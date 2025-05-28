@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.gms.dao.entity.table.FamilyEntitlementDOTableDef.FAMILY_ENTITLEMENT_D_O;
+import static org.gms.dao.entity.table.FamilyEntitlementDOTableDef.FAMILY_ENTITLEMENT_DO;
 
 @Service
 @AllArgsConstructor
@@ -62,9 +62,9 @@ public class FamilyService {
                 unmatchedJuniors.add(new Pair<>(familyCharacterDO.getSeniorid(), familyEntry));
             }
             List<FamilyEntitlementDO> familyEntitlementDOList = familyEntitlementMapper.selectListByQuery(QueryWrapper.create()
-                    .select(FAMILY_ENTITLEMENT_D_O.ENTITLEMENTID)
-                    .from(FAMILY_ENTITLEMENT_D_O)
-                    .where(FAMILY_ENTITLEMENT_D_O.CHARID.eq(charactersDO.getId())));
+                    .select(FAMILY_ENTITLEMENT_DO.ENTITLEMENTID)
+                    .from(FAMILY_ENTITLEMENT_DO)
+                    .where(FAMILY_ENTITLEMENT_DO.CHARID.eq(charactersDO.getId())));
             familyEntitlementDOList.forEach(familyEntitlementDO -> familyEntry.setEntitlementUsed(familyEntitlementDO.getEntitlementid()));
         }
         for (Pair<Integer, FamilyEntry> unmatchedJunior : unmatchedJuniors) {

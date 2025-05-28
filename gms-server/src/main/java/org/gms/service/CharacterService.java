@@ -4,17 +4,17 @@ import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.gms.client.*;
 import org.gms.client.Character;
+import org.gms.client.*;
 import org.gms.client.keybind.KeyBinding;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.MapId;
 import org.gms.constants.string.ExtendType;
 import org.gms.dao.entity.*;
 import org.gms.dao.mapper.*;
+import org.gms.exception.BizException;
 import org.gms.model.dto.ChrOnlineListReqDTO;
 import org.gms.model.dto.ChrOnlineListRtnDTO;
-import org.gms.exception.BizException;
 import org.gms.model.pojo.SkillEntry;
 import org.gms.net.server.Server;
 import org.gms.net.server.guild.GuildCharacter;
@@ -37,27 +37,27 @@ import java.util.*;
 
 import static com.mybatisflex.core.query.QueryMethods.dateDiff;
 import static com.mybatisflex.core.query.QueryMethods.now;
-import static org.gms.dao.entity.table.AccountsDOTableDef.ACCOUNTS_D_O;
-import static org.gms.dao.entity.table.AreaInfoDOTableDef.AREA_INFO_D_O;
-import static org.gms.dao.entity.table.BbsRepliesDOTableDef.BBS_REPLIES_D_O;
-import static org.gms.dao.entity.table.BbsThreadsDOTableDef.BBS_THREADS_D_O;
-import static org.gms.dao.entity.table.BuddiesDOTableDef.BUDDIES_D_O;
-import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
-import static org.gms.dao.entity.table.CooldownsDOTableDef.COOLDOWNS_D_O;
-import static org.gms.dao.entity.table.EventstatsDOTableDef.EVENTSTATS_D_O;
-import static org.gms.dao.entity.table.ExtendValueDOTableDef.EXTEND_VALUE_D_O;
-import static org.gms.dao.entity.table.FamelogDOTableDef.FAMELOG_D_O;
-import static org.gms.dao.entity.table.FamilyCharacterDOTableDef.FAMILY_CHARACTER_D_O;
-import static org.gms.dao.entity.table.FredstorageDOTableDef.FREDSTORAGE_D_O;
-import static org.gms.dao.entity.table.KeymapDOTableDef.KEYMAP_D_O;
-import static org.gms.dao.entity.table.MonsterbookDOTableDef.MONSTERBOOK_D_O;
-import static org.gms.dao.entity.table.PlayerdiseasesDOTableDef.PLAYERDISEASES_D_O;
-import static org.gms.dao.entity.table.SavedlocationsDOTableDef.SAVEDLOCATIONS_D_O;
-import static org.gms.dao.entity.table.ServerQueueDOTableDef.SERVER_QUEUE_D_O;
-import static org.gms.dao.entity.table.SkillmacrosDOTableDef.SKILLMACROS_D_O;
-import static org.gms.dao.entity.table.SkillsDOTableDef.SKILLS_D_O;
-import static org.gms.dao.entity.table.TrocklocationsDOTableDef.TROCKLOCATIONS_D_O;
-import static org.gms.dao.entity.table.WishlistsDOTableDef.WISHLISTS_D_O;
+import static org.gms.dao.entity.table.AccountsDOTableDef.ACCOUNTS_DO;
+import static org.gms.dao.entity.table.AreaInfoDOTableDef.AREA_INFO_DO;
+import static org.gms.dao.entity.table.BbsRepliesDOTableDef.BBS_REPLIES_DO;
+import static org.gms.dao.entity.table.BbsThreadsDOTableDef.BBS_THREADS_DO;
+import static org.gms.dao.entity.table.BuddiesDOTableDef.BUDDIES_DO;
+import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_DO;
+import static org.gms.dao.entity.table.CooldownsDOTableDef.COOLDOWNS_DO;
+import static org.gms.dao.entity.table.EventstatsDOTableDef.EVENTSTATS_DO;
+import static org.gms.dao.entity.table.ExtendValueDOTableDef.EXTEND_VALUE_DO;
+import static org.gms.dao.entity.table.FamelogDOTableDef.FAMELOG_DO;
+import static org.gms.dao.entity.table.FamilyCharacterDOTableDef.FAMILY_CHARACTER_DO;
+import static org.gms.dao.entity.table.FredstorageDOTableDef.FREDSTORAGE_DO;
+import static org.gms.dao.entity.table.KeymapDOTableDef.KEYMAP_DO;
+import static org.gms.dao.entity.table.MonsterbookDOTableDef.MONSTERBOOK_DO;
+import static org.gms.dao.entity.table.PlayerdiseasesDOTableDef.PLAYERDISEASES_DO;
+import static org.gms.dao.entity.table.SavedlocationsDOTableDef.SAVEDLOCATIONS_DO;
+import static org.gms.dao.entity.table.ServerQueueDOTableDef.SERVER_QUEUE_DO;
+import static org.gms.dao.entity.table.SkillmacrosDOTableDef.SKILLMACROS_DO;
+import static org.gms.dao.entity.table.SkillsDOTableDef.SKILLS_DO;
+import static org.gms.dao.entity.table.TrocklocationsDOTableDef.TROCKLOCATIONS_DO;
+import static org.gms.dao.entity.table.WishlistsDOTableDef.WISHLISTS_DO;
 
 @Service
 @AllArgsConstructor
@@ -136,9 +136,9 @@ public class CharacterService {
     public void resetRate(ExtendValueDO data) {
         checkName(data);
         extendValueMapper.deleteByQuery(QueryWrapper.create()
-                .where(EXTEND_VALUE_D_O.EXTEND_ID.eq(data.getExtendId()))
-                .and(EXTEND_VALUE_D_O.EXTEND_TYPE.eq(ExtendType.CHARACTER_EXTEND.getType()))
-                .and(EXTEND_VALUE_D_O.EXTEND_NAME.eq(data.getExtendName())));
+                .where(EXTEND_VALUE_DO.EXTEND_ID.eq(data.getExtendId()))
+                .and(EXTEND_VALUE_DO.EXTEND_TYPE.eq(ExtendType.CHARACTER_EXTEND.getType()))
+                .and(EXTEND_VALUE_DO.EXTEND_NAME.eq(data.getExtendName())));
         Character character = getCharacter(data);
         character.resetPlayerRates();
         character.setWorldRates();
@@ -148,9 +148,9 @@ public class CharacterService {
     public void resetRates(ExtendValueDO data) {
         check(data);
         extendValueMapper.deleteByQuery(QueryWrapper.create()
-                .where(EXTEND_VALUE_D_O.EXTEND_ID.eq(data.getExtendId()))
-                .and(EXTEND_VALUE_D_O.EXTEND_TYPE.eq(ExtendType.CHARACTER_EXTEND.getType()))
-                .and(EXTEND_VALUE_D_O.EXTEND_NAME.in("expRate", "dropRate", "mesoRate")));
+                .where(EXTEND_VALUE_DO.EXTEND_ID.eq(data.getExtendId()))
+                .and(EXTEND_VALUE_DO.EXTEND_TYPE.eq(ExtendType.CHARACTER_EXTEND.getType()))
+                .and(EXTEND_VALUE_DO.EXTEND_NAME.in("expRate", "dropRate", "mesoRate")));
         Character character = getCharacter(data);
         character.resetPlayerRates();
         character.setWorldRates();
@@ -167,13 +167,13 @@ public class CharacterService {
         if (wholeServerRanking) {
             // 全服前50
             QueryWrapper queryWrapper = QueryWrapper.create()
-                    .select(CHARACTERS_D_O.NAME, CHARACTERS_D_O.LEVEL, CHARACTERS_D_O.WORLD)
-                    .from(CHARACTERS_D_O)
-                    .leftJoin(ACCOUNTS_D_O).on(CHARACTERS_D_O.ACCOUNTID.eq(ACCOUNTS_D_O.ID))
-                    .where(CHARACTERS_D_O.GM.lt(2))
-                    .and(ACCOUNTS_D_O.BANNED.eq(0).or(ACCOUNTS_D_O.TEMPBAN.isNull()))
-                    .and(CHARACTERS_D_O.WORLD.between(0, worldSize - 1))
-                    .orderBy(CHARACTERS_D_O.WORLD.asc(), CHARACTERS_D_O.LEVEL.desc(), CHARACTERS_D_O.EXP.desc(), CHARACTERS_D_O.LAST_EXP_GAIN_TIME.asc())
+                    .select(CHARACTERS_DO.NAME, CHARACTERS_DO.LEVEL, CHARACTERS_DO.WORLD)
+                    .from(CHARACTERS_DO)
+                    .leftJoin(ACCOUNTS_DO).on(CHARACTERS_DO.ACCOUNTID.eq(ACCOUNTS_DO.ID))
+                    .where(CHARACTERS_DO.GM.lt(2))
+                    .and(ACCOUNTS_DO.BANNED.eq(0).or(ACCOUNTS_DO.TEMPBAN.isNull()))
+                    .and(CHARACTERS_DO.WORLD.between(0, worldSize - 1))
+                    .orderBy(CHARACTERS_DO.WORLD.asc(), CHARACTERS_DO.LEVEL.desc(), CHARACTERS_DO.EXP.desc(), CHARACTERS_DO.LAST_EXP_GAIN_TIME.asc())
                     .limit(50);
             List<CharactersDO> charactersDOList = charactersMapper.selectListByQuery(queryWrapper);
             worldsRankingList.add(charactersDOList);
@@ -189,19 +189,19 @@ public class CharacterService {
 
     public List<CharactersDO> getWorldRankPlayers(int worldId) {
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .select(CHARACTERS_D_O.NAME, CHARACTERS_D_O.LEVEL, CHARACTERS_D_O.WORLD)
-                .from(CHARACTERS_D_O)
-                .leftJoin(ACCOUNTS_D_O).on(CHARACTERS_D_O.ACCOUNTID.eq(ACCOUNTS_D_O.ID))
-                .where(CHARACTERS_D_O.GM.lt(2))
-                .and(ACCOUNTS_D_O.BANNED.eq(0).or(ACCOUNTS_D_O.TEMPBAN.isNull()))
-                .and(CHARACTERS_D_O.WORLD.eq(worldId))
-                .orderBy(CHARACTERS_D_O.LEVEL.desc(), CHARACTERS_D_O.EXP.desc(), CHARACTERS_D_O.LAST_EXP_GAIN_TIME.asc())
+                .select(CHARACTERS_DO.NAME, CHARACTERS_DO.LEVEL, CHARACTERS_DO.WORLD)
+                .from(CHARACTERS_DO)
+                .leftJoin(ACCOUNTS_DO).on(CHARACTERS_DO.ACCOUNTID.eq(ACCOUNTS_DO.ID))
+                .where(CHARACTERS_DO.GM.lt(2))
+                .and(ACCOUNTS_DO.BANNED.eq(0).or(ACCOUNTS_DO.TEMPBAN.isNull()))
+                .and(CHARACTERS_DO.WORLD.eq(worldId))
+                .orderBy(CHARACTERS_DO.LEVEL.desc(), CHARACTERS_DO.EXP.desc(), CHARACTERS_DO.LAST_EXP_GAIN_TIME.asc())
                 .limit(50);
         return charactersMapper.selectListByQuery(queryWrapper);
     }
 
     public CharactersDO findByName(String name) {
-        List<CharactersDO> charactersDOS = charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(name)));
+        List<CharactersDO> charactersDOS = charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_DO.NAME.eq(name)));
         return charactersDOS.isEmpty() ? null : charactersDOS.getFirst();
     }
 
@@ -211,7 +211,7 @@ public class CharacterService {
 
     @Transactional(rollbackFor = Exception.class)
     public void deleteGuild(GuildsDO guildsDO) {
-        charactersMapper.updateByQuery(CharactersDO.builder().guildid(0).guildrank(5).build(), QueryWrapper.create().where(CHARACTERS_D_O.GUILDID.eq(guildsDO.getGuildid())));
+        charactersMapper.updateByQuery(CharactersDO.builder().guildid(0).guildrank(5).build(), QueryWrapper.create().where(CHARACTERS_DO.GUILDID.eq(guildsDO.getGuildid())));
         guildsMapper.deleteById(guildsDO.getGuildid());
     }
 
@@ -236,7 +236,7 @@ public class CharacterService {
             world = 0;
         }
         // 删除buddies
-        QueryWrapper buddiesQueryWrapper = QueryWrapper.create().where(BUDDIES_D_O.CHARACTERID.eq(cid));
+        QueryWrapper buddiesQueryWrapper = QueryWrapper.create().where(BUDDIES_DO.CHARACTERID.eq(cid));
         List<BuddiesDO> buddiesDOS = buddiesMapper.selectListByQuery(buddiesQueryWrapper);
         buddiesDOS.forEach(buddiesDO -> {
             Character buddy = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(buddiesDO.getBuddyid());
@@ -246,50 +246,50 @@ public class CharacterService {
         });
         buddiesMapper.deleteByQuery(buddiesQueryWrapper);
         // 删除bbs_threads bbs_replies
-        QueryWrapper bbsThreadsQueryWrapper = QueryWrapper.create().where(BBS_THREADS_D_O.POSTERCID.eq(cid));
+        QueryWrapper bbsThreadsQueryWrapper = QueryWrapper.create().where(BBS_THREADS_DO.POSTERCID.eq(cid));
         List<BbsThreadsDO> bbsThreadsDOS = bbsThreadsMapper.selectListByQuery(bbsThreadsQueryWrapper);
         List<Long> threadIds = bbsThreadsDOS.stream().map(BbsThreadsDO::getThreadid).toList();
         if (!threadIds.isEmpty()) {
-            bbsRepliesMapper.deleteByQuery(QueryWrapper.create().where(BBS_REPLIES_D_O.THREADID.in(threadIds)));
+            bbsRepliesMapper.deleteByQuery(QueryWrapper.create().where(BBS_REPLIES_DO.THREADID.in(threadIds)));
             bbsThreadsMapper.deleteByQuery(bbsThreadsQueryWrapper);
         }
         // 删除wishlists
-        wishlistsMapper.deleteByQuery(QueryWrapper.create().where(WISHLISTS_D_O.CHARID.eq(cid)));
+        wishlistsMapper.deleteByQuery(QueryWrapper.create().where(WISHLISTS_DO.CHARID.eq(cid)));
         // 删除cooldowns
-        cooldownsMapper.deleteByQuery(QueryWrapper.create().where(COOLDOWNS_D_O.CHARID.eq(cid)));
+        cooldownsMapper.deleteByQuery(QueryWrapper.create().where(COOLDOWNS_DO.CHARID.eq(cid)));
         // 删除playerdiseases
-        playerdiseasesMapper.deleteByQuery(QueryWrapper.create().where(PLAYERDISEASES_D_O.CHARID.eq(cid)));
+        playerdiseasesMapper.deleteByQuery(QueryWrapper.create().where(PLAYERDISEASES_DO.CHARID.eq(cid)));
         // 删除area_info
-        areaInfoMapper.deleteByQuery(QueryWrapper.create().where(AREA_INFO_D_O.CHARID.eq(cid)));
+        areaInfoMapper.deleteByQuery(QueryWrapper.create().where(AREA_INFO_DO.CHARID.eq(cid)));
         // 删除monsterbook
-        monsterbookMapper.deleteByQuery(QueryWrapper.create().where(MONSTERBOOK_D_O.CHARID.eq(cid)));
+        monsterbookMapper.deleteByQuery(QueryWrapper.create().where(MONSTERBOOK_DO.CHARID.eq(cid)));
         // 删除characters
         charactersMapper.deleteById(cid);
         // 删除family_character
-        familyCharacterMapper.deleteByQuery(QueryWrapper.create().where(FAMILY_CHARACTER_D_O.CID.eq(cid)));
+        familyCharacterMapper.deleteByQuery(QueryWrapper.create().where(FAMILY_CHARACTER_DO.CID.eq(cid)));
         // 删除famelog
-        famelogMapper.deleteByQuery(QueryWrapper.create().where(FAMELOG_D_O.CHARACTERID_TO.eq(cid).or(FAMELOG_D_O.CHARACTERID.eq(cid))));
+        famelogMapper.deleteByQuery(QueryWrapper.create().where(FAMELOG_DO.CHARACTERID_TO.eq(cid).or(FAMELOG_DO.CHARACTERID.eq(cid))));
         // 删除背包库存
         inventoryService.deleteInventoryByCharacterId(cid);
         // 删除任务进度
         questService.deleteQuestProgressByCharacter(cid);
         // 删除fredstorage
-        fredstorageMapper.deleteByQuery(QueryWrapper.create().where(FREDSTORAGE_D_O.CID.eq(cid)));
+        fredstorageMapper.deleteByQuery(QueryWrapper.create().where(FREDSTORAGE_DO.CID.eq(cid)));
         // 删除拍卖行
         mtsService.deleteMtsByCharacterId(cid);
         // 删除keymap
-        keymapMapper.deleteByQuery(QueryWrapper.create().where(KEYMAP_D_O.CHARACTERID.eq(cid)));
+        keymapMapper.deleteByQuery(QueryWrapper.create().where(KEYMAP_DO.CHARACTERID.eq(cid)));
         // 删除savedlocations
-        savedlocationsMapper.deleteByQuery(QueryWrapper.create().where(SAVEDLOCATIONS_D_O.CHARACTERID.eq(cid)));
+        savedlocationsMapper.deleteByQuery(QueryWrapper.create().where(SAVEDLOCATIONS_DO.CHARACTERID.eq(cid)));
         // 删除trocklocations
-        trocklocationsMapper.deleteByQuery(QueryWrapper.create().where(TROCKLOCATIONS_D_O.CHARACTERID.eq(cid)));
+        trocklocationsMapper.deleteByQuery(QueryWrapper.create().where(TROCKLOCATIONS_DO.CHARACTERID.eq(cid)));
         // 删除技能
-        skillsMapper.deleteByQuery(QueryWrapper.create().where(SKILLS_D_O.CHARACTERID.eq(cid)));
-        skillmacrosMapper.deleteByQuery(QueryWrapper.create().where(SKILLMACROS_D_O.CHARACTERID.eq(cid)));
+        skillsMapper.deleteByQuery(QueryWrapper.create().where(SKILLS_DO.CHARACTERID.eq(cid)));
+        skillmacrosMapper.deleteByQuery(QueryWrapper.create().where(SKILLMACROS_DO.CHARACTERID.eq(cid)));
         // 删除eventstats
-        eventstatsMapper.deleteByQuery(QueryWrapper.create().where(EVENTSTATS_D_O.CHARACTERID.eq(cid)));
+        eventstatsMapper.deleteByQuery(QueryWrapper.create().where(EVENTSTATS_DO.CHARACTERID.eq(cid)));
         // 删除server_queue
-        serverQueueMapper.deleteByQuery(QueryWrapper.create().where(SERVER_QUEUE_D_O.CHARACTERID.eq(cid)));
+        serverQueueMapper.deleteByQuery(QueryWrapper.create().where(SERVER_QUEUE_DO.CHARACTERID.eq(cid)));
         // 补充heaven没有删除的2张表
         nameChangeService.cancelPendingNameChange(player, false);
         worldTransferService.cancelPendingWorldTransfer(player, false);
@@ -352,7 +352,7 @@ public class CharacterService {
         List<QuestStatus> questStatusList = questService.getQuestStatusByCharacter(cid);
         questStatusList.forEach(questStatus -> chr.getQuests().put(questStatus.getQuestID(), questStatus));
 
-        List<SkillsDO> skillsDOList = skillsMapper.selectListByQuery(QueryWrapper.create().where(SKILLS_D_O.CHARACTERID.eq(cid)));
+        List<SkillsDO> skillsDOList = skillsMapper.selectListByQuery(QueryWrapper.create().where(SKILLS_DO.CHARACTERID.eq(cid)));
         skillsDOList.forEach(skillsDO -> {
             Skill skill = SkillFactory.getSkill(skillsDO.getSkillid());
             if (skill != null) {
@@ -361,7 +361,7 @@ public class CharacterService {
             }
         });
 
-        QueryWrapper cdQueryWrapper = QueryWrapper.create().where(COOLDOWNS_D_O.CHARID.eq(cid));
+        QueryWrapper cdQueryWrapper = QueryWrapper.create().where(COOLDOWNS_DO.CHARID.eq(cid));
         List<CooldownsDO> cooldownsDOList = cooldownsMapper.selectListByQuery(cdQueryWrapper);
         cooldownsDOList.forEach(cooldownsDO -> {
             if (cooldownsDO.getSkillid() != 5221999 && cooldownsDO.getLength() + cooldownsDO.getStarttime() < System.currentTimeMillis()) {
@@ -371,7 +371,7 @@ public class CharacterService {
         });
         cooldownsMapper.deleteByQuery(cdQueryWrapper);
 
-        QueryWrapper pdWrapper = QueryWrapper.create().where(PLAYERDISEASES_D_O.CHARID.eq(cid));
+        QueryWrapper pdWrapper = QueryWrapper.create().where(PLAYERDISEASES_DO.CHARID.eq(cid));
         List<PlayerdiseasesDO> playerdiseasesDOList = playerdiseasesMapper.selectListByQuery(pdWrapper);
         Map<Disease, Pair<Long, MobSkill>> loadedDiseases = new LinkedHashMap<>();
         playerdiseasesDOList.forEach(playerdiseasesDO -> {
@@ -388,21 +388,21 @@ public class CharacterService {
             Server.getInstance().getPlayerBuffStorage().addDiseasesToStorage(cid, loadedDiseases);
         }
 
-        List<SkillmacrosDO> skillmacrosDOList = skillmacrosMapper.selectListByQuery(QueryWrapper.create().where(SKILLMACROS_D_O.CHARACTERID.eq(cid)));
+        List<SkillmacrosDO> skillmacrosDOList = skillmacrosMapper.selectListByQuery(QueryWrapper.create().where(SKILLMACROS_DO.CHARACTERID.eq(cid)));
         skillmacrosDOList.forEach(skillmacrosDO -> chr.getSkillMacros()[skillmacrosDO.getPosition()] = new SkillMacro(
                 skillmacrosDO.getSkill1(), skillmacrosDO.getSkill2(), skillmacrosDO.getSkill3(), skillmacrosDO.getName(),
                 skillmacrosDO.getShout(), skillmacrosDO.getPosition()
         ));
 
-        List<KeymapDO> keymapDOList = keymapMapper.selectListByQuery(QueryWrapper.create().where(KEYMAP_D_O.CHARACTERID.eq(cid)));
+        List<KeymapDO> keymapDOList = keymapMapper.selectListByQuery(QueryWrapper.create().where(KEYMAP_DO.CHARACTERID.eq(cid)));
         keymapDOList.forEach(keymapDO -> chr.getKeymap().put(keymapDO.getKey(), new KeyBinding(keymapDO.getType(), keymapDO.getAction())));
 
-        List<SavedlocationsDO> savedlocationsDOList = savedlocationsMapper.selectListByQuery(QueryWrapper.create().where(SAVEDLOCATIONS_D_O.CHARACTERID.eq(cid)));
+        List<SavedlocationsDO> savedlocationsDOList = savedlocationsMapper.selectListByQuery(QueryWrapper.create().where(SAVEDLOCATIONS_DO.CHARACTERID.eq(cid)));
         savedlocationsDOList.forEach(savedlocationsDO -> chr.getSavedLocations()[SavedLocationType.valueOf(savedlocationsDO.getLocationtype()).ordinal()]
                 = new SavedLocation(savedlocationsDO.getMap(), savedlocationsDO.getPortal()));
 
         List<FamelogDO> famelogDOList = famelogMapper.selectListByQuery(QueryWrapper.create()
-                .where(FAMELOG_D_O.CHARACTERID.eq(cid)).and(dateDiff(now(), FAMELOG_D_O.WHEN).lt(30)));
+                .where(FAMELOG_DO.CHARACTERID.eq(cid)).and(dateDiff(now(), FAMELOG_DO.WHEN).lt(30)));
         long lastFameTime = 0;
         List<Integer> lastMonthFameIds = new ArrayList<>(31);
         for (FamelogDO famelogDO : famelogDOList) {
@@ -425,23 +425,23 @@ public class CharacterService {
     }
 
     public List<TrocklocationsDO> getTrockLocationByCharacter(Integer cid) {
-        return trocklocationsMapper.selectListByQuery(QueryWrapper.create().where(TROCKLOCATIONS_D_O.CHARACTERID.eq(cid)));
+        return trocklocationsMapper.selectListByQuery(QueryWrapper.create().where(TROCKLOCATIONS_DO.CHARACTERID.eq(cid)));
     }
 
     public List<AreaInfoDO> getAreaInfoByCharacter(Integer cid) {
-        return areaInfoMapper.selectListByQuery(QueryWrapper.create().where(AREA_INFO_D_O.CHARID.eq(cid)));
+        return areaInfoMapper.selectListByQuery(QueryWrapper.create().where(AREA_INFO_DO.CHARID.eq(cid)));
     }
 
     public List<EventstatsDO> getEventStatsByCharacter(Integer cid) {
-        return eventstatsMapper.selectListByQuery(QueryWrapper.create().where(EVENTSTATS_D_O.CHARACTERID.eq(cid)));
+        return eventstatsMapper.selectListByQuery(QueryWrapper.create().where(EVENTSTATS_DO.CHARACTERID.eq(cid)));
     }
 
     public List<WishlistsDO> getWishlistsByCharacter(Integer cid) {
-        return wishlistsMapper.selectListByQuery(QueryWrapper.create().where(WISHLISTS_D_O.CHARID.eq(cid)));
+        return wishlistsMapper.selectListByQuery(QueryWrapper.create().where(WISHLISTS_DO.CHARID.eq(cid)));
     }
 
     public List<CharactersDO> getCharacterByAccountId(int accountId) {
-        return charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_D_O.ACCOUNTID.eq(accountId)));
+        return charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_DO.ACCOUNTID.eq(accountId)));
     }
 
     private void checkName(ExtendValueDO data) {

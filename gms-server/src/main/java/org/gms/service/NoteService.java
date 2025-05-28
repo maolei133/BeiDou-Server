@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 
-import static org.gms.dao.entity.table.NotesDOTableDef.NOTES_D_O;
+import static org.gms.dao.entity.table.NotesDOTableDef.NOTES_DO;
 
 @Service
 @AllArgsConstructor
@@ -57,9 +57,9 @@ public class NoteService {
         }
 
         List<NotesDO> notesDOList = notesMapper.selectListByQuery(QueryWrapper.create()
-                .from(NOTES_D_O)
-                .where(NOTES_D_O.DELETED.eq(0))
-                .and(NOTES_D_O.TO.eq(chr.getName())));
+                .from(NOTES_DO)
+                .where(NOTES_DO.DELETED.eq(0))
+                .and(NOTES_DO.TO.eq(chr.getName())));
         if (!notesDOList.isEmpty()) {
             chr.sendPacket(new ShowNotesPacket(notesDOList));
         }

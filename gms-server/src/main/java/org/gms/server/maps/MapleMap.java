@@ -21,6 +21,9 @@
  */
 package org.gms.server.maps;
 
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Client;
@@ -45,54 +48,29 @@ import org.gms.net.server.services.task.channel.OverallService;
 import org.gms.net.server.services.type.ChannelServices;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.World;
-import org.gms.util.NumberTool;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.EventInstanceManager;
 import org.gms.scripting.map.MapScriptManager;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.StatEffect;
 import org.gms.server.TimerManager;
-import org.gms.server.events.gm.Coconut;
-import org.gms.server.events.gm.Fitness;
-import org.gms.server.events.gm.Ola;
-import org.gms.server.events.gm.OxQuiz;
-import org.gms.server.events.gm.Snowball;
-import org.gms.server.life.LifeFactory;
+import org.gms.server.events.gm.*;
+import org.gms.server.life.*;
 import org.gms.server.life.LifeFactory.selfDestruction;
-import org.gms.server.life.Monster;
-import org.gms.server.life.MonsterDropEntry;
-import org.gms.server.life.MonsterGlobalDropEntry;
-import org.gms.server.life.MonsterInformationProvider;
-import org.gms.server.life.MonsterListener;
-import org.gms.server.life.NPC;
-import org.gms.server.life.PlayerNPC;
-import org.gms.server.life.SpawnPoint;
 import org.gms.server.partyquest.CarnivalFactory;
 import org.gms.server.partyquest.CarnivalFactory.MCSkill;
 import org.gms.server.partyquest.GuardianSpawnPoint;
+import org.gms.util.NumberTool;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 import org.gms.util.Randomizer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.awt.*;
 import java.lang.ref.WeakReference;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
@@ -104,6 +82,8 @@ import java.util.function.Predicate;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+@Getter
+@Setter
 public class MapleMap {
     private static final Logger log = LoggerFactory.getLogger(MapleMap.class);
     private static final List<MapObjectType> rangedMapobjectTypes = Arrays.asList(MapObjectType.SHOP, MapObjectType.ITEM, MapObjectType.NPC, MapObjectType.MONSTER, MapObjectType.DOOR, MapObjectType.SUMMON, MapObjectType.REACTOR);
@@ -122,8 +102,8 @@ public class MapleMap {
     private final Map<String, Integer> environment = new LinkedHashMap<>();
     private final Map<MapItem, Long> droppedItems = new LinkedHashMap<>();
     private final LinkedList<WeakReference<MapObject>> registeredDrops = new LinkedList<>();
-    private final Map<MobLootEntry, Long> mobLootEntries = new HashMap(20);
-    private final List<Runnable> statUpdateRunnables = new ArrayList(50);
+    private final Map<MobLootEntry, Long> mobLootEntries = new HashMap<>(20);
+    private final List<Runnable> statUpdateRunnables = new ArrayList<>(50);
     private final List<Rectangle> areas = new ArrayList<>();
     private FootholdTree footholds = null;
     private Pair<Integer, Integer> xLimits;  // caches the min and max x's with available footholds
@@ -223,14 +203,6 @@ public class MapleMap {
         return event;
     }
 
-    public Rectangle getMapArea() {
-        return mapArea;
-    }
-
-    public int getWorld() {
-        return world;
-    }
-
     public void broadcastPacket(Character source, Packet packet) {
         broadcastPacket(packet, chr -> chr != null && chr.getClient() != null && chr != source);
     }
@@ -294,28 +266,12 @@ public class MapleMap {
         return getChannelServer().getMapFactory().getMap(returnMapId);
     }
 
-    public int getReturnMapId() {
-        return returnMapId;
-    }
-
     public MapleMap getForcedReturnMap() {
         return getChannelServer().getMapFactory().getMap(forcedReturnMap);
     }
 
     public int getForcedReturnId() {
         return forcedReturnMap;
-    }
-
-    public void setForcedReturnMap(int map) {
-        this.forcedReturnMap = map;
-    }
-
-    public int getTimeLimit() {
-        return timeLimit;
-    }
-
-    public void setTimeLimit(int timeLimit) {
-        this.timeLimit = timeLimit;
     }
 
     public int getTimeLeft() {
@@ -593,8 +549,6 @@ public class MapleMap {
      * Fetches angle relative between spawn and door points where 3 O'Clock is 0
      * and 12 O'Clock is 270 degrees
      *
-     * @param spawnPoint
-     * @param doorPoint
      * @return angle in degress from 0-360.
      */
     private static double getAngle(Point doorPoint, Point spawnPoint) {
@@ -617,7 +571,6 @@ public class MapleMap {
     /**
      * Converts angle in degrees to rounded cardinal coordinate.
      *
-     * @param angle
      * @return correspondent coordinate.
      */
     public static String getRoundedCoordinate(double angle) {
@@ -744,7 +697,7 @@ public class MapleMap {
 
         MonsterStatusEffect stati = mob.getStati(MonsterStatus.SHOWDOWN);
         if (stati != null) {
-            chRate *= (stati.getStati().get(MonsterStatus.SHOWDOWN).doubleValue() / 100.0 + 1.0);
+            chRate *= (float) (stati.getStati().get(MonsterStatus.SHOWDOWN).doubleValue() / 100.0 + 1.0);
         }
 
         if (chr.isFamilyBuff()) {
@@ -907,7 +860,7 @@ public class MapleMap {
                         if (registeredDrops.isEmpty()) {
                             break;
                         }
-                        mapobj = registeredDrops.remove(0).get();
+                        mapobj = registeredDrops.removeFirst().get();
                     }
                 } finally {
                     objectWLock.unlock();
@@ -1210,7 +1163,7 @@ public class MapleMap {
 
     public int countMonster(int minid, int maxid) {
         int count = 0;
-        for (MapObject m : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.MONSTER))) {
+        for (MapObject m : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.MONSTER))) {
             Monster mob = (Monster) m;
             if (mob.getId() >= minid && mob.getId() <= maxid) {
                 count++;
@@ -1220,19 +1173,19 @@ public class MapleMap {
     }
 
     public int countMonsters() {
-        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.MONSTER)).size();
+        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.MONSTER)).size();
     }
 
     public int countReactors() {
-        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.REACTOR)).size();
+        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.REACTOR)).size();
     }
 
     public final List<MapObject> getReactors() {
-        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.REACTOR));
+        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.REACTOR));
     }
 
     public final List<MapObject> getMonsters() {
-        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.MONSTER));
+        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.MONSTER));
     }
 
     public final List<Reactor> getAllReactors() {
@@ -1254,19 +1207,19 @@ public class MapleMap {
     }
 
     public int countItems() {
-        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.ITEM)).size();
+        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.ITEM)).size();
     }
 
     public final List<MapObject> getItems() {
-        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.ITEM));
+        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.ITEM));
     }
 
     public int countPlayers() {
-        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.PLAYER)).size();
+        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.PLAYER)).size();
     }
 
     public List<MapObject> getPlayers() {
-        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.PLAYER));
+        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.PLAYER));
     }
 
     public List<Character> getAllPlayers() {
@@ -1361,22 +1314,22 @@ public class MapleMap {
 
     // 巴洛古(Balrog)讨伐胜利广播
     public void broadcastBalrogVictory(String leaderName) {
-        getWorldServer().dropMessage(6,"[远征凯旋] " + leaderName + "的远征队成功讨伐了火焰魔神巴洛古！" + "让我们歌颂这支队伍，他们以" + countAlivePlayers() + "名幸存者的战绩完成了壮举！");
+        getWorldServer().dropMessage(6, "[远征凯旋] " + leaderName + "的远征队成功讨伐了火焰魔神巴洛古！" + "让我们歌颂这支队伍，他们以" + countAlivePlayers() + "名幸存者的战绩完成了壮举！");
     }
 
     // 暗黑龙王(Horntail)讨伐胜利广播
     public void broadcastHorntailVictory() {
-        getWorldServer().dropMessage(6,"[远征凯旋] 致历经无数次挑战最终征服暗黑龙王的勇士们：" + "谨以此礼赞献给真正的神木村英雄！");
+        getWorldServer().dropMessage(6, "[远征凯旋] 致历经无数次挑战最终征服暗黑龙王的勇士们：" + "谨以此礼赞献给真正的神木村英雄！");
     }
 
     // 扎昆(Zakum)讨伐胜利广播
     public void broadcastZakumVictory() {
-        getWorldServer().dropMessage(6,"[远征凯旋] 长久笼罩天空之城的邪恶之树终于倾倒！" +"致那些历经无数次尝试最终征服扎昆的远征队，胜利属于你们！" +"你们是天空之城真正的传说！");
+        getWorldServer().dropMessage(6, "[远征凯旋] 长久笼罩天空之城的邪恶之树终于倾倒！" + "致那些历经无数次尝试最终征服扎昆的远征队，胜利属于你们！" + "你们是天空之城真正的传说！");
     }
 
     // 品克缤(PinkBean)讨伐胜利广播
     public void broadcastPinkBeanVictory(int channel) {
-        getWorldServer().dropMessage(6,"[远征凯旋] 在" + channel + "频道挑战品克缤的远征队，" +  "以雷霆之势完成了终极讨伐！时间神殿重现璀璨光辉，" + "当英雄们从战场凯旋之时，被夺走的白昼终于归来！"
+        getWorldServer().dropMessage(6, "[远征凯旋] 在" + channel + "频道挑战品克缤的远征队，" + "以雷霆之势完成了终极讨伐！时间神殿重现璀璨光辉，" + "当英雄们从战场凯旋之时，被夺走的白昼终于归来！"
         );
     }
 
@@ -1501,11 +1454,11 @@ public class MapleMap {
     }
 
     public void killFriendlies(Monster mob) {
-        this.killMonster(mob, (Character) getPlayers().get(0), false);
+        this.killMonster(mob, (Character) getPlayers().getFirst(), false);
     }
 
     public void killMonster(int mobId) {
-        Character chr = (Character) getPlayers().get(0);
+        Character chr = (Character) getPlayers().getFirst();
         List<Monster> mobList = getAllMonsters();
 
         for (Monster mob : mobList) {
@@ -1538,7 +1491,7 @@ public class MapleMap {
     public void softKillAllMonsters() {
         closeMapSpawnPoints();
 
-        for (MapObject monstermo : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.MONSTER))) {
+        for (MapObject monstermo : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.MONSTER))) {
             Monster monster = (Monster) monstermo;
             if (monster.getStats().isFriendly()) {
                 continue;
@@ -1553,7 +1506,7 @@ public class MapleMap {
     public void killAllMonstersNotFriendly() {
         closeMapSpawnPoints();
 
-        for (MapObject monstermo : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.MONSTER))) {
+        for (MapObject monstermo : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.MONSTER))) {
             Monster monster = (Monster) monstermo;
             if (monster.getStats().isFriendly()) {
                 continue;
@@ -1566,7 +1519,7 @@ public class MapleMap {
     public void killAllMonsters() {
         closeMapSpawnPoints();
 
-        for (MapObject monstermo : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.MONSTER))) {
+        for (MapObject monstermo : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.MONSTER))) {
             Monster monster = (Monster) monstermo;
 
             killMonster(monster, null, false, 1);
@@ -1646,7 +1599,7 @@ public class MapleMap {
             Collections.shuffle(points);
             for (MapObject o : mapobjects.values()) {
                 if (o.getType() == MapObjectType.REACTOR) {
-                    o.setPosition(points.remove(points.size() - 1));
+                    o.setPosition(points.removeLast());
                 }
             }
         } finally {
@@ -1669,7 +1622,7 @@ public class MapleMap {
         Collections.shuffle(points);
         for (MapObject obj : targets) {
             Reactor mr = (Reactor) obj;
-            mr.setPosition(points.remove(points.size() - 1));
+            mr.setPosition(points.removeLast());
         }
     }
 
@@ -1701,7 +1654,7 @@ public class MapleMap {
         Collections.shuffle(points);
         for (MapObject obj : targets) {
             Reactor mr = (Reactor) obj;
-            mr.setPosition(points.remove(points.size() - 1));
+            mr.setPosition(points.removeLast());
         }
     }
 
@@ -1717,7 +1670,7 @@ public class MapleMap {
     public List<MapObject> getMapObjects() {
         objectRLock.lock();
         try {
-            return new LinkedList(mapobjects.values());
+            return new LinkedList<>(mapobjects.values());
         } finally {
             objectRLock.unlock();
         }
@@ -1753,7 +1706,7 @@ public class MapleMap {
     }
 
     public void destroyNPC(int npcid) {     // assumption: there's at most one of the same NPC in a map.
-        List<MapObject> npcs = getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.NPC));
+        List<MapObject> npcs = getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.NPC));
 
         chrRLock.lock();
         objectWLock.lock();
@@ -1784,9 +1737,6 @@ public class MapleMap {
     /**
      * returns a monster with the given oid, if no such monster exists returns
      * null
-     *
-     * @param oid
-     * @return
      */
     public Monster getMonsterByOid(int oid) {
         MapObject mmo = getMapObject(oid);
@@ -2419,12 +2369,12 @@ public class MapleMap {
                 aggroMonitor.startAggroCoordinator();
             }
 
-            if (onFirstUserEnter.length() != 0) {
+            if (!onFirstUserEnter.isEmpty()) {
                 msm.runMapScript(chr.getClient(), "onFirstUserEnter/" + onFirstUserEnter, true);
             }
         }
-        if (onUserEnter.length() != 0) {
-            if (onUserEnter.equals("cygnusTest") && !MapId.isCygnusIntro(mapid)) {
+        if (!onUserEnter.isEmpty()) {
+            if ("cygnusTest".equals(onUserEnter) && !MapId.isCygnusIntro(mapid)) {
                 chr.saveLocation("INTRO");
             }
 
@@ -2756,7 +2706,7 @@ public class MapleMap {
 
     /**
      * 无条件地将消息广播给所有玩家。
-     *
+     * <p>
      * Broadcasts a message to all players without any conditions.
      *
      * @param {Packet} packet - 要广播的数据包。The packet to be broadcasted.
@@ -2767,7 +2717,7 @@ public class MapleMap {
 
     /**
      * 无条件地将管理员消息广播给所有玩家。
-     *
+     * <p>
      * Broadcasts an admin message to all players without any conditions.
      *
      * @param {Packet} packet - 要广播的数据包。The packet to be broadcasted.
@@ -2778,13 +2728,13 @@ public class MapleMap {
 
     /**
      * 根据 repeatToSource 参数决定是否将消息重复发送给源角色，并无范围限制地广播消息。
-     *
+     * <p>
      * Broadcasts a message based on the repeatToSource parameter, repeating it to the source character if specified,
      * and broadcasts it without any range restrictions.
      *
      * @param {Character} source - 消息的源角色。The source character of the message.
-     * @param {Packet} packet - 要广播的数据包。The packet to be broadcasted.
-     * @param {boolean} repeatToSource - 是否重复发送给源角色。Whether to repeat the message to the source character.
+     * @param {Packet}    packet - 要广播的数据包。The packet to be broadcasted.
+     * @param {boolean}   repeatToSource - 是否重复发送给源角色。Whether to repeat the message to the source character.
      */
     public void broadcastMessage(Character source, Packet packet, boolean repeatToSource) {
         broadcastMessage(repeatToSource ? null : source, packet, Double.POSITIVE_INFINITY, source.getPosition());
@@ -2792,14 +2742,14 @@ public class MapleMap {
 
     /**
      * 根据 repeatToSource 和 ranged 参数决定是否将消息重复发送给源角色以及是否限定在一定范围内广播消息。
-     *
+     * <p>
      * Broadcasts a message based on the repeatToSource and ranged parameters, repeating it to the source character if specified,
      * and broadcasting it within a certain range if ranged is true.
      *
      * @param {Character} source - 消息的源角色。The source character of the message.
-     * @param {Packet} packet - 要广播的数据包。The packet to be broadcasted.
-     * @param {boolean} repeatToSource - 是否重复发送给源角色。Whether to repeat the message to the source character.
-     * @param {boolean} ranged - 是否限定在一定范围内广播消息。Whether to broadcast the message within a certain range.
+     * @param {Packet}    packet - 要广播的数据包。The packet to be broadcasted.
+     * @param {boolean}   repeatToSource - 是否重复发送给源角色。Whether to repeat the message to the source character.
+     * @param {boolean}   ranged - 是否限定在一定范围内广播消息。Whether to broadcast the message within a certain range.
      */
     public void broadcastMessage(Character source, Packet packet, boolean repeatToSource, boolean ranged) {
         broadcastMessage(repeatToSource ? null : source, packet, ranged ? getRangedDistance() : Double.POSITIVE_INFINITY, source.getPosition());
@@ -2807,11 +2757,11 @@ public class MapleMap {
 
     /**
      * 从指定点开始，在一定范围内广播消息。
-     *
+     * <p>
      * Broadcasts a message starting from a specified point within a certain range.
      *
      * @param {Packet} packet - 要广播的数据包。The packet to be broadcasted.
-     * @param {Point} rangedFrom - 广播的起点位置。The starting point for broadcasting.
+     * @param {Point}  rangedFrom - 广播的起点位置。The starting point for broadcasting.
      */
     public void broadcastMessage(Packet packet, Point rangedFrom) {
         broadcastMessage(null, packet, getRangedDistance(), rangedFrom);
@@ -2819,12 +2769,12 @@ public class MapleMap {
 
     /**
      * 从指定点开始，在一定范围内广播消息，并且不向源角色发送消息。
-     *
+     * <p>
      * Broadcasts a message starting from a specified point within a certain range and does not send it to the source character.
      *
      * @param {Character} source - 消息的源角色。The source character of the message.
-     * @param {Packet} packet - 要广播的数据包。The packet to be broadcasted.
-     * @param {Point} rangedFrom - 广播的起点位置。The starting point for broadcasting.
+     * @param {Packet}    packet - 要广播的数据包。The packet to be broadcasted.
+     * @param {Point}     rangedFrom - 广播的起点位置。The starting point for broadcasting.
      */
     public void broadcastMessage(Character source, Packet packet, Point rangedFrom) {
         broadcastMessage(source, packet, getRangedDistance(), rangedFrom);
@@ -2832,13 +2782,13 @@ public class MapleMap {
 
     /**
      * 核心广播方法，负责实际的消息分发工作。
-     *
+     * <p>
      * Core method responsible for actually dispatching the message.
      *
      * @param {Character} source - 消息的源角色。The source character of the message.
-     * @param {Packet} packet - 要广播的数据包。The packet to be broadcasted.
-     * @param {double} rangeSq - 广播的最大距离平方值。The maximum distance squared for broadcasting.
-     * @param {Point} rangedFrom - 广播的起点位置。The starting point for broadcasting.
+     * @param {Packet}    packet - 要广播的数据包。The packet to be broadcasted.
+     * @param {double}    rangeSq - 广播的最大距离平方值。The maximum distance squared for broadcasting.
+     * @param {Point}     rangedFrom - 广播的起点位置。The starting point for broadcasting.
      */
     private void broadcastMessage(Character source, Packet packet, double rangeSq, Point rangedFrom) {
         chrRLock.lock();
@@ -3015,18 +2965,10 @@ public class MapleMap {
     }
 
     private static boolean isNonRangedType(MapObjectType type) {
-        switch (type) {
-            case NPC:
-            case PLAYER:
-            case HIRED_MERCHANT:
-            case PLAYER_NPC:
-            case DRAGON:
-            case MIST:
-            case KITE:
-                return true;
-            default:
-                return false;
-        }
+        return switch (type) {
+            case NPC, PLAYER, HIRED_MERCHANT, PLAYER_NPC, DRAGON, MIST, KITE -> true;
+            default -> false;
+        };
     }
 
     private void sendObjectPlacement(Client c) {
@@ -3142,14 +3084,6 @@ public class MapleMap {
         return areas.get(index);
     }
 
-    public void setFootholds(FootholdTree footholds) {
-        this.footholds = footholds;
-    }
-
-    public FootholdTree getFootholds() {
-        return footholds;
-    }
-
     public void setMapPointBoundings(int px, int py, int h, int w) {
         mapArea.setBounds(px, py, w, h);
     }
@@ -3164,9 +3098,6 @@ public class MapleMap {
 
     /**
      * it's threadsafe, gtfo :D
-     *
-     * @param monster
-     * @param mobTime
      */
     public void addMonsterSpawn(Monster monster, int mobTime, int team) {
         Point newpos = calcPointBelow(monster.getPosition());
@@ -3234,14 +3165,14 @@ public class MapleMap {
     public void reportMonsterSpawnPoints(Character chr) {
         // 输出地图刷怪点统计信息头
         chr.dropMessage(6, "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        chr.dropMessage(6, "┃ 地图ID: " + getId() + " | 总刷怪点: " + monsterSpawn.size() +  " | 已刷怪: " + spawnedMonstersOnMap.get());
+        chr.dropMessage(6, "┃ 地图ID: " + getId() + " | 总刷怪点: " + monsterSpawn.size() + " | 已刷怪: " + spawnedMonstersOnMap.get());
         chr.dropMessage(6, "┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
         // 遍历所有刷怪点输出详细信息
         for (SpawnPoint sp : getAllMonsterSpawn()) {
             chr.dropMessage(6,
                     "┃ ID:" + sp.getMonsterId() + " | 可刷怪:" + (sp.getDenySpawn() ? "×" : "√") + " | 现存:" + sp.getSpawned() + "\n" +
-                    "┃ 坐标:(" +(int) sp.getPosition().getX() + " , " + (int) sp.getPosition().getY() + ") | 刷新:" + sp.getMobTime() + "ms | 阵营:" + sp.getTeam()
+                            "┃ 坐标:(" + (int) sp.getPosition().getX() + " , " + (int) sp.getPosition().getY() + ") | 刷新:" + sp.getMobTime() + "ms | 阵营:" + sp.getTeam()
             );
         }
         chr.dropMessage(6, "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -3362,32 +3293,8 @@ public class MapleMap {
         }
     }
 
-    public String getMapName() {
-        return mapName;
-    }
-
-    public void setMapName(String mapName) {
-        this.mapName = mapName;
-    }
-
-    public String getStreetName() {
-        return streetName;
-    }
-
-    public void setClock(boolean hasClock) {
-        this.clock = hasClock;
-    }
-
     public boolean hasClock() {
         return clock;
-    }
-
-    public void setTown(boolean isTown) {
-        this.town = isTown;
-    }
-
-    public boolean isTown() {
-        return town;
     }
 
     public boolean isMuted() {
@@ -3398,24 +3305,12 @@ public class MapleMap {
         isMuted = mute;
     }
 
-    public void setStreetName(String streetName) {
-        this.streetName = streetName;
-    }
-
-    public void setEverlast(boolean everlast) {
-        this.everlast = everlast;
-    }
-
     public boolean getEverlast() {
         return everlast;
     }
 
     public int getSpawnedMonstersOnMap() {
         return spawnedMonstersOnMap.get();
-    }
-
-    public void setMobCapacity(int capacity) {
-        this.mobCapacity = capacity;
     }
 
     public void setBackgroundTypes(HashMap<Integer, Integer> backTypes) {
@@ -3487,6 +3382,7 @@ public class MapleMap {
         return false;
     }
 
+    @EqualsAndHashCode
     private class MobLootEntry implements Runnable {
 
         private final byte droptype;
@@ -3546,7 +3442,7 @@ public class MapleMap {
             reactor.hitLockReactor();
             try {
                 if (reactor.getReactorType() == 100) {
-                    if (reactor.getShouldCollect() == true && mapitem != null && mapitem == getMapObject(mapitem.getObjectId())) {
+                    if (reactor.getShouldCollect() && mapitem != null && mapitem == getMapObject(mapitem.getObjectId())) {
                         mapitem.lockItem();
                         try {
                             if (mapitem.isPickedUp()) {
@@ -3756,9 +3652,8 @@ public class MapleMap {
 
         chrRLock.lock();
         try {
-            final Iterator<Character> ltr = characters.iterator();
-            while (ltr.hasNext()) {
-                if (rect.contains(ltr.next().getPosition())) {
+            for (Character character : characters) {
+                if (rect.contains(character.getPosition())) {
                     ret++;
                 }
             }
@@ -3774,7 +3669,7 @@ public class MapleMap {
 
     public final int getNumPlayersItemsInRect(final Rectangle rect) {
         int retP = getNumPlayersInRect(rect);
-        int retI = getMapObjectsInBox(rect, Arrays.asList(MapObjectType.ITEM)).size();
+        int retI = getMapObjectsInBox(rect, List.of(MapObjectType.ITEM)).size();
 
         return retP + retI;
     }
@@ -3805,36 +3700,12 @@ public class MapleMap {
         this.protectItem = delta;
     }
 
-    public float getRecovery() {
-        return recovery;
-    }
-
-    public void setRecovery(float recRate) {
-        recovery = recRate;
-    }
-
     private int hasBoat() {
         return !boat ? 0 : (docked ? 1 : 2);
     }
 
-    public void setBoat(boolean hasBoat) {
-        this.boat = hasBoat;
-    }
-
-    public void setDocked(boolean isDocked) {
-        this.docked = isDocked;
-    }
-
     public boolean getDocked() {
         return this.docked;
-    }
-
-    public void setSeats(int seats) {
-        this.seats = seats;
-    }
-
-    public int getSeats() {
-        return seats;
     }
 
     public void broadcastGMMessage(Character source, Packet packet, boolean repeatToSource) {
@@ -3883,14 +3754,6 @@ public class MapleMap {
         }
     }
 
-    public OxQuiz getOx() {
-        return ox;
-    }
-
-    public void setOx(OxQuiz set) {
-        this.ox = set;
-    }
-
     public void setOxQuiz(boolean b) {
         this.isOxQuiz = b;
     }
@@ -3899,32 +3762,12 @@ public class MapleMap {
         return isOxQuiz;
     }
 
-    public void setOnUserEnter(String onUserEnter) {
-        this.onUserEnter = onUserEnter;
-    }
-
-    public String getOnUserEnter() {
-        return onUserEnter;
-    }
-
-    public void setOnFirstUserEnter(String onFirstUserEnter) {
-        this.onFirstUserEnter = onFirstUserEnter;
-    }
-
-    public String getOnFirstUserEnter() {
-        return onFirstUserEnter;
-    }
-
     private boolean hasForcedEquip() {
         return fieldType == 81 || fieldType == 82;
     }
 
-    public void setFieldType(int fieldType) {
-        this.fieldType = fieldType;
-    }
-
     public void clearDrops(Character player) {
-        for (MapObject i : getMapObjectsInRange(player.getPosition(), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.ITEM))) {
+        for (MapObject i : getMapObjectsInRange(player.getPosition(), Double.POSITIVE_INFINITY, List.of(MapObjectType.ITEM))) {
             droppedItemCount.decrementAndGet();
             removeMapObject(i);
             this.broadcastMessage(PacketCreator.removeItemFromMap(i.getObjectId(), 0, player.getId()));
@@ -3932,19 +3775,11 @@ public class MapleMap {
     }
 
     public void clearDrops() {
-        for (MapObject i : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.ITEM))) {
+        for (MapObject i : getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.ITEM))) {
             droppedItemCount.decrementAndGet();
             removeMapObject(i);
             this.broadcastMessage(PacketCreator.removeItemFromMap(i.getObjectId(), 0, 0));
         }
-    }
-
-    public void setFieldLimit(int fieldLimit) {
-        this.fieldLimit = fieldLimit;
-    }
-
-    public int getFieldLimit() {
-        return fieldLimit;
     }
 
     public void allowSummonState(boolean b) {
@@ -3986,26 +3821,15 @@ public class MapleMap {
     }
 
     public Snowball getSnowball(int team) {
-        switch (team) {
-            case 0:
-                return snowball0;
-            case 1:
-                return snowball1;
-            default:
-                return null;
-        }
+        return switch (team) {
+            case 0 -> snowball0;
+            case 1 -> snowball1;
+            default -> null;
+        };
     }
 
     private boolean specialEquip() {//Maybe I shouldn't use fieldType :\
         return fieldType == 4 || fieldType == 19;
-    }
-
-    public void setCoconut(Coconut nut) {
-        this.coconut = nut;
-    }
-
-    public Coconut getCoconut() {
-        return coconut;
     }
 
     public void warpOutByTeam(int team, int mapid) {
@@ -4055,7 +3879,7 @@ public class MapleMap {
 
     public String getEventNPC() {
         StringBuilder sb = new StringBuilder();
-        sb.append("请与 "+ mapName + " 的 ");
+        sb.append("请与 ").append(mapName).append(" 的 ");
         if (mapid == MapId.SOUTHPERRY) {
             sb.append("珀尔");
         } else if (mapid == MapId.LITH_HARBOUR) {
@@ -4088,10 +3912,6 @@ public class MapleMap {
         timeMob = new Pair<>(id, msg);
     }
 
-    public Pair<Integer, String> getTimeMob() {
-        return timeMob;
-    }
-
     public void toggleHiddenNPC(int id) {
         chrRLock.lock();
         objectRLock.lock();
@@ -4112,14 +3932,6 @@ public class MapleMap {
             objectRLock.unlock();
             chrRLock.unlock();
         }
-    }
-
-    public void setMobInterval(short interval) {
-        this.mobInterval = interval;
-    }
-
-    public short getMobInterval() {
-        return mobInterval;
     }
 
     public void clearMapObjects() {
@@ -4282,18 +4094,10 @@ public class MapleMap {
 
     private final List<Point> takenSpawns = new LinkedList<>();
     private final List<GuardianSpawnPoint> guardianSpawns = new LinkedList<>();
-    private final List<MCSkill> blueTeamBuffs = new ArrayList();
-    private final List<MCSkill> redTeamBuffs = new ArrayList();
-    private final List<Integer> skillIds = new ArrayList();
-    private final List<Pair<Integer, Integer>> mobsToSpawn = new ArrayList();
-
-    public List<MCSkill> getBlueTeamBuffs() {
-        return blueTeamBuffs;
-    }
-
-    public List<MCSkill> getRedTeamBuffs() {
-        return redTeamBuffs;
-    }
+    private final List<MCSkill> blueTeamBuffs = new ArrayList<>();
+    private final List<MCSkill> redTeamBuffs = new ArrayList<>();
+    private final List<Integer> skillIds = new ArrayList<>();
+    private final List<Pair<Integer, Integer>> mobsToSpawn = new ArrayList<>();
 
     public void clearBuffList() {
         redTeamBuffs.clear();
@@ -4301,74 +4105,46 @@ public class MapleMap {
     }
 
     public List<MapObject> getAllPlayer() {
-        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.PLAYER));
+        return getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, List.of(MapObjectType.PLAYER));
     }
 
     public boolean isCPQMap() {
-        switch (this.getId()) {
-            case 980000101:
-            case 980000201:
-            case 980000301:
-            case 980000401:
-            case 980000501:
-            case 980000601:
-            case 980031100:
-            case 980032100:
-            case 980033100:
-                return true;
-        }
-        return false;
+        return switch (this.getId()) {
+            case 980000101, 980000201, 980000301, 980000401, 980000501, 980000601, 980031100, 980032100, 980033100 -> true;
+            default -> false;
+        };
     }
 
     public boolean isCPQMap2() {
-        switch (this.getId()) {
-            case 980031100:
-            case 980032100:
-            case 980033100:
-                return true;
-        }
-        return false;
+        return switch (this.getId()) {
+            case 980031100, 980032100, 980033100 -> true;
+            default -> false;
+        };
     }
 
     public boolean isCPQLobby() {
-        switch (this.getId()) {
-            case 980000100:
-            case 980000200:
-            case 980000300:
-            case 980000400:
-            case 980000500:
-            case 980000600:
-                return true;
-        }
-        return false;
+        return switch (this.getId()) {
+            case 980000100, 980000200, 980000300, 980000400, 980000500, 980000600 -> true;
+            default -> false;
+        };
     }
 
     public boolean isBlueCPQMap() {
-        switch (this.getId()) {
-            case 980000501:
-            case 980000601:
-            case 980031200:
-            case 980032200:
-            case 980033200:
-                return true;
-        }
-        return false;
+        return switch (this.getId()) {
+            case 980000501, 980000601, 980031200, 980032200, 980033200 -> true;
+            default -> false;
+        };
     }
 
     public boolean isPurpleCPQMap() {
-        switch (this.getId()) {
-            case 980000301:
-            case 980000401:
-            case 980031200:
-            case 980032200:
-            case 980033200:
-                return true;
-        }
-        return false;
+        return switch (this.getId()) {
+            case 980000301, 980000401, 980031200, 980032200, 980033200 -> true;
+            default -> false;
+        };
     }
 
     public Point getRandomSP(int team) {
-        if (takenSpawns.size() > 0) {
+        if (!takenSpawns.isEmpty()) {
             for (SpawnPoint sp : monsterSpawn) {
                 for (Point pt : takenSpawns) {
                     if ((sp.getPosition().x == pt.x && sp.getPosition().y == pt.y) || (sp.getTeam() != team && !this.isBlueCPQMap())) {
@@ -4401,7 +4177,7 @@ public class MapleMap {
         if (alltaken) {
             return null;
         }
-        if (this.guardianSpawns.size() > 0) {
+        if (!this.guardianSpawns.isEmpty()) {
             while (true) {
                 for (GuardianSpawnPoint gsp : this.guardianSpawns) {
                     if (!gsp.isTaken() && Math.random() < 0.3 && (gsp.getTeam() == -1 || gsp.getTeam() == team)) {
@@ -4441,7 +4217,7 @@ public class MapleMap {
             this.spawnReactor(reactor);
             reactor.setGuardian(pt);
             this.buffMonsters(team, skill);
-            getReactorByOid(reactor.getObjectId()).hitReactor(((Character) this.getAllPlayer().get(0)).getClient());
+            getReactorByOid(reactor.getObjectId()).hitReactor(((Character) this.getAllPlayer().getFirst()).getClient());
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -4485,35 +4261,17 @@ public class MapleMap {
     }
 
     public boolean isCPQWinnerMap() {
-        switch (this.getId()) {
-            case 980000103:
-            case 980000203:
-            case 980000303:
-            case 980000403:
-            case 980000503:
-            case 980000603:
-            case 980031300:
-            case 980032300:
-            case 980033300:
-                return true;
-        }
-        return false;
+        return switch (this.getId()) {
+            case 980000103, 980000203, 980000303, 980000403, 980000503, 980000603, 980031300, 980032300, 980033300 -> true;
+            default -> false;
+        };
     }
 
     public boolean isCPQLoserMap() {
-        switch (this.getId()) {
-            case 980000104:
-            case 980000204:
-            case 980000304:
-            case 980000404:
-            case 980000504:
-            case 980000604:
-            case 980031400:
-            case 980032400:
-            case 980033400:
-                return true;
-        }
-        return false;
+        return switch (this.getId()) {
+            case 980000104, 980000204, 980000304, 980000404, 980000504, 980000604, 980031400, 980032400, 980033400 -> true;
+            default -> false;
+        };
     }
 
     public void runCharacterStatUpdate() {
@@ -4570,46 +4328,6 @@ public class MapleMap {
         } finally {
             chrWLock.unlock();
         }
-    }
-
-    public int getMaxMobs() {
-        return maxMobs;
-    }
-
-    public void setMaxMobs(int maxMobs) {
-        this.maxMobs = maxMobs;
-    }
-
-    public int getMaxReactors() {
-        return maxReactors;
-    }
-
-    public void setMaxReactors(int maxReactors) {
-        this.maxReactors = maxReactors;
-    }
-
-    public int getDeathCP() {
-        return deathCP;
-    }
-
-    public void setDeathCP(int deathCP) {
-        this.deathCP = deathCP;
-    }
-
-    public int getTimeDefault() {
-        return timeDefault;
-    }
-
-    public void setTimeDefault(int timeDefault) {
-        this.timeDefault = timeDefault;
-    }
-
-    public int getTimeExpand() {
-        return timeExpand;
-    }
-
-    public void setTimeExpand(int timeExpand) {
-        this.timeExpand = timeExpand;
     }
 
 }

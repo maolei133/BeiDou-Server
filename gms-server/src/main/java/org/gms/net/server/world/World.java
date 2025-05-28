@@ -31,7 +31,6 @@ import org.gms.client.BuddylistEntry;
 import org.gms.client.Character;
 import org.gms.client.Family;
 import org.gms.config.GameConfig;
-import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
 import org.gms.dao.entity.PlayernpcsFieldDO;
 import org.gms.dao.mapper.PlayernpcsFieldMapper;
@@ -53,55 +52,19 @@ import org.gms.net.server.guild.GuildSummary;
 import org.gms.net.server.services.BaseService;
 import org.gms.net.server.services.ServicesManager;
 import org.gms.net.server.services.type.WorldServices;
-import org.gms.net.server.task.CharacterAutosaverTask;
-import org.gms.net.server.task.CharacterHpDecreaseTask;
-import org.gms.net.server.task.FamilyDailyResetTask;
-import org.gms.net.server.task.FishingTask;
-import org.gms.net.server.task.HiredMerchantTask;
-import org.gms.net.server.task.MapOwnershipTask;
-import org.gms.net.server.task.MountTirednessTask;
-import org.gms.net.server.task.PartySearchTask;
-import org.gms.net.server.task.PetFullnessTask;
-import org.gms.net.server.task.ServerMessageTask;
-import org.gms.net.server.task.TimedMapObjectTask;
-import org.gms.net.server.task.TimeoutTask;
-import org.gms.net.server.task.WeddingReservationTask;
+import org.gms.net.server.task.*;
+import org.gms.scripting.event.EventInstanceManager;
+import org.gms.server.Storage;
+import org.gms.server.TimerManager;
+import org.gms.server.maps.*;
 import org.gms.util.*;
 import org.gms.util.packets.Fishing;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.scripting.event.EventInstanceManager;
-import org.gms.server.Storage;
-import org.gms.server.TimerManager;
-import org.gms.server.maps.AbstractMapObject;
-import org.gms.server.maps.HiredMerchant;
-import org.gms.server.maps.MapleMap;
-import org.gms.server.maps.MiniDungeon;
-import org.gms.server.maps.MiniDungeonInfo;
-import org.gms.server.maps.PlayerShop;
-import org.gms.server.maps.PlayerShopItem;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.sql.*;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.PriorityQueue;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -110,11 +73,8 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static java.util.concurrent.TimeUnit.DAYS;
-import static java.util.concurrent.TimeUnit.HOURS;
-import static java.util.concurrent.TimeUnit.MINUTES;
-import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.gms.dao.entity.table.PlayernpcsFieldDOTableDef.PLAYERNPCS_FIELD_D_O;
+import static java.util.concurrent.TimeUnit.*;
+import static org.gms.dao.entity.table.PlayernpcsFieldDOTableDef.PLAYERNPCS_FIELD_DO;
 
 /**
  * @author kevintjuh93
@@ -1835,9 +1795,9 @@ public class World {
         }
         if (pnpcData.containsKey(mapId)) {
             QueryWrapper queryWrapper = QueryWrapper.create()
-                    .from(PLAYERNPCS_FIELD_D_O)
-                    .where(PLAYERNPCS_FIELD_D_O.WORLD.eq(worldId))
-                    .and(PLAYERNPCS_FIELD_D_O.MAP.eq(mapId));
+                    .from(PLAYERNPCS_FIELD_DO)
+                    .where(PLAYERNPCS_FIELD_DO.WORLD.eq(worldId))
+                    .and(PLAYERNPCS_FIELD_DO.MAP.eq(mapId));
             playernpcsFieldMapper.updateByQuery(playernpcsFieldDO, queryWrapper);
         } else {
             playernpcsFieldMapper.insert(playernpcsFieldDO);

@@ -17,9 +17,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-import static org.gms.dao.entity.table.MedalmapsDOTableDef.MEDALMAPS_D_O;
-import static org.gms.dao.entity.table.QuestprogressDOTableDef.QUESTPROGRESS_D_O;
-import static org.gms.dao.entity.table.QueststatusDOTableDef.QUESTSTATUS_D_O;
+import static org.gms.dao.entity.table.MedalmapsDOTableDef.MEDALMAPS_DO;
+import static org.gms.dao.entity.table.QuestprogressDOTableDef.QUESTPROGRESS_DO;
+import static org.gms.dao.entity.table.QueststatusDOTableDef.QUESTSTATUS_DO;
 
 @Service
 @AllArgsConstructor
@@ -30,15 +30,15 @@ public class QuestService {
 
     @Transactional(rollbackFor = Exception.class)
     public void deleteQuestProgressByCharacter(int cid) {
-        medalmapsMapper.deleteByQuery(QueryWrapper.create().where(MEDALMAPS_D_O.CHARACTERID.eq(cid)));
-        questprogressMapper.deleteByQuery(QueryWrapper.create().where(QUESTPROGRESS_D_O.CHARACTERID.eq(cid)));
-        queststatusMapper.deleteByQuery(QueryWrapper.create().where(QUESTSTATUS_D_O.CHARACTERID.eq(cid)));
+        medalmapsMapper.deleteByQuery(QueryWrapper.create().where(MEDALMAPS_DO.CHARACTERID.eq(cid)));
+        questprogressMapper.deleteByQuery(QueryWrapper.create().where(QUESTPROGRESS_DO.CHARACTERID.eq(cid)));
+        queststatusMapper.deleteByQuery(QueryWrapper.create().where(QUESTSTATUS_DO.CHARACTERID.eq(cid)));
     }
 
     public List<QuestStatus> getQuestStatusByCharacter(int cid) {
-        List<QueststatusDO> queststatusDOList = queststatusMapper.selectListByQuery(QueryWrapper.create().where(QUESTSTATUS_D_O.CHARACTERID.eq(cid)));
-        List<QuestprogressDO> questprogressDOList = questprogressMapper.selectListByQuery(QueryWrapper.create().where(QUESTPROGRESS_D_O.CHARACTERID.eq(cid)));
-        List<MedalmapsDO> medalmapsDOList = medalmapsMapper.selectListByQuery(QueryWrapper.create().where(MEDALMAPS_D_O.CHARACTERID.eq(cid)));
+        List<QueststatusDO> queststatusDOList = queststatusMapper.selectListByQuery(QueryWrapper.create().where(QUESTSTATUS_DO.CHARACTERID.eq(cid)));
+        List<QuestprogressDO> questprogressDOList = questprogressMapper.selectListByQuery(QueryWrapper.create().where(QUESTPROGRESS_DO.CHARACTERID.eq(cid)));
+        List<MedalmapsDO> medalmapsDOList = medalmapsMapper.selectListByQuery(QueryWrapper.create().where(MEDALMAPS_DO.CHARACTERID.eq(cid)));
 
         return queststatusDOList.stream().map(queststatusDO -> {
             Quest quest = Quest.getInstance(queststatusDO.getQuest());
@@ -53,7 +53,7 @@ public class QuestService {
             questStatus.setCompleted(queststatusDO.getCompleted());
             questprogressDOList.stream()
                     .filter(questprogressDO -> Objects.equals(queststatusDO.getQueststatusid(), questprogressDO.getQueststatusid()))
-                    .forEach(questprogressDO -> questStatus.setProgress(questprogressDO.getProgressid(),  questprogressDO.getProgress()));
+                    .forEach(questprogressDO -> questStatus.setProgress(questprogressDO.getProgressid(), questprogressDO.getProgress()));
             medalmapsDOList.stream()
                     .filter(medalmapsDO -> Objects.equals(queststatusDO.getQueststatusid(), medalmapsDO.getQueststatusid()))
                     .forEach(medalmapsDO -> questStatus.addMedalMap(medalmapsDO.getMapid()));

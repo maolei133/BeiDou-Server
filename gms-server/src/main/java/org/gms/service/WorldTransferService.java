@@ -24,8 +24,8 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Objects;
 
-import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
-import static org.gms.dao.entity.table.WorldtransfersDOTableDef.WORLDTRANSFERS_D_O;
+import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_DO;
+import static org.gms.dao.entity.table.WorldtransfersDOTableDef.WORLDTRANSFERS_DO;
 
 @Service
 @AllArgsConstructor
@@ -38,7 +38,7 @@ public class WorldTransferService {
 
     public void applyAllWorldTransfer() {
         List<WorldtransfersDO> worldtransfersDOList = worldtransfersMapper.selectListByQuery(QueryWrapper.create()
-                .where(WORLDTRANSFERS_D_O.COMPLETION_TIME.isNull()));
+                .where(WORLDTRANSFERS_DO.COMPLETION_TIME.isNull()));
         worldtransfersDOList.forEach(worldtransfersDO -> {
             try {
                 if (checkWorldTransferEligibility(worldtransfersDO)) {
@@ -82,8 +82,8 @@ public class WorldTransferService {
         }
         // 判断名字是否被占用
         long count = charactersMapper.selectCountByQuery(QueryWrapper.create()
-                .where(CHARACTERS_D_O.NAME.eq(charactersDO.getName()))
-                .and(CHARACTERS_D_O.WORLD.eq(data.getTo())));
+                .where(CHARACTERS_DO.NAME.eq(charactersDO.getName()))
+                .and(CHARACTERS_DO.WORLD.eq(data.getTo())));
         if (count > 0) {
             return false;
         }
@@ -116,7 +116,7 @@ public class WorldTransferService {
 
     public boolean registerWorldTransfer(Character chr, int newWorld) {
         List<WorldtransfersDO> worldTransfersDOList = worldtransfersMapper.selectListByQuery(QueryWrapper.create()
-                .where(WORLDTRANSFERS_D_O.CHARACTERID.eq(chr.getId())));
+                .where(WORLDTRANSFERS_DO.CHARACTERID.eq(chr.getId())));
         // 已有转区未生效或转区未冷却
         if (!worldTransfersDOList.isEmpty() && worldTransfersDOList.stream().anyMatch(worldtransfersDO ->
                 worldtransfersDO.getCompletionTime() == null || worldtransfersDO.getCompletionTime().getTime() + GameConfig.getServerLong("world_transfer_cooldown") > System.currentTimeMillis())) {
@@ -127,8 +127,8 @@ public class WorldTransferService {
     }
 
     public void cancelPendingWorldTransfer(Character chr, boolean needFinish) {
-        QueryWrapper queryWrapper = QueryWrapper.create().where(WORLDTRANSFERS_D_O.CHARACTERID.eq(chr.getId()));
-        if (needFinish) queryWrapper.and(WORLDTRANSFERS_D_O.COMPLETION_TIME.isNull());
+        QueryWrapper queryWrapper = QueryWrapper.create().where(WORLDTRANSFERS_DO.CHARACTERID.eq(chr.getId()));
+        if (needFinish) queryWrapper.and(WORLDTRANSFERS_DO.COMPLETION_TIME.isNull());
         worldtransfersMapper.deleteByQuery(queryWrapper);
     }
 }

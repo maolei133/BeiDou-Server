@@ -3,12 +3,12 @@ server:
 
 app:
   vue: http://localhost:8787
-  
+
 jwt:
   # secret 生产环境请自行生成 UUID
   secret: "50da066e-6080-40f5-a173-86bd27d4f674"
-  # token 过期时间（毫秒）默认 30min
-  duration: 1800000
+  # token 过期时间（毫秒）默认 8小时
+  duration: 28800000
 
 mybatis-flex:
   datasource:

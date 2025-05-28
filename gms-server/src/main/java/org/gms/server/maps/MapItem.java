@@ -20,6 +20,9 @@
 */
 package org.gms.server.maps;
 
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.Item;
@@ -31,6 +34,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+@Getter
+@Setter
+@EqualsAndHashCode(callSuper = false)
 public class MapItem extends AbstractMapObject {
     protected Client ownerClient;
     protected Item item;
@@ -170,18 +176,6 @@ public class MapItem extends AbstractMapObject {
 
     public final boolean isPickedUp() {
         return pickedUp;
-    }
-
-    public void setPickedUp(final boolean pickedUp) {
-        this.pickedUp = pickedUp;
-    }
-
-    public long getDropTime() {
-        return dropTime;
-    }
-
-    public void setDropTime(long time) {
-        this.dropTime = time;
     }
 
     public byte getDropType() {
