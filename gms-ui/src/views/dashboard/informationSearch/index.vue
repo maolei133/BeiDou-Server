@@ -90,7 +90,8 @@
           >
             <template #cell="{ record }">
               <a-popover>
-                <a-button type="text" size="mini">
+                <a-button type="text" size="mini"
+                  @click="itemClick(record.type, record.id, record.name)">
                   {{ record.name }}
                 </a-button>
                 <template #content>
@@ -182,6 +183,10 @@
         break;
     }
     return tag;
+  };
+
+  const itemClick = (type: string, itemId: number, itemName: string) => {
+    Message.success(`类型[${type}] ${itemName} (${itemId})`);
   };
 </script>
 
