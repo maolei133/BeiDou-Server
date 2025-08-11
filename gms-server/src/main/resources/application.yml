@@ -12,12 +12,9 @@ jwt:
 
 mybatis-flex:
   datasource:
-    mysql:
-      type: com.alibaba.druid.pool.DruidDataSource
-      driver-class-name: com.mysql.cj.jdbc.Driver
-      url: jdbc:mysql://localhost:3306/beidou?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
-      username: beidou
-      password: beidou
+    sqlite:
+      driver-class-name: org.sqlite.JDBC
+      url: jdbc:sqlite:/data/db/database.sqlite3?date_string_format=yyyy-MM-dd HH:mm:ss
   global-config:
     print-banner: false
 
@@ -33,6 +30,8 @@ springdoc:
 
 spring:
   flyway:
+    # 自动创建基线版本
+    baseline-on-migrate: false
     # 禁用版本验证
     validate-on-migrate: false
   servlet:

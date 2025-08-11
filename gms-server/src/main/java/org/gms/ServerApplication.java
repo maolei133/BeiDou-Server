@@ -12,8 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.LinkedHashMap;
 
 @SpringBootApplication
@@ -51,47 +49,24 @@ public class ServerApplication {
             resource = ServerApplication.class.getClassLoader().getResourceAsStream("application.yml");
         }
 
+        // 解析YAML配置
         Yaml yaml = new Yaml();
         LinkedHashMap<String, Object> property = yaml.load(resource);
         JSONObject mybatisFlex = JSONObject.parse(JSONObject.toJSONString(property.get("mybatis-flex")));
-        JSONObject datasource = mybatisFlex.getJSONObject("datasource").getJSONObject("mysql");
-        String driver = getStartParam(args, "mybatis-flex.datasource.mysql.driver-class-name");
-        if (driver == null) {
-            driver = datasource.getString("driver-class-name");
-        }
-        String dbUrl = getStartParam(args, "mybatis-flex.datasource.mysql.url");
+
+        // 改为获取SQLite配置节点
+        JSONObject datasource = mybatisFlex.getJSONObject("datasource").getJSONObject("sqlite");
+
+        // 参数获取逻辑调整
+        String dbUrl = getStartParam(args, "mybatis-flex.datasource.sqlite.url");
         if (dbUrl == null) {
             dbUrl = datasource.getString("url");
         }
-        String username = getStartParam(args, "mybatis-flex.datasource.mysql.username");
-        if (username == null) {
-            username = datasource.getString("username");
-        }
-        String password = getStartParam(args, "mybatis-flex.datasource.mysql.password");
-        if (password == null) {
-            password = datasource.getString("password");
-        }
 
-        String urlPrefix = dbUrl.split("\\?")[0];
-        String[] dbSplit = urlPrefix.split("/");
-        String dbName = dbSplit[dbSplit.length - 1];
-        String dbPrefix = urlPrefix.substring(0, urlPrefix.length() - dbName.length());
-        try (Connection connection = getConnection(driver, dbPrefix + "mysql", username, password)) {
-            PreparedStatement preparedStatement = connection.prepareStatement("SHOW DATABASES LIKE '" + dbName + "'");
-            ResultSet resultSet = preparedStatement.executeQuery();
-            if (resultSet.next()) {
-                return;
-            }
-            resultSet.close();
-            preparedStatement = connection.prepareStatement("CREATE DATABASE " + dbName + " DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci");
-            preparedStatement.executeUpdate();
-            preparedStatement.close();
+        // SQLite不需要用户名密码验证
+        try (Connection connection = DriverManager.getConnection(dbUrl)) {
+            connection.getMetaData();
         }
-    }
-
-    private static Connection getConnection(String driver, String url, String username, String password) throws Exception {
-        Class.forName(driver);
-        return DriverManager.getConnection(url, username, password);
     }
 
     private static String getStartParam(String[] args, String paramName) {
