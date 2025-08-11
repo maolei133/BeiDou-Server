@@ -162,7 +162,7 @@ function scheduledTimeout(eim) {
 }
 
 function bunnyDefeated(eim) {
-    eim.dropMessage(5, "因未能保护好月妙导致其重伤，你已被传送至流放之地！");
+    eim.dropMessage(5, "因未能保护好玉兔月妙导致其重伤，你已被传送至流放之地！");
     end(eim);
 }
 
