@@ -2,7 +2,6 @@ package org.gms;
 
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
-import org.gms.util.RequireUtil;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -57,13 +56,22 @@ public class ServerApplication {
         JSONObject mybatisFlex = JSONObject.parse(JSONObject.toJSONString(property.get("mybatis-flex")));
         JSONObject datasource = mybatisFlex.getJSONObject("datasource").getJSONObject("mysql");
         String driver = getStartParam(args, "mybatis-flex.datasource.mysql.driver-class-name");
-        if (driver == null) driver = datasource.getString("driver-class-name");
+        if (driver == null) {
+            driver = datasource.getString("driver-class-name");
+        }
         String dbUrl = getStartParam(args, "mybatis-flex.datasource.mysql.url");
-        if (dbUrl == null) dbUrl = datasource.getString("url");
+        if (dbUrl == null) {
+            dbUrl = datasource.getString("url");
+        }
         String username = getStartParam(args, "mybatis-flex.datasource.mysql.username");
-        if (username == null) username = datasource.getString("username");
+        if (username == null) {
+            username = datasource.getString("username");
+        }
         String password = getStartParam(args, "mybatis-flex.datasource.mysql.password");
-        if (password == null) password = datasource.getString("password");
+        if (password == null) {
+            password = datasource.getString("password");
+        }
+
         String urlPrefix = dbUrl.split("\\?")[0];
         String[] dbSplit = urlPrefix.split("/");
         String dbName = dbSplit[dbSplit.length - 1];

@@ -1,8 +1,8 @@
 server:
-  port: 8686
+  port: ${SERVER_PORT:8686}
 
 app:
-  vue: http://localhost:8787
+  vue: ${APP_VUE:http://localhost:8787}
 
 jwt:
   # secret 生产环境请自行生成 UUID
@@ -16,8 +16,8 @@ mybatis-flex:
       type: com.alibaba.druid.pool.DruidDataSource
       driver-class-name: com.mysql.cj.jdbc.Driver
       url: jdbc:mysql://localhost:3306/beidou?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
-      username: root
-      password: root
+      username: beidou
+      password: beidou
   global-config:
     print-banner: false
 
@@ -58,10 +58,10 @@ gms:
       # 是否自动封禁
       auto-ban: false
     # 公网ip
-    wan-host: 127.0.0.1
+    wan-host: ${GMS_SERVICE_WAN_HOST:127.0.0.1}
     # 局域网ip
-    lan-host: 127.0.0.1
+    lan-host: ${GMS_SERVICE_LAN_HOST:127.0.0.1}
     # 本地ip
-    localhost: 127.0.0.1
+    localhost: ${GMS_SERVICE_LOCAL_HOST:127.0.0.1}
     # 客户端登录端口
-    login-port: 8484
+    login-port: ${GMS_SERVICE_LOGIN_PORT:8484}
