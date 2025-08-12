@@ -5,7 +5,7 @@ import org.gms.dao.entity.ExtendValueDO;
 import org.gms.dao.mapper.ExtendValueMapper;
 import org.gms.manager.ServerManager;
 
-import java.sql.Date;
+import java.util.Date;
 
 import static org.gms.dao.entity.table.ExtendValueDOTableDef.EXTEND_VALUE_DO;
 

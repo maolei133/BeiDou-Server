@@ -5,7 +5,7 @@ import com.mybatisflex.annotation.Column;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.sql.Date;
+import java.time.LocalDate;
 
 @Data
 public class UpdateAccountByGmDTO implements Serializable {
@@ -13,7 +13,7 @@ public class UpdateAccountByGmDTO implements Serializable {
     private String pin;
     private String pic;
     @JsonFormat(pattern = "yyyy-MM-dd")
-    private Date birthday;
+    private LocalDate birthday;
     @Column("nxCredit")
     private Integer nxCredit;
     @Column("maplePoint")

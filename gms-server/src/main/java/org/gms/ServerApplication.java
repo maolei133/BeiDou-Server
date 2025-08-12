@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.util.LinkedHashMap;
 
@@ -64,8 +65,19 @@ public class ServerApplication {
         }
 
         // SQLite不需要用户名密码验证
-        try (Connection connection = DriverManager.getConnection(dbUrl)) {
-            connection.getMetaData();
+        try (Connection conn = DriverManager.getConnection(dbUrl)) {
+            DatabaseMetaData meta = conn.getMetaData();
+            // 1. 打印基础连接信息
+            log.info("=== 数据库连接信息 ===");
+            log.info("URL: {}", meta.getURL());
+            log.info("用户名: {}", meta.getUserName());
+
+            // 2. 打印数据库产品信息
+            log.info("=== 数据库产品信息 ===");
+            log.info("数据库名称: {}", meta.getDatabaseProductName());
+            log.info("版本: {}", meta.getDatabaseProductVersion());
+            log.info("驱动名称: {}", meta.getDriverName());
+            log.info("驱动版本: {}", meta.getDriverVersion());
         }
     }
 

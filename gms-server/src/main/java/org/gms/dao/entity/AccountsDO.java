@@ -13,11 +13,11 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.sql.Date;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 
 /**
- *  实体类。
+ * 实体类。
  *
  * @author sleep
  * @since 2024-05-24
@@ -53,7 +53,7 @@ public class AccountsDO implements Serializable {
     private Timestamp createdat;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
-    private Date birthday;
+    private LocalDate birthday;
 
     private Boolean banned;
 

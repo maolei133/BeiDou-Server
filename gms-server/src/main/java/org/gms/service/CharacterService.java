@@ -32,11 +32,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.*;
 
-import static com.mybatisflex.core.query.QueryMethods.dateDiff;
-import static com.mybatisflex.core.query.QueryMethods.now;
 import static org.gms.dao.entity.table.AccountsDOTableDef.ACCOUNTS_DO;
 import static org.gms.dao.entity.table.AreaInfoDOTableDef.AREA_INFO_DO;
 import static org.gms.dao.entity.table.BbsRepliesDOTableDef.BBS_REPLIES_DO;
@@ -402,7 +401,9 @@ public class CharacterService {
                 = new SavedLocation(savedlocationsDO.getMap(), savedlocationsDO.getPortal()));
 
         List<FamelogDO> famelogDOList = famelogMapper.selectListByQuery(QueryWrapper.create()
-                .where(FAMELOG_DO.CHARACTERID.eq(cid)).and(dateDiff(now(), FAMELOG_DO.WHEN).lt(30)));
+                .where(FAMELOG_DO.CHARACTERID.eq(cid))
+                .and(FAMELOG_DO.WHEN.ge(Timestamp.valueOf(LocalDateTime.now().minusDays(30))))
+        );
         long lastFameTime = 0;
         List<Integer> lastMonthFameIds = new ArrayList<>(31);
         for (FamelogDO famelogDO : famelogDOList) {

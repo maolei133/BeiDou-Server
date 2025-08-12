@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.sql.Date;
+import java.util.Date;
 
 /**
  * 扩展字段表 实体类。

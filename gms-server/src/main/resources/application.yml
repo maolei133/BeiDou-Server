@@ -11,10 +11,11 @@ jwt:
   duration: 28800000
 
 mybatis-flex:
+  dialect: sqlite
   datasource:
     sqlite:
       driver-class-name: org.sqlite.JDBC
-      url: jdbc:sqlite:/data/db/database.sqlite3?date_string_format=yyyy-MM-dd HH:mm:ss
+      url: jdbc:sqlite:/data/db/database.sqlite3
   global-config:
     print-banner: false
 
