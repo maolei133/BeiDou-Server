@@ -1212,7 +1212,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public void timeoutDisconnect() {
-        disconnectInternal(true, false);
+        disconnectInternal(false, false);   //只有这样才能正确断开玩家角色，否则会导致自动断开检测一直重复断开同一个橘色
     }
 
     private synchronized boolean canDisconnect() {
