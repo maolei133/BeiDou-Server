@@ -532,7 +532,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     public boolean banIP() {
         String ip = getRemoteAddress();
         try (Connection con = DatabaseConnection.getConnection()) {
-            if (ip.matches("[0-9]{1,3}\\..*")) {
+            if (ip.matches("[0-9]{1,3}\\..*") && !ip.equals("127.0.0.1")) {
                 try (PreparedStatement ps = con.prepareStatement("INSERT INTO ipbans VALUES (DEFAULT, ?, ?)")) {
                     ps.setString(1, ip);
                     ps.setInt(2, getAccID());
