@@ -174,15 +174,15 @@ public class AutobanManager {
         if (!useAntiCheatLoseHpMp() || chr == null || chr.gmLevel() >= 4) {
             return;
         }
-        
+
         // 限制扣除的HP不超过角色最大HP
         int actualHpLoss = Math.min(hpToLose, chr.getMaxHp());
         // 限制扣除的MP不超过角色最大MP
         int actualMpLoss = Math.min(mpToLose, chr.getMaxMp());
-        
+
         // 使用addMPHP同时扣除HP和MP
         chr.addMPHP(-actualHpLoss, -actualMpLoss);
-        
+
         // 记录日志
         if (useAutoBanLog()) {
             log.warn("[自动惩罚] 玩家 {} 因违规被扣除HP: {} MP: {}", chr.getName(), actualHpLoss, actualMpLoss);
@@ -234,21 +234,21 @@ public class AutobanManager {
         }
         long currentTime = Server.getInstance().getCurrentTime();
         long lastAttackTime = getLastSpam(8);
-        
+
         // 如果是第一次攻击，记录时间并返回
         if (lastAttackTime == 0) {
             spam(8);
             return false;
         }
-        
+
         // 计算攻击间隔
         long timeBetweenAttacks = currentTime - lastAttackTime;
-        
+
         // 更新攻击时间和技能
         spam(8);
-        
-        // 检查攻击间隔是否小于最小允许间隔，且为相同技能
-        if ((skill == 0 || SkillFactory.getSkill(skill).getAnimationTime() > 0) && timeBetweenAttacks < minAttackInterval) { //攻击动画>0才需要检测
+
+        // 检查攻击间隔是否小于最小允许间隔，且为相同技能，暴风箭雨/金属风暴 不做检测
+        if ((skill == 0 || skill == 13111002 || skill == 3121004 || skill == 5221004) && timeBetweenAttacks < minAttackInterval) {
             // 使用点数系统处理
             int result = addPoint(AutobanFactory.FAST_ATTACK, (skill > 0 ? "技能: " + SkillFactory.getSkillName(skill) + "[Lv." + skilllevel + "](" + skill + ")" : "普通攻击") + " 频率异常，间隔: " + timeBetweenAttacks + "ms (最小允许间隔: " + minAttackInterval + "ms)");
 
