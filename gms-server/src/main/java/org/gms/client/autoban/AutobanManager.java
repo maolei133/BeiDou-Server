@@ -9,6 +9,9 @@ import org.gms.client.Character;
 import org.gms.client.Disease;
 import org.gms.client.SkillFactory;
 import org.gms.config.GameConfig;
+import org.gms.constants.skills.Bowmaster;
+import org.gms.constants.skills.Corsair;
+import org.gms.constants.skills.WindArcher;
 import org.gms.net.server.Server;
 import org.gms.server.life.MobSkillFactory;
 import org.gms.server.life.MobSkillType;
@@ -248,7 +251,7 @@ public class AutobanManager {
         spam(8);
 
         // 检查攻击间隔是否小于最小允许间隔，且为相同技能，暴风箭雨/金属风暴 不做检测
-        if ((skill == 0 || skill == 13111002 || skill == 3121004 || skill == 5221004) && timeBetweenAttacks < minAttackInterval) {
+        if (skill == 0 || (skill != WindArcher.HURRICANE && skill != Bowmaster.HURRICANE && skill != Corsair.RAPID_FIRE) && timeBetweenAttacks < minAttackInterval) {
             // 使用点数系统处理
             int result = addPoint(AutobanFactory.FAST_ATTACK, (skill > 0 ? "技能: " + SkillFactory.getSkillName(skill) + "[Lv." + skilllevel + "](" + skill + ")" : "普通攻击") + " 频率异常，间隔: " + timeBetweenAttacks + "ms (最小允许间隔: " + minAttackInterval + "ms)");
 
