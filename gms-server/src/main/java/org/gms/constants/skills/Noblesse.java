@@ -21,25 +21,45 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 贵族 - 新手职业贵族分支常量
+ *
  * @author BubblesDev
  */
 public class Noblesse {
+    // 贵族技能常量
+    /*** 精灵的祝福 */
     public static final int BLESSING_OF_THE_FAIRY = 10000012;
+    /*** 椅子大师 */
     public static final int MAP_CHAIR = 10000100;
+    /*** 蜗牛投掷术 */
     public static final int THREE_SNAILS = 10001000;
+    /*** 团队治疗 */
     public static final int RECOVERY = 10001001;
+    /*** 疾风步 */
     public static final int NIMBLE_FEET = 10001002;
+    /*** 骑兽技能 */
     public static final int MONSTER_RIDER = 10001004;
+    /*** 英雄之回声 */
     public static final int ECHO_OF_HERO = 10001005;
+    /*** 锻造 */
     public static final int MAKER = 10001007;
+    /*** 流星竹雨 */
     public static final int BAMBOO_RAIN = 10001009;
+    /*** 金刚霸体 */
     public static final int INVINCIBLE_BARRIER = 10001010;
+    /*** 狂暴战魂 */
     public static final int POWER_EXPLOSION = 10001011;
+    /*** 宇宙船 */
     public static final int SPACESHIP = 1001014;
+    /*** 超时空冲锋 */
     public static final int SPACE_DASH = 1001015;
+    /*** 白雪人骑宠 */
     public static final int YETI_MOUNT1 = 10001019;
+    /*** 白雪人骑宠 */
     public static final int YETI_MOUNT2 = 10001022;
+    /*** 魔女的扫把 */
     public static final int WITCH_BROOMSTICK = 10001023;
+    /*** 蝙蝠怪 */
     public static final int BALROG_MOUNT = 10001031;
 }

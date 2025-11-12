@@ -21,15 +21,24 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 巫师（火毒） - 火毒魔法师职业常量
+ *
  * @author BubblesDev
  */
 public class FPMage {
+    /*** 火毒抗性 */
     public static final int PARTIAL_RESISTANCE = 2110000;
+    /*** 魔力激化 */
     public static final int ELEMENT_AMPLIFICATION = 2110001;
+    /*** 末日烈焰 */
     public static final int EXPLOSION = 2111002;
+    /*** 致命毒雾 */
     public static final int POISON_MIST = 2111003;
+    /*** 封印术 */
     public static final int SEAL = 2111004;
+    /*** 魔法狂暴 */
     public static final int SPELL_BOOSTER = 2111005;
+    /*** 火毒合击 */
     public static final int ELEMENT_COMPOSITION = 2111006;
 }

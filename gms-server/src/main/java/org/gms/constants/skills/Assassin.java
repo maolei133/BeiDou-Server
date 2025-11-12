@@ -22,13 +22,20 @@
 package org.gms.constants.skills;
 
 /**
+ * 刺客
  * @author BubblesDev
  */
 public class Assassin {
+    /*** 精准暗器 */
     public static final int CLAW_MASTERY = 4100000;
+    /*** 强力投掷 */
     public static final int CRITICAL_THROW = 4100001;
+    /*** 恢复术 */
     public static final int ENDURE = 4100002;
+    /*** 快速暗器 */
     public static final int CLAW_BOOSTER = 4101003;
+    /*** 轻功 */
     public static final int HASTE = 4101004;
+    /*** 生命吸收 */
     public static final int DRAIN = 4101005;
 }

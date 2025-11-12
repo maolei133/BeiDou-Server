@@ -21,14 +21,22 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 弩弓手 - 弩弓手职业常量
+ *
  * @author BubblesDev
  */
 public class Crossbowman {
+    /*** 精准弩 */
     public static final int CROSSBOW_MASTERY = 3200000;
+    /*** 终极弩 */
     public static final int FINAL_ATTACK = 3200001;
+    /*** 快速弩 */
     public static final int CROSSBOW_BOOSTER = 3201002;
+    /*** 强弩 */
     public static final int POWER_KNOCKBACK = 3201003;
+    /*** 无形箭 */
     public static final int SOUL_ARROW = 3201004;
+    /*** 穿透箭 */
     public static final int IRON_ARROW = 3201005;
 }

@@ -21,13 +21,21 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 海盗 - 初级海盗职业常量
+ *
  * @author BubblesDev
  */
 public class Pirate {
+    // 海盗技能常量
+    /*** 快动作 */
     public static final int BULLET_TIME = 5000000;
+    /*** 百裂拳 */
     public static final int FLASH_FIST = 5001001;
+    /*** 半月踢 */
     public static final int SOMERSAULT_KICK = 5001002;
+    /*** 双弹射击 */
     public static final int DOUBLE_SHOT = 5001003;
+    /*** 疾驰 */
     public static final int DASH = 5001005;
 }

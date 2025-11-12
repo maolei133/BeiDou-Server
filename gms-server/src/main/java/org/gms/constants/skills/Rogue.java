@@ -21,14 +21,23 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 飞侠 - 初级飞侠职业常量
+ *
  * @author BubblesDev
  */
 public class Rogue {
+    // 飞侠技能常量
+    /*** 集中术 */
     public static final int NIMBLE_BODY = 4001000;
+    /*** 远程暗器 */
     public static final int KEEN_EYES = 4001001;
+    /*** 诅咒术 */
     public static final int DARK_SIGHT = 4001003;
+    /*** 隐身术 */
     public static final int DISORDER = 4001002;
+    /*** 二连击 */
     public static final int DOUBLE_STAB = 4001334;
+    /*** 双飞斩 */
     public static final int LUCKY_SEVEN = 4001344;
 }

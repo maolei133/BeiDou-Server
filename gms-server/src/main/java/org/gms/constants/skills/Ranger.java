@@ -21,15 +21,25 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 游侠 - 弓箭手职业游侠分支常量
+ *
  * @author BubblesDev
  */
 public class Ranger {
+    // 游侠技能常量
+    /*** 疾风步 */
     public static final int THRUST = 3110000;
+    /*** 贯穿箭 */
     public static final int MORTAL_BLOW = 3110001;
+    /*** 替身术 */
     public static final int PUPPET = 3111002;
+    /*** 烈火箭 */
     public static final int INFERNO = 3111003;
+    /*** 箭雨 */
     public static final int ARROW_RAIN = 3111004;
+    /*** 银鹰召唤 */
     public static final int SILVER_HAWK = 3111005;
+    /*** 箭扫射 */
     public static final int STRAFE = 3111006;
 }

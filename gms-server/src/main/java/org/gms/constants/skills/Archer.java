@@ -21,14 +21,22 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 弓箭手 - 弓箭手职业常量
+ *
  * @author BubblesDev
  */
 public class Archer {
+    /*** 精准箭 */
     public static final int BLESSING_OF_AMAZON = 3000000;
+    /*** 远程箭 */
     public static final int EYE_OF_AMAZON = 3000002;
+    /*** 强力箭 */
     public static final int CRITICAL_SHOT = 3000001;
+    /*** 集中术 */
     public static final int FOCUS = 3001003;
+    /*** 二连射 */
     public static final int DOUBLE_SHOT = 3001005;
+    /*** 断魂箭 */
     public static final int ARROW_BLOW = 3001004;
 }

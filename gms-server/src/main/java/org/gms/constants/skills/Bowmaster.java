@@ -21,17 +21,28 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 神射手 - 神射手职业常量
+ *
  * @author BubblesDev
  */
 public class Bowmaster {
+    /*** 冒险岛勇士 */
     public static final int MAPLE_WARRIOR = 3121000;
+    /*** 火眼晶晶 */
     public static final int SHARP_EYES = 3121002;
+    /*** 飞龙冲击波 */
     public static final int DRAGONS_BREATH = 3121003;
+    /*** 暴风箭雨 */
     public static final int HURRICANE = 3121004;
+    /*** 神箭手 */
     public static final int BOW_EXPERT = 3120005;
+    /*** 火凤凰 */
     public static final int PHOENIX = 3121006;
+    /*** 击退箭 */
     public static final int HAMSTRING = 3121007;
+    /*** 集中精力 */
     public static final int CONCENTRATE = 3121008;
+    /*** 勇士的意志 */
     public static final int HEROS_WILL = 3121009;
 }

@@ -21,15 +21,25 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 独行客 - 飞侠职业独行客分支常量
+ *
  * @author BubblesDev
  */
 public class ChiefBandit {
+    // 独行客技能常量
+    /*** 强化盾 */
     public static final int SHIELD_MASTERY = 4210000;
+    /*** 转化术 */
     public static final int CHAKRA = 4211001;
+    /*** 落叶斩 */
     public static final int ASSAULTER = 4211002;
+    /*** 敛财术 */
     public static final int PICKPOCKET = 4211003;
+    /*** 分身术 */
     public static final int BAND_OF_THIEVES = 4211004;
+    /*** 金钱护盾 */
     public static final int MESO_GUARD = 4211005;
+    /*** 金钱炸弹 */
     public static final int MESO_EXPLOSION = 4211006;
 }

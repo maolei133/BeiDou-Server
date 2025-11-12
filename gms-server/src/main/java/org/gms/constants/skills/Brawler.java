@@ -21,16 +21,25 @@
 */
 package org.gms.constants.skills;
 
-/**
+/*** 拳手 - 拳手职业常量
+ *
  * @author BubblesDev
  */
 public class Brawler {
+    /*** 强体术 */
     public static final int IMPROVE_MAX_HP = 5100000;
+    /*** 精准拳 */
     public static final int KNUCKLER_MASTERY = 5100001;
+    /*** 回马 */
     public static final int BACK_SPIN_BLOW = 5101002;
+    /*** 升龙连击 */
     public static final int DOUBLE_UPPERCUT = 5101003;
+    /*** 贯骨击 */
     public static final int CORKSCREW_BLOW = 5101004;
+    /*** 生命分流 */
     public static final int MP_RECOVERY = 5101005;
+    /*** 急速拳 */
     public static final int KNUCKLER_BOOSTER = 5101006;
+    /*** 橡木伪装 */
     public static final int OAK_BARREL = 5101007;
 }

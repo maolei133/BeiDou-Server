@@ -21,14 +21,23 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 拳手 - 海盗职业拳手分支常量
+ *
  * @author BubblesDev
  */
 public class Marauder {
+    // 拳手技能常量
+    /*** 迷惑攻击 */
     public static final int STUN_MASTERY = 5110000;
+    /*** 能量获得 */
     public static final int ENERGY_CHARGE = 5110001;
+    /*** 能量爆破 */
     public static final int ENERGY_BLAST = 5111002;
+    /*** 能量耗转 */
     public static final int ENERGY_DRAIN = 5111004;
+    /*** 超人变形 */
     public static final int TRANSFORMATION = 5111005;
+    /*** 碎石乱击 */
     public static final int SHOCKWAVE = 5111006;
 }

@@ -21,15 +21,25 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 狙击手 - 弓箭手职业狙击手分支常量
+ *
  * @author BubblesDev
  */
 public class Sniper {
+    // 狙击手技能常量
+    /*** 疾风步 */
     public static final int THRUST = 3210000;
+    /*** 贯穿箭 */
     public static final int MORTAL_BLOW = 3210001;
+    /*** 替身术 */
     public static final int PUPPET = 3211002;
+    /*** 寒冰箭 */
     public static final int BLIZZARD = 3211003;
+    /*** 升龙弩 */
     public static final int ARROW_ERUPTION = 3211004;
+    /*** 金鹰召唤 */
     public static final int GOLDEN_EAGLE = 3211005;
+    /*** 箭扫射 */
     public static final int STRAFE = 3211006;
 }

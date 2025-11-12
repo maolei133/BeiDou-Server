@@ -21,15 +21,24 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 火枪手 - 海盗职业火枪手分支常量
+ *
  * @author BubblesDev
  */
 public class Gunslinger {
+    /*** 精准枪 */
     public static final int GUN_MASTERY = 5200000;
+    /*** 快枪手 */
     public static final int INVISIBLE_SHOT = 5201001;
+    /*** 投弹攻击 */
     public static final int GRENADE = 5201002;
+    /*** 速射 */
     public static final int GUN_BOOSTER = 5201003;
+    /*** 迷惑射击 */
     public static final int BLANK_SHOT = 5201004;
+    /*** 轻羽鞋 */
     public static final int WINGS = 5201005;
+    /*** 激退射杀 */
     public static final int RECOIL_SHOT = 5201006;
 }

@@ -21,11 +21,22 @@
 */
 package org.gms.constants.skills;
 
+/***
+ * 牧师 - 牧师职业常量
+ *
+ * @author BubblesDev
+ */
 public class Cleric {
+    /*** 魔力吸收 */
     public static final int MP_EATER = 2300000;
+    /*** 群体治愈 */
     public static final int HEAL = 2301002;
+    /*** 神之保护 */
     public static final int INVINCIBLE = 2301003;
+    /*** 快速移动 */
     public static final int TELEPORT = 2301001;
+    /*** 祝福 */
     public static final int BLESS = 2301004;
+    /*** 圣箭术 */
     public static final int HOLY_ARROW = 2301005;
 }

@@ -21,16 +21,27 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 骑士 - 战士职业骑士分支常量
+ *
  * @author BubblesDev
  */
 public class Page {
+    // 骑士技能常量
+    /*** 精准剑 */
     public static final int SWORD_MASTERY = 1200000;
+    /*** 精准钝器 */
     public static final int BW_MASTERY = 1200001;
+    /*** 终极剑 */
     public static final int FINAL_ATTACK_SWORD = 1200002;
+    /*** 终极钝器 */
     public static final int FINAL_ATTACK_BW = 1200003;
+    /*** 快速剑 */
     public static final int SWORD_BOOSTER = 1201004;
+    /*** 快速钝器 */
     public static final int BW_BOOSTER = 1201005;
+    /*** 压制术 */
     public static final int THREATEN = 1201006;
+    /*** 伤害反击 */
     public static final int POWER_GUARD = 1201007;
 }

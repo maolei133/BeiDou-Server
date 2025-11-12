@@ -21,17 +21,29 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 魔导师（冰雷） - 法师职业冰雷分支常量
+ *
  * @author BubblesDev
  */
 public class ILArchMage {
+    // 冰雷法师技能常量
+    /*** 冒险岛勇士 */
     public static final int MAPLE_WARRIOR = 2221000;
+    /*** 创世之破 */
     public static final int BIG_BANG = 2221001;
+    /*** 魔法反击 */
     public static final int MANA_REFLECTION = 2221002;
+    /*** 冰凤球 */
     public static final int ICE_DEMON = 2221003;
+    /*** 终极无限 */
     public static final int INFINITY = 2221004;
+    /*** 火魔兽 */
     public static final int IFRIT = 2221005;
-    public static final int BLIZZARD = 2221007;
-    public static final int HEROS_WILL = 2221008;
+    /*** 链环闪电 */
     public static final int CHAIN_LIGHTNING = 2221006;
+    /*** 落霜冰破 */
+    public static final int BLIZZARD = 2221007;
+    /*** 勇士的意志 */
+    public static final int HEROS_WILL = 2221008;
 }

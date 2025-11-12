@@ -21,16 +21,26 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 剑客 - 战士职业剑客分支常量
+ *
  * @author BubblesDev
  */
 public class Fighter {
+    /*** 精准剑 */
     public static final int SWORD_MASTERY = 1100000;
+    /*** 精准斧 */
     public static final int AXE_MASTERY = 1100001;
+    /*** 终极剑 */
     public static final int FINAL_ATTACK_SWORD = 1100002;
+    /*** 终极斧 */
     public static final int FINAL_ATTACK_AXE = 1100003;
+    /*** 快速剑 */
     public static final int SWORD_BOOSTER = 1101004;
+    /*** 快速斧 */
     public static final int AXE_BOOSTER = 1101005;
+    /*** 愤怒之火 */
     public static final int RAGE = 1101006;
+    /*** 伤害反击 */
     public static final int POWER_GUARD = 1101007;
 }

@@ -21,14 +21,23 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 猎人 - 弓箭手职业猎人分支常量
+ *
  * @author BubblesDev
  */
 public class Hunter {
+    // 猎人技能常量
+    /*** 精准弓 */
     public static final int BOW_MASTERY = 3100000;
+    /*** 终极弓 */
     public static final int FINAL_ATTACK = 3100001;
+    /*** 快速箭 */
     public static final int BOW_BOOSTER = 3101002;
+    /*** 强弓 */
     public static final int POWER_KNOCKBACK = 3101003;
+    /*** 无形箭 */
     public static final int SOUL_ARROW = 3101004;
+    /*** 爆炸箭 */
     public static final int ARROW_BOMB = 3101005;
 }

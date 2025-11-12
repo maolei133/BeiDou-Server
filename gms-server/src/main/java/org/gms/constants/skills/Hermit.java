@@ -21,15 +21,24 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 隐士 - 盗贼职业隐士分支常量
+ *
  * @author BubblesDev
  */
 public class Hermit {
+    /*** 药剂精通 */
     public static final int ALCHEMIST = 4110000;
+    /*** 聚财术 */
     public static final int MESO_UP = 4111001;
+    /*** 影分身 */
     public static final int SHADOW_PARTNER = 4111002;
+    /*** 影网术 */
     public static final int SHADOW_WEB = 4111003;
+    /*** 金钱攻击 */
     public static final int SHADOW_MESO = 4111004;
+    /*** 多重飞镖 */
     public static final int AVENGER = 4111005;
+    /*** 二段跳 */
     public static final int FLASH_JUMP = 4111006;
 }

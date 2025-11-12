@@ -21,17 +21,29 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 隐士 - 飞侠职业隐士分支常量
+ *
  * @author BubblesDev
  */
 public class NightLord {
+    // 隐士技能常量
+    /*** 冒险岛勇士 */
     public static final int MAPLE_WARRIOR = 4121000;
+    /*** 假动作 */
     public static final int SHADOW_SHIFTER = 4120002;
+    /*** 挑衅 */
     public static final int TAUNT = 4121003;
+    /*** 忍者伏击 */
     public static final int NINJA_AMBUSH = 4121004;
+    /*** 武器用毒液 */
     public static final int VENOMOUS_STAR = 4120005;
+    /*** 暗器伤人 */
     public static final int SHADOW_STARS = 4121006;
+    /*** 三连环光击破 */
     public static final int TRIPLE_THROW = 4121007;
+    /*** 忍者冲击 */
     public static final int NINJA_STORM = 4121008;
+    /*** 勇士的意志 */
     public static final int HEROS_WILL = 4121009;
 }

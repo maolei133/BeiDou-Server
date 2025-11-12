@@ -21,18 +21,30 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 英雄 - 战士职业英雄分支常量
+ *
  * @author BubblesDev
  */
 public class Hero {
+    /*** 冒险岛勇士 */
     public static final int MAPLE_WARRIOR = 1121000;
+    /*** 磁石 */
     public static final int MONSTER_MAGNET = 1121001;
+    /*** 稳如泰山 */
     public static final int STANCE = 1121002;
+    /*** 进阶斗气 */
     public static final int ADVANCED_COMBO = 1120003;
+    /*** 阿基里斯 */
     public static final int ACHILLES = 1120004;
+    /*** 寒冰掌 */
     public static final int GUARDIAN = 1120005;
+    /*** 突进 */
     public static final int RUSH = 1121006;
+    /*** 葵花宝典 */
     public static final int ENRAGE = 1121010;
+    /*** 勇士的意志 */
     public static final int HEROS_WILL = 1121011;
+    /*** 轻舞飞扬 */
     public static final int BRANDISH = 1121008;
 }

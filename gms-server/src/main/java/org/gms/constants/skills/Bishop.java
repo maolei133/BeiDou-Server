@@ -21,18 +21,30 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 主教 - 主教职业常量
+ *
  * @author BubblesDev
  */
 public class Bishop {
+    /*** 冒险岛勇士 */
     public static final int MAPLE_WARRIOR = 2321000;
+    /*** 创世之破 */
     public static final int BIG_BANG = 2321001;
+    /*** 魔法反击 */
     public static final int MANA_REFLECTION = 2321002;
+    /*** 强化圣龙 */
     public static final int BAHAMUT = 2321003;
+    /*** 终极无限 */
     public static final int INFINITY = 2321004;
+    /*** 圣灵之盾 */
     public static final int HOLY_SHIELD = 2321005;
+    /*** 复活术 */
     public static final int RESURRECTION = 2321006;
+    /*** 光芒飞箭 */
     public static final int ANGEL_RAY = 2321007;
+    /*** 圣光普照 */
     public static final int GENESIS = 2321008;
+    /*** 勇士的意志 */
     public static final int HEROS_WILL = 2321009;
 }

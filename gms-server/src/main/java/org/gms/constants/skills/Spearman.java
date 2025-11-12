@@ -21,16 +21,27 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 枪战士 - 战士职业枪战士分支常量
+ *
  * @author BubblesDev
  */
 public class Spearman {
+    // 枪战士技能常量
+    /*** 精准枪 */
     public static final int SPEAR_MASTERY = 1300000;
+    /*** 精准矛 */
     public static final int POLEARM_MASTERY = 1300001;
+    /*** 终极枪 */
     public static final int FINAL_ATTACK_SPEAR = 1300002;
+    /*** 终极矛 */
     public static final int FINAL_ATTACK_POLEARM = 1300003;
+    /*** 快速枪 */
     public static final int SPEAR_BOOSTER = 1301004;
+    /*** 快速矛 */
     public static final int POLEARM_BOOSTER = 1301005;
+    /*** 极限防御 */
     public static final int IRON_WILL = 1301006;
+    /*** 神圣之火 */
     public static final int HYPER_BODY = 1301007;
 }

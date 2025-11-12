@@ -22,13 +22,20 @@
 package org.gms.constants.skills;
 
 /**
+ * 侠客
  * @author BubblesDev
  */
 public class Bandit {
+    /*** 精准短刀 */
     public static final int DAGGER_MASTERY = 4200000;
+    /*** 恢复术 */
     public static final int ENDURE = 4200001;
+    /*** 快速短刀 */
     public static final int DAGGER_BOOSTER = 4201002;
+    /*** 轻功 */
     public static final int HASTE = 4201003;
+    /*** 神通术 */
     public static final int STEAL = 4201004;
+    /*** 回旋斩 */
     public static final int SAVAGE_BLOW = 4201005;
 }

@@ -21,15 +21,25 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 巫师（冰雷） - 法师职业冰雷分支常量
+ *
  * @author BubblesDev
  */
 public class ILMage {
+    // 冰雷法师技能常量
+    /*** 魔法抗性 */
     public static final int PARTIAL_RESISTANCE = 2210000;
+    /*** 魔力激化 */
     public static final int ELEMENT_AMPLIFICATION = 2210001;
+    /*** 冰咆哮 */
     public static final int ICE_STRIKE = 2211002;
+    /*** 落雷枪 */
     public static final int THUNDER_SPEAR = 2211003;
+    /*** 封印术 */
     public static final int SEAL = 2211004;
+    /*** 魔法狂暴 */
     public static final int SPELL_BOOSTER = 2211005;
+    /*** 冰雷合击 */
     public static final int ELEMENT_COMPOSITION = 2211006;
 }

@@ -21,17 +21,28 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 龙骑士 - 龙骑士职业常量
+ *
  * @author David
  */
 public class DragonKnight {
+    /*** 魔法抗性 */
     public static final int ELEMENTAL_RESISTANCE = 1310000;
+    /*** 枪连击 */
     public static final int SPEAR_CRUSHER = 1311001;
+    /*** 矛连击 */
     public static final int POLE_ARM_CRUSHER = 1311002;
+    /*** 无双枪 */
     public static final int SPEAR_DRAGON_FURY = 1311003;
+    /*** 无双矛 */
     public static final int POLE_ARM_DRAGON_FURY = 1311004;
+    /*** 龙之献祭 */
     public static final int SACRIFICE = 1311005;
+    /*** 龙咆哮 */
     public static final int DRAGON_ROAR = 1311006;
+    /*** 防御崩坏 */
     public static final int POWER_CRASH = 1311007;
+    /*** 龙之魂 */
     public static final int DRAGON_BLOOD = 1311008;
 }

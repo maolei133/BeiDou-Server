@@ -21,14 +21,23 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 神枪手 - 海盗职业神枪手分支常量
+ *
  * @author BubblesDev
  */
 public class Outlaw {
+    // 神枪手技能常量
+    /*** 三连射杀 */
     public static final int BURST_FIRE = 5210000;
+    /*** 章鱼炮台 */
     public static final int OCTOPUS = 5211001;
+    /*** 海鸥空袭 */
     public static final int GAVIOTA = 5211002;
+    /*** 烈焰喷射 */
     public static final int FLAME_THROWER = 5211004;
+    /*** 导航 */
     public static final int HOMING_BEACON = 5211006;
+    /*** 寒冰喷射 */
     public static final int ICE_SPLITTER = 5211005;
 }

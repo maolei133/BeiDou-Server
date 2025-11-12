@@ -21,19 +21,32 @@
 */
 package org.gms.constants.skills;
 
-/**
+/***
+ * 船长 - 神枪手职业常量
+ *
  * @author BubblesDev
  */
 public class Corsair {
+    /*** 冒险岛勇士 */
     public static final int MAPLE_WARRIOR = 5221000;
+    /*** 属性强化 */
     public static final int ELEMENTAL_BOOST = 5220001;
+    /*** 超级章鱼炮台 */
     public static final int WRATH_OF_THE_OCTOPI = 5220002;
+    /*** 地毯式空袭 */
     public static final int AERIAL_STRIKE = 5221003;
+    /*** 金属风暴 */
     public static final int RAPID_FIRE = 5221004;
+    /*** 武装 */
     public static final int BATTLE_SHIP = 5221006;
+    /*** 急速射 */
     public static final int BATTLESHIP_CANNON = 5221007;
+    /*** 重量炮击 */
     public static final int BATTLESHIP_TORPEDO = 5221008;
+    /*** 心灵控制 */
     public static final int HYPNOTIZE = 5221009;
+    /*** 勇士的意志 */
     public static final int SPEED_INFUSION = 5221010;
+    /*** 导航辅助 */
     public static final int BULLSEYE = 5220011;
 }
