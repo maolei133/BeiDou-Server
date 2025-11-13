@@ -163,6 +163,10 @@ public final class FamilyUseHandler extends AbstractPacketHandler {
                 return;
             }
             for (PartyCharacter mpc : player.getParty().getMembers()) {
+                // 检查玩家是否在线且有效
+                if (mpc.getPlayer() == null) {
+                    continue;
+                }
                 FamilyEntry mpcEntry = mpc.getPlayer().getFamilyEntry();
                 // 没有学院的不享受
                 if (mpcEntry == null) {

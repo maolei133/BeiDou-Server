@@ -4066,7 +4066,11 @@ public class Character extends AbstractCharacterObject {
         }
 
         List<StatEffect> buffList = new LinkedList<>();
-        while (true) {
+        // 添加最大迭代次数限制，防止无限循环
+        int iterations = 0;
+        int maxIterations = 10000; // 最大迭代次数设置为10000次
+        
+        while (iterations < maxIterations) {
             Map<StatEffect, Integer> leafStatCount = topologicalSortLeafStatCount(buffStack);
             if (leafStatCount.isEmpty()) {
                 break;
@@ -4078,6 +4082,16 @@ public class Character extends AbstractCharacterObject {
             } else {
                 buffList.addAll(clearedNodes);
             }
+            
+            iterations++;
+        }
+        
+        // 如果达到最大迭代次数，记录错误日志
+        if (iterations >= maxIterations) {
+            log.error("拓扑排序超过最大迭代次数: {}，可能存在循环依赖或算法缺陷", maxIterations);
+            // 可以选择抛出异常或者返回已处理的部分结果
+        } else {
+            log.debug("拓扑排序完成，共迭代{}次，处理了{}个效果", iterations, buffList.size());
         }
 
         return buffList;

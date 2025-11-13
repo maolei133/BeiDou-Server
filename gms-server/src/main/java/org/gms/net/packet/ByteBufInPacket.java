@@ -65,7 +65,13 @@ public class ByteBufInPacket implements InPacket {
 
     @Override
     public void skip(int numberOfBytes) {
-        byteBuf.skipBytes(numberOfBytes);
+        int readableBytes = byteBuf.readableBytes();
+        if (numberOfBytes <= readableBytes) {
+            byteBuf.skipBytes(numberOfBytes);
+        } else {
+            // 如果要跳过的字节数大于可读字节数，则只跳过可读字节
+            byteBuf.skipBytes(readableBytes);
+        }
     }
 
     @Override
