@@ -24,8 +24,9 @@ package org.gms.client;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.gms.cheatsystem.cheatCharacter;
-import org.gms.cheatsystem.itemVac;
+import org.gms.cheat.core.CheatManager;
+import org.gms.cheat.manager.CheatModuleManager;
+import org.gms.cheat.plugin.ItemVacPlugin;
 import org.gms.client.autoban.AutobanManager;
 import org.gms.client.creator.CharacterFactoryRecipe;
 import org.gms.client.inventory.*;
@@ -397,7 +398,6 @@ public class Character extends AbstractCharacterObject {
     /**
      * 自动吸物定时器
      */
-    private ScheduledFuture<?> cheatChaeracter_Timer_itemvac = null;
     private final Lock chrLock = new ReentrantLock(true);
     private final Lock evtLock = new ReentrantLock(true);
     private final Lock petLock = new ReentrantLock(true);
@@ -485,10 +485,11 @@ public class Character extends AbstractCharacterObject {
     @Getter
     private float familyDrop = 1;
     /**
-     * 内置作弊类
+     * 作弊管理器
      */
     @Getter
-    private final cheatCharacter cheatcharacter = new cheatCharacter(this);
+    private CheatManager cheatManager;
+    
     private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
     private static final NameChangeService nameChangeService = ServerManager.getApplicationContext().getBean(NameChangeService.class);
     private static final WorldTransferService worldTransferService = ServerManager.getApplicationContext().getBean(WorldTransferService.class);
@@ -517,6 +518,9 @@ public class Character extends AbstractCharacterObject {
         }
         quests = new LinkedHashMap<>();
         setPosition(new Point(0, 0));
+        
+        // 初始化作弊管理器
+        initCheatManager();
     }
 
     public Job getJobStyle(byte opt) {
@@ -569,6 +573,14 @@ public class Character extends AbstractCharacterObject {
         }
 
         return ret;
+    }
+    
+    /**
+     * 初始化作弊管理器
+     */
+    private void initCheatManager() {
+        cheatManager = CheatModuleManager.getInstance().createCheatManager(this);
+        CheatModuleManager.getInstance().registerAllPlugins(this);
     }
 
     public boolean isLoggedInWorld() {
@@ -2347,7 +2359,6 @@ public class Character extends AbstractCharacterObject {
      */
     public void startCheatItemVac() {
         if (!isLoggedInWorld() || pets[0] == null) {// 前置条件检查
-//            log.warn("角色 {} 不在游戏世界或没有主宠，不创建宠吸实例", name);
             return;
         }
 
@@ -2357,45 +2368,26 @@ public class Character extends AbstractCharacterObject {
                 return;
             }
             stopCheatItemVac();// 停止现有定时器
-            itemVac itemVac = cheatcharacter.getItemvac();
+            
+            ItemVacPlugin itemVacPlugin = cheatManager.getPlugin("ItemVac");
+            if (itemVacPlugin == null) {
+                return;
+            }
+            
             // 参数验证
-            if (!itemVac.updatePetVacParam() || !itemVac.isEnable()) {
-//                log.warn("角色 {} 宠吸功能未启用或参数更新失败", name);
+            if (!itemVacPlugin.updatePetVacParam() || !itemVacPlugin.isEnable()) {
                 return;
             }
-            int delay = itemVac.getSleep();
+            
+            int delay = itemVacPlugin.getSleep();
             if (delay <= 0) {
-//                log.warn("角色 {} 宠吸间隔配置无效: {}", name, delay);
                 return;
             }
 
-            // 创建定时任务
-            cheatChaeracter_Timer_itemvac = TimerManager.getInstance().register(() -> {
-                // 定时任务执行逻辑
-                try {
-                    // 条件检查
-                    if (!isLoggedInWorld() || pets[0] == null || !itemVac.updatePetVacParam() || !itemVac.isEnable()) {
-                        stopCheatItemVac();
-                        return;
-                    }
-
-                    // 执行吸物操作
-                    itemVac.pickupItem((byte) 0);
-
-                    // 检查间隔变化
-                    int currentDelay = itemVac.getSleep();
-                    if (currentDelay != delay) {
-                        // 异步重新启动，避免定时器线程阻塞
-                        TimerManager.getInstance().schedule(this::startCheatItemVac, 0);
-                    }
-
-                } catch (Exception ex) {
-//                    log.error("角色 {} 宠吸任务执行异常", name, ex);
-                    stopCheatItemVac();
-                }
-            }, delay, 1000);
-//            log.info("角色 {} 启动宠吸功能，间隔: {}ms", name, delay);
-            if (itemVac.isSHOW_PARAMS()) {//是否显示宠吸参数提示
+            // 启动插件
+            itemVacPlugin.start();
+            
+            if (itemVacPlugin.isShowParams()) {//是否显示宠吸参数提示
                 StringBuilder sb = new StringBuilder();
 
                 // 转换为秒，保留1位小数
@@ -2403,12 +2395,12 @@ public class Character extends AbstractCharacterObject {
 
                 sb.append("#e#b宠物智能拾取参数#k#n\r\n");
                 sb.append("════════════════\r\n");
-                sb.append(String.format("多人事件拾取：%s\r\n", itemVac.isALLOW_IN_EVENT() ? "#b√#k" : "#r×#k"));
+                sb.append(String.format("多人事件拾取：%s\r\n", itemVacPlugin.isAllowInEvent() ? "#b√#k" : "#r×#k"));
                 sb.append(String.format("智能拾取金币：%s\r\n", isEquippedMesoMagnet() ? "#b√#k" : "#r×#k"));
                 sb.append(String.format("智能拾取物品：%s\r\n", isEquippedItemPouch() ? "#b√#k" : "#r×#k"));
                 sb.append(String.format("智能过滤物品：%s\r\n", isEquippedPetItemIgnore() ? "#b√#k" : "#r×#k"));
                 sb.append(String.format("拾取超时物品：%s\r\n", isEquippedPetItemScales() ? "#b√#k" : "#r×#k"));
-                sb.append(String.format("智能拾取半径：%.0f 码\r\n", itemVac.getRadius() / 30));
+                sb.append(String.format("智能拾取半径：%.0f 码\r\n", itemVacPlugin.getRadius() / 30));
                 sb.append(String.format("智能拾取间隔：%.1f 秒\r\n", intervalSeconds));
                 sb.append("════════════════\r\n");
                 sb.append("使用宠物装备激活特定功能\r\n");
@@ -2429,10 +2421,10 @@ public class Character extends AbstractCharacterObject {
     public void stopCheatItemVac() {
         chrLock.lock();
         try {
-            if (cheatChaeracter_Timer_itemvac != null) {
-                cheatChaeracter_Timer_itemvac.cancel(true);
-                cheatChaeracter_Timer_itemvac = null;
-//                log.info("角色 {} 停止了宠吸",name);
+            // 停止作弊插件
+            ItemVacPlugin itemVacPlugin = cheatManager.getPlugin("ItemVac");
+            if (itemVacPlugin != null) {
+                itemVacPlugin.stop();
             }
         } finally {
             chrLock.unlock();

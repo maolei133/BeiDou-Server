@@ -612,10 +612,11 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                 }
 
                 int price = p.readInt();
-                if (perBundle <= 0 || perBundle * bundles > 2000 || bundles <= 0 || price <= 0 || price > Integer.MAX_VALUE) {
+                short slotMax = ItemInformationProvider.getInstance().getSlotMax(c,ivItem.getItemId());
+                if (perBundle <= 0 || perBundle * bundles > slotMax || bundles <= 0 || price <= 0 || price > Integer.MAX_VALUE) {
                     AutobanFactory.PACKET_EDIT.alert(chr, chr.getName() + I18nUtil.getMessage("PlayerInteractionHandler.message10"));
                     log.warn(I18nUtil.getLogMessage("PlayerInteractionHandler.warn5"),
-                            chr.getName(), perBundle, perBundle * bundles, bundles, price);
+                            chr.getName(), perBundle, slotMax,perBundle * bundles, bundles, price);
                     return;
                 }
 

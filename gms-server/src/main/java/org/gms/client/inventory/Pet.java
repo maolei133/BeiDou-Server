@@ -21,6 +21,7 @@
 */
 package org.gms.client.inventory;
 
+import org.gms.cheat.plugin.ItemVacPlugin;
 import org.gms.client.Character;
 import org.gms.util.CashIdGenerator;
 import org.gms.constants.game.ExpTable;
@@ -237,7 +238,10 @@ public class Pet extends Item {
         if (petz != null) {
             owner.forceUpdateItem(petz);
         }
-        owner.getCheatcharacter().getItemvac().updatePetVacParam();
+        ItemVacPlugin itemVacPlugin = owner.getCheatManager().getPlugin("ItemVac");
+        if (itemVacPlugin != null) {
+            itemVacPlugin.updatePetVacParam();
+        }
     }
 
     public void setLevel(byte level) {

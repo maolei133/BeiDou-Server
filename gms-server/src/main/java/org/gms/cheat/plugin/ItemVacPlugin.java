@@ -1,10 +1,12 @@
-package org.gms.cheatsystem;
+package org.gms.cheat.plugin;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.gms.client.inventory.Pet;
+import org.gms.cheat.core.BaseCheatPlugin;
 import org.gms.client.Character;
+import org.gms.client.inventory.Pet;
 import org.gms.config.GameConfig;
+import org.gms.server.TimerManager;
 import org.gms.server.maps.MapItem;
 import org.gms.server.maps.MapObject;
 import org.gms.server.maps.MapObjectType;
@@ -13,19 +15,20 @@ import java.awt.*;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ScheduledFuture;
+
 
 @Getter
 @Setter
-public class itemVac extends basic {
-    private Character player;
+public class ItemVacPlugin extends BaseCheatPlugin {
     /** 宠吸功能总开关 */
     private boolean enable = true;
     /** 是否允许在事件地图中使用宠吸功能，false=当检测到事件地图出现BOSS则关闭宠吸 */
-    private boolean ALLOW_IN_EVENT = false;
+    private boolean allowInEvent = false;
     /** 是否在界面上展示参数提示信息 */
-    private boolean SHOW_PARAMS = true;
+    private boolean showParams = true;
     /** 最大拾取半径限制 */
-    private double MAX_RADIUS = 15000;
+    private double maxRadius = 15000;
     /** 当前拾取半径，默认无穷大表示无限制 */
     private double radius = Double.POSITIVE_INFINITY;
     /** 上一次执行拾取操作的时间戳 */
@@ -33,42 +36,53 @@ public class itemVac extends basic {
     /** 拾取状态标志，true表示正在拾取中，避免重复操作 */
     private boolean pickuping = false;
     /** 最小拾取间隔时间（毫秒） */
-    private int MIN_INTERVAL = 200;
+    private int minInterval = 200;
     /** 最大拾取间隔时间（毫秒） */
-    private int MAX_INTERVAL = 5 * 1000;
+    private int maxInterval = 5 * 1000;
     /** 是否自动计算拾取范围和间隔 */
-    private boolean AUTO_CALC = true;
+    private boolean autoCalc = true;
     /** 当前使用的拾取间隔时间（毫秒） */
-    private int sleep = MAX_INTERVAL;
+    private int sleep = maxInterval;
     /** 宠吸功能支持的最高宠物等级 */
-    private int MAX_LEVEL = 20;
+    private int maxLevel = 20;
     /** 击杀BOSS时间 */
     private long killBossTime = -1;
-
-    public itemVac(Character player) {
-        this.player = player;
+    
+    private ScheduledFuture<?> itemVacTask;
+    
+    public ItemVacPlugin() {
+        super();
     }
-
-    public itemVac(Character player, double radius, int sleep) {
-        this.player = player;
-        this.radius = radius;
-        this.sleep = sleep;
+    
+    @Override
+    public String getName() {
+        return "ItemVac";
     }
-
-    /**
-     * 设置拾取半径和拾取间隔
-     * @param radius 拾取半径
-     * @param sleep 拾取间隔
-     */
-    public void setParam(double radius,int sleep) {
-        this.radius = radius;
-        this.sleep = sleep;
+    
+    @Override
+    public String getDescription() {
+        return "物品自动拾取功能";
     }
+    
+    @Override
+    public void initialize(Character player) {
+        super.initialize(player);
+    }
+    
+    @Override
+    public void updateConfig() {
+        // 读取配置参数（集中管理）
+        loadCommonConfig();
+        
+        // ==== 控制逻辑 ====
+        if (!enable) {
+            resetValues();
+        }
+    }
+    
     public boolean updatePetVacParam() {
         // 读取配置参数（集中管理）
-        enable = GameConfig.getServerBoolean("cheat_pet_itemvac_switch");
-        ALLOW_IN_EVENT = GameConfig.getServerBoolean("cheat_pet_itemvac_allow_in_event");
-        SHOW_PARAMS = GameConfig.getServerBoolean("cheat_pet_itemvac_show_params");
+        loadCommonConfig();
 
         // ==== 控制逻辑 ====
         if (!enable) {
@@ -76,20 +90,14 @@ public class itemVac extends basic {
             return false;
         }
 
-        MAX_LEVEL = GameConfig.getServerInt("cheat_pet_itemvac_max_level");
-        MAX_RADIUS = GameConfig.getServerDouble("cheat_pet_itemvac_radius_max");
-        MIN_INTERVAL = Math.max(GameConfig.getServerInt("cheat_pet_itemvac_sleep_min"), 200);
-        MAX_INTERVAL = GameConfig.getServerInt("cheat_pet_itemvac_sleep_max");
-        AUTO_CALC = GameConfig.getServerBoolean("cheat_pet_itemvac_radius_auto");
-
         // ==== 控制逻辑 ====
-        if (!enable || player == null || !player.isLoggedInWorld()) {
+        if (player == null || !player.isLoggedInWorld()) {
             resetValues();
             return false;
         }
 
         // ==== 自动计算开关处理 ====
-        if (!AUTO_CALC) {
+        if (!autoCalc) {
             setMaxValues();
             return true;
         }
@@ -108,27 +116,39 @@ public class itemVac extends basic {
 
     private void calculateParams(Pet pet) {
         // 参数预处理（保持原有缩放逻辑）
-        MAX_RADIUS *= (MAX_RADIUS <= 1000) ? 100 : (MAX_RADIUS <= 10000) ? 10 : 1;
+        maxRadius *= (maxRadius <= 1000) ? 100 : (maxRadius <= 10000) ? 10 : 1;
 
-        final int petLevel = Math.min(pet.getLevel(), MAX_LEVEL);
-        final double levelProgress = petLevel / (double) MAX_LEVEL;
+        final int petLevel = Math.min(pet.getLevel(), maxLevel);
+        final double levelProgress = petLevel / (double) maxLevel;
         final double fullness = pet.getFullness() / 100.0;  //饱食度百分比
         final int tameness = pet.getTameness(); //亲密度
 
         // ==== 修正关键系数 ====
         // 半径系数：0.6 → 1.4（饱食度越高越大）
-        final double radiusFactor = fullness;
         // 间隔系数：0.6 → 1.4（饱食度越高越大）
-        final double intervalFactor = fullness; // 原1.4-0.8改为0.6+0.8
 
         // ==== 半径计算（保持不变） ====
-        double baseRadius = MAX_RADIUS * levelProgress;
-        this.radius = Math.min(baseRadius, MAX_RADIUS) * radiusFactor;
+        double baseRadius = maxRadius * levelProgress;
+        this.radius = Math.min(baseRadius, maxRadius) * fullness;
 
         // ==== 间隔计算（修正逻辑） ====
         // 饱食度越高 → intervalFactor越大 → 减少量越多 → 最终间隔越小
-        double intervalReduction = (int) Math.max(MAX_INTERVAL - (tameness * intervalFactor),MIN_INTERVAL); // 使用修正后的系数
-        this.sleep = (int) Math.max(MIN_INTERVAL, intervalReduction);
+        double intervalReduction = (int) Math.max(maxInterval - (tameness * fullness), minInterval); // 使用修正后的系数
+        this.sleep = (int) Math.max(minInterval, intervalReduction);
+    }
+
+    /**
+     * 加载通用配置参数
+     */
+    private void loadCommonConfig() {
+        enable = GameConfig.getServerBoolean("cheat_pet_itemvac_switch");
+        allowInEvent = GameConfig.getServerBoolean("cheat_pet_itemvac_allow_in_event");
+        showParams = GameConfig.getServerBoolean("cheat_pet_itemvac_show_params");
+        maxLevel = GameConfig.getServerInt("cheat_pet_itemvac_max_level");
+        maxRadius = GameConfig.getServerDouble("cheat_pet_itemvac_radius_max");
+        minInterval = Math.max(GameConfig.getServerInt("cheat_pet_itemvac_sleep_min"), 200);
+        maxInterval = GameConfig.getServerInt("cheat_pet_itemvac_sleep_max");
+        autoCalc = GameConfig.getServerBoolean("cheat_pet_itemvac_radius_auto");
     }
 
     // ==== 辅助方法 ====
@@ -143,8 +163,8 @@ public class itemVac extends basic {
     }
 
     private void setMaxValues() {
-        this.radius = MAX_RADIUS;
-        this.sleep = MAX_INTERVAL;
+        this.radius = maxRadius;
+        this.sleep = maxInterval;
     }
 
     /**
@@ -154,16 +174,17 @@ public class itemVac extends basic {
         pickupItem((byte) -1);
     }
 
-    public void pickupItem(byte petIndex,boolean update) {
+    public void pickupItem(byte petIndex, boolean update) {
         if (update) {
             updatePetVacParam();
         }
         pickupItem(petIndex);
     }
+    
     /**
      * 范围吸物
      *
-     * @param {byte} petIndex -1:玩家，0~3: 携带的宠物
+     * @param petIndex -1:玩家，0~3: 携带的宠物
      */
     public void pickupItem(byte petIndex) {
         // 检查角色是否为空，是否在线，是否拾取中，拾取范围是否小于0，拾取冷却时间(防止频繁调用)
@@ -178,7 +199,7 @@ public class itemVac extends basic {
                 petIndex = -1;
             }
         }
-        pickupItem(Pos,radius,sleep,petIndex);
+        pickupItem(Pos, radius, sleep, petIndex);
     }
 
     public void pickupItem(Point Pos, double radius, int sleep, byte petIndex) {
@@ -192,7 +213,7 @@ public class itemVac extends basic {
             return;
         }
         // 检测条件并记录时间
-        if (!ALLOW_IN_EVENT && player.getEventInstance() != null && player.getMap().countBosses() > 0 && player.getMap().getPlayers().size() > 1) {
+        if (!allowInEvent && player.getEventInstance() != null && player.getMap().countBosses() > 0 && player.getMap().getPlayers().size() > 1) {
             // 条件满足：不允许在事件中使用、角色在事件中、BOSS数量>0、地图人数>1，记录当前时间
             killBossTime = currentServerTime();
         } else if (player.getMap().getPlayers().size() == 1) {
@@ -256,5 +277,59 @@ public class itemVac extends basic {
         }
         pickuping = false;
         pickupTime = currentServerTime();
+    }
+    
+    @Override
+    protected void onStart() {
+        // 启动定时任务
+        startItemVacTask();
+    }
+    
+    @Override
+    protected void onStop() {
+        // 停止定时任务
+        stopItemVacTask();
+    }
+    
+    private void startItemVacTask() {
+        stopItemVacTask(); // 确保之前的任务已停止
+        
+        if (!updatePetVacParam() || !isEnable()) {
+            return;
+        }
+        
+        int delay = getSleep();
+        if (delay <= 0) {
+            return;
+        }
+        
+        itemVacTask = TimerManager.getInstance().register(() -> {
+            try {
+                // 条件检查
+                if (!player.isLoggedInWorld() || player.getPet(0) == null || !updatePetVacParam() || !isEnable()) {
+                    stop();
+                    return;
+                }
+
+                // 执行吸物操作
+                pickupItem((byte) 0);
+
+                // 检查间隔变化
+                int currentDelay = getSleep();
+                if (currentDelay != delay) {
+                    // 重新启动任务以使用新间隔
+                    startItemVacTask();
+                }
+            } catch (Exception ex) {
+                stop();
+            }
+        }, delay, 1000);
+    }
+    
+    private void stopItemVacTask() {
+        if (itemVacTask != null) {
+            itemVacTask.cancel(true);
+            itemVacTask = null;
+        }
     }
 }
