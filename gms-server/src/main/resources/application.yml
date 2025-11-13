@@ -43,6 +43,9 @@ spring:
   jackson:
     time-zone: Asia/Shanghai
     date-format: yyyy-MM-dd HH:mm:ss
+  # 禁用Log4j2的JMX功能，防止关闭时出现Unable to unregister MBeans错误
+  jmx:
+    enabled: false
 
 gms:
   service:

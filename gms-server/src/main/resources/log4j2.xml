@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="GBK"?>
-<configuration status="ERROR" monitorInterval="300">
+<configuration status="ERROR" monitorInterval="300" shutdownHook="disable">
 
     <Properties>
         <property name="basePath">logs</property>
@@ -39,12 +39,12 @@
     </appenders>
 
     <loggers>
-        <!-- 降低 Druid 的日志级别 -->
+        <!-- 鍏抽棴 Druid 鏃ュ織杈撳嚭 -->
         <Logger name="com.alibaba.druid" level="ERROR">
             <AppenderRef ref="Console"/>
         </Logger>
 
-        <!-- 降低 flyway 的日志级别 -->
+        <!-- 鍏抽棴 flyway 鏃ュ織杈撳嚭 -->
         <Logger name="org.flywaydb" level="ERROR">
             <AppenderRef ref="Console"/>
         </Logger>
