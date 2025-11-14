@@ -17,10 +17,10 @@ VALUES
 -- 多语言资源表
 INSERT INTO `lang_resources`(`lang_type`, `lang_base`, `lang_code`, `lang_value`)
 VALUES
-    ('zh-CN', 'game_config', 'cheat_mob_vac_switch', '吸怪功能开关'),
-    ('en-US', 'game_config', 'cheat_mob_vac_switch', 'Mob Vacuum Feature Switch'),
-    ('zh-CN', 'game_config', 'cheat_mob_vac_daily_limit', '每日吸怪功能使用次数限制'),
-    ('en-US', 'game_config', 'cheat_mob_vac_daily_limit', 'Daily Mob Vacuum Feature Usage Limit'),
+    ('zh-CN', 'game_config', 'cheat_mob_vac_switch', '吸怪功能总开关，控制是否启用吸怪功能'),
+    ('en-US', 'game_config', 'cheat_mob_vac_switch', 'Mob Vacuum Feature Switch, controls whether to enable the mob vacuum feature'),
+    ('zh-CN', 'game_config', 'cheat_mob_vac_daily_limit', '每日吸怪功能使用次数限制，0为无限制'),
+    ('en-US', 'game_config', 'cheat_mob_vac_daily_limit', 'Daily Mob Vacuum Feature Usage Limit, 0 for unlimited'),
     ('zh-CN', 'game_config', 'cheat_mob_vac_duration', '单次使用吸怪功能的时长（分钟）'),
     ('en-US', 'game_config', 'cheat_mob_vac_duration', 'Duration of Single Use of Mob Vacuum Feature (minutes)'),
     ('zh-CN', 'game_config', 'cheat_mob_vac_radius', '吸怪范围半径，设为-1为全图吸怪'),

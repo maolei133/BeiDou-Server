@@ -4,12 +4,18 @@ import lombok.Getter;
 import lombok.Setter;
 import org.gms.cheat.core.BaseCheatPlugin;
 import org.gms.client.Character;
+import org.gms.client.Skill;
+import org.gms.client.SkillFactory;
+import org.gms.client.status.MonsterStatus;
+import org.gms.client.status.MonsterStatusEffect;
 import org.gms.config.GameConfig;
+import org.gms.dao.entity.ExtendValueDO;
 import org.gms.server.TimerManager;
 import org.gms.server.life.Monster;
 import org.gms.server.maps.MapObject;
 import org.gms.server.maps.MapObjectType;
 import org.gms.server.maps.MapleMap;
+import org.gms.util.ExtendUtil;
 import org.gms.util.PacketCreator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +29,7 @@ import java.util.concurrent.ScheduledFuture;
 @Setter
 public class MobVacPlugin extends BaseCheatPlugin {
     private static final Logger log = LoggerFactory.getLogger(MobVacPlugin.class);
+    
     /** 吸怪功能总开关 */
     private boolean enable = true;
     /** 每天可用次数 */
@@ -47,9 +54,14 @@ public class MobVacPlugin extends BaseCheatPlugin {
     private Set<Integer> playersInVacMap = new HashSet<>();
     /** 开启吸怪功能的玩家名称 */
     private String mobVacPlayerName;
+    /** 预创建的SPEED状态效果，避免重复创建 */
+    private MonsterStatusEffect speedEffect;
+    /** 数据库中存储的键名 */
+    private static final String MOB_VAC_USAGE_COUNT_KEY = "每日吸怪累计次数";
     
     public MobVacPlugin() {
         super();
+        initSpeedEffect();
     }
     
     @Override
@@ -59,7 +71,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
     
     @Override
     public String getDescription() {
-        return "怪物聚集功能";
+        return "吸怪功能";
     }
     
     @Override
@@ -71,6 +83,19 @@ public class MobVacPlugin extends BaseCheatPlugin {
     @Override
     public void updateConfig() {
         loadConfig();
+    }
+    
+    /**
+     * 初始化SPEED状态效果，避免重复创建对象
+     */
+    private void initSpeedEffect() {
+        try {
+            Map<MonsterStatus, Integer> stati = Collections.singletonMap(MonsterStatus.SPEED, -100);
+            Skill skill = SkillFactory.getSkill(1001); // 使用基础技能
+            speedEffect = new MonsterStatusEffect(stati, skill, null, false);
+        } catch (Exception e) {
+            log.error("初始化SPEED状态效果失败", e);
+        }
     }
     
     private void loadConfig() {
@@ -100,6 +125,9 @@ public class MobVacPlugin extends BaseCheatPlugin {
         
         int playerId = player.getId();
         
+        // 从数据库中读取使用次数
+        loadUsageCountFromDB();
+        
         // 检查地图条件
         if (!checkMapConditions()) {
             player.dropMessage(5, "当前地图无法使用吸怪功能：地图存在事件、倒计时或Boss，或已有其他玩家正在使用吸怪功能。");
@@ -108,9 +136,11 @@ public class MobVacPlugin extends BaseCheatPlugin {
         
         // 检查使用次数
         int todayUsage = usageCount.getOrDefault(playerId, 0);
-        if (todayUsage >= dailyLimit) {
-            player.dropMessage(5, "今日吸怪次数已用完，每日限制：" + dailyLimit + "次。");
-            return false;
+        if (dailyLimit > 0) {  // 仅在dailyLimit大于0时检查使用次数
+            if (todayUsage >= dailyLimit) {
+                player.dropMessage(6, "今日吸怪次数已用完，每日限制：" + dailyLimit + "次。");
+                return false;
+            }
         }
         
         // 检查是否已在使用中
@@ -121,6 +151,9 @@ public class MobVacPlugin extends BaseCheatPlugin {
         
         // 记录使用次数
         usageCount.put(playerId, todayUsage + 1);
+        // 将使用次数保存到数据库
+        saveUsageCountToDB();
+        
         activeUsers.add(playerId);
         
         // 记录玩家当前位置
@@ -137,8 +170,15 @@ public class MobVacPlugin extends BaseCheatPlugin {
         // 记录开始时间
         startTime = System.currentTimeMillis();
         
+        // 格式化持续时间
+        String durationStr = formatDuration(duration);
+        
         // 发送提示信息
-        player.dropMessage(5, "吸怪功能已开启，持续时间：" + (duration / 60) + "分钟，今日剩余次数：" + (dailyLimit - usageCount.get(playerId)) + "次。");
+        if (dailyLimit > 0) {  // 仅在有限制次数时显示剩余次数
+            player.dropMessage(6, "吸怪功能已开启，持续时间：" + durationStr + "，今日剩余次数：" + (dailyLimit - usageCount.get(playerId)) + "次。");
+        } else {
+            player.dropMessage(6, "吸怪功能已开启，持续时间：" + durationStr + "。");
+        }
         mobVacMap.broadcastMessage(PacketCreator.serverNotice(6, player.getName() + " 已开启吸怪功能。"));
         
         // 启动倒计时
@@ -148,6 +188,48 @@ public class MobVacPlugin extends BaseCheatPlugin {
         startMobVacTask(playerPosition);
         
         return true;
+    }
+    
+    /**
+     * 从数据库加载使用次数
+     */
+    private void loadUsageCountFromDB() {
+        if (player != null) {
+            try {
+                String accountId = String.valueOf(player.getAccountId());
+                String extendType = "11"; // 账号扩展类型
+                
+                ExtendValueDO extendValueDO = ExtendUtil.getExtendValue(accountId, extendType, MOB_VAC_USAGE_COUNT_KEY);
+                if (extendValueDO != null && extendValueDO.getExtendValue() != null) {
+                    try {
+                        int count = Integer.parseInt(extendValueDO.getExtendValue());
+                        usageCount.put(player.getId(), count);
+                    } catch (NumberFormatException e) {
+                        log.warn("解析吸怪使用次数失败，accountId: {}, value: {}", accountId, extendValueDO.getExtendValue());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("从数据库加载吸怪使用次数失败", e);
+            }
+        }
+    }
+    
+    /**
+     * 将使用次数保存到数据库
+     */
+    private void saveUsageCountToDB() {
+        if (player != null) {
+            try {
+                int playerId = player.getId();
+                int count = usageCount.getOrDefault(playerId, 0);
+                String accountId = String.valueOf(player.getAccountId());
+                String extendType = "11"; // 账号扩展类型
+                
+                ExtendUtil.saveOrUpdateExtendValue(accountId, extendType, MOB_VAC_USAGE_COUNT_KEY, String.valueOf(count));
+            } catch (Exception e) {
+                log.error("保存吸怪使用次数到数据库失败", e);
+            }
+        }
     }
     
     /**
@@ -193,7 +275,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         
         final Point position = new Point(centerPosition);
         final int playerId = player.getId();
-        
+
         // 给地图添加倒计时
         mobVacMap.broadcastMessage(PacketCreator.getClock(duration));
         
@@ -233,18 +315,47 @@ public class MobVacPlugin extends BaseCheatPlugin {
                         // 检查怪物是否偏离中心位置，如果偏离则移回
                         if (!mob.getPosition().equals(position)) {
                             mob.resetMobPosition(position);
+                            // 移除了Thread.sleep(5)调用，避免阻塞定时任务线程
+                            
+                            // 只有当怪物没有SPEED状态时才应用新的状态效果，避免频繁创建和应用重复的BUFF
+                            if (!mob.isBuffed(MonsterStatus.SPEED)) {
+                                try {
+                                    // 使用预创建的状态效果对象，避免重复创建
+                                    if (speedEffect != null) {
+                                        // 应用SPEED为0的状态效果来停止怪物移动，但不影响攻击和技能释放
+                                        mob.applyStatus(player, speedEffect, false, 24 * 60 * 1000);
+                                    }
+                                } catch (Exception e) {
+                                    // 记录详细的错误日志
+                                    log.error("应用怪物状态效果失败 - 频道: {}, 地图: {}({}), 玩家: {}, 怪物ID: {}, 怪物OID: {}, 错误信息: {}",
+                                            mobVacMap.getChannelServer().getId(),
+                                            mobVacMap.getMapName(),
+                                            mobVacMap.getId(),
+                                            player != null ? player.getName() : "未知",
+                                            mob.getId(),
+                                            mob.getObjectId(),
+                                            e.getMessage(),
+                                            e);
+                                }
+                            }
                         }
                     }
                 }
             } catch (Exception ex) {
+                // 记录详细的错误日志
+                log.error("吸怪功能执行异常 - 频道: {}, 地图: {}({}), 玩家: {}, 错误信息: {}",
+                    mobVacMap != null && mobVacMap.getChannelServer() != null ? mobVacMap.getChannelServer().getId() : "未知",
+                    mobVacMap != null ? mobVacMap.getMapName() : "未知",
+                    mobVacMap != null ? mobVacMap.getId() : "未知", 
+                    player != null ? player.getName() : "未知", 
+                    ex.getMessage(), 
+                    ex);
                 stopMobVac("发生异常: " + ex.getMessage(), true);
             }
         }, 1000, 1000); // 每1秒检查一次
         
         // 设置功能自动结束
-        TimerManager.getInstance().schedule(() -> {
-            stopMobVac("吸怪功能时间结束", false);
-        }, duration * 1000L);
+        TimerManager.getInstance().schedule(() -> stopMobVac("吸怪功能时间结束", false), duration * 1000L);
     }
     
     /**
@@ -299,11 +410,21 @@ public class MobVacPlugin extends BaseCheatPlugin {
      * @param broadcast 是否广播给地图上的所有玩家
      */
     private void stopMobVac(String reason, boolean broadcast) {
+        mobVacMap.killAllMonsters();
+        mobVacMap.restoreMapSpawnPoints();
         // 移除地图倒计时
         if (mobVacMap != null) {
             mobVacMap.broadcastMessage(PacketCreator.removeClock());
         }
-        
+        // 发送提示信息给开启吸怪功能的玩家
+        if (player != null && player.isLoggedInWorld()) {
+            player.dropMessage(6, "吸怪功能已停止，原因：" + reason);
+        }
+
+        // 广播给地图上的其他玩家
+        if (broadcast && mobVacMap != null && mobVacPlayerName != null) {
+            mobVacMap.broadcastMessage(player,PacketCreator.serverNotice(6, "玩家 " + mobVacPlayerName + " 的吸怪功能已停止，原因：" + reason),false);
+        }
         // 清除所有缓存
         if (player != null) {
             activeUsers.remove(player.getId());
@@ -311,19 +432,8 @@ public class MobVacPlugin extends BaseCheatPlugin {
         activeMapInstances.remove(mobVacMap);
         playersInVacMap.clear();
         mobVacPlayerName = null;
-        
         // 停止任务
         stopMobVacTask();
-        
-        // 发送提示信息给开启吸怪功能的玩家
-        if (player != null && player.isLoggedInWorld()) {
-            player.dropMessage(5, "吸怪功能已停止，原因：" + reason);
-        }
-        
-        // 广播给地图上的其他玩家
-        if (broadcast && mobVacMap != null && mobVacPlayerName != null) {
-            mobVacMap.broadcastMessage(PacketCreator.serverNotice(6, "玩家 " + mobVacPlayerName + " 的吸怪功能已停止，原因：" + reason));
-        }
     }
     
     /**
@@ -373,4 +483,27 @@ public class MobVacPlugin extends BaseCheatPlugin {
             handlePlayerEnterMap(player);
         }
     }
+    
+    /**
+     * 格式化持续时间显示
+     * @param seconds 总秒数
+     * @return 格式化后的时间字符串
+     */
+    private String formatDuration(int seconds) {
+        int days = seconds / 86400;
+        int hours = (seconds % 86400) / 3600;
+        int minutes = (seconds % 3600) / 60;
+        
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) {
+            sb.append(days).append("天");
+        }
+        if (hours > 0) {
+            sb.append(hours).append("小时");
+        }
+        sb.append(minutes).append("分钟");
+        
+        return sb.toString();
+    }
+
 }
