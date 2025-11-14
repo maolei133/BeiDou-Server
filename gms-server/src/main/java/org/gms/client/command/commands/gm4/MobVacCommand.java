@@ -32,7 +32,7 @@ import org.gms.util.I18nUtil;
 
 public class MobVacCommand extends Command {
     {
-        setDescription("吸怪功能 - 将怪物吸到当前位置（BOSS除外）");
+        setDescription("吸怪功能 - （BOSS除外）");
     }
 
     @Override
@@ -42,7 +42,7 @@ public class MobVacCommand extends Command {
         // 获取作弊管理器
         CheatManager cheatManager = player.getCheatManager();
         if (cheatManager == null) {
-            player.dropMessage(5, "无法获取作弊管理器。");
+            player.dropMessage(5, "无法获取内置辅助管理器。");
             return;
         }
         
@@ -53,16 +53,20 @@ public class MobVacCommand extends Command {
             return;
         }
         
-        // 尝试启动吸怪功能
+        // 切换吸怪功能状态
         if (mobVacPlugin.isRunning()) {
             mobVacPlugin.stop();
             player.dropMessage(5, "吸怪功能已关闭。");
         } else {
+            // 启动插件并调用吸怪功能
+            mobVacPlugin.start();
             boolean started = mobVacPlugin.startMobVac();
-            if (started) {
-                player.dropMessage(5, "吸怪功能已开启。");
-            } else {
+            if (!started) {
+                // 如果启动失败，则停止插件
+                mobVacPlugin.stop();
                 player.dropMessage(5, "吸怪功能启动失败。");
+            } else {
+                player.dropMessage(5, "吸怪功能已开启。");
             }
         }
     }
