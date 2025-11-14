@@ -15,7 +15,6 @@ import org.gms.server.life.Monster;
 import org.gms.server.maps.MapObject;
 import org.gms.server.maps.MapObjectType;
 import org.gms.server.maps.MapleMap;
-import org.gms.util.ExtendUtil;
 import org.gms.util.PacketCreator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -196,10 +195,10 @@ public class MobVacPlugin extends BaseCheatPlugin {
     private void loadUsageCountFromDB() {
         if (player != null) {
             try {
-                String accountId = String.valueOf(player.getAccountId());
+                int accountId = player.getAccountId();
                 String extendType = "11"; // 账号扩展类型
                 
-                ExtendValueDO extendValueDO = ExtendUtil.getExtendValue(accountId, extendType, MOB_VAC_USAGE_COUNT_KEY);
+                ExtendValueDO extendValueDO = getAccountExtendValue(accountId, extendType, MOB_VAC_USAGE_COUNT_KEY);
                 if (extendValueDO != null && extendValueDO.getExtendValue() != null) {
                     try {
                         int count = Integer.parseInt(extendValueDO.getExtendValue());
@@ -222,10 +221,10 @@ public class MobVacPlugin extends BaseCheatPlugin {
             try {
                 int playerId = player.getId();
                 int count = usageCount.getOrDefault(playerId, 0);
-                String accountId = String.valueOf(player.getAccountId());
-                String extendType = "11"; // 账号扩展类型
+                int accountId = player.getAccountId();
+                String extendType = "12"; // 账号扩展类型，日清
                 
-                ExtendUtil.saveOrUpdateExtendValue(accountId, extendType, MOB_VAC_USAGE_COUNT_KEY, String.valueOf(count));
+                saveOrUpdateAccountExtendValue(accountId, extendType, MOB_VAC_USAGE_COUNT_KEY, String.valueOf(count));
             } catch (Exception e) {
                 log.error("保存吸怪使用次数到数据库失败", e);
             }
