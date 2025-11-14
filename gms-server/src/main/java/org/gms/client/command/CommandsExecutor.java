@@ -348,6 +348,7 @@ public class CommandsExecutor {
         addCommand("travelrate", 4, TravelRateCommand.class);
         addCommand("fishrate", 4, FishingRateCommand.class);
         addCommand("itemvac", 4, ItemVacCommand.class);
+        addCommand("mobvac", 4, MobVacCommand.class);
         addCommand("forcevac", 4, ForceVacCommand.class);
         addCommand("zakum", 4, ZakumCommand.class);
         addCommand("horntail", 4, HorntailCommand.class);

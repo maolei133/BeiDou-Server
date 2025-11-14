@@ -1,0 +1,376 @@
+package org.gms.cheat.plugin;
+
+import lombok.Getter;
+import lombok.Setter;
+import org.gms.cheat.core.BaseCheatPlugin;
+import org.gms.client.Character;
+import org.gms.config.GameConfig;
+import org.gms.server.TimerManager;
+import org.gms.server.life.Monster;
+import org.gms.server.maps.MapObject;
+import org.gms.server.maps.MapObjectType;
+import org.gms.server.maps.MapleMap;
+import org.gms.util.PacketCreator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.awt.*;
+import java.util.List;
+import java.util.*;
+import java.util.concurrent.ScheduledFuture;
+
+@Getter
+@Setter
+public class MobVacPlugin extends BaseCheatPlugin {
+    private static final Logger log = LoggerFactory.getLogger(MobVacPlugin.class);
+    /** 吸怪功能总开关 */
+    private boolean enable = true;
+    /** 每天可用次数 */
+    private int dailyLimit = 10;
+    /** 每次使用时长（秒） */
+    private int duration = 30;
+    /** 使用次数计数器 */
+    private Map<Integer, Integer> usageCount = new HashMap<>();
+    /** 当前正在使用的玩家列表 */
+    private Set<Integer> activeUsers = new HashSet<>();
+    /** 当前吸怪任务 */
+    private ScheduledFuture<?> mobVacTask;
+    /** 吸怪范围半径 */
+    private double radius = Double.POSITIVE_INFINITY;
+    /** 当前正在使用吸怪功能的地图实例 */
+    private static final Map<MapleMap, Integer> activeMapInstances = new HashMap<>();
+    /** 吸怪开始时间 */
+    private long startTime;
+    /** 吸怪功能所在地图实例 */
+    private MapleMap mobVacMap;
+    /** 当前在使用吸怪地图中的玩家列表 */
+    private Set<Integer> playersInVacMap = new HashSet<>();
+    /** 开启吸怪功能的玩家名称 */
+    private String mobVacPlayerName;
+    
+    public MobVacPlugin() {
+        super();
+    }
+    
+    @Override
+    public String getName() {
+        return "MobVac";
+    }
+    
+    @Override
+    public String getDescription() {
+        return "怪物聚集功能";
+    }
+    
+    @Override
+    public void initialize(Character player) {
+        super.initialize(player);
+        loadConfig();
+    }
+    
+    @Override
+    public void updateConfig() {
+        loadConfig();
+    }
+    
+    private void loadConfig() {
+        enable = GameConfig.getServerBoolean("cheat_mob_vac_switch", true);
+        dailyLimit = GameConfig.getServerInt("cheat_mob_vac_daily_limit", 10);
+        duration = GameConfig.getServerInt("cheat_mob_vac_duration", 30) * 60; // 转换为秒
+        radius = GameConfig.getServerDouble("cheat_mob_vac_radius", -1.0) == -1.0 ? Double.POSITIVE_INFINITY : GameConfig.getServerDouble("cheat_mob_vac_radius", -1.0);
+    }
+    
+    /**
+     * 开始吸怪功能
+     */
+    public boolean startMobVac() {
+        updateConfig();//更新参数配置
+        // 检查功能是否启用
+        if (!enable) {
+            if (player != null) {
+                player.dropMessage(5, "吸怪功能未启用。");
+            }
+            return false;
+        }
+        
+        // 检查玩家是否在线
+        if (player == null || !player.isLoggedInWorld()) {
+            return false;
+        }
+        
+        int playerId = player.getId();
+        
+        // 检查地图条件
+        if (!checkMapConditions()) {
+            player.dropMessage(5, "当前地图无法使用吸怪功能：地图存在事件、倒计时或Boss，或已有其他玩家正在使用吸怪功能。");
+            return false;
+        }
+        
+        // 检查使用次数
+        int todayUsage = usageCount.getOrDefault(playerId, 0);
+        if (todayUsage >= dailyLimit) {
+            player.dropMessage(5, "今日吸怪次数已用完，每日限制：" + dailyLimit + "次。");
+            return false;
+        }
+        
+        // 检查是否已在使用中
+        if (activeUsers.contains(playerId)) {
+            player.dropMessage(5, "吸怪功能已在使用中。");
+            return false;
+        }
+        
+        // 记录使用次数
+        usageCount.put(playerId, todayUsage + 1);
+        activeUsers.add(playerId);
+        
+        // 记录玩家当前位置
+        Point playerPosition = player.getPosition();
+        
+        // 记录地图实例正在使用吸怪
+        mobVacMap = player.getMap();
+        activeMapInstances.put(mobVacMap, playerId);
+        mobVacPlayerName = player.getName(); // 记录开启吸怪的玩家名称
+        
+        // 将开启吸怪的玩家添加到地图玩家列表中
+        playersInVacMap.add(playerId);
+        
+        // 记录开始时间
+        startTime = System.currentTimeMillis();
+        
+        // 发送提示信息
+        player.dropMessage(5, "吸怪功能已开启，持续时间：" + (duration / 60) + "分钟，今日剩余次数：" + (dailyLimit - usageCount.get(playerId)) + "次。");
+        mobVacMap.broadcastMessage(PacketCreator.serverNotice(6, player.getName() + " 已开启吸怪功能。"));
+        
+        // 启动倒计时
+        startCountdown();
+        
+        // 启动定时任务保持怪物位置
+        startMobVacTask(playerPosition);
+        
+        return true;
+    }
+    
+    /**
+     * 检查地图条件
+     */
+    private boolean checkMapConditions() {
+        // 检查是否有其他玩家正在使用吸怪功能
+        MapleMap map = player.getMap();
+        if (activeMapInstances.containsKey(map)) {
+            return false;
+        }
+        
+        // 检查地图是否有事件
+        if (map.getEventInstance() != null) {
+            return false;
+        }
+        
+        // 检查地图是否有倒计时
+        if (map.hasClock() || map.getTimeLimit() > 0 || map.getTimeLeft() > 0) {
+            return false;
+        }
+        
+        // 检查地图是否有Boss
+        return map.countBosses() <= 0;
+    }
+    
+    /**
+     * 启动倒计时
+     */
+    private void startCountdown() {
+        TimerManager.getInstance().schedule(() -> {
+            if (player != null && player.isLoggedInWorld()) {
+                player.dropMessage(5, "吸怪功能剩余时间：10秒");
+            }
+        }, (duration - 10) * 1000L);
+    }
+    
+    /**
+     * 启动吸怪任务
+     */
+    private void startMobVacTask(Point centerPosition) {
+        stopMobVacTask();
+        
+        final Point position = new Point(centerPosition);
+        final int playerId = player.getId();
+        
+        // 给地图添加倒计时
+        mobVacMap.broadcastMessage(PacketCreator.getClock(duration));
+        
+        mobVacTask = TimerManager.getInstance().register(() -> {
+            try {
+                // 检查玩家是否仍然在线且在同一地图
+                if (player == null || !player.isLoggedInWorld() || !activeUsers.contains(playerId)) {
+                    stopMobVac("玩家离线或退出吸怪功能", true);
+                    return;
+                }
+                
+                // 检查地图中的玩家状态
+                checkPlayersInMap();
+                
+                // 检查玩家是否离开了地图
+                boolean playerInMap = false;
+                for (Character chr : mobVacMap.getCharacters()) {
+                    if (chr.getId() == playerId) {
+                        playerInMap = true;
+                        break;
+                    }
+                }
+
+                if (!playerInMap) {
+                    stopMobVac("玩家离开地图", true);
+                    return;
+                }
+                
+                // 获取地图中的所有怪物
+                List<MapObject> monsters = mobVacMap.getMapObjectsInRange(position, radius, List.of(MapObjectType.MONSTER));
+                
+                // 将怪物保持在中心位置
+                for (MapObject obj : monsters) {
+                    Monster mob = (Monster) obj;
+                    // 不处理Boss和已死亡的怪物
+                    if (!mob.isBoss() && mob.isAlive()) {
+                        // 检查怪物是否偏离中心位置，如果偏离则移回
+                        if (!mob.getPosition().equals(position)) {
+                            mob.resetMobPosition(position);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                stopMobVac("发生异常: " + ex.getMessage(), true);
+            }
+        }, 1000, 1000); // 每1秒检查一次
+        
+        // 设置功能自动结束
+        TimerManager.getInstance().schedule(() -> {
+            stopMobVac("吸怪功能时间结束", false);
+        }, duration * 1000L);
+    }
+    
+    /**
+     * 检查地图中的玩家状态，处理玩家进入和离开事件
+     */
+    private void checkPlayersInMap() {
+        // 获取当前在地图中的所有玩家
+        Collection<Character> currentPlayers = mobVacMap.getCharacters();
+        Set<Integer> currentPlayerIds = new HashSet<>();
+        
+        // 添加新进入地图的玩家到倒计时列表
+        for (Character chr : currentPlayers) {
+            int chrId = chr.getId();
+            currentPlayerIds.add(chrId);
+            
+            // 如果玩家是新进入地图的，为其添加倒计时
+            if (!playersInVacMap.contains(chrId)) {
+                handlePlayerEnterMap(chr);
+            }
+        }
+        
+        // 移除已离开地图的玩家
+        playersInVacMap.removeIf(playerId -> !currentPlayerIds.contains(playerId));
+    }
+    
+    /**
+     * 处理玩家进入地图的逻辑
+     * @param player 进入地图的玩家
+     */
+    private void handlePlayerEnterMap(Character player) {
+        // 提示该玩家当前地图上已经有人开启了吸怪功能
+        if (mobVacPlayerName != null) {
+            player.dropMessage(5, "玩家 " + mobVacPlayerName + " 已在此地图上开启了吸怪功能。");
+        }
+        
+        // 计算剩余时间
+        long elapsed = (System.currentTimeMillis() - startTime) / 1000;
+        int remainingTime = duration - (int) elapsed;
+        
+        // 确保剩余时间大于0
+        if (remainingTime > 0) {
+            player.sendPacket(PacketCreator.getClock(remainingTime));
+        }
+        
+        // 将玩家添加到缓存中
+        playersInVacMap.add(player.getId());
+    }
+    
+    /**
+     * 停止吸怪任务的统一方法
+     * @param reason 停止原因
+     * @param broadcast 是否广播给地图上的所有玩家
+     */
+    private void stopMobVac(String reason, boolean broadcast) {
+        // 移除地图倒计时
+        if (mobVacMap != null) {
+            mobVacMap.broadcastMessage(PacketCreator.removeClock());
+        }
+        
+        // 清除所有缓存
+        if (player != null) {
+            activeUsers.remove(player.getId());
+        }
+        activeMapInstances.remove(mobVacMap);
+        playersInVacMap.clear();
+        mobVacPlayerName = null;
+        
+        // 停止任务
+        stopMobVacTask();
+        
+        // 发送提示信息给开启吸怪功能的玩家
+        if (player != null && player.isLoggedInWorld()) {
+            player.dropMessage(5, "吸怪功能已停止，原因：" + reason);
+        }
+        
+        // 广播给地图上的其他玩家
+        if (broadcast && mobVacMap != null && mobVacPlayerName != null) {
+            mobVacMap.broadcastMessage(PacketCreator.serverNotice(6, "玩家 " + mobVacPlayerName + " 的吸怪功能已停止，原因：" + reason));
+        }
+    }
+    
+    /**
+     * 停止吸怪任务
+     */
+    private void stopMobVacTask() {
+        if (mobVacTask != null) {
+            mobVacTask.cancel(true);
+            mobVacTask = null;
+        }
+    }
+    
+    /**
+     * 停止吸怪功能
+     */
+    @Override
+    protected void onStop() {
+        stopMobVac("玩家主动停止吸怪功能", true);
+    }
+    
+    /**
+     * 获取用户当日使用次数
+     */
+    public int getTodayUsageCount() {
+        if (player == null) return 0;
+        return usageCount.getOrDefault(player.getId(), 0);
+    }
+    
+    /**
+     * 重置每日计数器（通常在每日重置时调用）
+     */
+    public void resetDailyCounters() {
+        usageCount.clear();
+    }
+    
+    /**
+     * 当玩家进入地图时调用，用于同步倒计时
+     */
+    public void onPlayerEnterMap(Character player) {
+        if (player == null) return;
+        
+        MapleMap currentMap = player.getMap();
+        Integer mobVacUserId = activeMapInstances.get(currentMap);
+        
+        // 检查当前地图是否正在使用吸怪功能
+        if (mobVacUserId != null) {
+            handlePlayerEnterMap(player);
+        }
+    }
+}

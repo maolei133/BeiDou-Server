@@ -298,9 +298,13 @@ public class GameConfig {
     }
 
     public static int getServerInt(String key) {
+        return getServerInt(key, 0);
+    }
+    
+    public static int getServerInt(String key, int defaultValue) {
         JSONObject valueProp = getValueProp("server", key);
         if (valueProp == null) {
-            return 0;
+            return defaultValue;
         }
         return valueProp.getIntValue("value");
     }
@@ -378,9 +382,13 @@ public class GameConfig {
     }
 
     public static double getServerDouble(String key) {
+        return getServerDouble(key, 0D);
+    }
+    
+    public static double getServerDouble(String key, double defaultValue) {
         JSONObject valueProp = getValueProp("server", key);
         if (valueProp == null) {
-            return 0D;
+            return defaultValue;
         }
         return valueProp.getDoubleValue("value");
     }
@@ -410,9 +418,13 @@ public class GameConfig {
     }
 
     public static boolean getServerBoolean(String key) {
+        return getServerBoolean(key, false);
+    }
+    
+    public static boolean getServerBoolean(String key, boolean defaultValue) {
         JSONObject valueProp = getValueProp("server", key);
         if (valueProp == null) {
-            return false;
+            return defaultValue;
         }
         return valueProp.getBooleanValue("value");
     }

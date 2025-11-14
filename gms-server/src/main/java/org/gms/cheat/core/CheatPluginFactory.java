@@ -1,6 +1,7 @@
 package org.gms.cheat.core;
 
 import org.gms.cheat.plugin.ItemVacPlugin;
+import org.gms.cheat.plugin.MobVacPlugin;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -12,10 +13,11 @@ import java.util.function.Supplier;
  */
 public class CheatPluginFactory {
     private static final Map<String, Supplier<CheatPlugin>> pluginRegistry = new HashMap<>();
-    
+
     static {
         // 注册所有插件
         registerPlugin("ItemVac", ItemVacPlugin::new);
+        registerPlugin("MobVac", MobVacPlugin::new);
     }
     
     /**
