@@ -80,6 +80,15 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         }
     }
     
+    /**
+     * 更新配置并返回是否启用状态
+     * @return 是否启用
+     */
+    public boolean updateConfigAndCheck() {
+        updateConfig();
+        return enable;
+    }
+    
     public boolean updatePetVacParam() {
         // 读取配置参数（集中管理）
         loadCommonConfig();
@@ -113,10 +122,18 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         calculateParams(pet);
         return true;
     }
+    
+    /**
+     * 检查是否应该执行物品拾取
+     * @return 是否应该拾取
+     */
+    private boolean shouldPickupItems() {
+        return !(pickuping || radius <= 0 || currentServerTime() - pickupTime < sleep || player == null || !player.isLoggedInWorld());
+    }
 
     private void calculateParams(Pet pet) {
         // 参数预处理（保持原有缩放逻辑）
-        maxRadius *= (maxRadius <= 1000) ? 100 : (maxRadius <= 10000) ? 10 : 1;
+        double scaledMaxRadius = maxRadius * ((maxRadius <= 1000) ? 100 : (maxRadius <= 10000) ? 10 : 1);
 
         final int petLevel = Math.min(pet.getLevel(), maxLevel);
         final double levelProgress = petLevel / (double) maxLevel;
@@ -128,12 +145,12 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         // 间隔系数：0.6 → 1.4（饱食度越高越大）
 
         // ==== 半径计算（保持不变） ====
-        double baseRadius = maxRadius * levelProgress;
-        this.radius = Math.min(baseRadius, maxRadius) * fullness;
+        double baseRadius = scaledMaxRadius * levelProgress;
+        this.radius = Math.min(baseRadius, scaledMaxRadius) * fullness;
 
         // ==== 间隔计算（修正逻辑） ====
         // 饱食度越高 → intervalFactor越大 → 减少量越多 → 最终间隔越小
-        double intervalReduction = (int) Math.max(maxInterval - (tameness * fullness), minInterval); // 使用修正后的系数
+        double intervalReduction = Math.max(maxInterval - (tameness * fullness), minInterval); // 使用修正后的系数
         this.sleep = (int) Math.max(minInterval, intervalReduction);
     }
 
@@ -182,22 +199,30 @@ public class ItemVacPlugin extends BaseCheatPlugin {
     }
     
     /**
+     * 检查玩家姿态是否允许拾取物品
+     * @param stance 玩家姿态
+     * @return 是否允许拾取
+     */
+    private boolean isStanceAllowPickup(int stance) {
+        // 14~17 = 上下爬绳子、梯子；20 = 坐下
+        return !((stance >= 14 && stance <= 17) || stance == 20);
+    }
+    
+    /**
      * 范围吸物
      *
      * @param petIndex -1:玩家，0~3: 携带的宠物
      */
     public void pickupItem(byte petIndex) {
         // 检查角色是否为空，是否在线，是否拾取中，拾取范围是否小于0，拾取冷却时间(防止频繁调用)
-        if (pickuping || radius <= 0 || currentServerTime() - pickupTime < sleep || player == null || !player.isLoggedInWorld()) return;
+        if (!shouldPickupItems()) return;
         Point Pos = null;
         if (petIndex >= 0) {
             Pet pet = player.getPet(petIndex);
-            if (pet != null ) Pos = player.getPet(petIndex).getPos();   //指定索引的宠物存在则使用该宠物的坐标
+            if (pet != null) Pos = pet.getPos();   //指定索引的宠物存在则使用该宠物的坐标
         } else {
             Pos = player.getPosition();   //获取玩家坐标
-            if (petIndex != -1) {
-                petIndex = -1;
-            }
+            petIndex = -1;
         }
         pickupItem(Pos, radius, sleep, petIndex);
     }
@@ -208,30 +233,18 @@ public class ItemVacPlugin extends BaseCheatPlugin {
             if (player != null && player.isLoggedInWorld()) player.enableActions();
             return;
         }
-        int Stance = player.getStance();    //获取角色姿态，14~17 = 上下爬绳子、梯子；20 = 坐下
-        if (Stance >= 14 && Stance <= 17 || Stance == 20) {//爬绳和坐下不拾取
+        
+        int stance = player.getStance();    //获取角色姿态，14~17 = 上下爬绳子、梯子；20 = 坐下
+        if (!isStanceAllowPickup(stance)) {//爬绳和坐下不拾取
             return;
         }
+        
         // 检测条件并记录时间
-        if (!allowInEvent && player.getEventInstance() != null && player.getMap().countBosses() > 0 && player.getMap().getPlayers().size() > 1) {
-            // 条件满足：不允许在事件中使用、角色在事件中、BOSS数量>0、地图人数>1，记录当前时间
-            killBossTime = currentServerTime();
-        } else if (player.getMap().getPlayers().size() == 1) {
-            // 地图人数=1时，重置时间为-1
-            killBossTime = -1;
-        } else if (player.getMap().getPlayers().size() > 1 && player.getMap().countBosses() == 0) {
-            // 地图人数>1且BOSS数量=0时
-            if (killBossTime != -1) {
-                if (currentServerTime() - killBossTime < 30000) { // 30秒 = 30000毫秒
-                    // 时间差小于30秒，不进行捡取操作
-                    return;
-                } else {
-                    // 时间差超过30秒，重置时间为-1
-                    killBossTime = -1;
-                }
-            }
-        } else if (killBossTime != -1) {
-            killBossTime = -1;
+        updateKillBossTime();
+        
+        // 如果在限制时间内，不进行捡取操作
+        if (killBossTime != -1 && currentServerTime() - killBossTime < 30000) { 
+            return;
         }
 
         pickuping = true;
@@ -268,8 +281,10 @@ public class ItemVacPlugin extends BaseCheatPlugin {
                         shouldPickup = isEquippedItemPouch && (!ignoreItems || !hasExclusions || !excludedItems.contains(mapItem.getItemId()));
                     }
                 }
+                
                 if (shouldPickup && player.isLoggedInWorld()) { //再次判定角色是否在线
-                    if ((mapItem.canBePickedBy(player) || isEquippedPetItemScales) && currentServerTime() - mapItem.getDropTime() > 1000) { //如果拥有拾取权 或者 装备了魔法天平 并且掉落时间超过1000ms，避免未落地先拾取
+                    //如果拥有拾取权 或者 装备了魔法天平 并且掉落时间超过1000ms，避免未落地先拾取
+                    if ((mapItem.canBePickedBy(player) || isEquippedPetItemScales) && currentServerTime() - mapItem.getDropTime() > 1000) { 
                         player.pickupItem(item, petIndex, false);  //执行拾取
                     }
                 }
@@ -306,7 +321,7 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         itemVacTask = TimerManager.getInstance().register(() -> {
             try {
                 // 条件检查
-                if (!player.isLoggedInWorld() || player.getPet(0) == null || !updatePetVacParam() || !isEnable()) {
+                if (!player.isLoggedInWorld() || player.getPet(0) == null || !updateConfigAndCheck() || !isEnable()) {
                     stop();
                     return;
                 }
@@ -330,6 +345,32 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         if (itemVacTask != null) {
             itemVacTask.cancel(true);
             itemVacTask = null;
+        }
+    }
+    
+    /**
+     * 更新击杀BOSS时间逻辑
+     */
+    private void updateKillBossTime() {
+        if (!allowInEvent && player.getEventInstance() != null && player.getMap().countBosses() > 0 && player.getMap().getPlayers().size() > 1) {
+            // 条件满足：不允许在事件中使用、角色在事件中、BOSS数量>0、地图人数>1，记录当前时间
+            killBossTime = currentServerTime();
+        } else if (player.getMap().getPlayers().size() == 1) {
+            // 地图人数=1时，重置时间为-1
+            killBossTime = -1;
+        } else if (player.getMap().getPlayers().size() > 1 && player.getMap().countBosses() == 0) {
+            // 地图人数>1且BOSS数量=0时
+            if (killBossTime != -1) {
+                if (currentServerTime() - killBossTime < 30000) { // 30秒 = 30000毫秒
+                    // 时间差小于30秒，不进行捡取操作
+                    // 这里不再直接返回，而是通过调用方处理
+                } else {
+                    // 时间差超过30秒，重置时间为-1
+                    killBossTime = -1;
+                }
+            }
+        } else if (killBossTime != -1) {
+            killBossTime = -1;
         }
     }
 }
