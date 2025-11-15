@@ -26,6 +26,7 @@ export default {
   'menu.game.gachapon': '百宝箱',
   'menu.game.command': 'GM指令',
   'menu.game.file': '文件管理',
+  'menu.game.log': '日志管理',
   'menu.account': '玩家管理',
   'menu.account.list': '账户列表',
   'menu.account.player': '玩家管理',
