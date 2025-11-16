@@ -230,6 +230,20 @@
 <!--        <finalName>BeiDou</finalName>-->
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                    <compilerArgs>
+                        <arg>--enable-preview</arg>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
                 <configuration>
                     <outputDirectory>${outputDirectory}</outputDirectory>
                     <finalName>${finalName}</finalName>

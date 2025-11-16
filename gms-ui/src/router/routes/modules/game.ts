@@ -105,7 +105,7 @@ const GAME: AppRouteRecordRaw = {
     {
       path: 'log',
       name: 'logManager',
-      component: () => import('@/views/game/logManager.vue'),
+      component: () => import('@/views/game/log/index.vue'),
       meta: {
         locale: 'menu.game.log',
         requiresAuth: true,

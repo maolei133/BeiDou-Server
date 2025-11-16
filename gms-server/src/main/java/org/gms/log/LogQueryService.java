@@ -10,8 +10,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static java.util.stream.Collectors.toList;
-
 /**
  * 日志查询服务类
  * 为后台管理系统提供日志查询功能
@@ -32,8 +30,8 @@ public class LogQueryService {
     public static List<String> queryLogsByDateRange(String majorCategory, String minorCategory, 
                                                     String startDate, String endDate) {
         try {
-            // 检查必要参数
-            if (majorCategory == null || minorCategory == null) {
+            // 如果没有提供大类或小类，则返回空列表
+            if (majorCategory == null || minorCategory == null || majorCategory.isEmpty() || minorCategory.isEmpty()) {
                 return Collections.emptyList();
             }
             
@@ -92,7 +90,8 @@ public class LogQueryService {
     public static List<String> queryLogsWithKeyword(String majorCategory, String minorCategory, String keyword) {
         try {
             // 检查必要参数
-            if (majorCategory == null || minorCategory == null || keyword == null) {
+            if (majorCategory == null || minorCategory == null || keyword == null || 
+                majorCategory.isEmpty() || minorCategory.isEmpty() || keyword.isEmpty()) {
                 return Collections.emptyList();
             }
             

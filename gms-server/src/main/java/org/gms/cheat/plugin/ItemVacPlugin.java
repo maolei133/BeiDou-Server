@@ -86,6 +86,9 @@ public class ItemVacPlugin extends BaseCheatPlugin {
      */
     public boolean updateConfigAndCheck() {
         updateConfig();
+        if (!enable) {
+            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 功能未启用");
+        }
         return enable;
     }
     
@@ -96,18 +99,21 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         // ==== 控制逻辑 ====
         if (!enable) {
             resetValues();
+            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 功能未启用");
             return false;
         }
 
         // ==== 控制逻辑 ====
         if (player == null || !player.isLoggedInWorld()) {
             resetValues();
+            logPluginActivation("未知", 0, "失败 - 玩家不在线");
             return false;
         }
 
         // ==== 自动计算开关处理 ====
         if (!autoCalc) {
             setMaxValues();
+            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "成功 - 使用最大值参数");
             return true;
         }
 
@@ -115,11 +121,13 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         Pet pet = getValidPet();
         if (pet == null) {
             resetValues();
+            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 未找到有效宠物");
             return false;
         }
 
         // ==== 核心公式计算 ====
         calculateParams(pet);
+        logPluginActivation(player.getMap().getMapName(), player.getMapId(), "成功 - 参数计算完成");
         return true;
     }
     
@@ -188,7 +196,10 @@ public class ItemVacPlugin extends BaseCheatPlugin {
      * 人物范围吸物
      */
     public void pickupItem() {
-        pickupItem((byte) -1);
+        if (shouldPickupItems()) {
+            logPluginUsage("物品拾取", "执行物品拾取操作");
+            pickupItem((byte) -1);
+        }
     }
 
     public void pickupItem(byte petIndex, boolean update) {

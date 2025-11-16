@@ -31,6 +31,8 @@ public class LogCategories {
         public static final String ERROR = "error";
         /** 安全相关 */
         public static final String SECURITY = "security";
+        /** 辅助系统相关 */
+        public static final String CHEAT = "cheat";
     }
 
     // 小类定义
@@ -94,5 +96,10 @@ public class LogCategories {
         // SECURITY大类下的小类
         public static final String HACK_DETECTION = "hack_detection";
         public static final String ACCOUNT_SECURITY = "account_security";
+        
+        // CHEAT大类下的小类
+        public static final String PLUGIN_ACTIVATION = "plugin_activation";
+        public static final String PLUGIN_DEACTIVATION = "plugin_deactivation";
+        public static final String PLUGIN_USAGE = "plugin_usage";
     }
 }

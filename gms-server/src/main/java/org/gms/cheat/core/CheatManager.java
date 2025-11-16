@@ -1,14 +1,15 @@
 package org.gms.cheat.core;
 
 import org.gms.client.Character;
+import org.gms.log.CheatLogger;
 
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 作弊管理器
- * 负责管理所有作弊插件的生命周期
+ * 辅助管理器
+ * 负责管理所有辅助插件的生命周期
  */
 public class CheatManager {
     private final Character player;
@@ -16,15 +17,17 @@ public class CheatManager {
     
     public CheatManager(Character player) {
         this.player = player;
+        CheatLogger.logCheatSystem(player, "创建辅助管理器实例");
     }
     
     /**
      * 注册插件
-     * @param plugin 作弊插件
+     * @param plugin 辅助插件
      */
     public void registerPlugin(CheatPlugin plugin) {
         plugin.initialize(player);
         plugins.put(plugin.getName(), plugin);
+        CheatLogger.logCheatSystem(player, "注册辅助插件: " + plugin.getName());
     }
     
     /**
@@ -35,13 +38,14 @@ public class CheatManager {
         CheatPlugin plugin = plugins.remove(pluginName);
         if (plugin != null) {
             plugin.stop();
+            CheatLogger.logCheatSystem(player, "注销辅助插件: " + pluginName);
         }
     }
     
     /**
      * 获取插件
      * @param pluginName 插件名称
-     * @return 作弊插件
+     * @return 辅助插件
      */
     @SuppressWarnings("unchecked")
     public <T extends CheatPlugin> T getPlugin(String pluginName) {
@@ -60,20 +64,29 @@ public class CheatManager {
      * 启动所有插件
      */
     public void startAllPlugins() {
-        plugins.values().forEach(CheatPlugin::start);
+        plugins.values().forEach(plugin -> {
+            plugin.start();
+            CheatLogger.logCheatSystem(player, "启动辅助插件: " + plugin.getName());
+        });
     }
     
     /**
      * 停止所有插件
      */
     public void stopAllPlugins() {
-        plugins.values().forEach(CheatPlugin::stop);
+        plugins.values().forEach(plugin -> {
+            plugin.stop();
+            CheatLogger.logCheatSystem(player, "停止辅助插件: " + plugin.getName());
+        });
     }
     
     /**
      * 更新所有插件配置
      */
     public void updateAllConfig() {
-        plugins.values().forEach(CheatPlugin::updateConfig);
+        plugins.values().forEach(plugin -> {
+            plugin.updateConfig();
+            CheatLogger.logCheatSystem(player, "更新辅助插件配置: " + plugin.getName());
+        });
     }
 }

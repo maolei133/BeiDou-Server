@@ -113,12 +113,14 @@ public class MobVacPlugin extends BaseCheatPlugin {
         if (!enable) {
             if (player != null) {
                 player.dropMessage(5, "吸怪功能未启用。");
+                logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 功能未启用");
             }
             return false;
         }
         
         // 检查玩家是否在线
         if (player == null || !player.isLoggedInWorld()) {
+            logPluginActivation("未知", 0, "失败 - 玩家不在线");
             return false;
         }
         
@@ -130,6 +132,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         // 检查地图条件
         if (!checkMapConditions()) {
             player.dropMessage(5, "当前地图无法使用吸怪功能：地图存在事件、倒计时或Boss，或已有其他玩家正在使用吸怪功能。");
+            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 地图条件不满足");
             return false;
         }
         
@@ -138,6 +141,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         if (dailyLimit > 0) {  // 仅在dailyLimit大于0时检查使用次数
             if (todayUsage >= dailyLimit) {
                 player.dropMessage(6, "今日吸怪次数已用完，每日限制：" + dailyLimit + "次。");
+                logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 使用次数已达上限");
                 return false;
             }
         }
@@ -145,6 +149,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         // 检查是否已在使用中
         if (activeUsers.contains(playerId)) {
             player.dropMessage(5, "吸怪功能已在使用中。");
+            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 功能已在使用中");
             return false;
         }
         
@@ -180,6 +185,8 @@ public class MobVacPlugin extends BaseCheatPlugin {
         }
         mobVacMap.broadcastMessage(PacketCreator.serverNotice(6, player.getName() + " 已开启吸怪功能。"));
         
+        logPluginActivation(player.getMap().getMapName(), player.getMapId(), "成功 - 吸怪功能已开启，持续时间：" + durationStr);
+        
         // 启动倒计时
         startCountdown();
         
@@ -196,7 +203,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         if (player != null) {
             try {
                 int accountId = player.getAccountId();
-                String extendType = "11"; // 账号扩展类型
+                String extendType = "12"; // 账号扩展类型
                 
                 ExtendValueDO extendValueDO = getAccountExtendValue(accountId, extendType, MOB_VAC_USAGE_COUNT_KEY);
                 if (extendValueDO != null && extendValueDO.getExtendValue() != null) {
@@ -448,6 +455,37 @@ public class MobVacPlugin extends BaseCheatPlugin {
     /**
      * 停止吸怪功能
      */
+    public void stopMobVac() {
+        if (player != null) {
+            int playerId = player.getId();
+            
+            // 移除玩家
+            activeUsers.remove(playerId);
+            playersInVacMap.remove(playerId);
+            
+            // 移除地图实例记录
+            if (mobVacMap != null) {
+                activeMapInstances.remove(mobVacMap);
+            }
+            
+            // 取消定时任务
+            if (mobVacTask != null && !mobVacTask.isDone()) {
+                mobVacTask.cancel(true);
+            }
+            
+            // 清除状态
+            // clearMobStatus(); // 方法不存在，已移除
+            
+            // 发送提示信息
+            player.dropMessage(6, "吸怪功能已结束。");
+            
+            logPluginDeactivation("正常结束");
+        }
+    }
+    
+    /**
+     * 停止吸怪功能
+     */
     @Override
     protected void onStop() {
         stopMobVac("玩家主动停止吸怪功能", true);
@@ -494,14 +532,11 @@ public class MobVacPlugin extends BaseCheatPlugin {
         int minutes = (seconds % 3600) / 60;
         
         StringBuilder sb = new StringBuilder();
-        if (days > 0) {
-            sb.append(days).append("天");
-        }
-        if (hours > 0) {
-            sb.append(hours).append("小时");
-        }
-        sb.append(minutes).append("分钟");
-        
+        if (days > 0) sb.append(days).append("天");
+        if (hours > 0) sb.append(hours).append("小时");
+        if (minutes > 0) sb.append(minutes).append("分钟");
+        // 如果没有任何时间单位，显示0分钟
+        if (sb.length() == 0) sb.append("0分钟");
         return sb.toString();
     }
 
