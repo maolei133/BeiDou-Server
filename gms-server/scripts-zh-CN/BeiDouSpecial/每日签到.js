@@ -23,7 +23,7 @@ function action(mode, type, selection)
 	    if (status == 0)
 	    {
 			//第一层对话
-			text = cm.getCharacterExtendValue("每日签到",true);
+			text = cm.getAccountExtendValue("每日签到",true);
 			if (text == "TRUE")
 			{
 			    cm.sendOk("您已经签到过了，请明天再来");
@@ -31,7 +31,7 @@ function action(mode, type, selection)
 			}
 			else
 			{
-			    cm.saveOrUpdateCharacterExtendValue("每日签到", "TRUE",true);
+			    cm.saveOrUpdateAccountExtendValue("每日签到", "TRUE",true);
 			    cm.sendOk("签到成功");
 				cm.gainItem(2430033,1);
 			    cm.dispose();				
