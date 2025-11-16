@@ -112,6 +112,78 @@
                   />
                 </a-form-item>
               </a-col>
+              <a-col :span="8">
+                <a-form-item
+                  field="ip"
+                  :label="$t('log.manager.form.ip.label')"
+                >
+                  <a-select
+                    v-model="formModel.ip"
+                    :placeholder="$t('log.manager.form.ip.placeholder')"
+                    allow-clear
+                    :options="ipOptions"
+                    allow-search
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
+            <a-row :gutter="16">
+              <a-col :span="8">
+                <a-form-item
+                  field="mac"
+                  :label="$t('log.manager.form.mac.label')"
+                >
+                  <a-select
+                    v-model="formModel.mac"
+                    :placeholder="$t('log.manager.form.mac.placeholder')"
+                    allow-clear
+                    :options="macOptions"
+                    allow-search
+                  />
+                </a-form-item>
+              </a-col>
+              <a-col :span="8">
+                <a-form-item
+                  field="hwid"
+                  :label="$t('log.manager.form.hwid.label')"
+                >
+                  <a-select
+                    v-model="formModel.hwid"
+                    :placeholder="$t('log.manager.form.hwid.placeholder')"
+                    allow-clear
+                    :options="hwidOptions"
+                    allow-search
+                  />
+                </a-form-item>
+              </a-col>
+              <a-col :span="8">
+                <a-form-item
+                  field="account"
+                  :label="$t('log.manager.form.account.label')"
+                >
+                  <a-select
+                    v-model="formModel.account"
+                    :placeholder="$t('log.manager.form.account.placeholder')"
+                    allow-clear
+                    :options="accountOptions"
+                    allow-search
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
+            <a-row :gutter="16">
+              <a-col :span="8">
+                <a-form-item
+                  field="character"
+                  :label="$t('log.manager.form.character.label')"
+                >
+                  <a-input
+                    v-model="formModel.character"
+                    :placeholder="$t('log.manager.form.character.placeholder')"
+                    allow-clear
+                  />
+                </a-form-item>
+              </a-col>
             </a-row>
           </a-form>
         </a-col>
@@ -142,12 +214,16 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref, reactive, onMounted } from 'vue';
+  import { ref, reactive, onMounted, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
     queryLogs,
     getAllMajorCategories,
     getMinorCategoriesByMajor,
+    getUniqueIPs,
+    getUniqueMACs,
+    getUniqueHWIDs,
+    getUniqueAccounts,
     LogQueryParams,
   } from '@/api/log';
   import useLoading from '@/hooks/loading';
@@ -161,12 +237,23 @@
   const majorCategories = ref<string[]>([]);
   const minorCategories = ref<string[]>([]);
 
+  // 筛选选项
+  const ipOptions = ref<SelectOptionData[]>([]);
+  const macOptions = ref<SelectOptionData[]>([]);
+  const hwidOptions = ref<SelectOptionData[]>([]);
+  const accountOptions = ref<SelectOptionData[]>([]);
+
   const formModel = reactive({
     majorCategory: '',
     minorCategory: '',
     startDate: '',
     endDate: '',
     keyword: '',
+    ip: '',
+    mac: '',
+    hwid: '',
+    account: '',
+    character: '',
   });
 
   const pagination = reactive({
@@ -182,7 +269,26 @@
     fetchMajorCategories();
   });
 
+  // 监听大类和小类变化，获取对应的筛选选项
+  watch(
+    [() => formModel.majorCategory, () => formModel.minorCategory],
+    async ([newMajor, newMinor], [oldMajor, oldMinor]) => {
+      if (
+        newMajor &&
+        newMinor &&
+        (newMajor !== oldMajor || newMinor !== oldMinor)
+      ) {
+        await fetchUniqueValues();
+      }
+    }
+  );
+
   const fetchLogs = async () => {
+    if (!formModel.majorCategory || !formModel.minorCategory) {
+      Message.warning(t('log.manager.message.selectCategoryFirst'));
+      return;
+    }
+
     try {
       setLoading(true);
       const params: LogQueryParams = {
@@ -191,6 +297,11 @@
         startDate: formModel.startDate || undefined,
         endDate: formModel.endDate || undefined,
         keyword: formModel.keyword || undefined,
+        ip: formModel.ip || undefined,
+        mac: formModel.mac || undefined,
+        hwid: formModel.hwid || undefined,
+        account: formModel.account || undefined,
+        character: formModel.character || undefined,
       };
 
       const response = (await queryLogs(params)) as unknown as HttpResponse<
@@ -227,6 +338,57 @@
     }
   };
 
+  // 获取唯一值（IP、MAC、HWID、账号等）
+  const fetchUniqueValues = async () => {
+    if (!formModel.majorCategory || !formModel.minorCategory) return;
+
+    try {
+      // 获取唯一IP列表
+      const ipResponse = (await getUniqueIPs(
+        formModel.majorCategory,
+        formModel.minorCategory
+      )) as unknown as HttpResponse<{ data: string[] }>;
+      ipOptions.value = (ipResponse.data?.data || []).map((ip) => ({
+        label: ip,
+        value: ip,
+      }));
+
+      // 获取唯一MAC列表
+      const macResponse = (await getUniqueMACs(
+        formModel.majorCategory,
+        formModel.minorCategory
+      )) as unknown as HttpResponse<{ data: string[] }>;
+      macOptions.value = (macResponse.data?.data || []).map((mac) => ({
+        label: mac,
+        value: mac,
+      }));
+
+      // 获取唯一HWID列表
+      const hwidResponse = (await getUniqueHWIDs(
+        formModel.majorCategory,
+        formModel.minorCategory
+      )) as unknown as HttpResponse<{ data: string[] }>;
+      hwidOptions.value = (hwidResponse.data?.data || []).map((hwid) => ({
+        label: hwid,
+        value: hwid,
+      }));
+
+      // 获取唯一账号列表
+      const accountResponse = (await getUniqueAccounts(
+        formModel.majorCategory,
+        formModel.minorCategory
+      )) as unknown as HttpResponse<{ data: string[] }>;
+      accountOptions.value = (accountResponse.data?.data || []).map(
+        (account) => ({
+          label: account,
+          value: account,
+        })
+      );
+    } catch (error) {
+      Message.error(t('log.manager.message.fetchUniqueValuesError'));
+    }
+  };
+
   const handleMajorCategoryChange = (
     value:
       | string
@@ -238,6 +400,18 @@
     // 类型转换为 string
     const stringValue = value as string;
     formModel.minorCategory = '';
+    formModel.ip = '';
+    formModel.mac = '';
+    formModel.hwid = '';
+    formModel.account = '';
+    formModel.character = '';
+
+    // 清空选项
+    ipOptions.value = [];
+    macOptions.value = [];
+    hwidOptions.value = [];
+    accountOptions.value = [];
+
     if (stringValue) {
       fetchMinorCategories(stringValue);
     } else {

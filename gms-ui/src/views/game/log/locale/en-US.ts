@@ -15,12 +15,26 @@ export default {
   'log.manager.form.startDate.placeholder': 'Please select start date',
   'log.manager.form.endDate.label': 'End Date',
   'log.manager.form.endDate.placeholder': 'Please select end date',
+  'log.manager.form.ip.label': 'IP Address',
+  'log.manager.form.ip.placeholder': 'Please select IP address',
+  'log.manager.form.mac.label': 'MAC Address',
+  'log.manager.form.mac.placeholder': 'Please select MAC address',
+  'log.manager.form.hwid.label': 'Hardware ID',
+  'log.manager.form.hwid.placeholder': 'Please select hardware ID',
+  'log.manager.form.account.label': 'Account',
+  'log.manager.form.account.placeholder': 'Please select account',
+  'log.manager.form.character.label': 'Character',
+  'log.manager.form.character.placeholder': 'Please enter character name',
   'log.manager.table.column.content': 'Log Content',
   'log.manager.message.fetchError': 'Error occurred while querying logs',
   'log.manager.message.fetchMajorCategoriesError':
     'Error occurred while fetching major categories',
   'log.manager.message.fetchMinorCategoriesError':
     'Error occurred while fetching minor categories',
+  'log.manager.message.fetchUniqueValuesError':
+    'Error occurred while fetching filter options',
+  'log.manager.message.selectCategoryFirst':
+    'Please select major and minor category first',
 
   // Log major category translations
   'log.category.major.player': 'Player',

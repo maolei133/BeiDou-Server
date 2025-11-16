@@ -91,4 +91,46 @@ public class LoggerService {
         getLogger(LogCategories.Major.SECURITY, securityType)
             .warn("安全警告: 玩家 {} 触发 {} 类型检测, 详情: {}", playerName, securityType, details);
     }
+    
+    /**
+     * 增强型玩家登录日志（包含详细信息）
+     */
+    public static void logEnhancedPlayerLogin(String playerName, Long characterId, Integer level, 
+                                              String account, Long accountId, 
+                                              String ip, String mac, String hwid) {
+        EnhancedLogEntry entry = new EnhancedLogEntry();
+        entry.setMajorCategory(LogCategories.Major.PLAYER);
+        entry.setMinorCategory(LogCategories.Minor.LOGIN);
+        entry.setMessage("玩家 " + playerName + " 登录游戏");
+        entry.setCharacter(playerName);
+        entry.setCharacterId(characterId);
+        entry.setLevel(level);
+        entry.setAccount(account);
+        entry.setAccountId(accountId);
+        entry.setIp(ip);
+        entry.setMac(mac);
+        entry.setHwid(hwid);
+        
+        EnhancedLogManager.log(entry);
+    }
+    
+    /**
+     * 增强型玩家登出日志（包含详细信息）
+     */
+    public static void logEnhancedPlayerLogout(String playerName, Long characterId, Integer level,
+                                               String account, Long accountId, 
+                                               String ip, long playTime) {
+        EnhancedLogEntry entry = new EnhancedLogEntry();
+        entry.setMajorCategory(LogCategories.Major.PLAYER);
+        entry.setMinorCategory(LogCategories.Minor.LOGOUT);
+        entry.setMessage("玩家 " + playerName + " 登出游戏，本次游戏时长 " + playTime + " 秒");
+        entry.setCharacter(playerName);
+        entry.setCharacterId(characterId);
+        entry.setLevel(level);
+        entry.setAccount(account);
+        entry.setAccountId(accountId);
+        entry.setIp(ip);
+        
+        EnhancedLogManager.log(entry);
+    }
 }
