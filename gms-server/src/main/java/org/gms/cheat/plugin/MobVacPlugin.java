@@ -10,6 +10,8 @@ import org.gms.client.status.MonsterStatus;
 import org.gms.client.status.MonsterStatusEffect;
 import org.gms.config.GameConfig;
 import org.gms.dao.entity.ExtendValueDO;
+import org.gms.log.EnhancedLogEntry;
+import org.gms.log.EnhancedLogManager;
 import org.gms.server.TimerManager;
 import org.gms.server.life.Monster;
 import org.gms.server.maps.MapObject;
@@ -539,5 +541,106 @@ public class MobVacPlugin extends BaseCheatPlugin {
         if (sb.length() == 0) sb.append("0分钟");
         return sb.toString();
     }
-
+    
+    /**
+     * 记录插件激活日志（增强型）
+     * 
+     * @param mapName 地图名称
+     * @param mapId 地图ID
+     * @param result 激活结果
+     */
+    @Override
+    protected void logPluginActivation(String mapName, int mapId, String result) {
+        if (isLoggingEnabled()) {
+            EnhancedLogEntry entry = new EnhancedLogEntry();
+            entry.setMajorCategory("cheat");
+            entry.setMinorCategory("plugin_activation");
+            entry.setMessage(String.format(
+                "玩家 %s (ID: %d) 在地图 %s (ID: %d) 开启了插件 %s，结果: %s",
+                player != null ? player.getName() : "未知",
+                player != null ? player.getId() : 0,
+                mapName,
+                mapId,
+                getName(),
+                result
+            ));
+            
+            if (player != null) {
+                entry.setAccount(player.getClient().getAccountName());
+                entry.setAccountId((long) player.getAccountId());
+                entry.setCharacter(player.getName());
+                entry.setCharacterId((long) player.getId());
+                entry.setLevel(player.getLevel());
+                entry.setIp(player.getClient().getRemoteAddress());
+            }
+            
+            EnhancedLogManager.log(entry);
+        }
+    }
+    
+    /**
+     * 记录插件停用日志（增强型）
+     * 
+     * @param reason 停用原因
+     */
+    @Override
+    protected void logPluginDeactivation(String reason) {
+        if (isLoggingEnabled()) {
+            EnhancedLogEntry entry = new EnhancedLogEntry();
+            entry.setMajorCategory("cheat");
+            entry.setMinorCategory("plugin_deactivation");
+            entry.setMessage(String.format(
+                "玩家 %s (ID: %d) 结束了插件 %s，原因: %s",
+                player != null ? player.getName() : "未知",
+                player != null ? player.getId() : 0,
+                getName(),
+                reason
+            ));
+            
+            if (player != null) {
+                entry.setAccount(player.getClient().getAccountName());
+                entry.setAccountId((long) player.getAccountId());
+                entry.setCharacter(player.getName());
+                entry.setCharacterId((long) player.getId());
+                entry.setLevel(player.getLevel());
+                entry.setIp(player.getClient().getRemoteAddress());
+            }
+            
+            EnhancedLogManager.log(entry);
+        }
+    }
+    
+    /**
+     * 记录插件使用日志（增强型）
+     * 
+     * @param action 使用动作
+     * @param details 详细信息
+     */
+    @Override
+    protected void logPluginUsage(String action, String details) {
+        if (isLoggingEnabled()) {
+            EnhancedLogEntry entry = new EnhancedLogEntry();
+            entry.setMajorCategory("cheat");
+            entry.setMinorCategory("plugin_usage");
+            entry.setMessage(String.format(
+                "玩家 %s (ID: %d) 使用插件 %s 执行操作: %s，详情: %s",
+                player != null ? player.getName() : "未知",
+                player != null ? player.getId() : 0,
+                getName(),
+                action,
+                details
+            ));
+            
+            if (player != null) {
+                entry.setAccount(player.getClient().getAccountName());
+                entry.setAccountId((long) player.getAccountId());
+                entry.setCharacter(player.getName());
+                entry.setCharacterId((long) player.getId());
+                entry.setLevel(player.getLevel());
+                entry.setIp(player.getClient().getRemoteAddress());
+            }
+            
+            EnhancedLogManager.log(entry);
+        }
+    }
 }

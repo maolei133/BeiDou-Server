@@ -4,8 +4,8 @@ import lombok.Getter;
 import lombok.Setter;
 import org.gms.client.Character;
 import org.gms.dao.entity.ExtendValueDO;
-import org.gms.log.CheatLogger;
-import org.gms.net.server.Server;
+import org.gms.log.EnhancedLogEntry;
+import org.gms.log.EnhancedLogManager;
 import org.gms.util.ExtendUtil;
 
 /**
@@ -27,14 +27,14 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
     protected boolean loggingEnabled = true;
     
     protected static long currentServerTime() {
-        return Server.getInstance().getCurrentTime();
+        return System.currentTimeMillis();
     }
     
     @Override
     public void initialize(Character player) {
         this.player = player;
         if (loggingEnabled && player != null) {
-            CheatLogger.logCheatSystem(player, "初始化辅助插件: " + getName());
+            logCheatSystem(player, "初始化辅助插件: " + getName());
         }
     }
     
@@ -43,7 +43,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
         if (!running) {
             running = true;
             if (loggingEnabled) {
-                CheatLogger.logCheatSystem(player, "启动辅助插件: " + getName());
+                logCheatSystem(player, "启动辅助插件: " + getName());
             }
             onStart();
         }
@@ -54,7 +54,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
         if (running) {
             running = false;
             if (loggingEnabled) {
-                CheatLogger.logCheatSystem(player, "停止辅助插件: " + getName());
+                logCheatSystem(player, "停止辅助插件: " + getName());
             }
             onStop();
         }
@@ -70,7 +70,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected ExtendValueDO getExtendValue(String extendId, String extendType, String extendName) {
         if (loggingEnabled) {
-            CheatLogger.logCheatSystem(player, String.format("读取扩展值: ID=%s, Type=%s, Name=%s", extendId, extendType, extendName));
+            logCheatSystem(player, String.format("读取扩展值: ID=%s, Type=%s, Name=%s", extendId, extendType, extendName));
         }
         return ExtendUtil.getExtendValue(extendId, extendType, extendName);
     }
@@ -85,7 +85,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void saveOrUpdateExtendValue(String extendId, String extendType, String extendName, String extendValue) {
         if (loggingEnabled) {
-            CheatLogger.logCheatSystem(player, String.format("保存扩展值: ID=%s, Type=%s, Name=%s, Value=%s", extendId, extendType, extendName, extendValue));
+            logCheatSystem(player, String.format("保存扩展值: ID=%s, Type=%s, Name=%s, Value=%s", extendId, extendType, extendName, extendValue));
         }
         ExtendUtil.saveOrUpdateExtendValue(extendId, extendType, extendName, extendValue);
     }
@@ -100,7 +100,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected ExtendValueDO getAccountExtendValue(int accountId, String extendType, String extendName) {
         if (loggingEnabled) {
-            CheatLogger.logCheatSystem(player, String.format("读取账号扩展值: AccountID=%d, Type=%s, Name=%s", accountId, extendType, extendName));
+            logCheatSystem(player, String.format("读取账号扩展值: AccountID=%d, Type=%s, Name=%s", accountId, extendType, extendName));
         }
         return getExtendValue(String.valueOf(accountId), extendType, extendName);
     }
@@ -115,7 +115,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void saveOrUpdateAccountExtendValue(int accountId, String extendType, String extendName, String extendValue) {
         if (loggingEnabled) {
-            CheatLogger.logCheatSystem(player, String.format("保存账号扩展值: AccountID=%d, Type=%s, Name=%s, Value=%s", accountId, extendType, extendName, extendValue));
+            logCheatSystem(player, String.format("保存账号扩展值: AccountID=%d, Type=%s, Name=%s, Value=%s", accountId, extendType, extendName, extendValue));
         }
         saveOrUpdateExtendValue(String.valueOf(accountId), extendType, extendName, extendValue);
     }
@@ -130,7 +130,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected ExtendValueDO getCharacterExtendValue(int characterId, String extendType, String extendName) {
         if (loggingEnabled) {
-            CheatLogger.logCheatSystem(player, String.format("读取角色扩展值: CharacterID=%d, Type=%s, Name=%s", characterId, extendType, extendName));
+            logCheatSystem(player, String.format("读取角色扩展值: CharacterID=%d, Type=%s, Name=%s", characterId, extendType, extendName));
         }
         return getExtendValue(String.valueOf(characterId), extendType, extendName);
     }
@@ -145,7 +145,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void saveOrUpdateCharacterExtendValue(int characterId, String extendType, String extendName, String extendValue) {
         if (loggingEnabled) {
-            CheatLogger.logCheatSystem(player, String.format("保存角色扩展值: CharacterID=%d, Type=%s, Name=%s, Value=%s", characterId, extendType, extendName, extendValue));
+            logCheatSystem(player, String.format("保存角色扩展值: CharacterID=%d, Type=%s, Name=%s, Value=%s", characterId, extendType, extendName, extendValue));
         }
         saveOrUpdateExtendValue(String.valueOf(characterId), extendType, extendName, extendValue);
     }
@@ -173,7 +173,29 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logPluginActivation(String mapName, int mapId, String result) {
         if (loggingEnabled) {
-            CheatLogger.logPluginActivation(player, this, mapName, mapId, result);
+            EnhancedLogEntry entry = new EnhancedLogEntry();
+            entry.setMajorCategory("cheat");
+            entry.setMinorCategory("plugin_activation");
+            entry.setMessage(String.format(
+                "玩家 %s (ID: %d) 在地图 %s (ID: %d) 开启了插件 %s，结果: %s",
+                player != null ? player.getName() : "未知",
+                player != null ? player.getId() : 0,
+                mapName,
+                mapId,
+                getName(),
+                result
+            ));
+            
+            if (player != null) {
+                entry.setAccount(player.getClient().getAccountName());
+                entry.setAccountId((long) player.getAccountId());
+                entry.setCharacter(player.getName());
+                entry.setCharacterId((long) player.getId());
+                entry.setLevel(player.getLevel());
+                entry.setIp(player.getClient().getRemoteAddress());
+            }
+            
+            EnhancedLogManager.log(entry);
         }
     }
     
@@ -184,7 +206,27 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logPluginDeactivation(String reason) {
         if (loggingEnabled) {
-            CheatLogger.logPluginDeactivation(player, this, reason);
+            EnhancedLogEntry entry = new EnhancedLogEntry();
+            entry.setMajorCategory("cheat");
+            entry.setMinorCategory("plugin_deactivation");
+            entry.setMessage(String.format(
+                "玩家 %s (ID: %d) 结束了插件 %s，原因: %s",
+                player != null ? player.getName() : "未知",
+                player != null ? player.getId() : 0,
+                getName(),
+                reason
+            ));
+            
+            if (player != null) {
+                entry.setAccount(player.getClient().getAccountName());
+                entry.setAccountId((long) player.getAccountId());
+                entry.setCharacter(player.getName());
+                entry.setCharacterId((long) player.getId());
+                entry.setLevel(player.getLevel());
+                entry.setIp(player.getClient().getRemoteAddress());
+            }
+            
+            EnhancedLogManager.log(entry);
         }
     }
     
@@ -196,7 +238,56 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logPluginUsage(String action, String details) {
         if (loggingEnabled) {
-            CheatLogger.logPluginUsage(player, this, action, details);
+            EnhancedLogEntry entry = new EnhancedLogEntry();
+            entry.setMajorCategory("cheat");
+            entry.setMinorCategory("plugin_usage");
+            entry.setMessage(String.format(
+                "玩家 %s (ID: %d) 使用插件 %s 执行操作: %s，详情: %s",
+                player != null ? player.getName() : "未知",
+                player != null ? player.getId() : 0,
+                getName(),
+                action,
+                details
+            ));
+            
+            if (player != null) {
+                entry.setAccount(player.getClient().getAccountName());
+                entry.setAccountId((long) player.getAccountId());
+                entry.setCharacter(player.getName());
+                entry.setCharacterId((long) player.getId());
+                entry.setLevel(player.getLevel());
+                entry.setIp(player.getClient().getRemoteAddress());
+            }
+            
+            EnhancedLogManager.log(entry);
+        }
+    }
+    
+    /**
+     * 记录通用辅助系统日志
+     * 
+     * @param player 玩家对象
+     * @param message 日志消息
+     */
+    protected void logCheatSystem(Character player, String message) {
+        if (loggingEnabled) {
+            EnhancedLogEntry entry = new EnhancedLogEntry();
+            entry.setMajorCategory("cheat");
+            entry.setMinorCategory("plugin_usage");
+            
+            if (player != null && player.getName() != null) {
+                entry.setMessage(String.format("玩家 %s (ID: %d): %s", player.getName(), player.getId(), message));
+                entry.setAccount(player.getClient().getAccountName());
+                entry.setAccountId((long) player.getAccountId());
+                entry.setCharacter(player.getName());
+                entry.setCharacterId((long) player.getId());
+                entry.setLevel(player.getLevel());
+                entry.setIp(player.getClient().getRemoteAddress());
+            } else {
+                entry.setMessage("玩家 null (ID: 0): " + message);
+            }
+            
+            EnhancedLogManager.log(entry);
         }
     }
 }
