@@ -17,7 +17,9 @@ public class CheatManager {
     
     public CheatManager(Character player) {
         this.player = player;
-        CheatLogger.logCheatSystem(player, "创建辅助管理器实例");
+        if (player != null) {
+            CheatLogger.logCheatSystem(player, "创建辅助管理器实例");
+        }
     }
     
     /**
@@ -25,9 +27,11 @@ public class CheatManager {
      * @param plugin 辅助插件
      */
     public void registerPlugin(CheatPlugin plugin) {
-        plugin.initialize(player);
-        plugins.put(plugin.getName(), plugin);
-        CheatLogger.logCheatSystem(player, "注册辅助插件: " + plugin.getName());
+        if (player != null) {
+            plugin.initialize(player);
+            plugins.put(plugin.getName(), plugin);
+            CheatLogger.logCheatSystem(player, "注册辅助插件: " + plugin.getName());
+        }
     }
     
     /**
@@ -35,10 +39,12 @@ public class CheatManager {
      * @param pluginName 插件名称
      */
     public void unregisterPlugin(String pluginName) {
-        CheatPlugin plugin = plugins.remove(pluginName);
-        if (plugin != null) {
-            plugin.stop();
-            CheatLogger.logCheatSystem(player, "注销辅助插件: " + pluginName);
+        if (player != null) {
+            CheatPlugin plugin = plugins.remove(pluginName);
+            if (plugin != null) {
+                plugin.stop();
+                CheatLogger.logCheatSystem(player, "注销辅助插件: " + pluginName);
+            }
         }
     }
     
@@ -64,29 +70,35 @@ public class CheatManager {
      * 启动所有插件
      */
     public void startAllPlugins() {
-        plugins.values().forEach(plugin -> {
-            plugin.start();
-            CheatLogger.logCheatSystem(player, "启动辅助插件: " + plugin.getName());
-        });
+        if (player != null) {
+            plugins.values().forEach(plugin -> {
+                plugin.start();
+                CheatLogger.logCheatSystem(player, "启动辅助插件: " + plugin.getName());
+            });
+        }
     }
     
     /**
      * 停止所有插件
      */
     public void stopAllPlugins() {
-        plugins.values().forEach(plugin -> {
-            plugin.stop();
-            CheatLogger.logCheatSystem(player, "停止辅助插件: " + plugin.getName());
-        });
+        if (player != null) {
+            plugins.values().forEach(plugin -> {
+                plugin.stop();
+                CheatLogger.logCheatSystem(player, "停止辅助插件: " + plugin.getName());
+            });
+        }
     }
     
     /**
      * 更新所有插件配置
      */
     public void updateAllConfig() {
-        plugins.values().forEach(plugin -> {
-            plugin.updateConfig();
-            CheatLogger.logCheatSystem(player, "更新辅助插件配置: " + plugin.getName());
-        });
+        if (player != null) {
+            plugins.values().forEach(plugin -> {
+                plugin.updateConfig();
+                CheatLogger.logCheatSystem(player, "更新辅助插件配置: " + plugin.getName());
+            });
+        }
     }
 }

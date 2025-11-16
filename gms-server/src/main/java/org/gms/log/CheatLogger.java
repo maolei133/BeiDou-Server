@@ -110,7 +110,7 @@ public class CheatLogger {
      */
     public static void logCheatSystem(Character player, String message) {
         String fullMessage;
-        if (player != null) {
+        if (player != null && player.getName() != null) {
             fullMessage = String.format(
                 "玩家 %s (ID: %d): %s",
                 player.getName(),
@@ -118,7 +118,7 @@ public class CheatLogger {
                 message
             );
         } else {
-            fullMessage = message;
+            fullMessage = "玩家 null (ID: 0): " + message;
         }
         
         LogManager.log(LogCategories.Major.CHEAT, LogCategories.Minor.PLUGIN_USAGE, fullMessage);

@@ -33,7 +33,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
     @Override
     public void initialize(Character player) {
         this.player = player;
-        if (loggingEnabled) {
+        if (loggingEnabled && player != null) {
             CheatLogger.logCheatSystem(player, "初始化辅助插件: " + getName());
         }
     }

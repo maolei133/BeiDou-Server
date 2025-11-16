@@ -31,6 +31,10 @@ public class CheatModuleManager {
      * @return 辅助管理器
      */
     public CheatManager createCheatManager(Character player) {
+        if (player == null) {
+            return null;
+        }
+        
         CheatManager cheatManager = new CheatManager(player);
         cheatManagers.put(player.getId(), cheatManager);
         CheatLogger.logCheatSystem(player, "为玩家创建辅助管理器");
@@ -63,6 +67,10 @@ public class CheatModuleManager {
      * @param player 玩家对象
      */
     public void registerAllPlugins(Character player) {
+        if (player == null) {
+            return;
+        }
+        
         CheatManager cheatManager = getCheatManager(player.getId());
         if (cheatManager == null) {
             cheatManager = createCheatManager(player);

@@ -437,6 +437,7 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
 
             player.receivePartyMemberHP();
 
+            player.initCheatManager();// 初始化作弊管理器
             player.startCheatItemVac(); //启动内置宠吸
             if (player.getPartnerId() > 0) {
                 int partnerId = player.getPartnerId();

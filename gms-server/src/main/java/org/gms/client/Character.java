@@ -485,7 +485,7 @@ public class Character extends AbstractCharacterObject {
     @Getter
     private float familyDrop = 1;
     /**
-     * 作弊管理器
+     * 内置辅助管理器
      */
     @Getter
     private CheatManager cheatManager;
@@ -518,9 +518,6 @@ public class Character extends AbstractCharacterObject {
         }
         quests = new LinkedHashMap<>();
         setPosition(new Point(0, 0));
-        
-        // 初始化作弊管理器
-        initCheatManager();
     }
 
     public Job getJobStyle(byte opt) {
@@ -576,11 +573,13 @@ public class Character extends AbstractCharacterObject {
     }
     
     /**
-     * 初始化作弊管理器
+     * 初始化内置辅助管理器
      */
-    private void initCheatManager() {
-        cheatManager = CheatModuleManager.getInstance().createCheatManager(this);
-        CheatModuleManager.getInstance().registerAllPlugins(this);
+    public void initCheatManager() {
+        if (this.getId() != 0 && cheatManager == null) {
+            cheatManager = CheatModuleManager.getInstance().createCheatManager(this);
+            CheatModuleManager.getInstance().registerAllPlugins(this);
+        }
     }
 
     public boolean isLoggedInWorld() {
@@ -2421,7 +2420,7 @@ public class Character extends AbstractCharacterObject {
     public void stopCheatItemVac() {
         chrLock.lock();
         try {
-            // 停止作弊插件
+            // 停止内置辅助插件
             ItemVacPlugin itemVacPlugin = cheatManager.getPlugin("ItemVac");
             if (itemVacPlugin != null) {
                 itemVacPlugin.stop();
