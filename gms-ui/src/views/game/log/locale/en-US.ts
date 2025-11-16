@@ -39,67 +39,67 @@ export default {
 
   // Log minor category translations
   // PLAYER major category minors
-  'log.category.minor.login': 'Login',
-  'log.category.minor.logout': 'Logout',
-  'log.category.minor.level_up': 'Level Up',
-  'log.category.minor.job_change': 'Job Change',
+  'log.category.minor.player.login': 'Login',
+  'log.category.minor.player.logout': 'Logout',
+  'log.category.minor.player.level_up': 'Level Up',
+  'log.category.minor.player.job_change': 'Job Change',
 
   // ITEM major category minors
-  'log.category.minor.obtain': 'Obtain',
-  'log.category.minor.consume': 'Consume',
-  'log.category.minor.drop': 'Drop',
-  'log.category.minor.pickup': 'Pickup',
+  'log.category.minor.item.obtain': 'Obtain',
+  'log.category.minor.item.consume': 'Consume',
+  'log.category.minor.item.drop': 'Drop',
+  'log.category.minor.item.pickup': 'Pickup',
 
   // ECONOMY major category minors
-  'log.category.minor.trade': 'Trade',
-  'log.category.minor.auction': 'Auction',
-  'log.category.minor.meso_transaction': 'Meso Transaction',
+  'log.category.minor.economy.trade': 'Trade',
+  'log.category.minor.economy.auction': 'Auction',
+  'log.category.minor.economy.meso_transaction': 'Meso Transaction',
 
   // SYSTEM major category minors
-  'log.category.minor.startup': 'Startup',
-  'log.category.minor.shutdown': 'Shutdown',
-  'log.category.minor.config_change': 'Config Change',
+  'log.category.minor.system.startup': 'Startup',
+  'log.category.minor.system.shutdown': 'Shutdown',
+  'log.category.minor.system.config_change': 'Config Change',
 
   // CHAT major category minors
-  'log.category.minor.general': 'General',
-  'log.category.minor.whisper': 'Whisper',
-  'log.category.minor.party': 'Party',
-  'log.category.minor.guild': 'Guild',
+  'log.category.minor.chat.general': 'General',
+  'log.category.minor.chat.whisper': 'Whisper',
+  'log.category.minor.chat.party': 'Party',
+  'log.category.minor.chat.guild': 'Guild',
 
   // BATTLE major category minors
-  'log.category.minor.damage': 'Damage',
-  'log.category.minor.skill_use': 'Skill Use',
-  'log.category.minor.monster_kill': 'Monster Kill',
+  'log.category.minor.battle.damage': 'Damage',
+  'log.category.minor.battle.skill_use': 'Skill Use',
+  'log.category.minor.battle.monster_kill': 'Monster Kill',
 
   // QUEST major category minors
-  'log.category.minor.accept': 'Accept',
-  'log.category.minor.complete': 'Complete',
-  'log.category.minor.forfeit': 'Forfeit',
+  'log.category.minor.quest.accept': 'Accept',
+  'log.category.minor.quest.complete': 'Complete',
+  'log.category.minor.quest.forfeit': 'Forfeit',
 
   // SHOP major category minors
-  'log.category.minor.buy': 'Buy',
-  'log.category.minor.sell': 'Sell',
-  'log.category.minor.recharge': 'Recharge',
+  'log.category.minor.shop.buy': 'Buy',
+  'log.category.minor.shop.sell': 'Sell',
+  'log.category.minor.shop.recharge': 'Recharge',
 
   // SOCIAL major category minors
-  'log.category.minor.friend': 'Friend',
-  'log.category.minor.guild': 'Guild',
-  'log.category.minor.party': 'Party',
+  'log.category.minor.social.friend': 'Friend',
+  'log.category.minor.social.guild': 'Guild',
+  'log.category.minor.social.party': 'Party',
 
   // GM_COMMAND major category minors
-  'log.category.minor.command_execution': 'Command Execution',
-  'log.category.minor.player_punishment': 'Player Punishment',
+  'log.category.minor.gm_command.command_execution': 'Command Execution',
+  'log.category.minor.gm_command.player_punishment': 'Player Punishment',
 
   // ERROR major category minors
-  'log.category.minor.exception': 'Exception',
-  'log.category.minor.warning': 'Warning',
+  'log.category.minor.error.exception': 'Exception',
+  'log.category.minor.error.warning': 'Warning',
 
   // SECURITY major category minors
-  'log.category.minor.hack_detection': 'Hack Detection',
-  'log.category.minor.account_security': 'Account Security',
+  'log.category.minor.security.hack_detection': 'Hack Detection',
+  'log.category.minor.security.account_security': 'Account Security',
 
   // CHEAT major category minors
-  'log.category.minor.plugin_activation': 'Plugin Activation',
-  'log.category.minor.plugin_deactivation': 'Plugin Deactivation',
-  'log.category.minor.plugin_usage': 'Plugin Usage',
+  'log.category.minor.cheat.plugin_activation': 'Plugin Activation',
+  'log.category.minor.cheat.plugin_deactivation': 'Plugin Deactivation',
+  'log.category.minor.cheat.plugin_usage': 'Plugin Usage',
 };

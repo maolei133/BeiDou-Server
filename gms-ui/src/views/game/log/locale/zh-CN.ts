@@ -35,67 +35,67 @@ export default {
 
   // 日志小类翻译
   // PLAYER大类下的小类
-  'log.category.minor.login': '登录',
-  'log.category.minor.logout': '登出',
-  'log.category.minor.level_up': '升级',
-  'log.category.minor.job_change': '转职',
+  'log.category.minor.player.login': '登录',
+  'log.category.minor.player.logout': '登出',
+  'log.category.minor.player.level_up': '升级',
+  'log.category.minor.player.job_change': '转职',
 
   // ITEM大类下的小类
-  'log.category.minor.obtain': '获得',
-  'log.category.minor.consume': '消耗',
-  'log.category.minor.drop': '丢弃',
-  'log.category.minor.pickup': '捡起',
+  'log.category.minor.item.obtain': '获得',
+  'log.category.minor.item.consume': '消耗',
+  'log.category.minor.item.drop': '丢弃',
+  'log.category.minor.item.pickup': '捡起',
 
   // ECONOMY大类下的小类
-  'log.category.minor.trade': '交易',
-  'log.category.minor.auction': '拍卖',
-  'log.category.minor.meso_transaction': '金币交易',
+  'log.category.minor.economy.trade': '交易',
+  'log.category.minor.economy.auction': '拍卖',
+  'log.category.minor.economy.meso_transaction': '金币交易',
 
   // SYSTEM大类下的小类
-  'log.category.minor.startup': '启动',
-  'log.category.minor.shutdown': '关闭',
-  'log.category.minor.config_change': '配置变更',
+  'log.category.minor.system.startup': '启动',
+  'log.category.minor.system.shutdown': '关闭',
+  'log.category.minor.system.config_change': '配置变更',
 
   // CHAT大类下的小类
-  'log.category.minor.general': '一般',
-  'log.category.minor.whisper': '私聊',
-  'log.category.minor.party': '组队',
-  'log.category.minor.guild': '公会',
+  'log.category.minor.chat.general': '一般',
+  'log.category.minor.chat.whisper': '私聊',
+  'log.category.minor.chat.party': '组队',
+  'log.category.minor.chat.guild': '公会',
 
   // BATTLE大类下的小类
-  'log.category.minor.damage': '伤害',
-  'log.category.minor.skill_use': '技能使用',
-  'log.category.minor.monster_kill': '击杀怪物',
+  'log.category.minor.battle.damage': '伤害',
+  'log.category.minor.battle.skill_use': '技能使用',
+  'log.category.minor.battle.monster_kill': '击杀怪物',
 
   // QUEST大类下的小类
-  'log.category.minor.accept': '接受',
-  'log.category.minor.complete': '完成',
-  'log.category.minor.forfeit': '放弃',
+  'log.category.minor.quest.accept': '接受',
+  'log.category.minor.quest.complete': '完成',
+  'log.category.minor.quest.forfeit': '放弃',
 
   // SHOP大类下的小类
-  'log.category.minor.buy': '购买',
-  'log.category.minor.sell': '出售',
-  'log.category.minor.recharge': '充值',
+  'log.category.minor.shop.buy': '购买',
+  'log.category.minor.shop.sell': '出售',
+  'log.category.minor.shop.recharge': '充值',
 
   // SOCIAL大类下的小类
-  'log.category.minor.friend': '好友',
-  'log.category.minor.guild': '公会',
-  'log.category.minor.party': '组队',
+  'log.category.minor.social.friend': '好友',
+  'log.category.minor.social.guild': '公会',
+  'log.category.minor.social.party': '组队',
 
   // GM_COMMAND大类下的小类
-  'log.category.minor.command_execution': '命令执行',
-  'log.category.minor.player_punishment': '玩家惩罚',
+  'log.category.minor.gm_command.command_execution': '命令执行',
+  'log.category.minor.gm_command.player_punishment': '玩家惩罚',
 
   // ERROR大类下的小类
-  'log.category.minor.exception': '异常',
-  'log.category.minor.warning': '警告',
+  'log.category.minor.error.exception': '异常',
+  'log.category.minor.error.warning': '警告',
 
   // SECURITY大类下的小类
-  'log.category.minor.hack_detection': '外挂检测',
-  'log.category.minor.account_security': '账户安全',
+  'log.category.minor.security.hack_detection': '外挂检测',
+  'log.category.minor.security.account_security': '账户安全',
 
   // CHEAT大类下的小类
-  'log.category.minor.plugin_activation': '插件激活',
-  'log.category.minor.plugin_deactivation': '插件停用',
-  'log.category.minor.plugin_usage': '插件使用',
+  'log.category.minor.cheat.plugin_activation': '插件激活',
+  'log.category.minor.cheat.plugin_deactivation': '插件停用',
+  'log.category.minor.cheat.plugin_usage': '插件使用',
 };

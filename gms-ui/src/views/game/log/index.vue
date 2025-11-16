@@ -44,7 +44,6 @@
                       v-for="item in majorCategories"
                       :key="item"
                       :value="item"
-                      :label="getMajorCategoryLabel(item)"
                     >
                       {{ getMajorCategoryLabel(item) }}
                     </a-option>
@@ -61,6 +60,7 @@
                     :placeholder="
                       $t('log.manager.form.minorCategory.placeholder')
                     "
+                    :fallback-option="getMinorCategoryFallbackOption"
                     allow-clear
                     :disabled="!formModel.majorCategory"
                   >
@@ -68,9 +68,8 @@
                       v-for="item in minorCategories"
                       :key="item"
                       :value="item"
-                      :label="getMinorCategoryLabel(item)"
                     >
-                      {{ getMinorCategoryLabel(item) }}
+                      {{ getMinorCategoryLabel(formModel.majorCategory, item) }}
                     </a-option>
                   </a-select>
                 </a-form-item>
@@ -154,6 +153,7 @@
   import useLoading from '@/hooks/loading';
   import { Message } from '@arco-design/web-vue';
   import type { HttpResponse } from '@/api/interceptor';
+  import type { SelectOptionData } from '@arco-design/web-vue/es/select/interface';
 
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(true);
@@ -261,10 +261,21 @@
   };
 
   // 获取小类显示标签
-  const getMinorCategoryLabel = (category: string) => {
-    const key = `log.category.minor.${category.toLowerCase()}`;
+  const getMinorCategoryLabel = (majorCategory: string, category: string) => {
+    const key = `log.category.minor.${majorCategory.toLowerCase()}.${category.toLowerCase()}`;
     const translated = t(key);
     return translated !== key ? translated : category;
+  };
+
+  // 获取小类回退选项（用于显示已选择的值）
+  const getMinorCategoryFallbackOption = (
+    key: string | number | boolean | Record<string, unknown>
+  ): SelectOptionData => {
+    const keyValue = key as string;
+    return {
+      value: keyValue,
+      label: getMinorCategoryLabel(formModel.majorCategory, keyValue),
+    };
   };
 </script>
 
