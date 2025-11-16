@@ -1,6 +1,11 @@
 <template>
   <div class="log-manager-container">
-    <Breadcrumb :items="['游戏管理', '日志管理']" />
+    <Breadcrumb
+      :items="[
+        $t('log.manager.breadcrumb.game'),
+        $t('log.manager.breadcrumb.log'),
+      ]"
+    />
     <a-card class="general-card">
       <a-row>
         <a-col :flex="'86px'" class="left-col">
@@ -8,7 +13,7 @@
             <template #icon>
               <icon-search />
             </template>
-            查询
+            {{ $t('log.manager.query.button') }}
           </a-button>
         </a-col>
       </a-row>
@@ -23,10 +28,15 @@
           >
             <a-row :gutter="16">
               <a-col :span="8">
-                <a-form-item field="majorCategory" label="日志大类">
+                <a-form-item
+                  field="majorCategory"
+                  :label="$t('log.manager.form.majorCategory.label')"
+                >
                   <a-select
                     v-model="formModel.majorCategory"
-                    placeholder="请选择日志大类"
+                    :placeholder="
+                      $t('log.manager.form.majorCategory.placeholder')
+                    "
                     allow-clear
                     @change="handleMajorCategoryChange as any"
                   >
@@ -34,17 +44,23 @@
                       v-for="item in majorCategories"
                       :key="item"
                       :value="item"
+                      :label="getMajorCategoryLabel(item)"
                     >
-                      {{ item }}
+                      {{ getMajorCategoryLabel(item) }}
                     </a-option>
                   </a-select>
                 </a-form-item>
               </a-col>
               <a-col :span="8">
-                <a-form-item field="minorCategory" label="日志小类">
+                <a-form-item
+                  field="minorCategory"
+                  :label="$t('log.manager.form.minorCategory.label')"
+                >
                   <a-select
                     v-model="formModel.minorCategory"
-                    placeholder="请选择日志小类"
+                    :placeholder="
+                      $t('log.manager.form.minorCategory.placeholder')
+                    "
                     allow-clear
                     :disabled="!formModel.majorCategory"
                   >
@@ -52,17 +68,21 @@
                       v-for="item in minorCategories"
                       :key="item"
                       :value="item"
+                      :label="getMinorCategoryLabel(item)"
                     >
-                      {{ item }}
+                      {{ getMinorCategoryLabel(item) }}
                     </a-option>
                   </a-select>
                 </a-form-item>
               </a-col>
               <a-col :span="8">
-                <a-form-item field="keyword" label="关键词">
+                <a-form-item
+                  field="keyword"
+                  :label="$t('log.manager.form.keyword.label')"
+                >
                   <a-input
                     v-model="formModel.keyword"
-                    placeholder="请输入关键词"
+                    :placeholder="$t('log.manager.form.keyword.placeholder')"
                     allow-clear
                   />
                 </a-form-item>
@@ -70,20 +90,26 @@
             </a-row>
             <a-row :gutter="16">
               <a-col :span="8">
-                <a-form-item field="startDate" label="开始日期">
+                <a-form-item
+                  field="startDate"
+                  :label="$t('log.manager.form.startDate.label')"
+                >
                   <a-date-picker
                     v-model="formModel.startDate"
                     style="width: 100%"
-                    placeholder="请选择开始日期"
+                    :placeholder="$t('log.manager.form.startDate.placeholder')"
                   />
                 </a-form-item>
               </a-col>
               <a-col :span="8">
-                <a-form-item field="endDate" label="结束日期">
+                <a-form-item
+                  field="endDate"
+                  :label="$t('log.manager.form.endDate.label')"
+                >
                   <a-date-picker
                     v-model="formModel.endDate"
                     style="width: 100%"
-                    placeholder="请选择结束日期"
+                    :placeholder="$t('log.manager.form.endDate.placeholder')"
                   />
                 </a-form-item>
               </a-col>
@@ -102,7 +128,10 @@
         @page-size-change="handlePageSizeChange"
       >
         <template #columns>
-          <a-table-column title="日志内容" :width="300">
+          <a-table-column
+            :title="$t('log.manager.table.column.content')"
+            :width="300"
+          >
             <template #cell="{ record }">
               <div class="log-content">{{ record }}</div>
             </template>
@@ -115,6 +144,7 @@
 
 <script lang="ts" setup>
   import { ref, reactive, onMounted } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import {
     queryLogs,
     getAllMajorCategories,
@@ -125,6 +155,7 @@
   import { Message } from '@arco-design/web-vue';
   import type { HttpResponse } from '@/api/interceptor';
 
+  const { t } = useI18n();
   const { loading, setLoading } = useLoading(true);
   const logData = ref<string[]>([]);
   const majorCategories = ref<string[]>([]);
@@ -168,7 +199,7 @@
       logData.value = response.data || [];
       pagination.total = logData.value.length;
     } catch (error) {
-      Message.error('查询日志时发生错误');
+      Message.error(t('log.manager.message.fetchError'));
     } finally {
       setLoading(false);
     }
@@ -180,7 +211,7 @@
         (await getAllMajorCategories()) as unknown as HttpResponse<string[]>;
       majorCategories.value = response.data || [];
     } catch (error) {
-      Message.error('获取大类列表时发生错误');
+      Message.error(t('log.manager.message.fetchMajorCategoriesError'));
     }
   };
 
@@ -191,7 +222,7 @@
       )) as unknown as HttpResponse<string[]>;
       minorCategories.value = response.data || [];
     } catch (error) {
-      Message.error('获取小类列表时发生错误');
+      Message.error(t('log.manager.message.fetchMinorCategoriesError'));
       minorCategories.value = [];
     }
   };
@@ -220,6 +251,20 @@
 
   const handlePageSizeChange = (pageSize: number) => {
     pagination.pageSize = pageSize;
+  };
+
+  // 获取大类显示标签
+  const getMajorCategoryLabel = (category: string) => {
+    const key = `log.category.major.${category.toLowerCase()}`;
+    const translated = t(key);
+    return translated !== key ? translated : category;
+  };
+
+  // 获取小类显示标签
+  const getMinorCategoryLabel = (category: string) => {
+    const key = `log.category.minor.${category.toLowerCase()}`;
+    const translated = t(key);
+    return translated !== key ? translated : category;
   };
 </script>
 
