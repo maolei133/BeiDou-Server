@@ -1316,6 +1316,12 @@ public class Client extends ChannelInboundHandlerAdapter {
         // 关闭会话连接
         SessionCoordinator.getInstance().closeSession(this, true);  //第2个参数改为true才能让客户端退出到登录界面
 
+        // 确保从PlayerStorage中移除玩家，防止幽灵连接
+        if (player != null) {
+            getChannelServer().getPlayerStorage().removePlayer(player.getId());
+            getWorldServer().getPlayerStorage().removePlayer(player.getId());
+        }
+
         // 更新登录状态
         if (!serverTransition && isLoggedIn()) {
             updateLoginState(Client.LOGIN_NOTLOGGEDIN);
