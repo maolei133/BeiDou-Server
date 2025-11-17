@@ -966,7 +966,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     );
                     damage = (int) maxWithCrit;
                 }
-                if (ret.skill == Marksman.SNIPE || (canCrit && damage >= (hitDmgMax * 0.7))) {//尝试调低暴击判断上限，以便其他玩家能够看到更多暴击
+                if (ret.skill == Marksman.SNIPE || (canCrit && damage > hitDmgMax)) {
                     // 如果技能是暴击，则反转伤害值以使其在客户端上正确显示。
                     damage = -Integer.MAX_VALUE + damage - 1;
                 }
