@@ -26,8 +26,8 @@ package org.gms.client.command.commands.gm4;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.command.Command;
-import org.gms.cheat.core.CheatManager;
-import org.gms.cheat.plugin.MobVacPlugin;
+import org.gms.client.cheatsystem.core.CheatManager;
+import org.gms.client.cheatsystem.plugin.MobVacPlugin;
 import org.gms.util.I18nUtil;
 
 public class MobVacCommand extends Command {

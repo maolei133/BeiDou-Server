@@ -1,4 +1,4 @@
-package org.gms.cheat.core;
+package org.gms.client.cheatsystem.core;
 
 import lombok.Getter;
 import lombok.Setter;

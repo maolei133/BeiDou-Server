@@ -1,7 +1,7 @@
 package org.gms.log;
 
 import org.gms.client.Character;
-import org.gms.cheat.core.CheatPlugin;
+import org.gms.client.cheatsystem.core.CheatPlugin;
 
 /**
  * 辅助系统日志记录器

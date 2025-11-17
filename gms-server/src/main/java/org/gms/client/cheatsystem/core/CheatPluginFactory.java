@@ -1,7 +1,7 @@
-package org.gms.cheat.core;
+package org.gms.client.cheatsystem.core;
 
-import org.gms.cheat.plugin.ItemVacPlugin;
-import org.gms.cheat.plugin.MobVacPlugin;
+import org.gms.client.cheatsystem.plugin.ItemVacPlugin;
+import org.gms.client.cheatsystem.plugin.MobVacPlugin;
 
 import java.util.HashMap;
 import java.util.Map;

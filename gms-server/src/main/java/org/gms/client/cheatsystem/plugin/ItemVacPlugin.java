@@ -1,8 +1,8 @@
-package org.gms.cheat.plugin;
+package org.gms.client.cheatsystem.plugin;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.gms.cheat.core.BaseCheatPlugin;
+import org.gms.client.cheatsystem.core.BaseCheatPlugin;
 import org.gms.client.Character;
 import org.gms.client.inventory.Pet;
 import org.gms.config.GameConfig;

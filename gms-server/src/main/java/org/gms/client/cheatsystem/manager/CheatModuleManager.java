@@ -1,9 +1,9 @@
-package org.gms.cheat.manager;
+package org.gms.client.cheatsystem.manager;
 
 import lombok.Getter;
-import org.gms.cheat.core.CheatManager;
-import org.gms.cheat.core.CheatPlugin;
-import org.gms.cheat.core.CheatPluginFactory;
+import org.gms.client.cheatsystem.core.CheatManager;
+import org.gms.client.cheatsystem.core.CheatPlugin;
+import org.gms.client.cheatsystem.core.CheatPluginFactory;
 import org.gms.client.Character;
 import org.gms.log.CheatLogger;
 

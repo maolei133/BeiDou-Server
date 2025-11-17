@@ -24,9 +24,9 @@ package org.gms.client;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.gms.cheat.core.CheatManager;
-import org.gms.cheat.manager.CheatModuleManager;
-import org.gms.cheat.plugin.ItemVacPlugin;
+import org.gms.client.cheatsystem.core.CheatManager;
+import org.gms.client.cheatsystem.manager.CheatModuleManager;
+import org.gms.client.cheatsystem.plugin.ItemVacPlugin;
 import org.gms.client.autoban.AutobanManager;
 import org.gms.client.creator.CharacterFactoryRecipe;
 import org.gms.client.inventory.*;

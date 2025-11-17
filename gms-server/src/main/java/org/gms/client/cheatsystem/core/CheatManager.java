@@ -1,4 +1,4 @@
-package org.gms.cheat.core;
+package org.gms.client.cheatsystem.core;
 
 import org.gms.client.Character;
 import org.gms.log.CheatLogger;

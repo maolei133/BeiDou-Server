@@ -1,10 +1,10 @@
-package org.gms.cheat.util;
+package org.gms.client.cheatsystem.util;
 
-import org.gms.cheat.core.CheatManager;
-import org.gms.cheat.core.CheatPlugin;
-import org.gms.cheat.core.CheatPluginFactory;
-import org.gms.cheat.manager.CheatModuleManager;
-import org.gms.cheat.plugin.ItemVacPlugin;
+import org.gms.client.cheatsystem.core.CheatManager;
+import org.gms.client.cheatsystem.core.CheatPlugin;
+import org.gms.client.cheatsystem.core.CheatPluginFactory;
+import org.gms.client.cheatsystem.manager.CheatModuleManager;
+import org.gms.client.cheatsystem.plugin.ItemVacPlugin;
 import org.gms.client.Character;
 
 /**

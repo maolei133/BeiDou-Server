@@ -1,6 +1,6 @@
-package org.gms.cheat.plugin.example;
+package org.gms.client.cheatsystem.plugin.example;
 
-import org.gms.cheat.core.BaseCheatPlugin;
+import org.gms.client.cheatsystem.core.BaseCheatPlugin;
 import org.gms.client.Character;
 import org.gms.config.GameConfig;
 
