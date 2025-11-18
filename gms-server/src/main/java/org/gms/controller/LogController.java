@@ -1,23 +1,22 @@
 package org.gms.controller;
 
+import org.gms.log.BaseLogger;
+import org.gms.log.LogCategoryDefinition;
 import org.gms.log.LogQueryService;
-import org.gms.model.dto.ResultBody;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
- * 日志管理控制器
- * 提供RESTful API供后台管理系统查询日志
+ * 日志控制器
+ * 提供日志查询和相关数据获取的REST API接口
  */
 @RestController
 @RequestMapping("/api/logs")
 public class LogController {
     
     /**
-     * 查询指定条件的日志
+     * 查询日志
      * 
      * @param majorCategory 大类
      * @param minorCategory 小类
@@ -29,38 +28,38 @@ public class LogController {
      * @param hwid 硬件ID
      * @param account 账号
      * @param character 角色名
-     * @return 日志列表
+     * @return 日志内容列表
      */
     @GetMapping("/query")
-    public ResultBody<List<String>> queryLogs(
-            HttpServletRequest request,
-            @RequestParam(value = "majorCategory", required = false) String majorCategory,
-            @RequestParam(value = "minorCategory", required = false) String minorCategory,
-            @RequestParam(value = "startDate", required = false) String startDate,
-            @RequestParam(value = "endDate", required = false) String endDate,
-            @RequestParam(value = "keyword", required = false) String keyword,
-            @RequestParam(value = "ip", required = false) String ip,
-            @RequestParam(value = "mac", required = false) String mac,
-            @RequestParam(value = "hwid", required = false) String hwid,
-            @RequestParam(value = "account", required = false) String account,
-            @RequestParam(value = "character", required = false) String character) {
+    public Map<String, Object> queryLogs(
+            @RequestParam(required = false) String majorCategory,
+            @RequestParam(required = false) String minorCategory,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String ip,
+            @RequestParam(required = false) String mac,
+            @RequestParam(required = false) String hwid,
+            @RequestParam(required = false) String account,
+            @RequestParam(required = false) String character) {
+        
+        Map<String, Object> result = new HashMap<>();
         
         try {
-            List<String> logs;
-            // 如果提供了详细筛选条件，则使用详细查询方法
-            if (ip != null || mac != null || hwid != null || account != null || character != null) {
-                logs = LogQueryService.queryLogsWithDetails(majorCategory, minorCategory, startDate, endDate,
-                        ip, mac, hwid, account, character, keyword);
-            } else if (keyword != null && !keyword.isEmpty()) {
-                logs = LogQueryService.queryLogsWithKeyword(majorCategory, minorCategory, keyword);
-            } else {
-                logs = LogQueryService.queryLogsByDateRange(majorCategory, minorCategory, startDate, endDate);
-            }
+            List<String> logs = LogQueryService.queryLogsWithDetails(
+                majorCategory, minorCategory, startDate, endDate, keyword,
+                ip, mac, hwid, account, character);
             
-            return ResultBody.success(logs);
+            result.put("code", 20000);
+            result.put("message", "success");
+            result.put("data", logs);
         } catch (Exception e) {
-            return ResultBody.error(request, "查询日志时发生错误: " + e.getMessage());
+            result.put("code", 500);
+            result.put("message", "查询日志时发生错误: " + e.getMessage());
+            result.put("data", new ArrayList<>());
         }
+        
+        return result;
     }
     
     /**
@@ -69,13 +68,19 @@ public class LogController {
      * @return 大类列表
      */
     @GetMapping("/categories/major")
-    public ResultBody<List<String>> getAllMajorCategories(HttpServletRequest request) {
+    public Map<String, Object> getAllMajorCategories() {
+        Map<String, Object> result = new HashMap<>();
         try {
-            List<String> categories = LogQueryService.getAllMajorCategories();
-            return ResultBody.success(categories);
+            Map<String, String> majorCategories = LogCategoryDefinition.getMajorCategories();
+            result.put("code", 20000);
+            result.put("message", "success");
+            result.put("data", new ArrayList<>(majorCategories.keySet()));
         } catch (Exception e) {
-            return ResultBody.error(request, "获取大类列表时发生错误: " + e.getMessage());
+            result.put("code", 500);
+            result.put("message", "获取大类列表时发生错误: " + e.getMessage());
+            result.put("data", new ArrayList<>());
         }
+        return result;
     }
     
     /**
@@ -85,69 +90,70 @@ public class LogController {
      * @return 小类列表
      */
     @GetMapping("/categories/minor")
-    public ResultBody<List<String>> getMinorCategoriesByMajor(
-            HttpServletRequest request,
-            @RequestParam(value = "majorCategory") String majorCategory) {
+    public Map<String, Object> getMinorCategoriesByMajor(
+            @RequestParam String majorCategory) {
+        Map<String, Object> result = new HashMap<>();
         try {
-            if (majorCategory == null || majorCategory.isEmpty()) {
-                return ResultBody.error(request, "缺少必要参数: 大类不能为空");
-            }
-            
-            List<String> categories = LogQueryService.getMinorCategoriesByMajor(majorCategory);
-            return ResultBody.success(categories);
+            Set<String> minorCategories = LogCategoryDefinition.getMinorCategories(majorCategory);
+            result.put("code", 20000);
+            result.put("message", "success");
+            result.put("data", new ArrayList<>(minorCategories));
         } catch (Exception e) {
-            return ResultBody.error(request, "获取小类列表时发生错误: " + e.getMessage());
+            result.put("code", 500);
+            result.put("message", "获取小类列表时发生错误: " + e.getMessage());
+            result.put("data", new ArrayList<>());
         }
+        return result;
     }
     
     /**
-     * 获取唯一IP地址列表
+     * 获取唯一IP列表
      * 
      * @param majorCategory 大类
      * @param minorCategory 小类
-     * @return IP地址列表
+     * @return IP列表
      */
     @GetMapping("/unique/ips")
-    public ResultBody<Set<String>> getUniqueIPs(
-            HttpServletRequest request,
-            @RequestParam(value = "majorCategory") String majorCategory,
-            @RequestParam(value = "minorCategory") String minorCategory) {
+    public Map<String, Object> getUniqueIPs(
+            @RequestParam String majorCategory,
+            @RequestParam String minorCategory) {
+        Map<String, Object> result = new HashMap<>();
         try {
-            if (majorCategory == null || majorCategory.isEmpty() || 
-                minorCategory == null || minorCategory.isEmpty()) {
-                return ResultBody.error(request, "缺少必要参数: 大类和小类不能为空");
-            }
-            
-            Set<String> ips = LogQueryService.getUniqueIPs(majorCategory, minorCategory);
-            return ResultBody.success(ips);
+            Set<String> ips = BaseLogger.getUserDataCache().get("ips");
+            result.put("code", 20000);
+            result.put("message", "success");
+            result.put("data", ips != null ? new ArrayList<>(ips) : new ArrayList<>());
         } catch (Exception e) {
-            return ResultBody.error(request, "获取IP地址列表时发生错误: " + e.getMessage());
+            result.put("code", 500);
+            result.put("message", "获取IP列表时发生错误: " + e.getMessage());
+            result.put("data", new ArrayList<>());
         }
+        return result;
     }
     
     /**
-     * 获取唯一MAC地址列表
+     * 获取唯一MAC列表
      * 
      * @param majorCategory 大类
      * @param minorCategory 小类
-     * @return MAC地址列表
+     * @return MAC列表
      */
     @GetMapping("/unique/macs")
-    public ResultBody<Set<String>> getUniqueMACs(
-            HttpServletRequest request,
-            @RequestParam(value = "majorCategory") String majorCategory,
-            @RequestParam(value = "minorCategory") String minorCategory) {
+    public Map<String, Object> getUniqueMACs(
+            @RequestParam String majorCategory,
+            @RequestParam String minorCategory) {
+        Map<String, Object> result = new HashMap<>();
         try {
-            if (majorCategory == null || majorCategory.isEmpty() || 
-                minorCategory == null || minorCategory.isEmpty()) {
-                return ResultBody.error(request, "缺少必要参数: 大类和小类不能为空");
-            }
-            
-            Set<String> macs = LogQueryService.getUniqueMACs(majorCategory, minorCategory);
-            return ResultBody.success(macs);
+            Set<String> macs = BaseLogger.getUserDataCache().get("macs");
+            result.put("code", 20000);
+            result.put("message", "success");
+            result.put("data", macs != null ? new ArrayList<>(macs) : new ArrayList<>());
         } catch (Exception e) {
-            return ResultBody.error(request, "获取MAC地址列表时发生错误: " + e.getMessage());
+            result.put("code", 500);
+            result.put("message", "获取MAC列表时发生错误: " + e.getMessage());
+            result.put("data", new ArrayList<>());
         }
+        return result;
     }
     
     /**
@@ -158,21 +164,21 @@ public class LogController {
      * @return HWID列表
      */
     @GetMapping("/unique/hwids")
-    public ResultBody<Set<String>> getUniqueHWIDs(
-            HttpServletRequest request,
-            @RequestParam(value = "majorCategory") String majorCategory,
-            @RequestParam(value = "minorCategory") String minorCategory) {
+    public Map<String, Object> getUniqueHWIDs(
+            @RequestParam String majorCategory,
+            @RequestParam String minorCategory) {
+        Map<String, Object> result = new HashMap<>();
         try {
-            if (majorCategory == null || majorCategory.isEmpty() || 
-                minorCategory == null || minorCategory.isEmpty()) {
-                return ResultBody.error(request, "缺少必要参数: 大类和小类不能为空");
-            }
-            
-            Set<String> hwids = LogQueryService.getUniqueHWIDs(majorCategory, minorCategory);
-            return ResultBody.success(hwids);
+            Set<String> hwids = BaseLogger.getUserDataCache().get("hwids");
+            result.put("code", 20000);
+            result.put("message", "success");
+            result.put("data", hwids != null ? new ArrayList<>(hwids) : new ArrayList<>());
         } catch (Exception e) {
-            return ResultBody.error(request, "获取HWID列表时发生错误: " + e.getMessage());
+            result.put("code", 500);
+            result.put("message", "获取HWID列表时发生错误: " + e.getMessage());
+            result.put("data", new ArrayList<>());
         }
+        return result;
     }
     
     /**
@@ -183,21 +189,21 @@ public class LogController {
      * @return 账号列表
      */
     @GetMapping("/unique/accounts")
-    public ResultBody<Set<String>> getUniqueAccounts(
-            HttpServletRequest request,
-            @RequestParam(value = "majorCategory") String majorCategory,
-            @RequestParam(value = "minorCategory") String minorCategory) {
+    public Map<String, Object> getUniqueAccounts(
+            @RequestParam String majorCategory,
+            @RequestParam String minorCategory) {
+        Map<String, Object> result = new HashMap<>();
         try {
-            if (majorCategory == null || majorCategory.isEmpty() || 
-                minorCategory == null || minorCategory.isEmpty()) {
-                return ResultBody.error(request, "缺少必要参数: 大类和小类不能为空");
-            }
-            
-            Set<String> accounts = LogQueryService.getUniqueAccounts(majorCategory, minorCategory);
-            return ResultBody.success(accounts);
+            Set<String> accounts = BaseLogger.getUserDataCache().get("accounts");
+            result.put("code", 20000);
+            result.put("message", "success");
+            result.put("data", accounts != null ? new ArrayList<>(accounts) : new ArrayList<>());
         } catch (Exception e) {
-            return ResultBody.error(request, "获取账号列表时发生错误: " + e.getMessage());
+            result.put("code", 500);
+            result.put("message", "获取账号列表时发生错误: " + e.getMessage());
+            result.put("data", new ArrayList<>());
         }
+        return result;
     }
     
     /**
@@ -208,20 +214,47 @@ public class LogController {
      * @return 角色ID列表
      */
     @GetMapping("/unique/characterIds")
-    public ResultBody<Set<String>> getUniqueCharacterIds(
-            HttpServletRequest request,
-            @RequestParam(value = "majorCategory") String majorCategory,
-            @RequestParam(value = "minorCategory") String minorCategory) {
+    public Map<String, Object> getUniqueCharacterIds(
+            @RequestParam String majorCategory,
+            @RequestParam String minorCategory) {
+        Map<String, Object> result = new HashMap<>();
         try {
-            if (majorCategory == null || majorCategory.isEmpty() || 
-                minorCategory == null || minorCategory.isEmpty()) {
-                return ResultBody.error(request, "缺少必要参数: 大类和小类不能为空");
+            Set<String> characterIds = BaseLogger.getUserDataCache().get("characterIds");
+            result.put("code", 20000);
+            result.put("message", "success");
+            result.put("data", characterIds != null ? new ArrayList<>(characterIds) : new ArrayList<>());
+        } catch (Exception e) {
+            result.put("code", 500);
+            result.put("message", "获取角色ID列表时发生错误: " + e.getMessage());
+            result.put("data", new ArrayList<>());
+        }
+        return result;
+    }
+    
+    /**
+     * 获取用户数据（供前端筛选使用）
+     * 
+     * @return 用户数据
+     */
+    @GetMapping("/userdata")
+    public Map<String, Object> getUserData() {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            Map<String, Set<String>> userDataCache = BaseLogger.getUserDataCache();
+            Map<String, List<String>> userData = new HashMap<>();
+            
+            for (Map.Entry<String, Set<String>> entry : userDataCache.entrySet()) {
+                userData.put(entry.getKey(), new ArrayList<>(entry.getValue()));
             }
             
-            Set<String> characterIds = LogQueryService.getUniqueCharacterIds(majorCategory, minorCategory);
-            return ResultBody.success(characterIds);
+            result.put("code", 20000);
+            result.put("message", "success");
+            result.put("data", userData);
         } catch (Exception e) {
-            return ResultBody.error(request, "获取角色ID列表时发生错误: " + e.getMessage());
+            result.put("code", 500);
+            result.put("message", "获取用户数据时发生错误: " + e.getMessage());
+            result.put("data", new HashMap<>());
         }
+        return result;
     }
 }

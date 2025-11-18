@@ -5,14 +5,14 @@ import org.gms.client.cheatsystem.core.CheatManager;
 import org.gms.client.cheatsystem.core.CheatPlugin;
 import org.gms.client.cheatsystem.core.CheatPluginFactory;
 import org.gms.client.Character;
-import org.gms.log.CheatLogger;
+import org.gms.log.CheatSystemLogger;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 辅助模块管理器
- * 管理所有玩家的辅助管理器实例
+ * 内置辅助模块管理器
+ * 管理所有玩家的内置辅助管理器实例
  */
 public class CheatModuleManager {
     @Getter
@@ -22,7 +22,7 @@ public class CheatModuleManager {
     
     private CheatModuleManager() {
         // 私有构造函数，确保单例
-        CheatLogger.logCheatSystem(null, "辅助模块管理器初始化");
+        CheatSystemLogger.logCheatSystem(null, "辅助模块管理器初始化");
     }
 
     /**
@@ -37,7 +37,7 @@ public class CheatModuleManager {
         
         CheatManager cheatManager = new CheatManager(player);
         cheatManagers.put(player.getId(), cheatManager);
-        CheatLogger.logCheatSystem(player, "为玩家创建辅助管理器");
+        CheatSystemLogger.logCheatSystem(player, "为玩家创建辅助管理器");
         return cheatManager;
     }
     
@@ -58,7 +58,7 @@ public class CheatModuleManager {
         CheatManager cheatManager = cheatManagers.remove(playerId);
         if (cheatManager != null) {
             cheatManager.stopAllPlugins();
-            CheatLogger.logCheatSystem(null, "移除玩家ID为 " + playerId + " 的辅助管理器");
+            CheatSystemLogger.logCheatSystem(null, "移除玩家ID为 " + playerId + " 的辅助管理器");
         }
     }
     
@@ -84,6 +84,6 @@ public class CheatModuleManager {
             pluginCount++;
         }
         
-        CheatLogger.logCheatSystem(player, "为玩家注册了 " + pluginCount + " 个辅助插件");
+        CheatSystemLogger.logCheatSystem(player, "为玩家注册了 " + pluginCount + " 个辅助插件");
     }
 }

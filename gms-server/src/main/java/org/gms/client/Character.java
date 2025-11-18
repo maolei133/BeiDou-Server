@@ -865,6 +865,7 @@ public class Character extends AbstractCharacterObject {
         }
         this.setPosition(portal.getPosition());
         this.initialSpawnPoint = portal.getId();
+        c.setMacs(this.client.getMacs());
     }
 
     public String getMedalText() {

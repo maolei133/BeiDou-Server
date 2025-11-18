@@ -10,8 +10,7 @@ import org.gms.client.status.MonsterStatus;
 import org.gms.client.status.MonsterStatusEffect;
 import org.gms.config.GameConfig;
 import org.gms.dao.entity.ExtendValueDO;
-import org.gms.log.EnhancedLogEntry;
-import org.gms.log.EnhancedLogManager;
+import org.gms.log.CheatSystemLogger;
 import org.gms.server.TimerManager;
 import org.gms.server.life.Monster;
 import org.gms.server.maps.MapObject;
@@ -31,33 +30,33 @@ import java.util.concurrent.ScheduledFuture;
 public class MobVacPlugin extends BaseCheatPlugin {
     private static final Logger log = LoggerFactory.getLogger(MobVacPlugin.class);
     
-    /** 吸怪功能总开关 */
+    /** 吸怪内置辅助功能总开关 */
     private boolean enable = true;
-    /** 每天可用次数 */
+    /** 每天可用次数（内置辅助） */
     private int dailyLimit = 10;
-    /** 每次使用时长（秒） */
+    /** 每次使用时长（秒）（内置辅助） */
     private int duration = 30;
-    /** 使用次数计数器 */
+    /** 使用次数计数器（内置辅助） */
     private Map<Integer, Integer> usageCount = new HashMap<>();
-    /** 当前正在使用的玩家列表 */
+    /** 当前正在使用的玩家列表（内置辅助） */
     private Set<Integer> activeUsers = new HashSet<>();
-    /** 当前吸怪任务 */
+    /** 当前吸怪任务（内置辅助） */
     private ScheduledFuture<?> mobVacTask;
-    /** 吸怪范围半径 */
+    /** 吸怪范围半径（内置辅助） */
     private double radius = Double.POSITIVE_INFINITY;
-    /** 当前正在使用吸怪功能的地图实例 */
+    /** 当前正在使用吸怪内置辅助功能的地图实例 */
     private static final Map<MapleMap, Integer> activeMapInstances = new HashMap<>();
-    /** 吸怪开始时间 */
+    /** 吸怪开始时间（内置辅助） */
     private long startTime;
-    /** 吸怪功能所在地图实例 */
+    /** 吸怪内置辅助功能所在地图实例 */
     private MapleMap mobVacMap;
-    /** 当前在使用吸怪地图中的玩家列表 */
+    /** 当前在使用吸怪内置辅助地图中的玩家列表 */
     private Set<Integer> playersInVacMap = new HashSet<>();
-    /** 开启吸怪功能的玩家名称 */
+    /** 开启吸怪内置辅助功能的玩家名称 */
     private String mobVacPlayerName;
-    /** 预创建的SPEED状态效果，避免重复创建 */
+    /** 预创建的SPEED状态效果，避免重复创建（内置辅助） */
     private MonsterStatusEffect speedEffect;
-    /** 数据库中存储的键名 */
+    /** 数据库中存储的键名（内置辅助） */
     private static final String MOB_VAC_USAGE_COUNT_KEY = "每日吸怪累计次数";
     
     public MobVacPlugin() {
@@ -106,23 +105,87 @@ public class MobVacPlugin extends BaseCheatPlugin {
         radius = GameConfig.getServerDouble("cheat_mob_vac_radius", -1.0) == -1.0 ? Double.POSITIVE_INFINITY : GameConfig.getServerDouble("cheat_mob_vac_radius", -1.0);
     }
     
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // 检查是否有启动参数
+        Map<String, Object> params = getStartParameters();
+        if (params != null && !params.isEmpty()) {
+            // 使用参数启动吸怪功能
+            handleStartWithParameters(params);
+        } else {
+            // 使用默认配置启动吸怪功能
+            startMobVac();
+        }
+    }
+    
     /**
-     * 开始吸怪功能
+     * 处理带参数的启动
+     * @param params 启动参数
+     */
+    private void handleStartWithParameters(Map<String, Object> params) {
+        // 从参数中获取配置，覆盖默认配置
+        Boolean enableOverride = (Boolean) params.get("enable");
+        if (enableOverride != null) {
+            this.enable = enableOverride;
+        }
+        
+        Integer dailyLimitOverride = (Integer) params.get("dailyLimit");
+        if (dailyLimitOverride != null) {
+            this.dailyLimit = dailyLimitOverride;
+        }
+        
+        Integer durationOverride = (Integer) params.get("duration");
+        if (durationOverride != null) {
+            this.duration = durationOverride;
+        }
+        
+        Double radiusOverride = (Double) params.get("radius");
+        if (radiusOverride != null) {
+            this.radius = radiusOverride;
+        }
+        
+        // 检查是否包含忽略启用检查的参数
+        Boolean ignoreEnableCheck = (Boolean) params.get("ignoreEnableCheck");
+        if (ignoreEnableCheck == null) {
+            ignoreEnableCheck = false;
+        }
+        
+        // 启动吸怪功能
+        startMobVac(ignoreEnableCheck);
+    }
+    
+    @Override
+    protected void onStop() {
+        super.onStop(); // 调用父类的onStop方法
+        stopMobVac();
+    }
+    
+    /**
+     * 开始吸怪功能（默认不忽略检查条件）
      */
     public boolean startMobVac() {
+        return startMobVac(false);
+    }
+    
+    /**
+     * 开始吸怪功能
+     * @param ignoreEnableCheck 是否忽略启用检查
+     */
+    public boolean startMobVac(boolean ignoreEnableCheck) {
         updateConfig();//更新参数配置
         // 检查功能是否启用
-        if (!enable) {
+        if (!ignoreEnableCheck && !enable) {
             if (player != null) {
                 player.dropMessage(5, "吸怪功能未启用。");
-                logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 功能未启用");
             }
+            logPluginActivation("失败 - 功能未启用");
             return false;
         }
         
         // 检查玩家是否在线
         if (player == null || !player.isLoggedInWorld()) {
-            logPluginActivation("未知", 0, "失败 - 玩家不在线");
+            logPluginActivation("失败 - 玩家不在线");
             return false;
         }
         
@@ -132,9 +195,10 @@ public class MobVacPlugin extends BaseCheatPlugin {
         loadUsageCountFromDB();
         
         // 检查地图条件
-        if (!checkMapConditions()) {
-            player.dropMessage(5, "当前地图无法使用吸怪功能：地图存在事件、倒计时或Boss，或已有其他玩家正在使用吸怪功能。");
-            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 地图条件不满足");
+        String mapConditionFailure = checkMapConditionsDetailed(ignoreEnableCheck);
+        if (mapConditionFailure != null) {
+            player.dropMessage(5, "当前地图无法使用吸怪功能：" + mapConditionFailure);
+            logPluginActivation("失败 - 地图条件不满足: " + mapConditionFailure);
             return false;
         }
         
@@ -143,7 +207,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         if (dailyLimit > 0) {  // 仅在dailyLimit大于0时检查使用次数
             if (todayUsage >= dailyLimit) {
                 player.dropMessage(6, "今日吸怪次数已用完，每日限制：" + dailyLimit + "次。");
-                logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 使用次数已达上限");
+                logPluginActivation("失败 - 使用次数已达上限(" + todayUsage + "/" + dailyLimit + ")");
                 return false;
             }
         }
@@ -151,7 +215,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         // 检查是否已在使用中
         if (activeUsers.contains(playerId)) {
             player.dropMessage(5, "吸怪功能已在使用中。");
-            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 功能已在使用中");
+            logPluginActivation("失败 - 功能已在使用中");
             return false;
         }
         
@@ -187,7 +251,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         }
         mobVacMap.broadcastMessage(PacketCreator.serverNotice(6, player.getName() + " 已开启吸怪功能。"));
         
-        logPluginActivation(player.getMap().getMapName(), player.getMapId(), "成功 - 吸怪功能已开启，持续时间：" + durationStr);
+        logPluginActivation("成功 - 吸怪功能已开启，持续时间：" + durationStr + (ignoreEnableCheck ? "（忽略启用检查）" : "") + "，今日使用次数：" + usageCount.get(playerId));
         
         // 启动倒计时
         startCountdown();
@@ -241,27 +305,59 @@ public class MobVacPlugin extends BaseCheatPlugin {
     }
     
     /**
+     * 检查地图条件（详细版）
+     * @return null表示条件满足，非null表示失败原因
+     */
+    private String checkMapConditionsDetailed() {
+        return checkMapConditionsDetailed(false);
+    }
+    
+    /**
+     * 检查地图条件（详细版）
+     * @param ignoreEnableCheck 是否忽略启用检查
+     * @return null表示条件满足，非null表示失败原因
+     */
+    private String checkMapConditionsDetailed(boolean ignoreEnableCheck) {
+        // 检查是否有其他玩家正在使用吸怪功能
+        MapleMap map = player.getMap();
+        Integer currentMapUser = activeMapInstances.get(map);
+        if (currentMapUser != null && currentMapUser != player.getId()) {
+            Character currentUser = map.getCharacterById(currentMapUser);
+            String userName = currentUser != null ? currentUser.getName() : "未知玩家";
+            return "已有玩家(" + userName + ")正在使用吸怪功能";
+        }
+        if (!ignoreEnableCheck) {
+            // 检查地图是否有事件
+            if (map.getEventInstance() != null) {
+                return "地图存在事件";
+            }
+
+            // 检查地图是否有倒计时
+            if (map.hasClock()) {
+                return "地图存在倒计时";
+            }
+
+            if (map.getTimeLimit() > 0) {
+                return "地图存在时间限制";
+            }
+
+            if (map.getTimeLeft() > 0) {
+                return "地图剩余时间未结束";
+            }
+
+            // 检查地图是否有Boss
+            if (map.countBosses() > 0) {
+                return "地图存在Boss";
+            }
+        }
+        return null; // 条件满足
+    }
+    
+    /**
      * 检查地图条件
      */
     private boolean checkMapConditions() {
-        // 检查是否有其他玩家正在使用吸怪功能
-        MapleMap map = player.getMap();
-        if (activeMapInstances.containsKey(map)) {
-            return false;
-        }
-        
-        // 检查地图是否有事件
-        if (map.getEventInstance() != null) {
-            return false;
-        }
-        
-        // 检查地图是否有倒计时
-        if (map.hasClock() || map.getTimeLimit() > 0 || map.getTimeLeft() > 0) {
-            return false;
-        }
-        
-        // 检查地图是否有Boss
-        return map.countBosses() <= 0;
+        return checkMapConditionsDetailed() == null;
     }
     
     /**
@@ -363,7 +459,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         }, 1000, 1000); // 每1秒检查一次
         
         // 设置功能自动结束
-        TimerManager.getInstance().schedule(() -> stopMobVac("吸怪功能时间结束", false), duration * 1000L);
+        TimerManager.getInstance().schedule(() -> stopMobVac("吸怪功能时间结束", true), duration * 1000L);
     }
     
     /**
@@ -415,14 +511,31 @@ public class MobVacPlugin extends BaseCheatPlugin {
     /**
      * 停止吸怪任务的统一方法
      * @param reason 停止原因
+     */
+    private void stopMobVac(String reason) {
+        stopMobVac(reason, false, null);
+    }
+    
+    /**
+     * 停止吸怪任务的统一方法
+     * @param reason 停止原因
      * @param broadcast 是否广播给地图上的所有玩家
      */
     private void stopMobVac(String reason, boolean broadcast) {
-        mobVacMap.killAllMonsters();
-        mobVacMap.restoreMapSpawnPoints();
-        // 移除地图倒计时
+        stopMobVac(reason, broadcast, null);
+    }
+    
+    /**
+     * 停止吸怪任务的统一方法
+     * @param reason 停止原因
+     * @param broadcast 是否广播给地图上的所有玩家
+     * @param broadcastMessage 自定义广播内容，如果为null则使用默认内容
+     */
+    private void stopMobVac(String reason, boolean broadcast, String broadcastMessage) {
         if (mobVacMap != null) {
-            mobVacMap.broadcastMessage(PacketCreator.removeClock());
+            mobVacMap.killAllMonsters(); // 清除地图中的所有怪物
+            mobVacMap.restoreMapSpawnPoints();  // 重置地图刷怪点
+            mobVacMap.broadcastMessage(PacketCreator.removeClock());    // 移除地图倒计时
         }
         // 发送提示信息给开启吸怪功能的玩家
         if (player != null && player.isLoggedInWorld()) {
@@ -431,7 +544,8 @@ public class MobVacPlugin extends BaseCheatPlugin {
 
         // 广播给地图上的其他玩家
         if (broadcast && mobVacMap != null && mobVacPlayerName != null) {
-            mobVacMap.broadcastMessage(player,PacketCreator.serverNotice(6, "玩家 " + mobVacPlayerName + " 的吸怪功能已停止，原因：" + reason),false);
+            String message = broadcastMessage != null ? broadcastMessage : "玩家 " + mobVacPlayerName + " 的吸怪功能已停止，原因：" + reason;
+            mobVacMap.broadcastMessage(player, PacketCreator.serverNotice(6, message), false);
         }
         // 清除所有缓存
         if (player != null) {
@@ -442,6 +556,8 @@ public class MobVacPlugin extends BaseCheatPlugin {
         mobVacPlayerName = null;
         // 停止任务
         stopMobVacTask();
+        
+        logPluginDeactivation("原因：" + reason);
     }
     
     /**
@@ -458,39 +574,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
      * 停止吸怪功能
      */
     public void stopMobVac() {
-        if (player != null) {
-            int playerId = player.getId();
-            
-            // 移除玩家
-            activeUsers.remove(playerId);
-            playersInVacMap.remove(playerId);
-            
-            // 移除地图实例记录
-            if (mobVacMap != null) {
-                activeMapInstances.remove(mobVacMap);
-            }
-            
-            // 取消定时任务
-            if (mobVacTask != null && !mobVacTask.isDone()) {
-                mobVacTask.cancel(true);
-            }
-            
-            // 清除状态
-            // clearMobStatus(); // 方法不存在，已移除
-            
-            // 发送提示信息
-            player.dropMessage(6, "吸怪功能已结束。");
-            
-            logPluginDeactivation("正常结束");
-        }
-    }
-    
-    /**
-     * 停止吸怪功能
-     */
-    @Override
-    protected void onStop() {
-        stopMobVac("玩家主动停止吸怪功能", true);
+        stopMobVac("玩家主动停止吸怪功能");
     }
     
     /**
@@ -542,105 +626,5 @@ public class MobVacPlugin extends BaseCheatPlugin {
         return sb.toString();
     }
     
-    /**
-     * 记录插件激活日志（增强型）
-     * 
-     * @param mapName 地图名称
-     * @param mapId 地图ID
-     * @param result 激活结果
-     */
-    @Override
-    protected void logPluginActivation(String mapName, int mapId, String result) {
-        if (isLoggingEnabled()) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_activation");
-            entry.setMessage(String.format(
-                "玩家 %s (ID: %d) 在地图 %s (ID: %d) 开启了插件 %s，结果: %s",
-                player != null ? player.getName() : "未知",
-                player != null ? player.getId() : 0,
-                mapName,
-                mapId,
-                getName(),
-                result
-            ));
-            
-            if (player != null) {
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            }
-            
-            EnhancedLogManager.log(entry);
-        }
-    }
-    
-    /**
-     * 记录插件停用日志（增强型）
-     * 
-     * @param reason 停用原因
-     */
-    @Override
-    protected void logPluginDeactivation(String reason) {
-        if (isLoggingEnabled()) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_deactivation");
-            entry.setMessage(String.format(
-                "玩家 %s (ID: %d) 结束了插件 %s，原因: %s",
-                player != null ? player.getName() : "未知",
-                player != null ? player.getId() : 0,
-                getName(),
-                reason
-            ));
-            
-            if (player != null) {
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            }
-            
-            EnhancedLogManager.log(entry);
-        }
-    }
-    
-    /**
-     * 记录插件使用日志（增强型）
-     * 
-     * @param action 使用动作
-     * @param details 详细信息
-     */
-    @Override
-    protected void logPluginUsage(String action, String details) {
-        if (isLoggingEnabled()) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_usage");
-            entry.setMessage(String.format(
-                "玩家 %s (ID: %d) 使用插件 %s 执行操作: %s，详情: %s",
-                player != null ? player.getName() : "未知",
-                player != null ? player.getId() : 0,
-                getName(),
-                action,
-                details
-            ));
-            
-            if (player != null) {
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            }
-            
-            EnhancedLogManager.log(entry);
-        }
-    }
+
 }

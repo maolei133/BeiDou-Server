@@ -2,9 +2,11 @@ package org.gms.client.cheatsystem.core;
 
 import org.gms.client.Character;
 
+import java.util.Map;
+
 /**
- * 作弊插件接口
- * 所有作弊功能都需要实现此接口
+ * 内置辅助插件接口
+ * 所有内置辅助功能都需要实现此接口
  */
 public interface CheatPlugin {
     /**
@@ -29,6 +31,15 @@ public interface CheatPlugin {
      * 启动插件
      */
     void start();
+    
+    /**
+     * 启动插件（带参数）
+     * @param parameters 启动参数
+     */
+    default void start(Map<String, Object> parameters) {
+        // 默认实现，忽略参数直接调用无参方法
+        start();
+    }
     
     /**
      * 停止插件

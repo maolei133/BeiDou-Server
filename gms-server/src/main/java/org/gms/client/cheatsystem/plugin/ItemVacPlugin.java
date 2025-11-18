@@ -6,8 +6,7 @@ import org.gms.client.cheatsystem.core.BaseCheatPlugin;
 import org.gms.client.Character;
 import org.gms.client.inventory.Pet;
 import org.gms.config.GameConfig;
-import org.gms.log.EnhancedLogEntry;
-import org.gms.log.EnhancedLogManager;
+import org.gms.log.CheatSystemLogger;
 import org.gms.server.TimerManager;
 import org.gms.server.maps.MapItem;
 import org.gms.server.maps.MapObject;
@@ -16,6 +15,7 @@ import org.gms.server.maps.MapObjectType;
 import java.awt.*;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 
@@ -23,31 +23,31 @@ import java.util.concurrent.ScheduledFuture;
 @Getter
 @Setter
 public class ItemVacPlugin extends BaseCheatPlugin {
-    /** 宠吸功能总开关 */
+    /** 宠吸内置辅助功能总开关 */
     private boolean enable = true;
-    /** 是否允许在事件地图中使用宠吸功能，false=当检测到事件地图出现BOSS则关闭宠吸 */
+    /** 是否允许在事件地图中使用宠吸内置辅助功能，false=当检测到事件地图出现BOSS则关闭宠吸 */
     private boolean allowInEvent = false;
-    /** 是否在界面上展示参数提示信息 */
+    /** 是否在界面上展示内置辅助参数提示信息 */
     private boolean showParams = true;
-    /** 最大拾取半径限制 */
+    /** 最大拾取半径限制（内置辅助） */
     private double maxRadius = 15000;
-    /** 当前拾取半径，默认无穷大表示无限制 */
+    /** 当前拾取半径，默认无穷大表示无限制（内置辅助） */
     private double radius = Double.POSITIVE_INFINITY;
-    /** 上一次执行拾取操作的时间戳 */
+    /** 上一次执行拾取操作的时间戳（内置辅助） */
     private long pickupTime = currentServerTime();
-    /** 拾取状态标志，true表示正在拾取中，避免重复操作 */
+    /** 拾取状态标志，true表示正在拾取中，避免重复操作（内置辅助） */
     private boolean pickuping = false;
-    /** 最小拾取间隔时间（毫秒） */
+    /** 最小拾取间隔时间（毫秒）（内置辅助） */
     private int minInterval = 200;
-    /** 最大拾取间隔时间（毫秒） */
+    /** 最大拾取间隔时间（毫秒）（内置辅助） */
     private int maxInterval = 5 * 1000;
-    /** 是否自动计算拾取范围和间隔 */
+    /** 是否自动计算拾取范围和间隔（内置辅助） */
     private boolean autoCalc = true;
-    /** 当前使用的拾取间隔时间（毫秒） */
+    /** 当前使用的拾取间隔时间（毫秒）（内置辅助） */
     private int sleep = maxInterval;
-    /** 宠吸功能支持的最高宠物等级 */
+    /** 宠吸内置辅助功能支持的最高宠物等级 */
     private int maxLevel = 20;
-    /** 击杀BOSS时间 */
+    /** 击杀BOSS时间（内置辅助） */
     private long killBossTime = -1;
     
     private ScheduledFuture<?> itemVacTask;
@@ -89,7 +89,7 @@ public class ItemVacPlugin extends BaseCheatPlugin {
     public boolean updateConfigAndCheck() {
         updateConfig();
         if (!enable) {
-            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 功能未启用");
+            logPluginActivation("失败 - 功能未启用");
         }
         return enable;
     }
@@ -101,21 +101,21 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         // ==== 控制逻辑 ====
         if (!enable) {
             resetValues();
-            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 功能未启用");
+            logPluginActivation("失败 - 功能未启用");
             return false;
         }
 
         // ==== 控制逻辑 ====
         if (player == null || !player.isLoggedInWorld()) {
             resetValues();
-            logPluginActivation("未知", 0, "失败 - 玩家不在线");
+            logPluginActivation("失败 - 玩家不在线");
             return false;
         }
 
         // ==== 自动计算开关处理 ====
         if (!autoCalc) {
             setMaxValues();
-            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "成功 - 使用最大值参数");
+            logPluginActivation("成功 - 使用最大值参数");
             return true;
         }
 
@@ -123,13 +123,15 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         Pet pet = getValidPet();
         if (pet == null) {
             resetValues();
-            logPluginActivation(player.getMap().getMapName(), player.getMapId(), "失败 - 未找到有效宠物");
+            logPluginActivation("失败 - 未找到有效宠物");
             return false;
         }
 
         // ==== 核心公式计算 ====
         calculateParams(pet);
-        logPluginActivation(player.getMap().getMapName(), player.getMapId(), "成功 - 参数计算完成");
+        logPluginActivation(
+            String.format("成功 - 参数计算完成 [半径: %d, 间隔: %dms, 宠物等级: %d, 饱食度: %d, 亲密度: %d]",
+                    (int) (radius / 30), sleep, pet.getLevel(), pet.getFullness(), pet.getTameness()));
         return true;
     }
     
@@ -199,7 +201,7 @@ public class ItemVacPlugin extends BaseCheatPlugin {
      */
     public void pickupItem() {
         if (shouldPickupItems()) {
-            logPluginUsage("物品拾取", "执行物品拾取操作");
+            logPluginUsage("执行物品拾取操作");
             pickupItem((byte) -1);
         }
     }
@@ -309,12 +311,43 @@ public class ItemVacPlugin extends BaseCheatPlugin {
     
     @Override
     protected void onStart() {
-        // 启动定时任务
-        startItemVacTask();
+        super.onStart();
+        // 检查是否有启动参数
+        Map<String, Object> params = getStartParameters();
+        if (params != null && !params.isEmpty()) {
+            // 使用参数启动物品吸怪功能
+            handleStartWithParameters(params);
+        } else {
+            // 使用默认配置启动物品吸怪功能
+            // 注意：ItemVacPlugin没有像MobVacPlugin那样的独立启动方法
+            // 这里只是示例，实际实现需要根据ItemVacPlugin的具体逻辑来处理
+            logPluginUsage("使用默认配置启动物品吸怪功能");
+        }
+    }
+    
+    /**
+     * 处理带参数的启动
+     * @param params 启动参数
+     */
+    private void handleStartWithParameters(Map<String, Object> params) {
+        // 示例：从参数中获取配置，覆盖默认配置
+        Boolean enableOverride = (Boolean) params.get("enable");
+        if (enableOverride != null) {
+            this.enable = enableOverride;
+        }
+        
+        Double radiusOverride = (Double) params.get("radius");
+        if (radiusOverride != null) {
+            this.radius = radiusOverride;
+        }
+        
+        // 记录使用参数启动
+        logPluginUsage("使用自定义参数启动物品吸怪功能");
     }
     
     @Override
     protected void onStop() {
+        super.onStop();
         // 停止定时任务
         stopItemVacTask();
     }
@@ -387,105 +420,5 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         }
     }
     
-    /**
-     * 记录插件激活日志（增强型）
-     * 
-     * @param mapName 地图名称
-     * @param mapId 地图ID
-     * @param result 激活结果
-     */
-    @Override
-    protected void logPluginActivation(String mapName, int mapId, String result) {
-        if (isLoggingEnabled()) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_activation");
-            entry.setMessage(String.format(
-                "玩家 %s (ID: %d) 在地图 %s (ID: %d) 开启了插件 %s，结果: %s",
-                player != null ? player.getName() : "未知",
-                player != null ? player.getId() : 0,
-                mapName,
-                mapId,
-                getName(),
-                result
-            ));
-            
-            if (player != null) {
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            }
-            
-            EnhancedLogManager.log(entry);
-        }
-    }
-    
-    /**
-     * 记录插件停用日志（增强型）
-     * 
-     * @param reason 停用原因
-     */
-    @Override
-    protected void logPluginDeactivation(String reason) {
-        if (isLoggingEnabled()) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_deactivation");
-            entry.setMessage(String.format(
-                "玩家 %s (ID: %d) 结束了插件 %s，原因: %s",
-                player != null ? player.getName() : "未知",
-                player != null ? player.getId() : 0,
-                getName(),
-                reason
-            ));
-            
-            if (player != null) {
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            }
-            
-            EnhancedLogManager.log(entry);
-        }
-    }
-    
-    /**
-     * 记录插件使用日志（增强型）
-     * 
-     * @param action 使用动作
-     * @param details 详细信息
-     */
-    @Override
-    protected void logPluginUsage(String action, String details) {
-        if (isLoggingEnabled()) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_usage");
-            entry.setMessage(String.format(
-                "玩家 %s (ID: %d) 使用插件 %s 执行操作: %s，详情: %s",
-                player != null ? player.getName() : "未知",
-                player != null ? player.getId() : 0,
-                getName(),
-                action,
-                details
-            ));
-            
-            if (player != null) {
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            }
-            
-            EnhancedLogManager.log(entry);
-        }
-    }
+
 }

@@ -8,24 +8,24 @@ import org.gms.client.cheatsystem.plugin.ItemVacPlugin;
 import org.gms.client.Character;
 
 /**
- * 作弊系统测试工具类
- * 用于测试和验证作弊系统框架的功能
+ * 内置辅助系统测试工具类
+ * 用于测试和验证内置辅助系统框架的功能
  */
 public class CheatSystemTest {
     
     /**
-     * 测试作弊系统框架的基本功能
+     * 测试内置辅助系统框架的基本功能
      * @param player 测试玩家对象
      */
     public static void testCheatSystem(Character player) {
-        System.out.println("=== 作弊系统框架测试 ===");
+        System.out.println("=== 内置辅助系统框架测试 ===");
         
-        // 测试作弊管理器创建
+        // 测试内置辅助管理器创建
         CheatManager cheatManager = CheatModuleManager.getInstance().getCheatManager(player.getId());
         if (cheatManager != null) {
             System.out.println("✓ CheatManager 创建成功");
         } else {
-            System.out.println("✗ CheatManager 创建失败");
+            System.out.println("✗ 内置辅助管理器 创建失败");
             return;
         }
         
@@ -63,21 +63,21 @@ public class CheatSystemTest {
             }
         }
         
-        System.out.println("=== 测试完成 ===");
+        System.out.println("=== 内置辅助系统测试完成 ===");
     }
     
     /**
-     * 显示所有插件状态
+     * 显示所有内置辅助插件状态
      * @param player 玩家对象
      */
     public static void displayPluginStatus(Character player) {
         CheatManager cheatManager = CheatModuleManager.getInstance().getCheatManager(player.getId());
         if (cheatManager == null) {
-            System.out.println("未找到玩家的作弊管理器");
+            System.out.println("未找到玩家的内置辅助管理器");
             return;
         }
         
-        System.out.println("=== 插件状态 ===");
+        System.out.println("=== 内置辅助插件状态 ===");
         for (CheatPlugin plugin : cheatManager.getAllPlugins()) {
             System.out.println("插件: " + plugin.getName() + 
                              " | 状态: " + (plugin.isRunning() ? "运行中" : "已停止"));

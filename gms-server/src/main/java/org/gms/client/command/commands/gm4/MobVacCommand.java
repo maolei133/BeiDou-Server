@@ -30,6 +30,9 @@ import org.gms.client.cheatsystem.core.CheatManager;
 import org.gms.client.cheatsystem.plugin.MobVacPlugin;
 import org.gms.util.I18nUtil;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class MobVacCommand extends Command {
     {
         setDescription("吸怪功能 - （BOSS除外）");
@@ -39,7 +42,7 @@ public class MobVacCommand extends Command {
     public void execute(Client c, String[] params) {
         Character player = c.getPlayer();
         
-        // 获取作弊管理器
+        // 获取内置辅助管理器
         CheatManager cheatManager = player.getCheatManager();
         if (cheatManager == null) {
             player.dropMessage(5, "无法获取内置辅助管理器。");
@@ -58,16 +61,13 @@ public class MobVacCommand extends Command {
             mobVacPlugin.stop();
             player.dropMessage(5, "吸怪功能已关闭。");
         } else {
-            // 启动插件并调用吸怪功能
-            mobVacPlugin.start();
-            boolean started = mobVacPlugin.startMobVac();
-            if (!started) {
-                // 如果启动失败，则停止插件
-                mobVacPlugin.stop();
-                player.dropMessage(5, "吸怪功能启动失败。");
-            } else {
-                player.dropMessage(5, "吸怪功能已开启。");
-            }
+            // 创建参数
+            Map<String, Object> p = new HashMap<>();
+            p.put("ignoreChecks", true);  // 忽略所有检查条件
+
+            // 启动插件，忽略检查条件
+            mobVacPlugin.start(p);
+            player.dropMessage(5, "吸怪功能已开启。");
         }
     }
 }

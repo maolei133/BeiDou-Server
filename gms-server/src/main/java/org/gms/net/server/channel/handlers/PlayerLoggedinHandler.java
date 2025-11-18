@@ -156,6 +156,12 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
                 c.disconnect(true, false);
                 return;
             }
+            
+            // 在验证通过后，恢复客户端的MAC地址信息
+            String transitionMacs = server.getTransitionMacs(c);
+            if (transitionMacs != null && !transitionMacs.isEmpty()) {
+                c.setMacs(transitionMacs);
+            }
 
             boolean newcomer = false;
             if (player == null) {

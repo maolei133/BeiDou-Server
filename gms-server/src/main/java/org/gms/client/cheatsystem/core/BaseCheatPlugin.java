@@ -4,12 +4,13 @@ import lombok.Getter;
 import lombok.Setter;
 import org.gms.client.Character;
 import org.gms.dao.entity.ExtendValueDO;
-import org.gms.log.EnhancedLogEntry;
-import org.gms.log.EnhancedLogManager;
+import org.gms.log.CheatSystemLogger;
 import org.gms.util.ExtendUtil;
 
+import java.util.Map;
+
 /**
- * 辅助插件基类
+ * 内置辅助插件基类
  * 提供通用功能的默认实现
  */
 @Getter
@@ -26,6 +27,11 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
     @Setter
     protected boolean loggingEnabled = true;
     
+    /**
+     * 启动参数
+     */
+    protected Map<String, Object> startParameters;
+    
     protected static long currentServerTime() {
         return System.currentTimeMillis();
     }
@@ -34,7 +40,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
     public void initialize(Character player) {
         this.player = player;
         if (loggingEnabled && player != null) {
-            logCheatSystem(player, "初始化辅助插件: " + getName());
+            CheatSystemLogger.logCheatSystem(player, "初始化辅助插件: " + getName());
         }
     }
     
@@ -43,10 +49,16 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
         if (!running) {
             running = true;
             if (loggingEnabled) {
-                logCheatSystem(player, "启动辅助插件: " + getName());
+                CheatSystemLogger.logCheatSystem(player, "启动辅助插件: " + getName());
             }
             onStart();
         }
+    }
+    
+    @Override
+    public void start(Map<String, Object> parameters) {
+        this.startParameters = parameters;
+        start();
     }
     
     @Override
@@ -54,7 +66,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
         if (running) {
             running = false;
             if (loggingEnabled) {
-                logCheatSystem(player, "停止辅助插件: " + getName());
+                CheatSystemLogger.logCheatSystem(player, "停止辅助插件: " + getName());
             }
             onStop();
         }
@@ -70,7 +82,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected ExtendValueDO getExtendValue(String extendId, String extendType, String extendName) {
         if (loggingEnabled) {
-            logCheatSystem(player, String.format("读取扩展值: ID=%s, Type=%s, Name=%s", extendId, extendType, extendName));
+            CheatSystemLogger.logCheatSystem(player, String.format("读取扩展值: ID=%s, Type=%s, Name=%s", extendId, extendType, extendName));
         }
         return ExtendUtil.getExtendValue(extendId, extendType, extendName);
     }
@@ -85,7 +97,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void saveOrUpdateExtendValue(String extendId, String extendType, String extendName, String extendValue) {
         if (loggingEnabled) {
-            logCheatSystem(player, String.format("保存扩展值: ID=%s, Type=%s, Name=%s, Value=%s", extendId, extendType, extendName, extendValue));
+            CheatSystemLogger.logCheatSystem(player, String.format("保存扩展值: ID=%s, Type=%s, Name=%s, Value=%s", extendId, extendType, extendName, extendValue));
         }
         ExtendUtil.saveOrUpdateExtendValue(extendId, extendType, extendName, extendValue);
     }
@@ -100,7 +112,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected ExtendValueDO getAccountExtendValue(int accountId, String extendType, String extendName) {
         if (loggingEnabled) {
-            logCheatSystem(player, String.format("读取账号扩展值: AccountID=%d, Type=%s, Name=%s", accountId, extendType, extendName));
+            CheatSystemLogger.logCheatSystem(player, String.format("读取账号扩展值: AccountID=%d, Type=%s, Name=%s", accountId, extendType, extendName));
         }
         return getExtendValue(String.valueOf(accountId), extendType, extendName);
     }
@@ -115,7 +127,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void saveOrUpdateAccountExtendValue(int accountId, String extendType, String extendName, String extendValue) {
         if (loggingEnabled) {
-            logCheatSystem(player, String.format("保存账号扩展值: AccountID=%d, Type=%s, Name=%s, Value=%s", accountId, extendType, extendName, extendValue));
+            CheatSystemLogger.logCheatSystem(player, String.format("保存账号扩展值: AccountID=%d, Type=%s, Name=%s, Value=%s", accountId, extendType, extendName, extendValue));
         }
         saveOrUpdateExtendValue(String.valueOf(accountId), extendType, extendName, extendValue);
     }
@@ -130,7 +142,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected ExtendValueDO getCharacterExtendValue(int characterId, String extendType, String extendName) {
         if (loggingEnabled) {
-            logCheatSystem(player, String.format("读取角色扩展值: CharacterID=%d, Type=%s, Name=%s", characterId, extendType, extendName));
+            CheatSystemLogger.logCheatSystem(player, String.format("读取角色扩展值: CharacterID=%d, Type=%s, Name=%s", characterId, extendType, extendName));
         }
         return getExtendValue(String.valueOf(characterId), extendType, extendName);
     }
@@ -145,7 +157,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void saveOrUpdateCharacterExtendValue(int characterId, String extendType, String extendName, String extendValue) {
         if (loggingEnabled) {
-            logCheatSystem(player, String.format("保存角色扩展值: CharacterID=%d, Type=%s, Name=%s, Value=%s", characterId, extendType, extendName, extendValue));
+            CheatSystemLogger.logCheatSystem(player, String.format("保存角色扩展值: CharacterID=%d, Type=%s, Name=%s, Value=%s", characterId, extendType, extendName, extendValue));
         }
         saveOrUpdateExtendValue(String.valueOf(characterId), extendType, extendName, extendValue);
     }
@@ -155,6 +167,9 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void onStart() {
         // 默认实现为空
+        if (loggingEnabled && player != null) {
+            logCheatSystem(player, "插件 " + getName() + " 启动完成");
+        }
     }
     
     /**
@@ -162,40 +177,19 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void onStop() {
         // 默认实现为空
+        if (loggingEnabled && player != null) {
+            logCheatSystem(player, "插件 " + getName() + " 停止完成");
+        }
     }
     
     /**
      * 记录插件激活日志
      * 
-     * @param mapName 地图名称
-     * @param mapId 地图ID
      * @param result 激活结果
      */
-    protected void logPluginActivation(String mapName, int mapId, String result) {
+    protected void logPluginActivation(String result) {
         if (loggingEnabled) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_activation");
-            entry.setMessage(String.format(
-                "玩家 %s (ID: %d) 在地图 %s (ID: %d) 开启了插件 %s，结果: %s",
-                player != null ? player.getName() : "未知",
-                player != null ? player.getId() : 0,
-                mapName,
-                mapId,
-                getName(),
-                result
-            ));
-            
-            if (player != null) {
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            }
-            
-            EnhancedLogManager.log(entry);
+            CheatSystemLogger.logPluginActivation(player, getName(), result);
         }
     }
     
@@ -206,60 +200,18 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logPluginDeactivation(String reason) {
         if (loggingEnabled) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_deactivation");
-            entry.setMessage(String.format(
-                "玩家 %s (ID: %d) 结束了插件 %s，原因: %s",
-                player != null ? player.getName() : "未知",
-                player != null ? player.getId() : 0,
-                getName(),
-                reason
-            ));
-            
-            if (player != null) {
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            }
-            
-            EnhancedLogManager.log(entry);
+            CheatSystemLogger.logPluginDeactivation(player, getName(), reason);
         }
     }
     
     /**
      * 记录插件使用日志
      * 
-     * @param action 使用动作
      * @param details 详细信息
      */
-    protected void logPluginUsage(String action, String details) {
+    protected void logPluginUsage(String details) {
         if (loggingEnabled) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_usage");
-            entry.setMessage(String.format(
-                "玩家 %s (ID: %d) 使用插件 %s 执行操作: %s，详情: %s",
-                player != null ? player.getName() : "未知",
-                player != null ? player.getId() : 0,
-                getName(),
-                action,
-                details
-            ));
-            
-            if (player != null) {
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            }
-            
-            EnhancedLogManager.log(entry);
+            CheatSystemLogger.logPluginUsage(player, getName(), details);
         }
     }
     
@@ -271,23 +223,80 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logCheatSystem(Character player, String message) {
         if (loggingEnabled) {
-            EnhancedLogEntry entry = new EnhancedLogEntry();
-            entry.setMajorCategory("cheat");
-            entry.setMinorCategory("plugin_usage");
-            
-            if (player != null && player.getName() != null) {
-                entry.setMessage(String.format("玩家 %s (ID: %d): %s", player.getName(), player.getId(), message));
-                entry.setAccount(player.getClient().getAccountName());
-                entry.setAccountId((long) player.getAccountId());
-                entry.setCharacter(player.getName());
-                entry.setCharacterId((long) player.getId());
-                entry.setLevel(player.getLevel());
-                entry.setIp(player.getClient().getRemoteAddress());
-            } else {
-                entry.setMessage("玩家 null (ID: 0): " + message);
-            }
-            
-            EnhancedLogManager.log(entry);
+            CheatSystemLogger.logCheatSystem(player, message);
         }
+    }
+    
+    /**
+     * 获取启动参数
+     * 
+     * @return 启动参数映射
+     */
+    protected Map<String, Object> getStartParameters() {
+        return startParameters;
+    }
+    
+    /**
+     * 获取指定的启动参数
+     * 
+     * @param key 参数键
+     * @param defaultValue 默认值
+     * @return 参数值
+     */
+    protected Object getStartParameter(String key, Object defaultValue) {
+        if (startParameters != null && startParameters.containsKey(key)) {
+            return startParameters.get(key);
+        }
+        return defaultValue;
+    }
+    
+    /**
+     * 获取指定的启动参数（字符串类型）
+     * 
+     * @param key 参数键
+     * @param defaultValue 默认值
+     * @return 参数值
+     */
+    protected String getStartParameterAsString(String key, String defaultValue) {
+        Object value = getStartParameter(key, defaultValue);
+        return value != null ? value.toString() : defaultValue;
+    }
+    
+    /**
+     * 获取指定的启动参数（整数类型）
+     * 
+     * @param key 参数键
+     * @param defaultValue 默认值
+     * @return 参数值
+     */
+    protected int getStartParameterAsInt(String key, int defaultValue) {
+        Object value = getStartParameter(key, defaultValue);
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        } else if (value instanceof String) {
+            try {
+                return Integer.parseInt((String) value);
+            } catch (NumberFormatException e) {
+                return defaultValue;
+            }
+        }
+        return defaultValue;
+    }
+    
+    /**
+     * 获取指定的启动参数（布尔类型）
+     * 
+     * @param key 参数键
+     * @param defaultValue 默认值
+     * @return 参数值
+     */
+    protected boolean getStartParameterAsBoolean(String key, boolean defaultValue) {
+        Object value = getStartParameter(key, defaultValue);
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        } else if (value instanceof String) {
+            return Boolean.parseBoolean((String) value);
+        }
+        return defaultValue;
     }
 }

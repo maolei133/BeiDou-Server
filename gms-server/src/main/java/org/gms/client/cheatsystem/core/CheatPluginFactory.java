@@ -8,8 +8,8 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * 作弊插件工厂类
- * 负责创建和管理各种作弊插件的实例
+ * 内置辅助插件工厂类
+ * 负责创建和管理各种内置辅助插件的实例
  */
 public class CheatPluginFactory {
     private static final Map<String, Supplier<CheatPlugin>> pluginRegistry = new HashMap<>();

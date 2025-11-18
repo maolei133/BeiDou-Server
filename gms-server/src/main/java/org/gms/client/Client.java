@@ -416,7 +416,7 @@ public class Client extends ChannelInboundHandlerAdapter {
         Date currentDate = new Date();
         int timeNow = (int) (currentDate.getTime() / 1000);
         int difference = (timeNow - getVoteTime());
-        return difference < 86400 && difference > 0;
+        return difference < 86600 && difference > 0;
     }
 
     public boolean hasBannedHWID() {
@@ -987,6 +987,11 @@ public class Client extends ChannelInboundHandlerAdapter {
             e.printStackTrace();
         }
     }
+    
+    public void setMacs(String macData) {
+        macs.clear();
+        macs.addAll(Arrays.asList(macData.split(", ")));
+    }
 
     /**
      * 更新IP地址列表，自动去重并保存到数据库
@@ -1443,6 +1448,10 @@ public class Client extends ChannelInboundHandlerAdapter {
 
     public Set<String> getMacs() {
         return Collections.unmodifiableSet(macs);
+    }
+
+    public void setMacs(Set<String> macs) {
+        this.macs = macs;
     }
 
     public Set<String> getIps() {

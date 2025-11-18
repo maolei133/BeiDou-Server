@@ -204,7 +204,7 @@
             :width="300"
           >
             <template #cell="{ record }">
-              <div class="log-content">{{ record }}</div>
+              <div class="log-content">{{ formatLogContent(record) }}</div>
             </template>
           </a-table-column>
         </template>
@@ -224,24 +224,23 @@
     getUniqueMACs,
     getUniqueHWIDs,
     getUniqueAccounts,
+    getUserData,
     LogQueryParams,
   } from '@/api/log';
   import useLoading from '@/hooks/loading';
   import { Message } from '@arco-design/web-vue';
-  import type { HttpResponse } from '@/api/interceptor';
-  import type { SelectOptionData } from '@arco-design/web-vue/es/select/interface';
 
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(true);
-  const logData = ref<string[]>([]);
+  const logData = ref<any[]>([]);
   const majorCategories = ref<string[]>([]);
   const minorCategories = ref<string[]>([]);
 
   // 筛选选项
-  const ipOptions = ref<SelectOptionData[]>([]);
-  const macOptions = ref<SelectOptionData[]>([]);
-  const hwidOptions = ref<SelectOptionData[]>([]);
-  const accountOptions = ref<SelectOptionData[]>([]);
+  const ipOptions = ref<any[]>([]);
+  const macOptions = ref<any[]>([]);
+  const hwidOptions = ref<any[]>([]);
+  const accountOptions = ref<any[]>([]);
 
   const formModel = reactive({
     majorCategory: '',
@@ -267,6 +266,7 @@
 
   onMounted(() => {
     fetchMajorCategories();
+    fetchUserData(); // 获取用户数据用于筛选
   });
 
   // 监听大类和小类变化，获取对应的筛选选项
@@ -304,13 +304,21 @@
         character: formModel.character || undefined,
       };
 
-      const response = (await queryLogs(params)) as unknown as HttpResponse<
-        string[]
-      >;
-      logData.value = response.data || [];
+      const response = await queryLogs(params);
+
+      // 解析日志内容
+      logData.value = (response.data || []).map((item) => {
+        try {
+          return JSON.parse(item);
+        } catch (e) {
+          // 如果解析失败，返回原始字符串
+          return { raw: item };
+        }
+      });
       pagination.total = logData.value.length;
     } catch (error) {
       Message.error(t('log.manager.message.fetchError'));
+      console.error('查询日志失败:', error);
     } finally {
       setLoading(false);
     }
@@ -318,22 +326,21 @@
 
   const fetchMajorCategories = async () => {
     try {
-      const response =
-        (await getAllMajorCategories()) as unknown as HttpResponse<string[]>;
+      const response = await getAllMajorCategories();
       majorCategories.value = response.data || [];
     } catch (error) {
       Message.error(t('log.manager.message.fetchMajorCategoriesError'));
+      console.error('获取大类失败:', error);
     }
   };
 
   const fetchMinorCategories = async (majorCategory: string) => {
     try {
-      const response = (await getMinorCategoriesByMajor(
-        majorCategory
-      )) as unknown as HttpResponse<string[]>;
+      const response = await getMinorCategoriesByMajor(majorCategory);
       minorCategories.value = response.data || [];
     } catch (error) {
       Message.error(t('log.manager.message.fetchMinorCategoriesError'));
+      console.error('获取小类失败:', error);
       minorCategories.value = [];
     }
   };
@@ -344,48 +351,82 @@
 
     try {
       // 获取唯一IP列表
-      const ipResponse = (await getUniqueIPs(
+      const ipResponse = await getUniqueIPs(
         formModel.majorCategory,
         formModel.minorCategory
-      )) as unknown as HttpResponse<{ data: string[] }>;
-      ipOptions.value = (ipResponse.data?.data || []).map((ip) => ({
+      );
+      ipOptions.value = (ipResponse.data || []).map((ip) => ({
         label: ip,
         value: ip,
       }));
 
       // 获取唯一MAC列表
-      const macResponse = (await getUniqueMACs(
+      const macResponse = await getUniqueMACs(
         formModel.majorCategory,
         formModel.minorCategory
-      )) as unknown as HttpResponse<{ data: string[] }>;
-      macOptions.value = (macResponse.data?.data || []).map((mac) => ({
+      );
+      macOptions.value = (macResponse.data || []).map((mac) => ({
         label: mac,
         value: mac,
       }));
 
       // 获取唯一HWID列表
-      const hwidResponse = (await getUniqueHWIDs(
+      const hwidResponse = await getUniqueHWIDs(
         formModel.majorCategory,
         formModel.minorCategory
-      )) as unknown as HttpResponse<{ data: string[] }>;
-      hwidOptions.value = (hwidResponse.data?.data || []).map((hwid) => ({
+      );
+      hwidOptions.value = (hwidResponse.data || []).map((hwid) => ({
         label: hwid,
         value: hwid,
       }));
 
       // 获取唯一账号列表
-      const accountResponse = (await getUniqueAccounts(
+      const accountResponse = await getUniqueAccounts(
         formModel.majorCategory,
         formModel.minorCategory
-      )) as unknown as HttpResponse<{ data: string[] }>;
-      accountOptions.value = (accountResponse.data?.data || []).map(
-        (account) => ({
-          label: account,
-          value: account,
-        })
       );
+      accountOptions.value = (accountResponse.data || []).map((account) => ({
+        label: account,
+        value: account,
+      }));
     } catch (error) {
       Message.error(t('log.manager.message.fetchUniqueValuesError'));
+      console.error('获取筛选选项失败:', error);
+    }
+  };
+
+  // 获取用户数据用于筛选
+  const fetchUserData = async () => {
+    try {
+      const response = await getUserData();
+
+      // 从响应中提取数据
+      const userData = response.data;
+      if (userData) {
+        // 初始化筛选选项
+        ipOptions.value = (userData.ips || []).map((ip) => ({
+          label: ip,
+          value: ip,
+        }));
+
+        macOptions.value = (userData.macs || []).map((mac) => ({
+          label: mac,
+          value: mac,
+        }));
+
+        hwidOptions.value = (userData.hwids || []).map((hwid) => ({
+          label: hwid,
+          value: hwid,
+        }));
+
+        accountOptions.value = (userData.accounts || []).map((account) => ({
+          label: account,
+          value: account,
+        }));
+      }
+    } catch (error) {
+      // 静默失败，不影响主要功能
+      console.error('获取用户数据失败:', error);
     }
   };
 
@@ -412,10 +453,11 @@
     hwidOptions.value = [];
     accountOptions.value = [];
 
+    // 清空小类列表，确保在获取新的小类之前不会使用旧的小类数据
+    minorCategories.value = [];
+
     if (stringValue) {
       fetchMinorCategories(stringValue);
-    } else {
-      minorCategories.value = [];
     }
   };
 
@@ -444,12 +486,43 @@
   // 获取小类回退选项（用于显示已选择的值）
   const getMinorCategoryFallbackOption = (
     key: string | number | boolean | Record<string, unknown>
-  ): SelectOptionData => {
+  ): any => {
     const keyValue = key as string;
+    // 确保我们有当前选中的大类，如果没有则不进行翻译
+    if (!formModel.majorCategory) {
+      return {
+        value: keyValue,
+        label: keyValue,
+      };
+    }
+
+    // 检查当前大类是否包含这个小类，如果不包含则直接返回key，避免使用错误的大类小类组合
+    if (!minorCategories.value.includes(keyValue)) {
+      return {
+        value: keyValue,
+        label: keyValue,
+      };
+    }
+
     return {
       value: keyValue,
       label: getMinorCategoryLabel(formModel.majorCategory, keyValue),
     };
+  };
+
+  // 格式化日志内容显示
+  const formatLogContent = (record: any) => {
+    if (record.raw) {
+      return record.raw;
+    }
+
+    try {
+      // 新的日志格式化逻辑，适配新的JSON结构
+      return JSON.stringify(record);
+      // return JSON.stringify(record, null, 2);
+    } catch (e) {
+      return JSON.stringify(record);
+    }
   };
 </script>
 

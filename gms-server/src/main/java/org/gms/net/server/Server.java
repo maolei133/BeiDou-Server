@@ -116,6 +116,7 @@ public class Server {
     private final Map<Integer, Short> accountCharacterCount = new HashMap<>();
     private final Map<Integer, Integer> worldChars = new HashMap<>();
     private final Map<String, Integer> transitioningChars = new HashMap<>();
+    private final Map<String, String> transitioningMacs = new HashMap<>();
     private final List<Pair<Integer, String>> worldRecommendedList = new LinkedList<>();
     private final Map<Integer, Guild> guilds = new HashMap<>(100);
     private final Map<Client, Long> inLoginState = new HashMap<>(100);
@@ -1503,6 +1504,8 @@ public class Server {
         lgnWLock.lock();
         try {
             transitioningChars.put(remoteIp, charId);
+            // 同时存储MAC地址信息，将Set<String>转换为String
+            transitioningMacs.put(remoteIp, String.join(", ", client.getMacs()));
         } finally {
             lgnWLock.unlock();
         }
@@ -1518,6 +1521,8 @@ public class Server {
         lgnWLock.lock();
         try {
             Integer cid = transitioningChars.remove(remoteIp);
+            // 同时移除对应的MAC地址信息
+            transitioningMacs.remove(remoteIp);
             return cid != null && cid.equals(charId);
         } finally {
             lgnWLock.unlock();
@@ -1533,6 +1538,8 @@ public class Server {
 
         lgnWLock.lock();
         try {
+            // 同时移除对应的MAC地址信息
+            transitioningMacs.remove(remoteIp);
             return transitioningChars.remove(remoteIp);
         } finally {
             lgnWLock.unlock();
@@ -1553,7 +1560,19 @@ public class Server {
             lgnRLock.unlock();
         }
     }
-
+    
+    // 新增方法：获取过渡期间存储的MAC地址
+    public String getTransitionMacs(Client client) {
+        String remoteIp = getRemoteHost(client);
+        
+        lgnRLock.lock();
+        try {
+            return transitioningMacs.get(remoteIp);
+        } finally {
+            lgnRLock.unlock();
+        }
+    }
+    
     public void registerLoginState(Client c) {
         srvLock.lock();
         try {

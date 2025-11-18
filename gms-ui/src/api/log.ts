@@ -23,19 +23,29 @@ export interface UniqueValuesResponse {
   data: string[];
 }
 
+export interface UserDataResponse {
+  ips: string[];
+  macs: string[];
+  hwids: string[];
+  accounts: string[];
+  accountIds: string[];
+  characters: string[];
+  characterIds: string[];
+}
+
 /**
  * 查询日志
  * @param params 查询参数
  */
 export function queryLogs(params: LogQueryParams) {
-  return axios.get<HttpResponse<string[]>>('/api/logs/query', { params });
+  return axios.get('/api/logs/query', { params });
 }
 
 /**
  * 获取所有大类
  */
 export function getAllMajorCategories() {
-  return axios.get<HttpResponse<string[]>>('/api/logs/categories/major');
+  return axios.get('/api/logs/categories/major');
 }
 
 /**
@@ -43,7 +53,7 @@ export function getAllMajorCategories() {
  * @param majorCategory 大类
  */
 export function getMinorCategoriesByMajor(majorCategory: string) {
-  return axios.get<HttpResponse<string[]>>('/api/logs/categories/minor', {
+  return axios.get('/api/logs/categories/minor', {
     params: { majorCategory },
   });
 }
@@ -54,7 +64,7 @@ export function getMinorCategoriesByMajor(majorCategory: string) {
  * @param minorCategory 小类
  */
 export function getUniqueIPs(majorCategory: string, minorCategory: string) {
-  return axios.get<HttpResponse<UniqueValuesResponse>>('/api/logs/unique/ips', {
+  return axios.get('/api/logs/unique/ips', {
     params: { majorCategory, minorCategory },
   });
 }
@@ -65,12 +75,9 @@ export function getUniqueIPs(majorCategory: string, minorCategory: string) {
  * @param minorCategory 小类
  */
 export function getUniqueMACs(majorCategory: string, minorCategory: string) {
-  return axios.get<HttpResponse<UniqueValuesResponse>>(
-    '/api/logs/unique/macs',
-    {
-      params: { majorCategory, minorCategory },
-    }
-  );
+  return axios.get('/api/logs/unique/macs', {
+    params: { majorCategory, minorCategory },
+  });
 }
 
 /**
@@ -79,12 +86,9 @@ export function getUniqueMACs(majorCategory: string, minorCategory: string) {
  * @param minorCategory 小类
  */
 export function getUniqueHWIDs(majorCategory: string, minorCategory: string) {
-  return axios.get<HttpResponse<UniqueValuesResponse>>(
-    '/api/logs/unique/hwids',
-    {
-      params: { majorCategory, minorCategory },
-    }
-  );
+  return axios.get('/api/logs/unique/hwids', {
+    params: { majorCategory, minorCategory },
+  });
 }
 
 /**
@@ -96,12 +100,9 @@ export function getUniqueAccounts(
   majorCategory: string,
   minorCategory: string
 ) {
-  return axios.get<HttpResponse<UniqueValuesResponse>>(
-    '/api/logs/unique/accounts',
-    {
-      params: { majorCategory, minorCategory },
-    }
-  );
+  return axios.get('/api/logs/unique/accounts', {
+    params: { majorCategory, minorCategory },
+  });
 }
 
 /**
@@ -113,10 +114,14 @@ export function getUniqueCharacterIds(
   majorCategory: string,
   minorCategory: string
 ) {
-  return axios.get<HttpResponse<UniqueValuesResponse>>(
-    '/api/logs/unique/characterIds',
-    {
-      params: { majorCategory, minorCategory },
-    }
-  );
+  return axios.get('/api/logs/unique/characterIds', {
+    params: { majorCategory, minorCategory },
+  });
+}
+
+/**
+ * 获取用户数据（供前端筛选使用）
+ */
+export function getUserData() {
+  return axios.get('/api/logs/userdata');
 }
