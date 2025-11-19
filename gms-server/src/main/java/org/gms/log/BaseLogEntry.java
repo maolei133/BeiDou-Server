@@ -21,6 +21,9 @@ import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 基础日志条目类
@@ -30,8 +33,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * 1. 字段缩写以减少日志文件大小
  * 2. 按重要性排序字段（时间、版本在前，模块信息在后）
  */
-@JsonPropertyOrder({"t", "v", "ip", "mac", "hwid", "acc", "accId", "chr", "chrId", "map","mId", "mod", "cf"})
+@JsonPropertyOrder({"t", "v", "lvl", "ip", "mac", "hwid", "acc", "accId", "chr", "chrId", "map","mId", "mod", "cf"})
 public class BaseLogEntry {
+    // 日志级别常量定义
+    public static final String LEVEL_DEBUG = "DEBUG";
+    public static final String LEVEL_INFO = "INFO";
+    public static final String LEVEL_WARN = "WARN";
+    public static final String LEVEL_ERROR = "ERROR";
+    
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final String USERDATA_FILE = "logs/userdata.json";
@@ -41,7 +50,11 @@ public class BaseLogEntry {
     // 标记用户数据是否已更改，需要写入文件
     private static volatile boolean userDataChanged = false;
     // 用户数据写入线程
-    private static final Thread userDataWriterThread;
+    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "UserDataWriter");
+        t.setDaemon(true);
+        return t;
+    });
     
     static {
         // 初始化缓存
@@ -53,33 +66,26 @@ public class BaseLogEntry {
         userDataCache.put("characters", ConcurrentHashMap.newKeySet());
         userDataCache.put("characterIds", ConcurrentHashMap.newKeySet());
         
-        // 启动用户数据写入线程
-        userDataWriterThread = new Thread(() -> {
-            while (!Thread.currentThread().isInterrupted()) {
-                try {
-                    if (userDataChanged) {
-                        writeUserDataToFile();
-                        userDataChanged = false;
-                    }
-                    Thread.sleep(5000); // 每5秒检查一次
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                } catch (Exception e) {
-                    // 忽略写入错误
+        // 启动用户数据写入任务，每5秒检查一次
+        scheduler.scheduleWithFixedDelay(() -> {
+            try {
+                if (userDataChanged) {
+                    writeUserDataToFile();
+                    userDataChanged = false;
                 }
+            } catch (Exception e) {
+                // 忽略写入错误
             }
-        });
-        userDataWriterThread.setDaemon(true);
-        userDataWriterThread.start();
+        }, 5, 5, TimeUnit.SECONDS);
         
         // 加载现有的用户数据
         loadUserDataFromFile();
     }
     
     // 缩写字段以减少日志大小
-    protected String v = String.valueOf(ServerConstants.BEI_DOU_VERSION);  // 版本号
+    protected String v = ServerConstants.BEI_DOU_VERSION;  // 版本号
     protected String t;  // 时间戳
+    protected String lvl = LEVEL_INFO; // 日志级别，默认为INFO
     protected String ip;  // IP地址
     protected List<String> mac;  // MAC地址列表
     protected String hwid;  // 硬件ID
@@ -268,6 +274,14 @@ public class BaseLogEntry {
 
     public void setT(String t) {
         this.t = t;
+    }
+
+    public String getLvl() {
+        return lvl;
+    }
+
+    public void setLvl(String lvl) {
+        this.lvl = lvl;
     }
 
     public String getIp() {
