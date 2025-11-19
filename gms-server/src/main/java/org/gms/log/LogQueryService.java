@@ -98,7 +98,7 @@ public class LogQueryService {
 //            System.out.println("返回结果数量: " + result.size());
             return result;
         } catch (IOException e) {
-            e.printStackTrace();
+            ErrorLogger.logException(null, null, e, "查询日志时发生IO异常");
             return Collections.emptyList();
         }
     }

@@ -73,8 +73,8 @@ public class ModuleLogger {
             
             logger.log(entry);
         } catch (Exception e) {
-            // 忽略日志记录错误，但应该使用统一的日志系统而不是printStackTrace
-            System.err.println("日志记录错误: " + e.getMessage());
+            // 使用统一的日志系统记录错误信息，而不是printStackTrace
+            ErrorLogger.logException(client, chr, e, "记录日志时发生异常");
         }
     }
     
@@ -107,7 +107,7 @@ public class ModuleLogger {
             
             logger.log(entry);
         } catch (Exception e) {
-            System.err.println("日志记录错误: " + e.getMessage());
+            ErrorLogger.logException(client, chr, e, "记录带级别日志时发生异常");
         }
     }
     

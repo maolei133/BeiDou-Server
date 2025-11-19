@@ -20,6 +20,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -199,8 +200,11 @@ public class BaseLogger {
         if (client != null) {
             entry.setIp(client.getRemoteAddress());
             
-            // 设置MAC地址列表
-            entry.setMac(new ArrayList<>(client.getMacs()));
+            // 设置MAC地址列表，仅在有数据时才设置
+            Set<String> macs = client.getMacs();
+            if (macs != null && !macs.isEmpty()) {
+                entry.setMac(new ArrayList<>(macs));
+            }
             
             entry.setHwid(client.getHwid() != null ? client.getHwid().hwid() : "");
             entry.setAcc(client.getAccountName());
@@ -262,7 +266,7 @@ public class BaseLogger {
                 break;
             } catch (Exception e) {
                 // 使用统一的日志系统记录错误信息，而不是printStackTrace
-                System.err.println("写入日志时出错: " + e.getMessage());
+                ErrorLogger.logException(null, null, e, "写入日志时发生异常");
             }
         }
     }

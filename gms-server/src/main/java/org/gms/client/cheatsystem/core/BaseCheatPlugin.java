@@ -22,6 +22,11 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
     protected boolean running = false;
     
     /**
+     * 记录启动时的频道，用于检测频道切换
+     */
+    protected int channel = -1;
+    
+    /**
      * 是否启用日志记录
      */
     @Setter
@@ -48,6 +53,10 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
     public void start() {
         if (!running) {
             running = true;
+            // 记录当前频道，用于后续判断是否切换频道
+            if (player != null && player.getClient() != null) {
+                channel = player.getClient().getChannel();
+            }
             if (loggingEnabled) {
                 CheatSystemLogger.logCheatSystem(player, "启动辅助插件: " + getName());
             }

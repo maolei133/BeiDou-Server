@@ -100,7 +100,8 @@ public class BaseLogEntry {
 
     public BaseLogEntry() {
         this.t = DATE_FORMAT.format(new Date());
-        this.mac = new ArrayList<>();
+        // 初始化为空，这样在没有设置MAC地址时就不会包含该字段
+        this.mac = null;
     }
 
     /**
@@ -190,8 +191,8 @@ public class BaseLogEntry {
                 }
             }
         } catch (Exception e) {
-            // 忽略加载错误
-            e.printStackTrace();
+            // 使用统一的日志系统记录错误信息
+            ErrorLogger.logException(null, null, e, "加载用户数据文件时发生异常");
         }
     }
     
@@ -222,7 +223,8 @@ public class BaseLogEntry {
                 objectMapper.writeValue(osw, rootNode);
             }
         } catch (Exception e) {
-            // 忽略写入错误
+            // 使用统一的日志系统记录错误信息
+            ErrorLogger.logException(null, null, e, "写入用户数据文件时发生异常");
         }
     }
 
@@ -292,7 +294,12 @@ public class BaseLogEntry {
         this.ip = ip;
     }
 
+    @JsonProperty("mac")
     public List<String> getMac() {
+        // 如果MAC列表为空或为null，则返回null，这样Jackson就不会序列化该字段
+        if (mac == null || mac.isEmpty()) {
+            return null;
+        }
         return mac;
     }
 

@@ -44,7 +44,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
     private ScheduledFuture<?> mobVacTask;
     /** 吸怪范围半径（内置辅助） */
     private double radius = Double.POSITIVE_INFINITY;
-    /** 当前正在使用吸怪内置辅助功能的地图实例 */
+    /** 当前在使用吸怪内置辅助功能的地图实例 */
     private static final Map<MapleMap, Integer> activeMapInstances = new HashMap<>();
     /** 吸怪开始时间（内置辅助） */
     private long startTime;
@@ -58,6 +58,8 @@ public class MobVacPlugin extends BaseCheatPlugin {
     private MonsterStatusEffect speedEffect;
     /** 数据库中存储的键名（内置辅助） */
     private static final String MOB_VAC_USAGE_COUNT_KEY = "每日吸怪累计次数";
+    /** 记录启动时的频道，用于检测频道切换 */
+    private int channel = -1;
     
     public MobVacPlugin() {
         super();
@@ -184,8 +186,27 @@ public class MobVacPlugin extends BaseCheatPlugin {
         }
         
         // 检查玩家是否在线
-        if (player == null || !player.isLoggedInWorld()) {
-            logPluginActivation("失败 - 玩家不在线");
+        if (player == null) {
+            logPluginActivation("失败 - 玩家对象为空");
+            return false;
+        }
+        
+        if (!player.isLoggedInWorld()) {
+            logPluginActivation("失败 - 玩家离线");
+            return false;
+        }
+        
+        // 检查玩家是否在商城中
+        if (player.getCashShop().isOpened()) {
+            logPluginActivation("失败 - 玩家在商城中");
+            return false;
+        }
+        
+        // 检查玩家是否切换了频道
+        if (player.getClient() == null || 
+            player.getMap() == null || 
+            player.getClient().getChannel() != channel) {
+            logPluginActivation("失败 - 玩家切换频道");
             return false;
         }
         
@@ -386,8 +407,33 @@ public class MobVacPlugin extends BaseCheatPlugin {
         mobVacTask = TimerManager.getInstance().register(() -> {
             try {
                 // 检查玩家是否仍然在线且在同一地图
-                if (player == null || !player.isLoggedInWorld() || !activeUsers.contains(playerId)) {
-                    stopMobVac("玩家离线或退出吸怪功能", true);
+                if (player == null) {
+                    stopMobVac("玩家对象为空", true);
+                    return;
+                }
+                
+                if (!player.isLoggedInWorld()) {
+                    // 棺材递送员: 玩家离线
+                    stopMobVac("玩家离线", true);
+                    return;
+                }
+                
+                // 检查玩家是否在商城中
+                if (player.getCashShop().isOpened()) {
+                    stopMobVac("玩家进入商城", true);
+                    return;
+                }
+                
+                // 检查玩家是否切换了频道
+                if (player.getClient() == null || 
+                    player.getMap() == null || 
+                    player.getClient().getChannel() != channel) {
+                    stopMobVac("玩家切换频道", true);
+                    return;
+                }
+                
+                if (!activeUsers.contains(playerId)) {
+                    stopMobVac("玩家退出吸怪功能", true);
                     return;
                 }
                 

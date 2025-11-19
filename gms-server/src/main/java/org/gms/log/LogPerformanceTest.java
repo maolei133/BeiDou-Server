@@ -86,7 +86,7 @@ public class LogPerformanceTest {
                         }
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    ErrorLogger.logException(null, null, e, "性能测试过程中发生异常");
                 } finally {
                     latch.countDown();
                 }
@@ -107,7 +107,7 @@ public class LogPerformanceTest {
             System.out.println("TPS: " + (threadCount * logCount) / (totalTime / 1000.0));
             
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            ErrorLogger.logException(null, null, e, "性能测试等待过程中发生异常");
         } finally {
             executor.shutdown();
         }

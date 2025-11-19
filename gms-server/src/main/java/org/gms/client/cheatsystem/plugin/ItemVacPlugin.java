@@ -106,9 +106,31 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         }
 
         // ==== 控制逻辑 ====
-        if (player == null || !player.isLoggedInWorld()) {
+        if (player == null) {
             resetValues();
-            logPluginActivation("失败 - 玩家不在线");
+            logPluginActivation("失败 - 玩家对象为空");
+            return false;
+        }
+        
+        if (!player.isLoggedInWorld()) {
+            resetValues();
+            logPluginActivation("失败 - 玩家离线");
+            return false;
+        }
+        
+        // 检查玩家是否在商城中
+        if (player.getCashShop().isOpened()) {
+            resetValues();
+            logPluginActivation("失败 - 玩家在商城中");
+            return false;
+        }
+        
+        // 检查玩家是否切换了频道
+        if (player.getClient() == null || 
+            player.getMap() == null || 
+            player.getClient().getChannel() != channel) {
+            resetValues();
+            logPluginActivation("失败 - 玩家切换频道");
             return false;
         }
 
@@ -140,7 +162,43 @@ public class ItemVacPlugin extends BaseCheatPlugin {
      * @return 是否应该拾取
      */
     private boolean shouldPickupItems() {
-        return !(pickuping || radius <= 0 || currentServerTime() - pickupTime < sleep || player == null || !player.isLoggedInWorld());
+        if (pickuping) {
+            return false;
+        }
+        
+        if (radius <= 0) {
+            return false;
+        }
+        
+        if (currentServerTime() - pickupTime < sleep) {
+            return false;
+        }
+        
+        if (player == null) {
+            logPluginActivation("失败 - 玩家对象为空");
+            return false;
+        }
+        
+        if (!player.isLoggedInWorld()) {
+            logPluginActivation("失败 - 玩家离线");
+            return false;
+        }
+        
+        // 检查玩家是否在商城中
+        if (player.getCashShop().isOpened()) {
+            logPluginActivation("失败 - 玩家在商城中");
+            return false;
+        }
+        
+        // 检查玩家是否切换了频道
+        if (player.getClient() == null || 
+            player.getMap() == null || 
+            player.getClient().getChannel() != channel) {
+            logPluginActivation("失败 - 玩家切换频道");
+            return false;
+        }
+        
+        return true;
     }
 
     private void calculateParams(Pet pet) {
@@ -244,13 +302,54 @@ public class ItemVacPlugin extends BaseCheatPlugin {
 
     public void pickupItem(Point Pos, double radius, int sleep, byte petIndex) {
         // 检查角色是否为空，是否在线，是否拾取中，拾取范围是否小于0，拾取冷却时间(防止频繁调用)
-        if (player == null || Pos == null || !player.isLoggedInWorld() || pickuping || radius <= 0 || currentServerTime() - pickupTime < sleep) {
-            if (player != null && player.isLoggedInWorld()) player.enableActions();
+        if (player == null) {
+            logPluginActivation("失败 - 玩家对象为空");
+            return;
+        }
+        
+        if (Pos == null) {
+            logPluginActivation("失败 - 坐标为空");
+            return;
+        }
+        
+        if (!player.isLoggedInWorld()) {
+            logPluginActivation("失败 - 玩家离线");
+            if (player.isLoggedInWorld()) player.enableActions();
+            return;
+        }
+        
+        // 检查玩家是否在商城中
+        if (player.getCashShop().isOpened()) {
+            logPluginActivation("失败 - 玩家在商城中");
+            return;
+        }
+        
+        // 检查玩家是否切换了频道
+        if (player.getClient() == null || 
+            player.getMap() == null || 
+            player.getClient().getChannel() != channel) {
+            logPluginActivation("失败 - 玩家切换频道");
+            return;
+        }
+        
+        if (pickuping) {
+            logPluginActivation("失败 - 正在拾取中");
+            return;
+        }
+        
+        if (radius <= 0) {
+            logPluginActivation("失败 - 拾取半径小于等于0");
+            return;
+        }
+        
+        if (currentServerTime() - pickupTime < sleep) {
+            logPluginActivation("失败 - 拾取冷却时间未到");
             return;
         }
         
         int stance = player.getStance();    //获取角色姿态，14~17 = 上下爬绳子、梯子；20 = 坐下
         if (!isStanceAllowPickup(stance)) {//爬绳和坐下不拾取
+            logPluginActivation("失败 - 玩家姿态不允许拾取（爬绳或坐下）");
             return;
         }
         
@@ -259,6 +358,7 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         
         // 如果在限制时间内，不进行捡取操作
         if (killBossTime != -1 && currentServerTime() - killBossTime < 30000) { 
+            logPluginActivation("失败 - 击杀Boss后30秒内禁止拾取");
             return;
         }
 
@@ -281,7 +381,30 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         // 遍历所有可拾取物品
         for (MapObject item : items) {
             try {
-                if (!player.isLoggedInWorld()) return;  //不在线直接返回
+                if (player == null) {
+                    logPluginActivation("失败 - 玩家对象为空");
+                    return;
+                }
+                
+                if (!player.isLoggedInWorld()) {
+                    logPluginActivation("失败 - 玩家离线");
+                    return;
+                }
+                
+                // 检查玩家是否在商城中
+                if (player.getCashShop().isOpened()) {
+                    logPluginActivation("失败 - 玩家在商城中");
+                    return;
+                }
+                
+                // 检查玩家是否切换了频道
+                if (player.getClient() == null || 
+                    player.getMap() == null || 
+                    player.getClient().getChannel() != channel) {
+                    logPluginActivation("失败 - 玩家切换频道");
+                    return;
+                }
+                
                 MapItem mapItem = (MapItem) item;
                 boolean shouldPickup = true;
 
@@ -367,7 +490,48 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         itemVacTask = TimerManager.getInstance().register(() -> {
             try {
                 // 条件检查
-                if (!player.isLoggedInWorld() || player.getPet(0) == null || !updateConfigAndCheck() || !isEnable()) {
+                if (player == null) {
+                    logPluginDeactivation("失败 - 玩家对象为空");
+                    stop();
+                    return;
+                }
+                
+                if (!player.isLoggedInWorld()) {
+                    logPluginDeactivation("失败 - 玩家离线");
+                    stop();
+                    return;
+                }
+                
+                // 检查玩家是否在商城中
+                if (player.getCashShop().isOpened()) {
+                    logPluginDeactivation("失败 - 玩家在商城中");
+                    stop();
+                    return;
+                }
+                
+                // 检查玩家是否切换了频道
+                if (player.getClient() == null || 
+                    player.getMap() == null || 
+                    player.getClient().getChannel() != channel) {
+                    logPluginDeactivation("失败 - 玩家切换频道");
+                    stop();
+                    return;
+                }
+                
+                if (player.getPet(0) == null) {
+                    logPluginDeactivation("失败 - 宠物为空");
+                    stop();
+                    return;
+                }
+                
+                if (!updateConfigAndCheck()) {
+                    logPluginDeactivation("失败 - 配置检查未通过");
+                    stop();
+                    return;
+                }
+                
+                if (!isEnable()) {
+                    logPluginDeactivation("失败 - 功能未启用");
                     stop();
                     return;
                 }
@@ -382,6 +546,7 @@ public class ItemVacPlugin extends BaseCheatPlugin {
                     startItemVacTask();
                 }
             } catch (Exception ex) {
+                logPluginDeactivation("失败 - 发生异常: " + ex.getMessage());
                 stop();
             }
         }, delay, 1000);
