@@ -914,8 +914,9 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             }
 
             for (int j = 0; j < ret.numDamage; j++) {
-                int damage = p.readInt();
+                long damage = (long) p.readInt();
                 long hitDmgMax = calcDmgMax;
+
                 if (ret.skill == Buccaneer.BARRAGE || ret.skill == ThunderBreaker.BARRAGE) {
                     if (j > 3) {
                         hitDmgMax *= Math.pow(2, (j - 3));
@@ -929,11 +930,15 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     }
                 }
 
+                // 狙击技能特殊处理：固定伤害19.5万-20万
                 if (ret.skill == Marksman.SNIPE) {
-                    damage = 195000 + Randomizer.nextInt(5000);
-                    hitDmgMax = 200000;
-                } else if (ret.skill == Beginner.BAMBOO_RAIN || ret.skill == Noblesse.BAMBOO_RAIN || ret.skill == Evan.BAMBOO_THRUST || ret.skill == Legend.BAMBOO_THRUST) {
-                    hitDmgMax = 82569000; // 武陵道场最强Boss最大血量的30%
+                    damage = 195000 + Randomizer.nextInt(5000);  // 195000-199999的随机伤害
+                    hitDmgMax = 200000;  // 设置最大伤害上限为20万
+                } 
+                // 竹林雨/竹林突刺技能特殊处理：用于武陵道场Boss战
+                else if (ret.skill == Beginner.BAMBOO_RAIN || ret.skill == Noblesse.BAMBOO_RAIN 
+                        || ret.skill == Evan.BAMBOO_THRUST || ret.skill == Legend.BAMBOO_THRUST) {
+                    hitDmgMax = 82569000; // 设置为武陵道场最强Boss最大血量的30%，即82569000
                 }
 
                 long maxWithCrit = hitDmgMax;
@@ -944,13 +949,13 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
 
 
                 // 如果伤害超过我们计算值的2.5倍，则添加一个自动封禁点数，并将伤害调整为上限值。
-                if (chr.getAutoBanManager().useAntiCheat() && damage > maxWithCrit * 2.5) {
+                if (chr.getAutoBanManager().useAntiCheat() && (damage < 0 || damage > maxWithCrit * 2.5)) {
                     retban = AutobanFactory.DAMAGE_HACK.addPoint(chr.getAutoBanManager(),
                             (ret.skill > 0 ? "技能: " + SkillFactory.getSkillName(ret.skill) + "[Lv." + ret.skilllevel + "](" + ret.skill + ")" : "普通攻击: ") +
                             " 伤害: " + damage + " 预警: " + maxWithCrit * 2.5 + " 已纠正: " + maxWithCrit +
                             " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null")
                     );
-                    if (chr.getAutoBanManager().useAntiCheat()) {
+                    if (chr.getAutoBanManager().useAntiCheat() && retban == 0) {
                         int tmpdamge = (int) Math.min(damage - maxWithCrit,Integer.MAX_VALUE);
                         chr.getAutoBanManager().applyLoseHpMp(tmpdamge,tmpdamge,"检测到使用倍攻，");
                     }
@@ -971,10 +976,10 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     damage = -Integer.MAX_VALUE + damage - 1;
                 }
                 if (chr.getAutoBanManager().useAntiCheat() && j > maxattack && retban == 0) {
-                    chr.getAutoBanManager().applyLoseHpMp(damage,damage,"检测到修改技能段数，");
+                    chr.getAutoBanManager().applyLoseHpMp((int) damage,(int) damage,"检测到修改技能段数，");
                     damage = 0; // 将此段伤害取消，防止技能段数错误导致其他角色掉线报38错误。
                 }
-                allDamageNumbers.add(damage);
+                allDamageNumbers.add((int) damage);
             }
             if (ret.skill != Corsair.RAPID_FIRE || ret.skill != Aran.HIDDEN_FULL_DOUBLE || ret.skill != Aran.HIDDEN_FULL_TRIPLE || ret.skill != Aran.HIDDEN_OVER_DOUBLE || ret.skill != Aran.HIDDEN_OVER_TRIPLE) {
                 p.skip(4);

@@ -184,7 +184,7 @@ public class AutobanManager {
         int actualMpLoss = Math.min(mpToLose, chr.getMaxMp());
 
         // 使用addMPHP同时扣除HP和MP
-        chr.addMPHP(-actualHpLoss, -actualMpLoss);
+        chr.addMPHP(actualHpLoss, actualMpLoss);
 
         // 记录日志
         if (useAutoBanLog()) {

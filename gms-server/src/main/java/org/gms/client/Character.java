@@ -2358,60 +2358,10 @@ public class Character extends AbstractCharacterObject {
      * 启动自动吸物定时器
      */
     public void startCheatItemVac() {
-        if (!isLoggedInWorld() || pets[0] == null) {// 前置条件检查
-            return;
-        }
-
-        chrLock.lock();
-        try {
-            if (!isLoggedInWorld() || pets[0] == null) {// 双重检查（加锁后再次验证）
-                return;
-            }
-            stopCheatItemVac();// 停止现有定时器
-            
-            ItemVacPlugin itemVacPlugin = cheatManager.getPlugin("ItemVac");
-            if (itemVacPlugin == null) {
-                return;
-            }
-            
-            // 参数验证
-            if (!itemVacPlugin.updatePetVacParam() || !itemVacPlugin.isEnable()) {
-                return;
-            }
-            
-            int delay = itemVacPlugin.getSleep();
-            if (delay <= 0) {
-                return;
-            }
-
-            // 启动插件
-            itemVacPlugin.start();
-            
-            if (itemVacPlugin.isShowParams()) {//是否显示宠吸参数提示
-                StringBuilder sb = new StringBuilder();
-
-                // 转换为秒，保留1位小数
-                double intervalSeconds = delay / 1000.0;
-
-                sb.append("#e#b宠物智能拾取参数#k#n\r\n");
-                sb.append("════════════════\r\n");
-                sb.append(String.format("多人事件拾取：%s\r\n", itemVacPlugin.isAllowInEvent() ? "#b√#k" : "#r×#k"));
-                sb.append(String.format("智能拾取金币：%s\r\n", isEquippedMesoMagnet() ? "#b√#k" : "#r×#k"));
-                sb.append(String.format("智能拾取物品：%s\r\n", isEquippedItemPouch() ? "#b√#k" : "#r×#k"));
-                sb.append(String.format("智能过滤物品：%s\r\n", isEquippedPetItemIgnore() ? "#b√#k" : "#r×#k"));
-                sb.append(String.format("拾取超时物品：%s\r\n", isEquippedPetItemScales() ? "#b√#k" : "#r×#k"));
-                sb.append(String.format("智能拾取半径：%.0f 码\r\n", itemVacPlugin.getRadius() / 30));
-                sb.append(String.format("智能拾取间隔：%.1f 秒\r\n", intervalSeconds));
-                sb.append("════════════════\r\n");
-                sb.append("使用宠物装备激活特定功能\r\n");
-                showHint(sb.toString(), 200); // 显示提示
-            }
-        } catch (Exception ex) {
-            log.error("角色 {} 自动宠吸定时器启动失败", name, ex);
-            // 异常时清理资源
-            stopCheatItemVac();
-        } finally {
-            chrLock.unlock();
+        if (cheatManager == null) return;
+        ItemVacPlugin itemVacPlugin = cheatManager.getPlugin("ItemVac");
+        if (itemVacPlugin != null) {
+            itemVacPlugin.startCheatItemVac();
         }
     }
 
@@ -2419,17 +2369,14 @@ public class Character extends AbstractCharacterObject {
      * 停止自动吸物定时器
      */
     public void stopCheatItemVac() {
-        chrLock.lock();
-        try {
-            // 停止内置辅助插件
-            ItemVacPlugin itemVacPlugin = cheatManager.getPlugin("ItemVac");
-            if (itemVacPlugin != null) {
-                itemVacPlugin.stop();
-            }
-        } finally {
-            chrLock.unlock();
+        if (cheatManager == null) return;
+        ItemVacPlugin itemVacPlugin = cheatManager.getPlugin("ItemVac");
+        if (itemVacPlugin != null) {
+            itemVacPlugin.stop();
         }
     }
+    
+    // 修复遗留的不完整代码块
     private void stopExtraTask() {
         chrLock.lock();
         try {
