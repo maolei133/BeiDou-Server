@@ -31,7 +31,6 @@ import org.gms.client.BuddylistEntry;
 import org.gms.client.Character;
 import org.gms.client.Family;
 import org.gms.config.GameConfig;
-import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
 import org.gms.dao.entity.PlayernpcsFieldDO;
 import org.gms.dao.mapper.PlayernpcsFieldMapper;
@@ -251,18 +250,18 @@ public class World {
         }
 
         TimerManager tman = TimerManager.getInstance();
-        petsSchedule = tman.register(new PetFullnessTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1));
-        srvMessagesSchedule = tman.register(new ServerMessageTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10));
-        mountsSchedule = tman.register(new MountTirednessTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1));
-        merchantSchedule = tman.register(new HiredMerchantTask(this), 10 * MINUTES.toMillis(1), 10 * MINUTES.toMillis(1));
-        timedMapObjectsSchedule = tman.register(new TimedMapObjectTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1));
-        charactersSchedule = tman.register(new CharacterAutosaverTask(this), HOURS.toMillis(1), HOURS.toMillis(1));
-        marriagesSchedule = tman.register(new WeddingReservationTask(this), MINUTES.toMillis(GameConfig.getServerLong("wedding_reservation_interval")), MINUTES.toMillis(GameConfig.getServerLong("wedding_reservation_interval")));
-        mapOwnershipSchedule = tman.register(new MapOwnershipTask(this), SECONDS.toMillis(20), SECONDS.toMillis(20));
-        fishingSchedule = tman.register(new FishingTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10));
-        partySearchSchedule = tman.register(new PartySearchTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10));
-        timeoutSchedule = tman.register(new TimeoutTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10));
-        hpDecSchedule = tman.register(new CharacterHpDecreaseTask(this), GameConfig.getServerLong("map_damage_overtime_interval"), GameConfig.getServerLong("map_damage_overtime_interval"));
+        petsSchedule = tman.register(new PetFullnessTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1)); // 注册宠物饱食度任务，每1分钟检查一次宠物饥饿状态
+        srvMessagesSchedule = tman.register(new ServerMessageTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10)); // 注册服务器消息任务，每10秒广播一次服务器消息
+        mountsSchedule = tman.register(new MountTirednessTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1)); // 注册坐骑疲劳度任务，每1分钟检查一次坐骑疲劳状态
+        merchantSchedule = tman.register(new HiredMerchantTask(this), 10 * MINUTES.toMillis(1), 10 * MINUTES.toMillis(1)); // 注册雇佣商人任务，每10分钟检查一次商人状态和过期时间
+        timedMapObjectsSchedule = tman.register(new TimedMapObjectTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1)); // 注册定时地图对象任务，每1分钟清理一次过期的地图对象
+        charactersSchedule = tman.register(new CharacterAutosaverTask(this), MINUTES.toMillis(30), MINUTES.toMillis(30)); // 注册角色自动保存任务，每30分钟自动保存一次所有在线角色数据
+        marriagesSchedule = tman.register(new WeddingReservationTask(this), MINUTES.toMillis(GameConfig.getServerLong("wedding_reservation_interval")), MINUTES.toMillis(GameConfig.getServerLong("wedding_reservation_interval"))); // 注册婚礼预约任务，根据配置间隔检查婚礼预约状态
+        mapOwnershipSchedule = tman.register(new MapOwnershipTask(this), SECONDS.toMillis(20), SECONDS.toMillis(20)); // 注册地图所有权任务，每20秒检查一次地图所有权归属
+        fishingSchedule = tman.register(new FishingTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10)); // 注册钓鱼任务，每10秒检查一次钓鱼状态并处理钓鱼结果
+        partySearchSchedule = tman.register(new PartySearchTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10)); // 注册组队搜索任务，每10秒更新一次组队搜索列表
+        timeoutSchedule = tman.register(new TimeoutTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10)); // 注册超时检查任务，每10秒检查一次各类超时事件
+        hpDecSchedule = tman.register(new CharacterHpDecreaseTask(this), GameConfig.getServerLong("map_damage_overtime_interval"), GameConfig.getServerLong("map_damage_overtime_interval")); // 注册角色HP减少任务，根据配置间隔对特定地图的角色造成持续伤害
 
         if (GameConfig.getServerBoolean("use_family_system")) {
             long timeLeft = Server.getTimeLeftForNextDay();
