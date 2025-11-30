@@ -9830,8 +9830,10 @@ public class Character extends AbstractCharacterObject {
     }
 
     public void updateOnlineTime() {
-        String strNewOnlineTime = String.valueOf(m_iCurrentOnlineTime);
-        getAbstractPlayerInteraction().saveOrUpdateAccountExtendValue("每日在线时间", strNewOnlineTime, true);
+        if (m_iCurrentOnlineTime > 0) { //在线时间小于0不保存，避免刚上线立马掉线导致在线时间清0
+            String strNewOnlineTime = String.valueOf(m_iCurrentOnlineTime);
+            getAbstractPlayerInteraction().saveOrUpdateAccountExtendValue("每日在线时间", strNewOnlineTime, true);
+        }
     }
 
     /**
