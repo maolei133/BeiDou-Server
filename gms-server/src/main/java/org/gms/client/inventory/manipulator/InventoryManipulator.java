@@ -412,6 +412,7 @@ public class InventoryManipulator {
 
     public static void removeFromSlot(Client c, InventoryType type, short slot, short quantity, boolean fromDrop, boolean consume) {
         Character chr = c.getPlayer();
+        if (chr == null) return;    //避免角色掉线导致空指针报错
         Inventory inv = chr.getInventory(type);
         Item item = inv.getItem(slot);
         boolean allowZero = consume && ItemConstants.isRechargeable(item.getItemId());
