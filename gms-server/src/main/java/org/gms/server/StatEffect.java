@@ -334,8 +334,13 @@ public class StatEffect {
                     ret.mmpR = (byte) DataTool.getInt("mmpR", source, 0);
                     ret.mmpRRate = (short) (DataTool.getInt("mmpRRate", source, 0) * 100);
 
-                    addBuffStatPairToListIfNotZero(statups, BuffStat.HYPERBODYHP, (int) ret.mhpR);
-                    addBuffStatPairToListIfNotZero(statups, BuffStat.HYPERBODYMP, (int) ret.mmpR);
+                    if (isHpMpRecovery(sourceid)) {//任务3514 [时间神殿]出售情感的魔法术士 给的道具，如果不使用REC，会造成客户端闪退。
+                        addBuffStatPairToListIfNotZero(statups, BuffStat.HPREC, (int) ret.mhpR);
+                        addBuffStatPairToListIfNotZero(statups, BuffStat.MPREC, (int) ret.mmpR);
+                    } else { //修复武陵道馆加血加蓝道具
+                        addBuffStatPairToListIfNotZero(statups, BuffStat.HYPERBODYHP, (int) ret.mhpR);
+                        addBuffStatPairToListIfNotZero(statups, BuffStat.HYPERBODYMP, (int) ret.mmpR);
+                    }
 
                 } else if (ItemId.isRateCoupon(sourceid)) {
                     switch (DataTool.getInt("expR", source, 0)) {
