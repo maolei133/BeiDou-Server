@@ -2211,6 +2211,7 @@ public class Character extends AbstractCharacterObject {
     public static boolean deleteCharFromDB(Character player, int senderAccId) {
         try {
             characterService.deleteCharFromDB(player, senderAccId);
+            Server.getInstance().deleteCharacterEntry(senderAccId, player.getId());// 删除缓存,防止角色槽满后无法再次建立角色
             return true;
         } catch (Exception e) {
             log.error(I18nUtil.getLogMessage("Character.deleteCharFromDB.error1"), e);
