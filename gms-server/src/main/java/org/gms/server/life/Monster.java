@@ -90,6 +90,8 @@ public class Monster extends AbstractLoadedLife {
     private MonsterStats stats;
     private final AtomicInteger hp = new AtomicInteger(1);
     private final AtomicLong maxHpPlusHeal = new AtomicLong(1);
+    private final AtomicInteger lastSkillId = new AtomicInteger(0);  // 记录上一次玩家释放的技能ID，线程安全
+    private final AtomicInteger lastSkillTargetCount = new AtomicInteger(0);  // 记录上一次玩家攻击的目标数，线程安全
     private int mp;
     private WeakReference<Character> controller = new WeakReference<>(null);
     private boolean controllerHasAggro, controllerKnowsAboutAggro, controllerHasPuppet;
@@ -109,6 +111,8 @@ public class Monster extends AbstractLoadedLife {
     private int parentMobOid = 0;
     private int spawnEffect = 0;
     private final HashMap<Integer, AtomicLong> takenDamage = new HashMap<>();
+    private final HashMap<Integer, Long> takenDamageTime = new HashMap<>();  // 记录每个玩家了最后一次伤害的时间戳
+    private final HashMap<Integer, Boolean> summonDamageFlag = new HashMap<>();  // 标记是否是召唤兽伤害，key=playerId, value=true为召唤兽,false为玩家直接伤害
     private ScheduledFuture<?> monsterItemDrop = null;
     private Runnable removeAfterAction = null;
     private boolean availablePuppetUpdate = true;
@@ -251,6 +255,42 @@ public class Monster extends AbstractLoadedLife {
 
     public int getMaxHp() {
         return stats.getHp();
+    }
+
+    /**
+     * 获取玩家上一次释放的技能ID
+     * 
+     * @return 上一次使用的技能ID
+     */
+    public int getLastSkillId() {
+        return lastSkillId.get();
+    }
+
+    /**
+     * 设置玩家上一次释放的技能ID
+     * 
+     * @param skillId 要设置的技能ID
+     */
+    public void setLastSkillId(int skillId) {
+        lastSkillId.set(skillId);
+    }
+
+    /**
+     * 获取玩家上一次伤害的目标数
+     * 
+     * @return 上一次技能的目标数
+     */
+    public int getLastSkillTargetCount() {
+        return lastSkillTargetCount.get();
+    }
+
+    /**
+     * 设置玩家上一次伤害的目标数
+     * 
+     * @param targetCount 要设置的目标数
+     */
+    public void setLastSkillTargetCount(int targetCount) {
+        lastSkillTargetCount.set(targetCount);
     }
 
     public int getMp() {
@@ -438,7 +478,7 @@ public class Monster extends AbstractLoadedLife {
             */
 
             if (damage > 0) {
-                this.applyDamage(attacker, damage, stayAlive, false);
+                this.applyDamage(attacker, damage, stayAlive, false, false);
                 if (!this.isAlive()) {  // monster just died
                     lastHit = true;
                 }
@@ -454,15 +494,21 @@ public class Monster extends AbstractLoadedLife {
      * @param from      the player that dealt the damage
      * @param damage
      * @param stayAlive
+     * @param isFromSummon  true为召唤兽伤害，false为玩家直接伤害
      */
-    private void applyDamage(Character from, int damage, boolean stayAlive, boolean fake) {
+    private void applyDamage(Character from, int damage, boolean stayAlive, boolean fake, boolean isFromSummon) {
         Integer trueDamage = applyAndGetHpDamage(damage, stayAlive);
         if (trueDamage == null) {
             return;
         }
 
         if (GameConfig.getServerBoolean("use_debug") && from.isGM()) {
-            from.dropMessage(5, I18nUtil.getMessage("Monster.applyDamage.message1") + this.getId() + ", OID " + this.getObjectId());
+            from.dropMessage(5, I18nUtil.getMessage("Monster.applyDamage.message1", 
+                this.getObjectId(), 
+                this.getName(), 
+                this.getId(), 
+                this.getLevel(),
+                trueDamage));
         }
 
         if (!fake) {
@@ -474,12 +520,25 @@ public class Monster extends AbstractLoadedLife {
         } else {
             takenDamage.get(from.getId()).addAndGet(trueDamage);
         }
+        // 记录伤害时间戳
+        takenDamageTime.put(from.getId(), System.currentTimeMillis());
+        // 记录是否是召唤兽伤害，如果玩家有直接伤害会覆盖召唤兽的标记
+        if (!isFromSummon) {
+            from.setLastMonsterDamageTime(System.currentTimeMillis());//更新玩家的最后活跃时间戳
+            summonDamageFlag.put(from.getId(), false);//伤害来源：玩家
+        } else if (!summonDamageFlag.containsKey(from.getId())) {
+            summonDamageFlag.put(from.getId(), true);//伤害来源：召唤兽
+        }
 
         broadcastMobHpBar(from);
     }
 
     public void applyFakeDamage(Character from, int damage, boolean stayAlive) {
-        applyDamage(from, damage, stayAlive, true);
+        applyDamage(from, damage, stayAlive, true, false);
+    }
+    
+    public void applySummonDamage(Character from, int damage, boolean stayAlive) {
+        applyDamage(from, damage, stayAlive, false, true);
     }
 
     public void heal(int hp, int mp) {
@@ -534,7 +593,7 @@ public class Monster extends AbstractLoadedLife {
         return avgExpReward + Math.sqrt(varExpReward);
     }
 
-    private void distributePlayerExperience(Character chr, float exp, float partyBonusMod, int totalPartyLevel, boolean highestPartyDamager, boolean whiteExpGain, boolean hasPartySharers) {
+    private void distributePlayerExperience(Character chr, float exp, float partyBonusMod, int totalPartyLevel, boolean highestPartyDamager, boolean whiteExpGain, boolean hasPartySharers, float activeExp, boolean isActiveMember) {
         float playerExp = (GameConfig.getServerFloat("exp_split_common_mod") * chr.getLevel()) / totalPartyLevel;
         if (highestPartyDamager) {
             playerExp += GameConfig.getServerFloat("exp_split_mvp_mod");
@@ -542,6 +601,11 @@ public class Monster extends AbstractLoadedLife {
 
         playerExp *= exp;
         float bonusExp = partyBonusMod * playerExp;
+        
+        // 活跃成员额外经验（活跃成员获得所有被队员打死的怪物的活跃加成）
+        if (isActiveMember && activeExp > 0) {
+            bonusExp += activeExp;
+        }
 
         this.giveExpToCharacter(chr, playerExp, bonusExp, whiteExpGain, hasPartySharers);
         giveFamilyRep(chr.getFamilyEntry());
@@ -553,6 +617,24 @@ public class Monster extends AbstractLoadedLife {
 
         long maxDamage = 0, partyDamage = 0;
         Character participationMvp = null;
+        // 计算组队活跃成员数量（需要检查时效）
+        long currentTime = System.currentTimeMillis();
+        int activeMembers = 0;
+        int timeoutSeconds = GameConfig.getServerInt("party_active_member_timeout_seconds");
+        long timeoutMillis = timeoutSeconds * 1000L;
+        
+        // 获取组队成员列表（用于后续多次使用）
+        Character anyPartyMember = partyParticipation.keySet().iterator().next();
+        List<Character> allPartyMembers = anyPartyMember.getPartyMembersOnSameMap();
+        
+        // 计算活跃成员数（从组队成员出发，检查每个成员的Character级别活跃时间戳）
+        // 这确保了不管玩家是否伤害了本只怪物，只要在活跃时间窗口内伤害过其他怪物，就计入活跃
+        for (Character member : allPartyMembers) {
+            long lastDamageTime = member.getLastMonsterDamageTime();
+            if (lastDamageTime > 0 && currentTime - lastDamageTime <= timeoutMillis) {
+                activeMembers++;
+            }
+        }
         for (Entry<Character, Long> e : partyParticipation.entrySet()) {
             long entryDamage = e.getValue();
             partyDamage += entryDamage;
@@ -572,7 +654,7 @@ public class Monster extends AbstractLoadedLife {
 
         // thanks G h o s t, Alfred, Vcoc, BHB for poiting out a bug in detecting party members after membership transactions in a party took place
         if (GameConfig.getServerBoolean("use_enforce_mob_level_range")) {
-            for (Character member : partyParticipation.keySet().iterator().next().getPartyMembersOnSameMap()) {
+            for (Character member : allPartyMembers) {
                 if (!leechInterval.inInterval(member.getLevel())) {
                     underleveled.add(member);
                     continue;
@@ -582,7 +664,7 @@ public class Monster extends AbstractLoadedLife {
                 expMembers.add(member);
             }
         } else {    // thanks Ari for noticing unused server flag after EXP system overhaul
-            for (Character member : partyParticipation.keySet().iterator().next().getPartyMembersOnSameMap()) {
+            for (Character member : allPartyMembers) {
                 totalPartyLevel += member.getLevel();
                 expMembers.add(member);
             }
@@ -594,10 +676,106 @@ public class Monster extends AbstractLoadedLife {
         // thanks Crypter for reporting an insufficiency on party exp bonuses
         boolean hasPartySharers = membersSize > 1;
         float partyBonusMod = hasPartySharers ? 0.05f * membersSize : 0.0f;
-
+        
+        // 计算活跃成员加成倍率，仅当activeMemberBonus > 0且activeMembers >= 2时才有加成
+        float activeMemberBonus = GameConfig.getServerFloat("party_active_member_exp_bonus");
+        // 计算活跃成员数量加成：只有至2个活跃成员才能触发加成
+        int activeMembersBonus = Math.max(0, activeMembers - 1);
+        // 当activeMemberBonus <= 0或activeMembersBonus == 0时，activeExp应为0
+        float activeExp = (activeMemberBonus > 0 && activeMembersBonus > 0) ? participationExp * activeMemberBonus * activeMembersBonus : 0.0f;
+        
+        // 检查是否启用活跃成员强制模式和动态加成模式
+        boolean enforcementEnabled = GameConfig.getServerBoolean("party_active_member_enforcement_enabled");
+        boolean dynamicBonusEnabled = GameConfig.getServerBoolean("party_active_member_dynamic_bonus_enabled");
+        
+        // 分离活跃成员和不活跃成员
+        List<Character> activeMembersList = new LinkedList<>();
+        List<Character> inactiveMembersList = new LinkedList<>();
+        
         for (Character mc : expMembers) {
-            distributePlayerExperience(mc, participationExp, partyBonusMod, totalPartyLevel, mc == participationMvp, isWhiteExpGain(mc, personalRatio, sdevRatio), hasPartySharers);
-            giveFamilyRep(mc.getFamilyEntry());
+            long lastDamageTime = mc.getLastMonsterDamageTime();
+            boolean isActiveMember = lastDamageTime > 0 && (currentTime - lastDamageTime <= timeoutMillis);
+            
+            if (isActiveMember) {
+                activeMembersList.add(mc);
+            } else {
+                inactiveMembersList.add(mc);
+            }
+        }
+        
+        // 处理enforcementEnabled模式：不活跃成员不获得经验，但经验补给活跃成员
+        if (enforcementEnabled) {
+            if (!inactiveMembersList.isEmpty() && !activeMembersList.isEmpty()) {
+                // 计算不活跃成员本应获得的经验总和
+                float inactiveMembersExp = 0.0f;
+                for (Character inactiveMember : inactiveMembersList) {
+                    float memberExp = (GameConfig.getServerFloat("exp_split_common_mod") * inactiveMember.getLevel()) / totalPartyLevel;
+                    if (inactiveMember == participationMvp) {
+                        memberExp += GameConfig.getServerFloat("exp_split_mvp_mod");
+                    }
+                    memberExp *= participationExp;
+                    float bonusExp = partyBonusMod * memberExp;
+                    inactiveMembersExp += (memberExp + bonusExp);
+                }
+                
+                // 不活跃成员的经验补给活跃成员，简化为直接一次性添加
+                activeExp += inactiveMembersExp;
+            }
+            
+            // 需要重新计算partyBonusMod基于活跃成员数量和活跃加成倍率
+            boolean hasActiveMemberSharers = activeMembersList.size() > 1;
+            float activePartyBonusMod = hasActiveMemberSharers ? activeMemberBonus * activeMembersList.size() : 0.0f;
+            
+            // 仅分配给活跃成员
+            for (Character mc : activeMembersList) {
+                distributePlayerExperience(mc, participationExp, activePartyBonusMod, totalPartyLevel, mc == participationMvp, isWhiteExpGain(mc, personalRatio, sdevRatio), hasActiveMemberSharers, activeExp, true);
+                giveFamilyRep(mc.getFamilyEntry());
+            }
+        } else if (dynamicBonusEnabled && !activeMembersList.isEmpty() && !inactiveMembersList.isEmpty() && activeMemberBonus > 0) {
+            // 动态加成模式：所有成员都获得基础经验
+            // 活跃成员获得activeMemberBonus的奖励经验
+            // 挿機成员应扣除activeMemberBonus比例的经验
+            float totalInactiveExp = 0.0f;
+            for (Character inactiveMember : inactiveMembersList) {
+                float memberExp = (GameConfig.getServerFloat("exp_split_common_mod") * inactiveMember.getLevel()) / totalPartyLevel;
+                if (inactiveMember == participationMvp) {
+                    memberExp += GameConfig.getServerFloat("exp_split_mvp_mod");
+                }
+                memberExp *= participationExp;
+                totalInactiveExp += memberExp;  // 只计基础经验，不计组队奖励
+            }
+            
+                        
+            // 不活跃成员处理逻辑：基础经验扣除activeMemberBonus * totalInactiveExp / inactiveMemberCount后分离
+            float penaltyPerInactiveMember = activeMemberBonus * totalInactiveExp / inactiveMembersList.size();
+            for (Character inactiveMember : inactiveMembersList) {
+                float memberExp = (GameConfig.getServerFloat("exp_split_common_mod") * inactiveMember.getLevel()) / totalPartyLevel;
+                if (inactiveMember == participationMvp) {
+                    memberExp += GameConfig.getServerFloat("exp_split_mvp_mod");
+                }
+                memberExp *= participationExp;
+                float bonusExp = partyBonusMod * memberExp;
+                // 扣除惩罚经验
+                bonusExp -= penaltyPerInactiveMember;
+                distributePlayerExperience(inactiveMember, participationExp, partyBonusMod, totalPartyLevel, inactiveMember == participationMvp, isWhiteExpGain(inactiveMember, personalRatio, sdevRatio), hasPartySharers, 0.0f, false);
+                giveFamilyRep(inactiveMember.getFamilyEntry());
+            }
+            
+            // 活跃成员获得基础经验 * activeMemberBonus的奖励经验
+            float bonusPerActiveMember = activeMemberBonus * totalInactiveExp / activeMembersList.size();
+            for (Character activeMember : activeMembersList) {
+                distributePlayerExperience(activeMember, participationExp, partyBonusMod, totalPartyLevel, activeMember == participationMvp, isWhiteExpGain(activeMember, personalRatio, sdevRatio), hasPartySharers, activeExp + bonusPerActiveMember, true);
+                giveFamilyRep(activeMember.getFamilyEntry());
+            }
+        } else {
+            // 正常模式：所有成员正常获得经验，活跃成员额外获得activeExp
+            for (Character mc : expMembers) {
+                long lastDamageTime = mc.getLastMonsterDamageTime();
+                boolean isActiveMember = lastDamageTime > 0 && (currentTime - lastDamageTime <= timeoutMillis);
+                
+                distributePlayerExperience(mc, participationExp, partyBonusMod, totalPartyLevel, mc == participationMvp, isWhiteExpGain(mc, personalRatio, sdevRatio), hasPartySharers, activeExp, isActiveMember);
+                giveFamilyRep(mc.getFamilyEntry());
+            }
         }
     }
 
@@ -670,7 +848,7 @@ public class Monster extends AbstractLoadedLife {
             float exp = chrParticipation.getValue() * expPerDmg;
             Character chr = chrParticipation.getKey();
 
-            distributePlayerExperience(chr, exp, 0.0f, chr.getLevel(), true, isWhiteExpGain(chr, personalRatio, sdevRatio), false);
+            distributePlayerExperience(chr, exp, 0.0f, chr.getLevel(), true, isWhiteExpGain(chr, personalRatio, sdevRatio), false, 0.0f, false);
         }
 
         for (Map<Character, Long> partyParticipation : partyExpDist.values()) {
@@ -854,7 +1032,7 @@ public class Monster extends AbstractLoadedLife {
                 }, getAnimationTime("die1"));
             }
         } else {  // is this even necessary?
-            log.warn("[CRITICAL LOSS] toSpawn is null for {}", getName());
+            log.warn("[严重丢失] {} 的 toSpawn 为 null", getName());
         }
 
         Character looter = map.getCharacterById(getHighestDamagerId());
@@ -1655,7 +1833,7 @@ public class Monster extends AbstractLoadedLife {
             if (damage > 0) {
                 lockMonster();
                 try {
-                    applyDamage(chr, damage, true, false);
+                    applyDamage(chr, damage, true, false, false);
                 } finally {
                     unlockMonster();
                 }

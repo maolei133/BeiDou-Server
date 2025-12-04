@@ -249,6 +249,7 @@ public class Character extends AbstractCharacterObject {
     @Getter
     private long lastUsedCashItem;
     private long lastExpression = 0;
+    private long lastMonsterDamageTime = 0;  // 记录最后一次对怪物造成伤害的时间戳，用于判断是否是组队活跃成员
     @Setter
     private long jailExpiration = -1;
     private transient int localstr, localdex, localluk, localint_, localmagic, localwatk;
@@ -659,6 +660,14 @@ public class Character extends AbstractCharacterObject {
 
     public void setNpcCooldown(long d) {
         npcCd = d;
+    }
+    
+    public long getLastMonsterDamageTime() {
+        return lastMonsterDamageTime;
+    }
+    
+    public void setLastMonsterDamageTime(long time) {
+        this.lastMonsterDamageTime = time;
     }
 
     public void addCooldown(int skillId, long startTime, long length) {
@@ -9245,7 +9254,14 @@ public class Character extends AbstractCharacterObject {
     private void equipPendantOfSpirit() {   //精灵吊坠装备时长经验计算
         if (pendantOfSpirit == null) {
             pendantOfSpirit = TimerManager.getInstance().register(() -> {
+                String type = "精灵吊坠时长";
+                ExtendValueDO extendValueDO = ExtendUtil.getExtendValue(String.valueOf(id), ExtendType.CHARACTER_EXTEND_DAILY.getType(), type);
+                // 检查是否需要加载离线保存的精灵吊坠时长（默认false）
+                if (GameConfig.getServerBoolean("offline_pendant_of_spirit_enabled") && extendValueDO != null && extendValueDO.getExtendValue() != null) {
+                    pendantExp = Byte.parseByte(extendValueDO.getExtendValue());
+                }
                 if (pendantExp < 3) {
+                    ExtendUtil.saveOrUpdateExtendValue(String.valueOf(id),ExtendType.CHARACTER_EXTEND_DAILY.getType(), type,String.valueOf(pendantExp));//保存时长
                     pendantExp++;
                     //用于准确提示装备1小时内还是装备经过几小时
                     message(I18nUtil.getMessage(pendantExp <= 2 ? "Character.equipPendantOfSpirit.message1" : "Character.equipPendantOfSpirit.message2", pendantExp == 3 ? 2 : pendantExp, pendantExp * 10));

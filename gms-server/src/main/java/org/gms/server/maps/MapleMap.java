@@ -664,10 +664,35 @@ public class MapleMap {
 
         Item idrop;
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
-
+        int targetSkillId = mob.getLastSkillId(); //获取上一次玩家释放的技能ID
+        int targetCount = mob.getLastSkillTargetCount(); //获取上次技能释放的目标数量
+        
+        // 读取掉率调整配置，避免在循环内重复查询
+        boolean isBoss = mob.isBoss();
+        double equipMultiplier = GameConfig.getServerDouble("equip_drop_rate_multiplier",1); // 获取装备掉率倍率配置
+        boolean aoeAdjustmentEnabled = GameConfig.getServerBoolean("aoe_drop_rate_adjustment_enabled"); // 获取是否启用群攻掉率调整配置
+        double penaltyFactor = aoeAdjustmentEnabled ? GameConfig.getServerDouble("aoe_drop_rate_penalty_factor") : 0.0d; // 获取群攻掉率惩罚系数，若未启用则为0
+        boolean shouldApplyAoeAdjustment = aoeAdjustmentEnabled && targetCount > 1; // 判断是否需要应用群攻掉率调整（启用配置且目标数量大于1）
+        
         for (final MonsterDropEntry de : dropEntry) {
             float cardRate = chr.getCardRate(de.itemId);
             int dropChance = (int) Math.min((float) de.chance * chRate * cardRate, Integer.MAX_VALUE);
+
+            // 针对非BOSS怪物的装备和群攻掉率调整
+            if (!isBoss && de.itemId != 0 && !ii.isQuestItem(de.itemId)) {
+                // 装备掉率调整
+                if (equipMultiplier != 1 && ItemConstants.getInventoryType(de.itemId) == InventoryType.EQUIP) {
+                    dropChance = (int) (dropChance * equipMultiplier);
+                }
+                // 群攻掉率调整（在装备调整基础上进一步调整）
+                if (shouldApplyAoeAdjustment) {
+                    float rateFactor = (float) (1.0d / (1.0d + (targetCount - 1) * penaltyFactor));
+                    if (rateFactor < 0.1f) {
+                        rateFactor = 0.1f;
+                    }
+                    dropChance = (int) (dropChance * rateFactor);
+                }
+            }
 
             if (Randomizer.nextInt(1000000) < dropChance) {
                 if (droptype == 3) {
@@ -710,6 +735,11 @@ public class MapleMap {
     }
 
     private byte dropGlobalItemsFromMonsterOnMap(List<MonsterGlobalDropEntry> globalEntry, Point pos, byte d, byte droptype, int mobpos, Character chr, Monster mob) {
+        // 检查是否允许事件怪物掉落全局物品
+        if (mob.getMap().isEventMap() && !GameConfig.getServerBoolean("allow_event_monster_global_drops")) {
+            return d;
+        }
+
         Collections.shuffle(globalEntry);
 
         Item idrop;
@@ -1358,6 +1388,27 @@ public class MapleMap {
             }
             if (killed) {
                 killMonster(monster, chr, true);
+            }
+            return true;
+        }
+        return false;
+    }
+    
+    public boolean damageMonsterBySummon(Character chr, Monster monster, int damage) {
+        if (monster.isAlive()) {
+            monster.applySummonDamage(chr, damage, false);
+            
+            selfDestruction selfDestr = monster.getStats().selfDestruction();
+            if (selfDestr != null && selfDestr.getHp() > -1) {// should work ;p
+                if (monster.getHp() <= selfDestr.getHp()) {
+                    killMonster(monster, chr, true, selfDestr.getAction());
+                    return true;
+                }
+            }
+            
+            if (!monster.isAlive()) {
+                killMonster(monster, chr, true);
+                return true;
             }
             return true;
         }

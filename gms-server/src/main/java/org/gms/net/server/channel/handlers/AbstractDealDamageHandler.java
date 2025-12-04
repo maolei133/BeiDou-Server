@@ -152,8 +152,8 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
 
                 if (player.getAutoBanManager().useAntiCheat() && player.getMp() < attackEffect.getMpCon()) {
                     AutobanFactory.MPCON.addPoint(player.getAutoBanManager(),
-                            " 尝试使用: " + SkillFactory.getSkillName(attack.skill) + "[Lv." + attack.skilllevel + "](" + attack.skill + ")" +
-                                    " 所需MP: " + attackEffect.getMpCon() + " 当前MP: " + player.getMp() + " 已作废"
+                        " 尝试使用: " + SkillFactory.getSkillName(attack.skill) + "[Lv." + attack.skilllevel + "](" + attack.skill + ")" +
+                        " 所需MP: " + attackEffect.getMpCon() + " 当前MP: " + player.getMp() + " 已作废"
                     );
                     player.sendPacket(PacketCreator.enableActions());
                     return;
@@ -201,6 +201,8 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             }*/
 
             int totDamage = 0;
+            // 根据配置决定使用技能最大目标数还是实际伤害目标数
+            int targetCount = GameConfig.getServerBoolean("use_skill_max_target_count") ? mobCount : attack.allDamage.size();
 
             if (attack.skill == ChiefBandit.MESO_EXPLOSION) {
                 int delay = 0;
@@ -253,6 +255,12 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
 
                     if (player.getJob().isA(Job.ARAN1)) {
                         distanceToDetect += 200000; // Arans have extra range over normal warriors.
+                    }
+
+                    if ((monster.getId() >= 8800000 && monster.getId() <= 8800010) ||    //扎昆
+                            (monster.getId() >= 8810000 && monster.getId() <= 8810026)  //暗黑龙王
+                    ) { //某些组合怪物的模型比较大，需要增加攻击距离。
+                        distanceToDetect += 100000;
                     }
 
                     if (attack.skill == Aran.COMBO_SMASH || attack.skill == Aran.BODY_PRESSURE) {
@@ -537,6 +545,10 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                             }
                         }
                     }
+                    // 在伤害应用前更新怪物最后受到的技能ID和技能目标数，避免怪物被秒杀导致无法正确设置
+                    monster.setLastSkillId(attack.skill);
+                    monster.setLastSkillTargetCount(targetCount);
+
                     if (attack.skill == Paladin.HEAVENS_HAMMER) {
                         if (!monster.isBoss()) {
                             damageMonsterWithSkill(player, map, monster, monster.getHp() - 1, attack.skill, 1777);
@@ -907,15 +919,21 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 }
                 if (ret.numDamage > maxattack) {
                     retban = AutobanFactory.DAMAGE_SEGMENTS_HACK.addPoint(chr.getAutoBanManager(),
-                            "尝试使用: " + SkillFactory.getSkillName(ret.skill) + "[Lv." + ret.skilllevel + "](" + ret.skill + ")" +
-                                    " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null")+
-                                    " 伤害段数: " + ret.numDamage + " 上限: " + maxattack + " 已纠正: " + maxattack);
+                            (ret.skill > 0 ? "技能: " + SkillFactory.getSkillName(ret.skill) + "[Lv." + ret.skilllevel + "](" + ret.skill + ")" : "普通攻击: ") +
+                            " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
+                            " 段数: " + ret.numDamage + " 上限: " + maxattack + " 已纠正: " + maxattack
+                    );
                 }
             }
 
             for (int j = 0; j < ret.numDamage; j++) {
                 long damage = (long) p.readInt();
                 long hitDmgMax = calcDmgMax;
+
+                if (chr.getAutoBanManager().useAntiCheat() && j > maxattack && retban == 0) {
+                    chr.getAutoBanManager().applyLoseHpMp((int) damage,(int) damage,"检测到修改技能段数，");
+                    damage = 0; // 将此段伤害取消，防止技能段数错误导致其他角色掉线报38错误。
+                }
 
                 if (ret.skill == Buccaneer.BARRAGE || ret.skill == ThunderBreaker.BARRAGE) {
                     if (j > 3) {
@@ -947,37 +965,32 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     maxWithCrit *= 2;
                 }
 
-
                 // 如果伤害超过我们计算值的2.5倍，则添加一个自动封禁点数，并将伤害调整为上限值。
                 if (chr.getAutoBanManager().useAntiCheat() && (damage < 0 || damage > maxWithCrit * 2.5)) {
-                    retban = AutobanFactory.DAMAGE_HACK.addPoint(chr.getAutoBanManager(),
+                    int tmpretban = AutobanFactory.DAMAGE_HACK.addPoint(chr.getAutoBanManager(),
                             (ret.skill > 0 ? "技能: " + SkillFactory.getSkillName(ret.skill) + "[Lv." + ret.skilllevel + "](" + ret.skill + ")" : "普通攻击: ") +
-                            " 伤害: " + damage + " 预警: " + maxWithCrit * 2.5 + " 已纠正: " + maxWithCrit +
-                            " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null")
+                            " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
+                            " 伤害: " + damage + " 预警: " + maxWithCrit * 2.5 + " 已取消"
                     );
-                    if (chr.getAutoBanManager().useAntiCheat() && retban == 0) {
+                    if (chr.getAutoBanManager().useAntiCheat() && tmpretban == 0) {
                         int tmpdamge = (int) Math.min(damage - maxWithCrit,Integer.MAX_VALUE);
                         chr.getAutoBanManager().applyLoseHpMp(tmpdamge,tmpdamge,"检测到使用倍攻，");
                     }
-                    damage = 0; //伤害过高，基本可以确定是开了倍攻，直接置零完事。
+                    damage = 0; //负数伤害 或者 伤害过高，基本可以确定是开了倍攻，直接置零完事。
                 }
 
                 // 如果伤害超过我们计算值的2倍，则发出警告。
                 if (chr.getAutoBanManager().useAntiCheat() && damage > maxWithCrit * 2) {// 如果伤害超过2倍则进行纠正
                     AutobanFactory.DAMAGE_HACK.alert(chr,
                             (ret.skill > 0 ? "技能: " + SkillFactory.getSkillName(ret.skill) + "[Lv." + ret.skilllevel + "](" + ret.skill + ")" : "普通攻击: ") +
-                                    " 伤害: " + damage + " 上限: " + maxWithCrit + " 已纠正: " + maxWithCrit +
-                                    " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null")
+                            " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
+                            " 伤害: " + damage + " 上限: " + maxWithCrit + " 已纠正: " + maxWithCrit
                     );
                     damage = (int) maxWithCrit;
                 }
                 if (ret.skill == Marksman.SNIPE || (canCrit && damage > hitDmgMax)) {
                     // 如果技能是暴击，则反转伤害值以使其在客户端上正确显示。
                     damage = -Integer.MAX_VALUE + damage - 1;
-                }
-                if (chr.getAutoBanManager().useAntiCheat() && j > maxattack && retban == 0) {
-                    chr.getAutoBanManager().applyLoseHpMp((int) damage,(int) damage,"检测到修改技能段数，");
-                    damage = 0; // 将此段伤害取消，防止技能段数错误导致其他角色掉线报38错误。
                 }
                 allDamageNumbers.add((int) damage);
             }
