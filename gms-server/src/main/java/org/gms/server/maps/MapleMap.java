@@ -660,13 +660,15 @@ public class MapleMap {
             return d;
         }
 
-        Collections.shuffle(dropEntry);
+        // 创建副本避免并发修改问题
+        List<MonsterDropEntry> shuffledDropEntry = new ArrayList<>(dropEntry);
+        Collections.shuffle(shuffledDropEntry);
 
         Item idrop;
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
         int targetSkillId = mob.getLastSkillId(); //获取上一次玩家释放的技能ID
         int targetCount = mob.getLastSkillTargetCount(); //获取上次技能释放的目标数量
-        
+
         // 读取掉率调整配置，避免在循环内重复查询
         boolean isBoss = mob.isBoss();
         double equipMultiplier = GameConfig.getServerDouble("equip_drop_rate_multiplier",1); // 获取装备掉率倍率配置
@@ -674,7 +676,7 @@ public class MapleMap {
         double penaltyFactor = aoeAdjustmentEnabled ? GameConfig.getServerDouble("aoe_drop_rate_penalty_factor") : 0.0d; // 获取群攻掉率惩罚系数，若未启用则为0
         boolean shouldApplyAoeAdjustment = aoeAdjustmentEnabled && targetCount > 1; // 判断是否需要应用群攻掉率调整（启用配置且目标数量大于1）
         
-        for (final MonsterDropEntry de : dropEntry) {
+        for (final MonsterDropEntry de : shuffledDropEntry) {
             float cardRate = chr.getCardRate(de.itemId);
             int dropChance = (int) Math.min((float) de.chance * chRate * cardRate, Integer.MAX_VALUE);
 
@@ -740,12 +742,14 @@ public class MapleMap {
             return d;
         }
 
-        Collections.shuffle(globalEntry);
+        // 创建副本避免并发修改问题
+        List<MonsterGlobalDropEntry> shuffledGlobalEntry = new ArrayList<>(globalEntry);
+        Collections.shuffle(shuffledGlobalEntry);
 
         Item idrop;
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
 
-        for (final MonsterGlobalDropEntry de : globalEntry) {
+        for (final MonsterGlobalDropEntry de : shuffledGlobalEntry) {
             if (Randomizer.nextInt(1000000) < de.chance) {
                 if (droptype == 3) {
                     pos.x = mobpos + (d % 2 == 0 ? (40 * (d + 1) / 2) : -(40 * (d / 2)));
