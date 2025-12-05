@@ -10,15 +10,12 @@ import org.gms.client.status.MonsterStatus;
 import org.gms.client.status.MonsterStatusEffect;
 import org.gms.config.GameConfig;
 import org.gms.dao.entity.ExtendValueDO;
-import org.gms.log.CheatSystemLogger;
 import org.gms.server.TimerManager;
 import org.gms.server.life.Monster;
 import org.gms.server.maps.MapObject;
 import org.gms.server.maps.MapObjectType;
 import org.gms.server.maps.MapleMap;
 import org.gms.util.PacketCreator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.awt.*;
 import java.util.List;
@@ -28,7 +25,6 @@ import java.util.concurrent.ScheduledFuture;
 @Getter
 @Setter
 public class MobVacPlugin extends BaseCheatPlugin {
-    private static final Logger log = LoggerFactory.getLogger(MobVacPlugin.class);
     
     /** 吸怪内置辅助功能总开关 */
     private boolean enable = true;
@@ -58,9 +54,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
     private MonsterStatusEffect speedEffect;
     /** 数据库中存储的键名（内置辅助） */
     private static final String MOB_VAC_USAGE_COUNT_KEY = "每日吸怪累计次数";
-    /** 记录启动时的频道，用于检测频道切换 */
-    private int channel = -1;
-    
+
     public MobVacPlugin() {
         super();
         initSpeedEffect();
@@ -96,6 +90,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
             Skill skill = SkillFactory.getSkill(1001); // 使用基础技能
             speedEffect = new MonsterStatusEffect(stati, skill, null, false);
         } catch (Exception e) {
+            // 系统初始化异常，记录为系统级错误
             log.error("初始化SPEED状态效果失败", e);
         }
     }
@@ -298,11 +293,11 @@ public class MobVacPlugin extends BaseCheatPlugin {
                         int count = Integer.parseInt(extendValueDO.getExtendValue());
                         usageCount.put(player.getId(), count);
                     } catch (NumberFormatException e) {
-                        log.warn("解析吸怪使用次数失败，accountId: {}, value: {}", accountId, extendValueDO.getExtendValue());
+                        logPluginOperationAuto("解析吸怪使用次数失败，accountId: " + accountId + ", value: " + extendValueDO.getExtendValue());
                     }
                 }
             } catch (Exception e) {
-                log.error("从数据库加载吸怪使用次数失败", e);
+                logPluginOperationAuto("从数据库加载吸怪使用次数失败: " + e.getMessage());
             }
         }
     }
@@ -320,7 +315,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
                 
                 saveOrUpdateAccountExtendValue(accountId, extendType, MOB_VAC_USAGE_COUNT_KEY, String.valueOf(count));
             } catch (Exception e) {
-                log.error("保存吸怪使用次数到数据库失败", e);
+                logPluginOperationAuto("保存吸怪使用次数到数据库失败: " + e.getMessage());
             }
         }
     }
@@ -476,30 +471,16 @@ public class MobVacPlugin extends BaseCheatPlugin {
                                         mob.applyStatus(player, speedEffect, false, 24 * 60 * 1000);
                                     }
                                 } catch (Exception e) {
-                                    // 记录详细的错误日志
-                                    log.error("应用怪物状态效果失败 - 频道: {}, 地图: {}({}), 玩家: {}, 怪物ID: {}, 怪物OID: {}, 错误信息: {}",
-                                            mobVacMap.getChannelServer().getId(),
-                                            mobVacMap.getMapName(),
-                                            mobVacMap.getId(),
-                                            player != null ? player.getName() : "未知",
-                                            mob.getId(),
-                                            mob.getObjectId(),
-                                            e.getMessage(),
-                                            e);
+                                    // 记录业务日志 - 辆倒直下的上下文不可用
+                                    logPluginOperationAuto("应用怪物状态效果失败: " + e.getMessage());
                                 }
                             }
                         }
                     }
                 }
             } catch (Exception ex) {
-                // 记录详细的错误日志
-                log.error("吸怪功能执行异常 - 频道: {}, 地图: {}({}), 玩家: {}, 错误信息: {}",
-                    mobVacMap != null && mobVacMap.getChannelServer() != null ? mobVacMap.getChannelServer().getId() : "未知",
-                    mobVacMap != null ? mobVacMap.getMapName() : "未知",
-                    mobVacMap != null ? mobVacMap.getId() : "未知", 
-                    player != null ? player.getName() : "未知", 
-                    ex.getMessage(), 
-                    ex);
+                // 记录业务日志
+                logPluginOperationAuto("吸怪功能执行异常: " + ex.getMessage());
                 stopMobVac("发生异常: " + ex.getMessage(), true);
             }
         }, 1000, 1000); // 每1秒检查一次

@@ -1,7 +1,8 @@
 package org.gms.client.cheatsystem.core;
 
 import org.gms.client.Character;
-import org.gms.log.CheatSystemLogger;
+import org.gms.logsystem.category.DynamicCategoryManager;
+import org.gms.logsystem.facade.CheatSystemLoggerFacade;
 
 import java.util.Collection;
 import java.util.Map;
@@ -18,7 +19,7 @@ public class CheatManager {
     public CheatManager(Character player) {
         this.player = player;
         if (player != null) {
-            CheatSystemLogger.logCheatSystem(player, "创建辅助管理器实例");
+            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "创建辅助管理器实例", "INFO");
         }
     }
     
@@ -30,7 +31,7 @@ public class CheatManager {
         if (player != null) {
             plugin.initialize(player);
             plugins.put(plugin.getName(), plugin);
-            CheatSystemLogger.logCheatSystem(player, "注册辅助插件: " + plugin.getName());
+            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "注册辅助插件: " + plugin.getName(), "INFO");
         }
     }
     
@@ -43,7 +44,7 @@ public class CheatManager {
             CheatPlugin plugin = plugins.remove(pluginName);
             if (plugin != null) {
                 plugin.stop();
-                CheatSystemLogger.logCheatSystem(player, "注销辅助插件: " + pluginName);
+                CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "注销辅助插件: " + pluginName, "INFO");
             }
         }
     }
@@ -73,7 +74,7 @@ public class CheatManager {
         if (player != null) {
             plugins.values().forEach(plugin -> {
                 plugin.start();
-                CheatSystemLogger.logPluginActivation(player, plugin.getName(), "启动插件");
+                CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_ACTIVATION, "启动插件: " + plugin.getName(), "INFO");
             });
         }
     }
@@ -85,7 +86,7 @@ public class CheatManager {
         if (player != null) {
             plugins.values().forEach(plugin -> {
                 plugin.stop();
-                CheatSystemLogger.logPluginDeactivation(player, plugin.getName(), "停止插件");
+                CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_ACTIVATION, "停止插件: " + plugin.getName(), "INFO");
             });
         }
     }
@@ -97,7 +98,7 @@ public class CheatManager {
         if (player != null) {
             plugins.values().forEach(plugin -> {
                 plugin.updateConfig();
-                CheatSystemLogger.logCheatSystem(player, "更新辅助插件配置: " + plugin.getName());
+                CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "更新辅助插件配置: " + plugin.getName(), "INFO");
             });
         }
     }

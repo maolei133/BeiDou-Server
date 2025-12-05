@@ -5,7 +5,8 @@ import org.gms.client.cheatsystem.core.CheatManager;
 import org.gms.client.cheatsystem.core.CheatPlugin;
 import org.gms.client.cheatsystem.core.CheatPluginFactory;
 import org.gms.client.Character;
-import org.gms.log.CheatSystemLogger;
+import org.gms.logsystem.category.DynamicCategoryManager;
+import org.gms.logsystem.facade.CheatSystemLoggerFacade;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,7 +23,7 @@ public class CheatModuleManager {
     
     private CheatModuleManager() {
         // 私有构造函数，确保单例
-        CheatSystemLogger.logCheatSystem(null, "辅助模块管理器初始化");
+        // 辅助模块管理器不需要辜助辜助日志，应用程序已于启动时打印
     }
 
     /**
@@ -37,7 +38,7 @@ public class CheatModuleManager {
         
         CheatManager cheatManager = new CheatManager(player);
         cheatManagers.put(player.getId(), cheatManager);
-        CheatSystemLogger.logCheatSystem(player, "为玩家创建辅助管理器");
+        CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "为玩家创建辅助管理器", "INFO");
         return cheatManager;
     }
     
@@ -58,7 +59,7 @@ public class CheatModuleManager {
         CheatManager cheatManager = cheatManagers.remove(playerId);
         if (cheatManager != null) {
             cheatManager.stopAllPlugins();
-            CheatSystemLogger.logCheatSystem(null, "移除玩家ID为 " + playerId + " 的辅助管理器");
+            // 移除玉家信息不辜助辜助日志，仅清理插件
         }
     }
     
@@ -84,6 +85,8 @@ public class CheatModuleManager {
             pluginCount++;
         }
         
-        CheatSystemLogger.logCheatSystem(player, "为玩家注册了 " + pluginCount + " 个辅助插件");
+        if (pluginCount > 0) {
+            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "为玩家注册了 " + pluginCount + " 个辅助插件", "INFO");
+        }
     }
 }

@@ -4,8 +4,11 @@ import lombok.Getter;
 import lombok.Setter;
 import org.gms.client.Character;
 import org.gms.dao.entity.ExtendValueDO;
-import org.gms.log.CheatSystemLogger;
+import org.gms.logsystem.category.DynamicCategoryManager;
+import org.gms.logsystem.facade.CheatSystemLoggerFacade;
 import org.gms.util.ExtendUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
@@ -16,6 +19,9 @@ import java.util.Map;
 @Getter
 public abstract class BaseCheatPlugin implements CheatPlugin {
     protected Character player;
+    
+    // 系统日志记录器，用于初始化阶段等无上下文场景
+    protected final Logger log = LoggerFactory.getLogger(this.getClass());
     
     @Getter
     @Setter
@@ -45,7 +51,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
     public void initialize(Character player) {
         this.player = player;
         if (loggingEnabled && player != null) {
-            CheatSystemLogger.logCheatSystem(player, "初始化辅助插件: " + getName());
+            logPluginOperationAuto("初始化辅助插件: " + getName());
         }
     }
     
@@ -58,7 +64,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
                 channel = player.getClient().getChannel();
             }
             if (loggingEnabled) {
-                CheatSystemLogger.logCheatSystem(player, "启动辅助插件: " + getName());
+                logPluginOperationAuto("启动辅助插件: " + getName());
             }
             onStart();
         }
@@ -75,7 +81,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
         if (running) {
             running = false;
             if (loggingEnabled) {
-                CheatSystemLogger.logCheatSystem(player, "停止辅助插件: " + getName());
+                logPluginOperationAuto("停止辅助插件: " + getName());
             }
             onStop();
         }
@@ -91,7 +97,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected ExtendValueDO getExtendValue(String extendId, String extendType, String extendName) {
         if (loggingEnabled) {
-            CheatSystemLogger.logCheatSystem(player, String.format("读取扩展值: ID=%s, Type=%s, Name=%s", extendId, extendType, extendName));
+            logPluginOperationAuto(String.format("读取扩展值: ID=%s, Type=%s, Name=%s", extendId, extendType, extendName));
         }
         return ExtendUtil.getExtendValue(extendId, extendType, extendName);
     }
@@ -106,7 +112,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void saveOrUpdateExtendValue(String extendId, String extendType, String extendName, String extendValue) {
         if (loggingEnabled) {
-            CheatSystemLogger.logCheatSystem(player, String.format("保存扩展值: ID=%s, Type=%s, Name=%s, Value=%s", extendId, extendType, extendName, extendValue));
+            logPluginOperationAuto(String.format("保存扩展值: ID=%s, Type=%s, Name=%s, Value=%s", extendId, extendType, extendName, extendValue));
         }
         ExtendUtil.saveOrUpdateExtendValue(extendId, extendType, extendName, extendValue);
     }
@@ -121,7 +127,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected ExtendValueDO getAccountExtendValue(int accountId, String extendType, String extendName) {
         if (loggingEnabled) {
-            CheatSystemLogger.logCheatSystem(player, String.format("读取账号扩展值: AccountID=%d, Type=%s, Name=%s", accountId, extendType, extendName));
+            logPluginOperationAuto(String.format("读取账号扩展值: AccountID=%d, Type=%s, Name=%s", accountId, extendType, extendName));
         }
         return getExtendValue(String.valueOf(accountId), extendType, extendName);
     }
@@ -136,7 +142,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void saveOrUpdateAccountExtendValue(int accountId, String extendType, String extendName, String extendValue) {
         if (loggingEnabled) {
-            CheatSystemLogger.logCheatSystem(player, String.format("保存账号扩展值: AccountID=%d, Type=%s, Name=%s, Value=%s", accountId, extendType, extendName, extendValue));
+            logPluginOperationAuto(String.format("保存账号扩展值: AccountID=%d, Type=%s, Name=%s, Value=%s", accountId, extendType, extendName, extendValue));
         }
         saveOrUpdateExtendValue(String.valueOf(accountId), extendType, extendName, extendValue);
     }
@@ -151,7 +157,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected ExtendValueDO getCharacterExtendValue(int characterId, String extendType, String extendName) {
         if (loggingEnabled) {
-            CheatSystemLogger.logCheatSystem(player, String.format("读取角色扩展值: CharacterID=%d, Type=%s, Name=%s", characterId, extendType, extendName));
+            logPluginOperationAuto(String.format("读取角色扩展值: CharacterID=%d, Type=%s, Name=%s", characterId, extendType, extendName));
         }
         return getExtendValue(String.valueOf(characterId), extendType, extendName);
     }
@@ -166,7 +172,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void saveOrUpdateCharacterExtendValue(int characterId, String extendType, String extendName, String extendValue) {
         if (loggingEnabled) {
-            CheatSystemLogger.logCheatSystem(player, String.format("保存角色扩展值: CharacterID=%d, Type=%s, Name=%s, Value=%s", characterId, extendType, extendName, extendValue));
+            logPluginOperationAuto(String.format("保存角色扩展值: CharacterID=%d, Type=%s, Name=%s, Value=%s", characterId, extendType, extendName, extendValue));
         }
         saveOrUpdateExtendValue(String.valueOf(characterId), extendType, extendName, extendValue);
     }
@@ -177,7 +183,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
     protected void onStart() {
         // 默认实现为空
         if (loggingEnabled && player != null) {
-            logCheatSystem(player, "插件 " + getName() + " 启动完成");
+            logPluginOperationAuto("插件 " + getName() + " 启动完成");
         }
     }
     
@@ -187,7 +193,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
     protected void onStop() {
         // 默认实现为空
         if (loggingEnabled && player != null) {
-            logCheatSystem(player, "插件 " + getName() + " 停止完成");
+            logPluginOperationAuto("插件 " + getName() + " 停止完成");
         }
     }
     
@@ -198,7 +204,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logPluginActivation(String result) {
         if (loggingEnabled) {
-            CheatSystemLogger.logPluginActivation(player, getName(), result);
+            logPluginActivationAuto(getName() + " " + result);
         }
     }
     
@@ -209,7 +215,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logPluginDeactivation(String reason) {
         if (loggingEnabled) {
-            CheatSystemLogger.logPluginDeactivation(player, getName(), reason);
+            logPluginOperationAuto(getName() + " 停用原因: " + reason);
         }
     }
     
@@ -220,7 +226,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logPluginUsage(String details) {
         if (loggingEnabled) {
-            CheatSystemLogger.logPluginUsage(player, getName(), details);
+            logPluginOperationAuto(getName() + " 使用: " + details);
         }
     }
     
@@ -232,8 +238,39 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logCheatSystem(Character player, String message) {
         if (loggingEnabled) {
-            CheatSystemLogger.logCheatSystem(player, message);
+            logPluginOperationAuto(message);
         }
+    }
+    
+    /**
+     * 使用新日志系统记录插件事件日志（带自动上下文管理）
+     * 
+     * @param minorCategory 小类分类
+     * @param message 日志消息
+     * @param level 日志级别
+     */
+    protected void logPluginEventAuto(String minorCategory, String message, String level) {
+        if (loggingEnabled && player != null) {
+            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, minorCategory, message, level);
+        }
+    }
+    
+    /**
+     * 使用新日志系统记录插件激活日志
+     * 
+     * @param message 日志消息
+     */
+    protected void logPluginActivationAuto(String message) {
+        logPluginEventAuto(DynamicCategoryManager.Category.MINOR_PLUGIN_ACTIVATION, message, "INFO");
+    }
+    
+    /**
+     * 使用新日志系统记录插件操作日志
+     * 
+     * @param message 日志消息
+     */
+    protected void logPluginOperationAuto(String message) {
+        logPluginEventAuto(DynamicCategoryManager.Category.MINOR_PLUGIN_OPERATION, message, "INFO");
     }
     
     /**

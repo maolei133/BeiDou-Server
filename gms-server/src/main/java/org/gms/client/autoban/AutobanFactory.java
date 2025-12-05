@@ -23,8 +23,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package org.gms.client.autoban;
 
 import org.gms.client.Character;
+import org.gms.logsystem.category.DynamicCategoryManager;
+import org.gms.logsystem.core.HighPerformanceLogger;
+import org.gms.logsystem.facade.SecurityLoggerFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -124,7 +128,21 @@ public enum AutobanFactory {
         }
         if (chr.getAutoBanManager().useAutoBanLog()) {
 //            Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常提示] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + this.getName() + " - " + reason));
-            log.warn("[异常提示] 玩家 {} 在地图 {}({}) 因触发 {} - {}", chr.getName(), chr.getMap().getMapName(),chr.getMapId(), this.getName(), reason);
+            log.warn("[异常提示] 玩家 {}({}) [Lv {}] 职业:{}({}) 在地图 {}({}) 坐标({},{}) 因触发 {} {}",
+                chr.getName(), 
+                chr.getId(), 
+                chr.getLevel(),
+                chr.getJob().getName(),
+                chr.getJob().getId(),
+                chr.getMap().getMapName(),
+                chr.getMapId(), 
+                chr.getPosition().x,
+                chr.getPosition().y,
+                this.getName(), 
+                reason);
+            
+            // 根据新日志系统规则，添加新的日志记录信息
+            SecurityLoggerFacade.logSecurityEventAuto(chr, DynamicCategoryManager.Category.MINOR_HACK_DETECTION, reason, "WARN");
         }
     }
 

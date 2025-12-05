@@ -6,7 +6,6 @@ import org.gms.client.cheatsystem.core.BaseCheatPlugin;
 import org.gms.client.Character;
 import org.gms.client.inventory.Pet;
 import org.gms.config.GameConfig;
-import org.gms.log.CheatSystemLogger;
 import org.gms.server.TimerManager;
 import org.gms.server.maps.MapItem;
 import org.gms.server.maps.MapObject;
@@ -125,14 +124,14 @@ public class ItemVacPlugin extends BaseCheatPlugin {
             return false;
         }
         
-        // 检查玩家是否切换了频道
+/*        // 检查玩家是否切换了频道
         if (player.getClient() == null || 
             player.getMap() == null || 
             player.getClient().getChannel() != channel) {
             resetValues();
             logPluginActivation("失败 - 玩家切换频道");
             return false;
-        }
+        }*/
 
         // ==== 自动计算开关处理 ====
         if (!autoCalc) {
@@ -190,13 +189,13 @@ public class ItemVacPlugin extends BaseCheatPlugin {
             return false;
         }
         
-        // 检查玩家是否切换了频道
+/*        // 检查玩家是否切换了频道
         if (player.getClient() == null || 
             player.getMap() == null || 
             player.getClient().getChannel() != channel) {
             logPluginActivation("失败 - 玩家切换频道");
             return false;
-        }
+        }*/
         
         return true;
     }
@@ -324,13 +323,13 @@ public class ItemVacPlugin extends BaseCheatPlugin {
             return;
         }
         
-        // 检查玩家是否切换了频道
+/*        // 检查玩家是否切换了频道
         if (player.getClient() == null || 
             player.getMap() == null || 
             player.getClient().getChannel() != channel) {
             logPluginActivation("失败 - 玩家切换频道");
             return;
-        }
+        }*/
         
         if (pickuping) {
             logPluginActivation("失败 - 正在拾取中");
@@ -397,13 +396,13 @@ public class ItemVacPlugin extends BaseCheatPlugin {
                     return;
                 }
                 
-                // 检查玩家是否切换了频道
+/*                // 检查玩家是否切换了频道
                 if (player.getClient() == null || 
                     player.getMap() == null || 
                     player.getClient().getChannel() != channel) {
                     logPluginActivation("失败 - 玩家切换频道");
                     return;
-                }
+                }*/
                 
                 MapItem mapItem = (MapItem) item;
                 boolean shouldPickup = true;
@@ -444,7 +443,7 @@ public class ItemVacPlugin extends BaseCheatPlugin {
             // 使用默认配置启动物品吸怪功能
             // 注意：ItemVacPlugin没有像MobVacPlugin那样的独立启动方法
             // 这里只是示例，实际实现需要根据ItemVacPlugin的具体逻辑来处理
-            logPluginUsage("使用默认配置启动物品吸怪功能");
+            logPluginUsage("使用默认配置启动吸物功能");
         }
     }
     
@@ -509,14 +508,14 @@ public class ItemVacPlugin extends BaseCheatPlugin {
                     return;
                 }
                 
-                // 检查玩家是否切换了频道
+/*                // 检查玩家是否切换了频道
                 if (player.getClient() == null || 
                     player.getMap() == null || 
                     player.getClient().getChannel() != channel) {
                     logPluginDeactivation("失败 - 玩家切换频道");
                     stop();
                     return;
-                }
+                }*/
                 
                 if (player.getPet(0) == null) {
                     logPluginDeactivation("失败 - 宠物为空");
@@ -585,5 +584,52 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         }
     }
     
+    /**
+     * 启动自动吸物定时器
+     */
+    public void startCheatItemVac() {
+        if (player == null || !player.isLoggedInWorld() || player.getPet(0) == null) {// 前置条件检查
+            return;
+        }
 
+        // 双重检查（移除了锁机制）
+        if (!player.isLoggedInWorld() || player.getPet(0) == null) {
+            return;
+        }
+        
+        stop(); // 停止现有定时器
+
+        // 参数验证
+        if (!updatePetVacParam() || !isEnable()) {
+            return;
+        }
+
+        int delay = getSleep();
+        if (delay <= 0) {
+            return;
+        }
+
+        // 启动插件
+        start();
+
+        if (isShowParams()) {//是否显示宠吸参数提示
+            StringBuilder sb = new StringBuilder();
+
+            // 转换为秒，保留1位小数
+            double intervalSeconds = delay / 1000.0;
+
+            sb.append("#e#b宠物智能拾取参数#k#n\r\n");
+            sb.append("════════════════\r\n");
+            sb.append(String.format("多人事件拾取：%s\r\n", isAllowInEvent() ? "#b√#k" : "#r×#k"));
+            sb.append(String.format("智能拾取金币：%s\r\n", player.isEquippedMesoMagnet() ? "#b√#k" : "#r×#k"));
+            sb.append(String.format("智能拾取物品：%s\r\n", player.isEquippedItemPouch() ? "#b√#k" : "#r×#k"));
+            sb.append(String.format("智能过滤物品：%s\r\n", player.isEquippedPetItemIgnore() ? "#b√#k" : "#r×#k"));
+            sb.append(String.format("拾取超时物品：%s\r\n", player.isEquippedPetItemScales() ? "#b√#k" : "#r×#k"));
+            sb.append(String.format("智能拾取半径：%.0f 码\r\n", getRadius() / 30));
+            sb.append(String.format("智能拾取间隔：%.1f 秒\r\n", intervalSeconds));
+            sb.append("════════════════\r\n");
+            sb.append("使用宠物装备激活特定功能\r\n");
+            player.showHint(sb.toString(), 200); // 显示提示
+        }
+    }
 }

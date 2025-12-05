@@ -9,7 +9,7 @@ import informationSearch from '@/views/dashboard/informationSearch/locale/en-US'
 import account from '@/views/account/locale/en-US';
 import login from '@/views/login/locale/en-US';
 import inventory from '@/views/game/inventory/locale/en-US';
-import log from '@/views/game/log/locale/en-US';
+import logs from '@/views/game/logs/locale/en-US';
 import base from './en-US/base';
 
 export default {
@@ -27,6 +27,12 @@ export default {
   'menu.game.command': 'Command',
   'menu.game.file': 'File',
   'menu.game.log': 'Log Management',
+  'menu.game.logs': 'Logs System',
+  'menu.game.logs.config': 'Configuration',
+  'menu.game.logs.query': 'Log Query',
+  'menu.game.logs.monitor': 'Performance Monitor',
+  'menu.game.logs.alert': 'Alert Rules',
+  'menu.game.logs.backup': 'Backup',
   'menu.account': 'Account',
   'menu.account.list': 'Account List',
   'menu.account.player': 'Player',
@@ -57,5 +63,5 @@ export default {
   ...informationSearch,
   ...inventory,
   ...config,
-  ...log,
+  ...logs,
 };

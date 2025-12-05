@@ -103,14 +103,66 @@ const GAME: AppRouteRecordRaw = {
       },
     },
     {
-      path: 'log',
-      name: 'logManager',
-      component: () => import('@/views/game/log/index.vue'),
+      path: 'logs',
+      name: 'logs',
+      component: () => import('@/views/game/logs/index.vue'),
       meta: {
-        locale: 'menu.game.log',
+        locale: 'menu.game.logs',
         requiresAuth: true,
         roles: ['admin'],
       },
+      children: [
+        {
+          path: 'dashboard',
+          name: 'LogsDashboard',
+          component: () => import('@/views/game/logs/Dashboard.vue'),
+          meta: {
+            locale: 'menu.game.logs.dashboard',
+            requiresAuth: true,
+            roles: ['admin'],
+          },
+        },
+        {
+          path: 'query',
+          name: 'LogsQuery',
+          component: () => import('@/views/game/logs/LogQuery.vue'),
+          meta: {
+            locale: 'menu.game.logs.query',
+            requiresAuth: true,
+            roles: ['admin'],
+          },
+        },
+        {
+          path: 'config',
+          name: 'LogsConfig',
+          component: () => import('@/views/game/logs/Config.vue'),
+          meta: {
+            locale: 'menu.game.logs.config',
+            requiresAuth: true,
+            roles: ['admin'],
+          },
+        },
+        {
+          path: 'alert',
+          name: 'LogsAlert',
+          component: () => import('@/views/game/logs/AlertRuleManagement.vue'),
+          meta: {
+            locale: 'menu.game.logs.alert',
+            requiresAuth: true,
+            roles: ['admin'],
+          },
+        },
+        {
+          path: 'backup',
+          name: 'LogsBackup',
+          component: () => import('@/views/game/logs/BackupManagement.vue'),
+          meta: {
+            locale: 'menu.game.logs.backup',
+            requiresAuth: true,
+            roles: ['admin'],
+          },
+        },
+      ],
     },
   ],
 };

@@ -9,7 +9,7 @@ import informationSearch from '@/views/dashboard/informationSearch/locale/zh-CN'
 import account from '@/views/account/locale/zh-CN';
 import login from '@/views/login/locale/zh-CN';
 import inventory from '@/views/game/inventory/locale/zh-CN';
-import log from '@/views/game/log/locale/zh-CN';
+import logs from '@/views/game/logs/locale/zh-CN';
 import baseConfig from './zh-CN/base';
 
 export default {
@@ -28,6 +28,12 @@ export default {
   'menu.game.command': 'GM指令',
   'menu.game.file': '文件管理',
   'menu.game.log': '日志管理',
+  'menu.game.logs': '日志系统',
+  'menu.game.logs.config': '配置管理',
+  'menu.game.logs.query': '日志查询',
+  'menu.game.logs.monitor': '性能监控',
+  'menu.game.logs.alert': '告警规则',
+  'menu.game.logs.backup': '备份管理',
   'menu.account': '玩家管理',
   'menu.account.list': '账户列表',
   'menu.account.player': '玩家管理',
@@ -60,5 +66,5 @@ export default {
   ...informationSearch,
   ...inventory,
   ...config,
-  ...log,
+  ...logs,
 };
