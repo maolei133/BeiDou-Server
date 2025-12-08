@@ -50,10 +50,14 @@ import java.util.List;
  */
 public final class MoveLifeHandler extends AbstractMovementPacketHandler {
     private static final Logger log = LoggerFactory.getLogger(MoveLifeHandler.class);
+    private static int moboid = 0;
 
     @Override
     public void handlePacket(InPacket p, Client c) {
         Character player = c.getPlayer();
+        if (player == null) {
+            return;
+        }
         MapleMap map = player.getMap();
 
         // 如果玩家正在切换地图，则不处理怪物移动，避免不同地图间怪物OID冲突
@@ -170,15 +174,20 @@ public final class MoveLifeHandler extends AbstractMovementPacketHandler {
             p.seek(movementDataStart);// 重新定位到移动数据起始位置
 
             // 如果启用了移动调试日志，则记录相关信息
-            if (GameConfig.getServerBoolean("use_debug_show_life_move")) {
-                log.info("{} 原始活动: {}, 选项: {}, 技能ID: {}, 技能等级: {}, 允许技能: {}, 怪物MP: {}",
+            if (monster.getObjectId() == moboid || GameConfig.getServerBoolean("use_debug_show_life_move")) {
+                log.info("{} 原始活动: {}, 选项: {}, 技能ID: {}, 技能等级: {}, 允许技能: {}, 怪物MP: {}, 移动前: ({},{}), 移动后: ({},{})",
                         isSkill ? "技能" : (isAttack ? "攻击" : ""), rawActivity, pOption, useSkillId,
-                        useSkillLevel, nextMovementCouldBeSkill, mobMp);
+                        useSkillLevel, nextMovementCouldBeSkill, mobMp,
+                        serverStartPos.x, serverStartPos.y, monster.getPosition().x, monster.getPosition().y);
             }
 
 //            log.info("怪物 {}({})(oid:{}) 移动到 {} , {}",monster.getName(), monster.getId(),monster.getObjectId(), monster.getPosition().getX(), monster.getPosition().getY());
+            if (!player.getAutoBanManager().detectMonsterVac(monster)) {
+                map.moveMonster(monster, monster.getPosition());// 更新地图中怪物的位置
+            } else {
+                monster.resetMobPosition(serverStartPos);
+            }
             map.broadcastMessage(player, PacketCreator.moveMonster(objectid, nextMovementCouldBeSkill, rawActivity, useSkillId, useSkillLevel, pOption, startPos, p, movementDataLength), serverStartPos);// 广播怪物移动消息给地图上的其他玩家
-            map.moveMonster(monster, monster.getPosition());// 更新地图中怪物的位置
         } catch (EmptyMovementException e) {// 捕获空移动异常，不做特殊处理
         }
 

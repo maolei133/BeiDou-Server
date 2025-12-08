@@ -20,6 +20,7 @@ import org.gms.util.PacketCreator;
 import java.awt.*;
 import java.util.List;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
 @Getter
@@ -41,7 +42,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
     /** 吸怪范围半径（内置辅助） */
     private double radius = Double.POSITIVE_INFINITY;
     /** 当前在使用吸怪内置辅助功能的地图实例 */
-    private static final Map<MapleMap, Integer> activeMapInstances = new HashMap<>();
+    private static final Map<MapleMap, Integer> activeMapInstances = new ConcurrentHashMap<>();
     /** 吸怪开始时间（内置辅助） */
     private long startTime;
     /** 吸怪内置辅助功能所在地图实例 */
@@ -247,7 +248,12 @@ public class MobVacPlugin extends BaseCheatPlugin {
         
         // 记录地图实例正在使用吸怪
         mobVacMap = player.getMap();
-        activeMapInstances.put(mobVacMap, playerId);
+        // 使用原子操作检查并添加，避免竞态条件
+        if (activeMapInstances.putIfAbsent(mobVacMap, playerId) != null) {
+             player.dropMessage(5, "该地图已有其他玩家开启了吸怪功能。");
+             logPluginActivation("失败 - 地图已被占用");
+             return false;
+        }
         mobVacPlayerName = player.getName(); // 记录开启吸怪的玩家名称
         
         // 将开启吸怪的玩家添加到地图玩家列表中
@@ -560,6 +566,15 @@ public class MobVacPlugin extends BaseCheatPlugin {
      */
     private void stopMobVac(String reason, boolean broadcast, String broadcastMessage) {
         if (mobVacMap != null) {
+            // 安全移除地图实例标记
+            Integer ownerId = activeMapInstances.get(mobVacMap);
+            if (ownerId != null && player != null && ownerId == player.getId()) {
+                activeMapInstances.remove(mobVacMap);
+            } else if (player == null) {
+                // 如果玩家离线，尝试移除该地图的标记
+                activeMapInstances.remove(mobVacMap);
+            }
+
             mobVacMap.killAllMonsters(); // 清除地图中的所有怪物
             mobVacMap.restoreMapSpawnPoints();  // 重置地图刷怪点
             mobVacMap.broadcastMessage(PacketCreator.removeClock());    // 移除地图倒计时
@@ -578,7 +593,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
         if (player != null) {
             activeUsers.remove(player.getId());
         }
-        activeMapInstances.remove(mobVacMap);
+        // activeMapInstances.remove(mobVacMap); // 已经在上面处理了
         playersInVacMap.clear();
         mobVacPlayerName = null;
         // 停止任务
@@ -652,6 +667,12 @@ public class MobVacPlugin extends BaseCheatPlugin {
         if (sb.length() == 0) sb.append("0分钟");
         return sb.toString();
     }
-    
-
+    /**
+     * 检查指定地图是否开启了吸怪功能
+     * @param map 地图实例
+     * @return true表示开启了，false表示未开启
+     */
+    public static boolean isMobVacActiveInMap(MapleMap map) {
+        return activeMapInstances.containsKey(map);
+    }
 }

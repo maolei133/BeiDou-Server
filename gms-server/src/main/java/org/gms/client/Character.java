@@ -9883,4 +9883,76 @@ public class Character extends AbstractCharacterObject {
     public void enableActions() {
         sendPacket(PacketCreator.enableActions());
     }
+
+    /**
+     * 从扩展表中获取账号或角色的扩展值
+     * 
+     * @param extendId 扩展ID（账号ID或角色ID）
+     * @param extendType 扩展类型，11-账号，12-账号日清，13-账号周清；21-角色，22-角色日清，23-角色周清
+     * @param extendName 扩展字段名称
+     * @return 扩展值对象
+     */
+    public ExtendValueDO getExtendValue(String extendId, String extendType, String extendName) {
+        return ExtendUtil.getExtendValue(extendId, extendType, extendName);
+    }
+
+    /**
+     * 保存或更新账号或角色的扩展值到数据库
+     * 
+     * @param extendId 扩展ID（账号ID或角色ID）
+     * @param extendType 扩展类型，11-账号，12-账号日清，13-账号周清；21-角色，22-角色日清，23-角色周清
+     * @param extendName 扩展字段名称
+     * @param extendValue 扩展字段值
+     */
+    public void saveOrUpdateExtendValue(String extendId, String extendType, String extendName, String extendValue) {
+        ExtendUtil.saveOrUpdateExtendValue(extendId, extendType, extendName, extendValue);
+    }
+
+    /**
+     * 从扩展表中获取账号的扩展值
+     * 
+     * @param accountId 账号ID
+     * @param extendType 扩展类型，11-账号，12-账号日清，13-账号周清
+     * @param extendName 扩展字段名称
+     * @return 扩展值对象
+     */
+    public ExtendValueDO getAccountExtendValue(int accountId, String extendType, String extendName) {
+        return getExtendValue(String.valueOf(accountId), extendType, extendName);
+    }
+
+    /**
+     * 保存或更新账号的扩展值到数据库
+     * 
+     * @param accountId 账号ID
+     * @param extendType 扩展类型，11-账号，12-账号日清，13-账号周清
+     * @param extendName 扩展字段名称
+     * @param extendValue 扩展字段值
+     */
+    public void saveOrUpdateAccountExtendValue(int accountId, String extendType, String extendName, String extendValue) {
+        saveOrUpdateExtendValue(String.valueOf(accountId), extendType, extendName, extendValue);
+    }
+
+    /**
+     * 从扩展表中获取角色的扩展值
+     * 
+     * @param characterId 角色ID
+     * @param extendType 扩展类型，21-角色，22-角色日清，23-角色周清
+     * @param extendName 扩展字段名称
+     * @return 扩展值对象
+     */
+    public ExtendValueDO getCharacterExtendValue(int characterId, String extendType, String extendName) {
+        return getExtendValue(String.valueOf(characterId), extendType, extendName);
+    }
+
+    /**
+     * 保存或更新角色的扩展值到数据库
+     * 
+     * @param characterId 角色ID
+     * @param extendType 扩展类型，21-角色，22-角色日清，23-角色周清
+     * @param extendName 扩展字段名称
+     * @param extendValue 扩展字段值
+     */
+    public void saveOrUpdateCharacterExtendValue(int characterId, String extendType, String extendName, String extendValue) {
+        saveOrUpdateExtendValue(String.valueOf(characterId), extendType, extendName, extendValue);
+    }
 }

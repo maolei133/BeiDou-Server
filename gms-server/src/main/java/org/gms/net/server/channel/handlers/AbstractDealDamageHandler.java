@@ -242,6 +242,9 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             for (Integer oned : attack.allDamage.keySet()) {
                 final Monster monster = map.getMonsterByOid(oned);
                 if (monster != null) {
+                    if (player.getAutoBanManager().detectMonsterVac(monster)) {
+                        continue;
+                    }
                     int distance = (int) player.getPosition().distanceSq(monster.getPosition());
                     int distanceToDetect = 200000;
 

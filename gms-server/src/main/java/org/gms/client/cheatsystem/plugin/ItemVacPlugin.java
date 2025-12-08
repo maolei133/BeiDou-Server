@@ -48,6 +48,8 @@ public class ItemVacPlugin extends BaseCheatPlugin {
     private int maxLevel = 20;
     /** 击杀BOSS时间（内置辅助） */
     private long killBossTime = -1;
+    /** 半径显示除数，用于将半径转换为显示单位（内置辅助） */
+    private double radiusDisplayDivisor = 60.0;
     
     private ScheduledFuture<?> itemVacTask;
     
@@ -152,7 +154,7 @@ public class ItemVacPlugin extends BaseCheatPlugin {
         calculateParams(pet);
         logPluginActivation(
             String.format("成功 - 参数计算完成 [半径: %d, 间隔: %dms, 宠物等级: %d, 饱食度: %d, 亲密度: %d]",
-                    (int) (radius / 30), sleep, pet.getLevel(), pet.getFullness(), pet.getTameness()));
+                    getDisplayRadius(), sleep, pet.getLevel(), pet.getFullness(), pet.getTameness()));
         return true;
     }
     
@@ -251,6 +253,32 @@ public class ItemVacPlugin extends BaseCheatPlugin {
     private void setMaxValues() {
         this.radius = maxRadius;
         this.sleep = maxInterval;
+    }
+    
+    /**
+     * 获取用于显示的半径值（将实际半径除以显示除数）
+     * @return 显示用的半径值
+     */
+    private int getDisplayRadius() {
+        return (int) (radius / radiusDisplayDivisor);
+    }
+    
+    /**
+     * 设置半径显示除数
+     * @param divisor 新的显示除数，必须大于0
+     */
+    public void setRadiusDisplayDivisor(double divisor) {
+        if (divisor > 0) {
+            this.radiusDisplayDivisor = divisor;
+        }
+    }
+    
+    /**
+     * 获取当前的半径显示除数
+     * @return 当前的显示除数
+     */
+    public double getRadiusDisplayDivisor() {
+        return radiusDisplayDivisor;
     }
 
     /**
@@ -441,9 +469,8 @@ public class ItemVacPlugin extends BaseCheatPlugin {
             handleStartWithParameters(params);
         } else {
             // 使用默认配置启动物品吸怪功能
-            // 注意：ItemVacPlugin没有像MobVacPlugin那样的独立启动方法
-            // 这里只是示例，实际实现需要根据ItemVacPlugin的具体逻辑来处理
             logPluginUsage("使用默认配置启动吸物功能");
+            startItemVacTask();
         }
     }
     
@@ -625,7 +652,7 @@ public class ItemVacPlugin extends BaseCheatPlugin {
             sb.append(String.format("智能拾取物品：%s\r\n", player.isEquippedItemPouch() ? "#b√#k" : "#r×#k"));
             sb.append(String.format("智能过滤物品：%s\r\n", player.isEquippedPetItemIgnore() ? "#b√#k" : "#r×#k"));
             sb.append(String.format("拾取超时物品：%s\r\n", player.isEquippedPetItemScales() ? "#b√#k" : "#r×#k"));
-            sb.append(String.format("智能拾取半径：%.0f 码\r\n", getRadius() / 30));
+            sb.append(String.format("智能拾取半径：%d 码\r\n", getDisplayRadius()));
             sb.append(String.format("智能拾取间隔：%.1f 秒\r\n", intervalSeconds));
             sb.append("════════════════\r\n");
             sb.append("使用宠物装备激活特定功能\r\n");

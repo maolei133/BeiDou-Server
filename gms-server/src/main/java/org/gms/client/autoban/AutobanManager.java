@@ -8,6 +8,7 @@ package org.gms.client.autoban;
 import org.gms.client.Character;
 import org.gms.client.Disease;
 import org.gms.client.SkillFactory;
+import org.gms.client.cheatsystem.plugin.MobVacPlugin;
 import org.gms.config.GameConfig;
 import org.gms.constants.skills.Bowmaster;
 import org.gms.constants.skills.Corsair;
@@ -15,14 +16,18 @@ import org.gms.constants.skills.WindArcher;
 import org.gms.logsystem.category.DynamicCategoryManager;
 import org.gms.logsystem.facade.SecurityLoggerFacade;
 import org.gms.net.server.Server;
+import org.gms.server.TimerManager;
 import org.gms.server.life.MobSkillFactory;
 import org.gms.server.life.MobSkillType;
+import org.gms.server.life.Monster;
+import org.gms.server.maps.MapleMap;
 import org.gms.util.PacketCreator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
 
@@ -59,6 +64,8 @@ public class AutobanManager {
     private final long[] spam = new long[20]; // 频繁操作时间记录数组
     private final int[] timestamp = new int[20]; // 时间戳记录数组
     private final byte[] timestampcounter = new byte[20]; // 时间戳计数器
+    private final LinkedList<MonsterVacSample> monsterVacSamples = new LinkedList<>();
+    private static class MonsterVacSample { int x; int y; long ts; }
 
     /**
      * 构造函数
@@ -477,5 +484,67 @@ public class AutobanManager {
      */
     public void resetBanPoints(AutobanFactory fac) {
         banPoints.put(fac, 0);
+    }
+
+    /**
+     * 检测怪物吸怪外挂
+     * 
+     * 功能说明：
+     * 通过分析怪物坐标的一致性来判断玩家是否使用吸怪外挂。
+     * 该函数会收集怪物位置样本，当90%以上的怪物都在70像素范围内时，
+     * 判定为吸怪行为并执行相应的惩罚措施。
+     * 
+     * 检测逻辑：
+     * 1. 基础安全检查（反作弊启用、玩家和怪物对象有效）
+     * 2. 地图状态检查（跳过已启用合法聚集功能的地图）
+     * 3. 清理过期采样数据
+     * 4. 收集新的怪物位置样本
+     * 5. 当样本数量足够时进行一致性分析
+     * 6. 如果90%以上怪物位置一致，执行惩罚措施
+     * 
+     * @param monster 要检测的怪物对象，包含位置坐标信息
+     * @return boolean 如果检测到吸怪行为返回true，否则返回false
+     * @see MonsterVacSample 怪物位置采样数据结构
+     * @see AutobanFactory#MONSTER_VAC 反作弊配置工厂
+     * @since 1.0.0
+     */
+    public boolean detectMonsterVac(Monster monster) {
+        if (!useAntiCheat() || chr == null || monster == null) return false; // 基础安全检查：反作弊启用且对象有效
+        MapleMap map = chr.getMap(); // 获取玩家所在地图
+        if (map == null || MobVacPlugin.isMobVacActiveInMap(map)) { // 检查地图状态：跳过已启用合法聚集功能的地图
+            return false; // 地图无效或已启用合法聚集功能，跳过检测
+        }
+        long now = Server.getInstance().getCurrentTime(); // 获取当前服务器时间
+        long expire = AutobanFactory.MONSTER_VAC.getExpire(); // 获取怪物吸怪检测的过期时间配置
+        while (!monsterVacSamples.isEmpty() && monsterVacSamples.getFirst().ts <= now - expire) { // 清理过期的采样数据
+            monsterVacSamples.removeFirst(); // 移除过期记录
+        }
+        MonsterVacSample s = new MonsterVacSample(); // 创建新的怪物位置采样
+        s.x = (int) monster.getPosition().getX(); // 怪物X坐标
+        s.y = (int) monster.getPosition().getY(); // 怪物Y坐标
+        s.ts = now; // 采样时间戳
+        monsterVacSamples.addLast(s); // 将新采样添加到队列末尾
+        int maxSize = AutobanFactory.MONSTER_VAC.getMaximum(); // 获取最大采样数量配置
+        while (monsterVacSamples.size() > maxSize) { // 保持采样队列在最大容量范围内
+            monsterVacSamples.removeFirst(); // 移除最旧的采样
+        }
+        if (monsterVacSamples.size() >= maxSize) { // 当采样数量达到最大值时开始检测
+            int consistentCount = 0; // 统计在相近位置的怪物数量
+            for (MonsterVacSample sample : monsterVacSamples) { // 遍历所有采样，检查位置一致性
+                if (Math.abs(sample.x - s.x) <= 70 && Math.abs(sample.y - s.y) <= 70) { // 如果怪物位置在70像素范围内，认为位置一致
+                    consistentCount++; // 一致位置计数增加
+                }
+            }
+            if (consistentCount * 1.0 / monsterVacSamples.size() >= 0.90) { // 如果90%以上的怪物都在相近位置，判定为吸怪
+                String reason = "怪物坐标: (" + s.x + "," + s.y + ") 附近一致性检测 " + consistentCount + "/" + monsterVacSamples.size(); // 构建违规原因描述
+                int ret = addPoint(AutobanFactory.MONSTER_VAC, reason); // 添加到反作弊积分系统
+                if (ret >= 1) { // 如果积分达到阈值，执行惩罚措施
+                    map.killAllMonsters(); // 击杀所有怪物
+                    map.restoreMapSpawnPoints(); // 恢复地图出生点
+                }
+                return true; // 检测到吸怪行为
+            }
+        }
+        return false; // 未检测到吸怪行为
     }
 }
