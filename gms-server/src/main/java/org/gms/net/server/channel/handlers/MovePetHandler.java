@@ -44,6 +44,9 @@ public final class MovePetHandler extends AbstractMovementPacketHandler {
             return;
         }
         Character player = c.getPlayer();
+        if (player == null) {
+            return;
+        }
         byte slot = player.getPetIndex(petId);
         if (slot == -1) {
             return;

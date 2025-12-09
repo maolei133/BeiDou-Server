@@ -68,7 +68,9 @@ public class AutobanManager {
     private final AtomicLongArray spam = new AtomicLongArray(20); // 频繁操作时间记录数组
     private final AtomicIntegerArray timestamp = new AtomicIntegerArray(20); // 时间戳记录数组
     private final AtomicIntegerArray timestampcounter = new AtomicIntegerArray(20); // 时间戳计数器
-    private final ConcurrentLinkedQueue<MonsterVacSample> monsterVacSamples = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<MonsterVacSample> landMonsterVacSamples = new ConcurrentLinkedQueue<>();    // 陆地怪物采样集合
+    private final ConcurrentLinkedQueue<MonsterVacSample> flyMonsterVacSamples = new ConcurrentLinkedQueue<>();     // 飞行怪物采样集合
+    private final ConcurrentLinkedQueue<MonsterVacSample> otherMonsterVacSamples = new ConcurrentLinkedQueue<>();    // 其他类型怪物采样集合
     private static class MonsterVacSample { int x; int y; long ts; }
 
     /**
@@ -518,30 +520,73 @@ public class AutobanManager {
         if (map == null || MobVacPlugin.isMobVacActiveInMap(map)) { // 检查地图状态：跳过已启用合法聚集功能的地图
             return false; // 地图无效或已启用合法聚集功能，跳过检测
         }
+        
+        // 获取怪物移动类型
+        int movetype = monster.getStats().getMovetype(); // 获取怪物移动类型
+        
+        // 根据移动类型选择对应的采样集合
+        ConcurrentLinkedQueue<MonsterVacSample> currentSamples;
+        if (movetype == 1) { // 陆地类型
+            currentSamples = landMonsterVacSamples;
+        } else if (movetype == 2) { // 飞行类型
+            currentSamples = flyMonsterVacSamples;
+        } else { // 其它类型
+            currentSamples = otherMonsterVacSamples;
+        }
+        
         long now = Server.getInstance().getCurrentTime(); // 获取当前服务器时间
         long expire = AutobanFactory.MONSTER_VAC.getExpire(); // 获取怪物吸怪检测的过期时间配置
-        while (!monsterVacSamples.isEmpty() && monsterVacSamples.peek().ts <= now - expire) { // 清理过期的采样数据
-            monsterVacSamples.poll(); // 移除过期记录
+        
+        // 清理过期的采样数据
+        while (!currentSamples.isEmpty() && currentSamples.peek().ts <= now - expire) {
+            currentSamples.poll(); // 移除过期记录
         }
+        
         MonsterVacSample s = new MonsterVacSample(); // 创建新的怪物位置采样
         s.x = (int) monster.getPosition().getX(); // 怪物X坐标
         s.y = (int) monster.getPosition().getY(); // 怪物Y坐标
         s.ts = now; // 采样时间戳
-        monsterVacSamples.add(s); // 将新采样添加到队列末尾
+        
+        // 将新采样添加到对应的队列末尾
+        currentSamples.add(s);
+        
         int maxSize = AutobanFactory.MONSTER_VAC.getMaximum(); // 获取最大采样数量配置
-        while (monsterVacSamples.size() > maxSize) { // 保持采样队列在最大容量范围内
-            monsterVacSamples.poll(); // 移除最旧的采样
+        
+        // 保持采样队列在最大容量范围内
+        while (currentSamples.size() > maxSize) {
+            currentSamples.poll(); // 移除最旧的采样
         }
-        if (monsterVacSamples.size() >= maxSize) { // 当采样数量达到最大值时开始检测
+        
+        // 当采样数量达到最大值时开始检测
+        if (currentSamples.size() >= maxSize) {
+            // 根据移动类型设置不同的检测参数
+            int pixelRange = 60; // 默认采样范围
+            double consistencyThreshold = 0.95; // 默认相似率阈值
+            
+            // 根据移动类型设置参数：1=陆地，2=飞行，其它=未知
+            if (movetype == 0) { // 陆地类型
+                pixelRange = 150; // 采样范围100像素点
+                consistencyThreshold = 0.95; // 相似率95%
+            } else if (movetype == 1) { // 飞行类型
+                pixelRange = 50; // 采样范围50像素点
+                consistencyThreshold = 0.98; // 相似率98%
+            } else { // 其它类型
+                pixelRange = 80; // 采样范围80像素点
+                consistencyThreshold = 0.90; // 相似率90%
+            }
+            
             int consistentCount = 0; // 统计在相近位置的怪物数量
-            for (MonsterVacSample sample : monsterVacSamples) { // 遍历所有采样，检查位置一致性
-                if (Math.abs(sample.x - s.x) <= 60 && Math.abs(sample.y - s.y) <= 60) { // 如果怪物位置在60像素范围内，认为位置一致
+            for (MonsterVacSample sample : currentSamples) { // 遍历当前类型的所有采样，检查位置一致性
+                if (Math.abs(sample.x - s.x) <= pixelRange && Math.abs(sample.y - s.y) <= pixelRange) { // 使用动态计算的像素范围
                     consistentCount++; // 一致位置计数增加
                 }
             }
-            double consistencyRatio = consistentCount * 1.0 / monsterVacSamples.size(); // 计算一致位置比例
-            if (consistencyRatio >= 0.95) { // 如果90%以上的怪物都在相近位置，判定为吸怪
-                String reason = "怪物坐标: (" + s.x + "," + s.y + ") 附近一致性检测 " + consistentCount + "/" + monsterVacSamples.size(); // 构建违规原因描述
+            
+            double consistencyRatio = consistentCount * 1.0 / currentSamples.size(); // 计算一致位置比例
+            
+            if (consistencyRatio >= consistencyThreshold) { // 使用动态计算的相似率阈值
+                String reason = "坐标: (" + s.x + "," + s.y + ") 附近一致性检测 " + consistentCount + "/" + currentSamples.size() +
+                                " (移动类型: " + (movetype == 0 ? "陆地" : (movetype == 1 ? "飞行" : "未知")) + ")"; // 构建违规原因描述
                 int ret = addPoint(AutobanFactory.MONSTER_VAC, reason); // 添加到反作弊积分系统
                 if (ret >= 1) { // 如果积分达到阈值，执行惩罚措施
                     map.killAllMonsters(); // 击杀所有怪物
