@@ -29,6 +29,9 @@ import org.gms.exception.EmptyMovementException;
 public final class MovePlayerHandler extends AbstractMovementPacketHandler {
     @Override
     public final void handlePacket(InPacket p, Client c) {
+        if (c.getPlayer() == null) {
+            return;
+        }
         p.skip(9);
         try {   // thanks Sa for noticing empty movement sequences crashing players
             int movementDataStart = p.getPosition();
