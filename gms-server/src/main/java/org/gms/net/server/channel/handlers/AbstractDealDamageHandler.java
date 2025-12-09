@@ -68,8 +68,22 @@ import java.util.Map;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+/**
+ * @author kevintjuh93
+ * @version 1.1
+ * @description 抽象伤害处理类，提供处理玩家攻击伤害的通用逻辑。
+ *              包括伤害计算、技能效果应用、作弊检测等。
+ *              此类经过重构，将作弊检测逻辑迁移到 AutobanManager，并优化了代码结构。
+ * @since 2024/07/30
+ */
 public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
 
+    /**
+     * @author kevintjuh93
+     * @version 1.0
+     * @description 攻击信息内部类，用于封装一次攻击的所有相关数据。
+     * @since 2024/07/29
+     */
     public static class AttackInfo {
 
         /** 被攻击的怪物数量 */
@@ -103,6 +117,12 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
         /** 攻击位置坐标 */
         public Point position = new Point();
 
+        /**
+         * @param chr 角色对象
+         * @param theSkill 技能对象
+         * @return 技能效果对象
+         * @description 获取攻击技能的效果。
+         */
         public StatEffect getAttackEffect(Character chr, Skill theSkill) {
             Skill mySkill = theSkill;
             if (mySkill == null) {
@@ -117,7 +137,8 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             if (skillLevel == 0) {
                 return null;
             }
-            if (chr.getAutoBanManager().useAntiCheat() && display > 80) { //Hmm
+            // WZ编辑；为技能添加动作检测
+            if (chr.getAutoBanManager().useAntiCheat() && display > 80) {
                 if (!mySkill.getAction()) {
                     AutobanFactory.FAST_ATTACK.autoban(chr, "WZ编辑；为技能添加动作：" + display);
                     return null;
@@ -127,8 +148,13 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
         }
     }
 
+    /**
+     * @param attack 攻击信息
+     * @param player 玩家角色
+     * @param attackCount 攻击次数
+     * @description 应用攻击伤害到怪物。
+     */
     protected void applyAttack(AttackInfo attack, final Character player, int attackCount) {
-        int retban = -1;
         int mobCount = 1;
         final MapleMap map = player.getMap();
         if (map.isOwnershipRestricted(player)) {
@@ -143,18 +169,15 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 return;
             }
             if (attack.skill != 0) {
-                theSkill = SkillFactory.getSkill(attack.skill); // 感谢Conrad注意到一些阿兰技能没有消耗MP
-                attackEffect = attack.getAttackEffect(player, theSkill); // 返回玩家的攻击效果，这样我们就没问题了
+                theSkill = SkillFactory.getSkill(attack.skill);
+                attackEffect = attack.getAttackEffect(player, theSkill);
                 if (attackEffect == null) {
                     player.sendPacket(PacketCreator.enableActions());
                     return;
                 }
 
-                if (player.getAutoBanManager().useAntiCheat() && player.getMp() < attackEffect.getMpCon()) {
-                    AutobanFactory.MPCON.addPoint(player.getAutoBanManager(),
-                        " 尝试使用: " + SkillFactory.getSkillName(attack.skill) + "[Lv." + attack.skilllevel + "](" + attack.skill + ")" +
-                        " 所需MP: " + attackEffect.getMpCon() + " 当前MP: " + player.getMp() + " 已作废"
-                    );
+                // 作弊检测：MP消耗
+                if (player.getAutoBanManager().checkMpCon(attackEffect, attack.skill, attack.skilllevel)) {
                     player.sendPacket(PacketCreator.enableActions());
                     return;
                 }
@@ -162,12 +185,13 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 mobCount = attackEffect.getMobCount();
                 if (attack.skill != Cleric.HEAL) {
                     if (player.isAlive()) {
-                        if (attack.skill == Aran.BODY_PRESSURE || attack.skill == Marauder.ENERGY_CHARGE || attack.skill == ThunderBreaker.ENERGY_CHARGE) {  // thanks IxianMace for noticing Energy Charge skills refreshing on touch
+                        // 特殊技能处理，不应用效果或修改怪物数量
+                        if (attack.skill == Aran.BODY_PRESSURE || attack.skill == Marauder.ENERGY_CHARGE || attack.skill == ThunderBreaker.ENERGY_CHARGE) {
                             // 防止触碰伤害技能刷新
                         } else if (attack.skill == DawnWarrior.FINAL_ATTACK || attack.skill == WindArcher.FINAL_ATTACK) {
                             // 防止席格诺斯最终攻击技能刷新
                             mobCount = 15;
-                        } else if (attack.skill == NightWalker.POISON_BOMB) {// Poison Bomb
+                        } else if (attack.skill == NightWalker.POISON_BOMB) {
                             attackEffect.applyTo(player, new Point(attack.position.x, attack.position.y));
                         } else {
                             attackEffect.applyTo(player);
@@ -175,8 +199,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                             if (attack.skill == Page.FINAL_ATTACK_BW || attack.skill == Page.FINAL_ATTACK_SWORD || attack.skill == Fighter.FINAL_ATTACK_SWORD
                                     || attack.skill == Fighter.FINAL_ATTACK_AXE || attack.skill == Spearman.FINAL_ATTACK_SPEAR || attack.skill == Spearman.FINAL_ATTACK_POLEARM
                                     || attack.skill == Hunter.FINAL_ATTACK || attack.skill == Crossbowman.FINAL_ATTACK) {
-
-                                mobCount = 15;//:(
+                                mobCount = 15;
                             } else if (attack.skill == Aran.HIDDEN_FULL_DOUBLE || attack.skill == Aran.HIDDEN_FULL_TRIPLE || attack.skill == Aran.HIDDEN_OVER_DOUBLE || attack.skill == Aran.HIDDEN_OVER_TRIPLE) {
                                 mobCount = 12;
                             }
@@ -186,8 +209,8 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     }
                 }
 
-                if (player.getAutoBanManager().useAntiCheat() && attack.numAttacked > mobCount) {
-                    AutobanFactory.MOB_COUNT.addPoint(player.getAutoBanManager(),  "尝试使用: " + SkillFactory.getSkillName(attack.skill) + "[Lv." + attack.skilllevel + "](" + attack.skill + ")" + " 目标数量: " + attack.numAttacked + " 上限: " + attackEffect.getMobCount() + " 已作废");
+                // 作弊检测：攻击怪物数量
+                if (player.getAutoBanManager().checkMobCount(attackEffect, attack.numAttacked, attack.skill, attack.skilllevel)) {
                     return;
                 }
             }
@@ -195,128 +218,37 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 return;
             }
 
-            //WTF IS THIS F3,1
-            /*if (attackCount != attack.numDamage && attack.skill != ChiefBandit.MESO_EXPLOSION && attack.skill != NightWalker.VAMPIRE && attack.skill != WindArcher.WIND_SHOT && attack.skill != Aran.COMBO_SMASH && attack.skill != Aran.COMBO_FENRIR && attack.skill != Aran.COMBO_TEMPEST && attack.skill != NightLord.NINJA_AMBUSH && attack.skill != Shadower.NINJA_AMBUSH) {
-                return;
-            }*/
-
-            int totDamage = 0;
             // 根据配置决定使用技能最大目标数还是实际伤害目标数
             int targetCount = GameConfig.getServerBoolean("use_skill_max_target_count") ? mobCount : attack.allDamage.size();
 
+            // 处理金钱炸弹技能
             if (attack.skill == ChiefBandit.MESO_EXPLOSION) {
-                int delay = 0;
-                for (Integer oned : attack.allDamage.keySet()) {
-                    MapObject mapobject = map.getMapObject(oned);
-                    if (mapobject != null && mapobject.getType() == MapObjectType.ITEM) {
-                        final MapItem mapitem = (MapItem) mapobject;
-                        if (mapitem.getMeso() == 0) { //Maybe it is possible some how?
-                            return;
-                        }
-
-                        mapitem.lockItem();
-                        try {
-                            if (mapitem.isPickedUp()) {
-                                return;
-                            }
-                            TimerManager.getInstance().schedule(() -> {
-                                mapitem.lockItem();
-                                try {
-                                    if (mapitem.isPickedUp()) {
-                                        return;
-                                    }
-                                    map.pickItemDrop(PacketCreator.removeItemFromMap(mapitem.getObjectId(), 4, 0), mapitem);
-                                } finally {
-                                    mapitem.unlockItem();
-                                }
-                            }, delay);
-                            delay += 100;
-                        } finally {
-                            mapitem.unlockItem();
-                        }
-                    } else if (mapobject != null && mapobject.getType() != MapObjectType.MONSTER) {
-                        return;
-                    }
-                }
+                handleMesoExplosion(attack, map);
+                return;
             }
+
             for (Integer oned : attack.allDamage.keySet()) {
                 final Monster monster = map.getMonsterByOid(oned);
                 if (monster != null) {
+                    // 作弊检测：吸怪
                     if (player.getAutoBanManager().detectMonsterVac(monster)) {
                         continue;
                     }
-                    int distance = (int) player.getPosition().distanceSq(monster.getPosition());
-                    int distanceToDetect = 200000;
 
-                    if (attack.ranged) {
-                        distanceToDetect += 400000;
-                    }
-
-                    if (attack.magic) {
-                        distanceToDetect += 250000;
-                    }
-
-                    if (player.getJob().isA(Job.ARAN1)) {
-                        distanceToDetect += 200000; // Arans have extra range over normal warriors.
-                    }
-
-                    if ((monster.getId() >= 8800000 && monster.getId() <= 8800010) ||    //扎昆
-                            (monster.getId() >= 8810000 && monster.getId() <= 8810026)  //暗黑龙王
-                    ) { //某些组合怪物的模型比较大，需要增加攻击距离。
-                        distanceToDetect += 100000;
-                    }
-
-                    if (attack.skill == Aran.COMBO_SMASH || attack.skill == Aran.BODY_PRESSURE) {
-                        distanceToDetect += 40000;
-                    } else if (attack.skill == Bishop.GENESIS || attack.skill == ILArchMage.BLIZZARD || attack.skill == FPArchMage.METEOR_SHOWER) {//圣光普照、落霜冰破、天降落星
-                        distanceToDetect += 350000;
-                    } else if (attack.skill == Hero.BRANDISH || attack.skill == DragonKnight.SPEAR_CRUSHER || attack.skill == DragonKnight.POLE_ARM_CRUSHER || attack.skill == DawnWarrior.BRANDISH) {
-                        distanceToDetect += 100000;
-                    } else if (attack.skill == DragonKnight.DRAGON_ROAR || attack.skill == SuperGM.SUPER_DRAGON_ROAR || attack.skill == Crusader.SHOUT) { //龙咆哮 、 GM龙咆哮 、 虎咆哮
-                        distanceToDetect += 350000;
-                    } else if (attack.skill == Shadower.BOOMERANG_STEP) { //一出双击
-                        distanceToDetect += 200000;
-                    } else if (attack.skill == ILArchMage.CHAIN_LIGHTNING) { //链环闪电
-                        distanceToDetect += attack.numAttacked * 85000;
-                    } else if (attack.skill == ChiefBandit.ASSAULTER || attack.skill == Corsair.AERIAL_STRIKE) { //落叶斩 、 地毯式空袭
-                        distanceToDetect += 80000;
-                    } else if (attack.skill == ChiefBandit.BAND_OF_THIEVES) { //分身术
-                        distanceToDetect += 150000;
-                    }
-
-                    if (player.getAutoBanManager().useAntiCheat() && distance > distanceToDetect * 1.15) { //如果距离超过检测距离1.15倍
-                        AutobanFactory.DISTANCE_HACK.addPoint(player.getAutoBanManager(),
-//                                "地图 " + player.getMap().getMapName() + " (" + player.getMapId() + ")" +
-                                        " 尝试使用: " + (attack.skill > 0 ? SkillFactory.getSkillName(attack.skill) + "[Lv." + attack.skilllevel + "](" + attack.skill + ")" : "普通攻击") +
-                                        " 对怪物：" + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null")+
-                                        " 距离：" + distance + " 上限：" + distanceToDetect + " 已作废");
-                        monster.refreshMobPosition();
-                        return;
+                    // 作弊检测：攻击距离
+                    if (player.getAutoBanManager().checkDistanceHack(monster, attack)) {
+                        continue;
                     }
 
                     int totDamageToOneMonster = 0;
                     List<Integer> onedList = attack.allDamage.get(oned);
 
-                    if (attack.magic) { // thanks BHB, Alex (CanIGetaPR) for noticing no immunity status check here
-                        if (monster.isBuffed(MonsterStatus.MAGIC_IMMUNITY)) {
-                            Collections.fill(onedList, 1);
-                        }
-                    } else {
-                        if (monster.isBuffed(MonsterStatus.WEAPON_IMMUNITY)) {
-                            Collections.fill(onedList, 1);
-                        }
-                    }
+                    // 处理怪物免疫状态
+                    handleMonsterImmunity(monster, attack, onedList);
 
+                    // 处理武陵道场Boss伤害限制
                     if (MobId.isDojoBoss(monster.getId())) {
-                        if (attack.skill == 1009 || attack.skill == 10001009 || attack.skill == 20001009) {
-                            int dmgLimit = (int) Math.ceil(0.3 * monster.getMaxHp());
-                            List<Integer> _onedList = new LinkedList<>();
-                            for (Integer i : onedList) {
-                                _onedList.add(i < dmgLimit ? i : dmgLimit);
-                            }
-
-                            onedList = _onedList;
-                        }
+                        handleDojoBossDamageLimit(attack, monster, onedList);
                     }
 
                     for (Integer eachd : onedList) {
@@ -325,272 +257,32 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                         }
                         totDamageToOneMonster += eachd;
                     }
-                    totDamage += totDamageToOneMonster;
                     monster.aggroMonsterDamage(player, totDamageToOneMonster);
-                    if (player.getBuffedValue(BuffStat.PICKPOCKET) != null && (attack.skill == 0 || attack.skill == Rogue.DOUBLE_STAB || attack.skill == Bandit.SAVAGE_BLOW || attack.skill == ChiefBandit.ASSAULTER || attack.skill == ChiefBandit.BAND_OF_THIEVES || attack.skill == Shadower.ASSASSINATE || attack.skill == Shadower.TAUNT || attack.skill == Shadower.BOOMERANG_STEP)) {
-                        Skill pickpocket = SkillFactory.getSkill(ChiefBandit.PICKPOCKET);
-                        int picklv = (player.isGM()) ? pickpocket.getMaxLevel() : player.getSkillLevel(pickpocket);
-                        if (picklv > 0) {
-                            int delay = 0;
-                            final int maxmeso = player.getBuffedValue(BuffStat.PICKPOCKET);
-                            for (Integer eachd : onedList) {
-                                eachd += Integer.MAX_VALUE;
 
-                                if (pickpocket.getEffect(picklv).makeChanceResult()) {
-                                    final int eachdf;
-                                    if (eachd < 0) {
-                                        eachdf = eachd + Integer.MAX_VALUE;
-                                    } else {
-                                        eachdf = eachd;
-                                    }
+                    // 应用各种技能效果（偷窃、吸血、元素效果等）
+                    applySkillEffects(player, monster, attack, attackCount, totDamageToOneMonster, theSkill, job, map);
 
-                                    TimerManager.getInstance().schedule(() -> map.spawnMesoDrop(Math.min((int) Math.max(((double) eachdf / (double) 20000) * (double) maxmeso, 1), maxmeso), new Point((int) (monster.getPosition().getX() + Randomizer.nextInt(100) - 50), (int) (monster.getPosition().getY())), monster, player, true, (byte) 2), delay);
-                                    delay += 100;
-                                }
-                            }
-                        }
-                    } else if (attack.skill == Marauder.ENERGY_DRAIN || attack.skill == ThunderBreaker.ENERGY_DRAIN || attack.skill == NightWalker.VAMPIRE || attack.skill == Assassin.DRAIN) {
-                        player.addHP(Math.min(monster.getMaxHp(), Math.min((int) ((double) totDamage * (double) SkillFactory.getSkill(attack.skill).getEffect(player.getSkillLevel(SkillFactory.getSkill(attack.skill))).getX() / 100.0), player.getCurrentMaxHp() / 2)));
-                    } else if (attack.skill == Bandit.STEAL) { //神通术
-                        Skill steal = SkillFactory.getSkill(Bandit.STEAL);
-                        if (monster.getStolen().size() < 1) { // 每个怪物只能被偷取一次 <3
-                            if (steal.getEffect(player.getSkillLevel(steal)).makeChanceResult()) {
-                                monster.addStolen(0);
-
-                                MonsterInformationProvider mi = MonsterInformationProvider.getInstance();
-                                List<Integer> dropPool = mi.retrieveDropPool(monster.getId());
-                                if (dropPool != null && !dropPool.isEmpty()) {
-                                    int rndPool = (int) Math.floor(Math.random() * dropPool.get(dropPool.size() - 1));
-
-                                    int i = 0;
-                                    while (rndPool >= dropPool.get(i)) {
-                                        i++;
-                                    }
-
-                                    List<MonsterDropEntry> toSteal = new ArrayList<>();
-                                    toSteal.add(mi.retrieveDrop(monster.getId()).get(i));
-
-                                    map.dropItemsFromMonster(toSteal, player, monster);
-                                    monster.addStolen(toSteal.get(0).itemId);
-                                }
-                            }
-                        }
-                    } else if (attack.skill == FPArchMage.FIRE_DEMON) {
-                        long duration = SECONDS.toMillis(SkillFactory.getSkill(FPArchMage.FIRE_DEMON).getEffect(player.getSkillLevel(SkillFactory.getSkill(FPArchMage.FIRE_DEMON))).getDuration());
-                        monster.setTempEffectiveness(Element.ICE, ElementalEffectiveness.WEAK, duration);
-                    } else if (attack.skill == ILArchMage.ICE_DEMON) {
-                        long duration = SECONDS.toMillis(SkillFactory.getSkill(ILArchMage.ICE_DEMON).getEffect(player.getSkillLevel(SkillFactory.getSkill(ILArchMage.ICE_DEMON))).getDuration());
-                        monster.setTempEffectiveness(Element.FIRE, ElementalEffectiveness.WEAK, duration);
-                    } else if (attack.skill == Outlaw.HOMING_BEACON || attack.skill == Corsair.BULLSEYE) {
-                        StatEffect beacon = SkillFactory.getSkill(attack.skill).getEffect(player.getSkillLevel(attack.skill));
-                        beacon.applyBeaconBuff(player, monster.getObjectId());
-                    } else if (attack.skill == Outlaw.FLAME_THROWER) {
-                        if (!monster.isBoss()) {
-                            Skill type = SkillFactory.getSkill(Outlaw.FLAME_THROWER);
-                            if (player.getSkillLevel(type) > 0) {
-                                StatEffect DoT = type.getEffect(player.getSkillLevel(type));
-                                MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.POISON, 1), type, null, false);
-                                monster.applyStatus(player, monsterStatusEffect, true, DoT.getDuration(), false);
-                            }
+                    // 作弊检测：固定伤害
+                    if (attack.skill != 0 && attackEffect != null) {
+                        if (player.getAutoBanManager().checkFixedDamage(totDamageToOneMonster, attackEffect, attack.skill, attack.skilllevel, monster)) {
+                            return;
                         }
                     }
 
-                    if (player.isAran()) {
-                        if (player.getBuffedValue(BuffStat.WK_CHARGE) != null) {
-                            Skill snowCharge = SkillFactory.getSkill(Aran.SNOW_CHARGE);
-                            if (totDamageToOneMonster > 0) {
-                                MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.SPEED, snowCharge.getEffect(player.getSkillLevel(snowCharge)).getX()), snowCharge, null, false);
-                                long duration = SECONDS.toMillis(snowCharge.getEffect(player.getSkillLevel(snowCharge)).getY());
-                                monster.applyStatus(player, monsterStatusEffect, false, duration);
-                            }
-                        }
-                    }
-                    if (player.getBuffedValue(BuffStat.HAMSTRING) != null) {
-                        Skill hamstring = SkillFactory.getSkill(Bowmaster.HAMSTRING);
-                        if (hamstring.getEffect(player.getSkillLevel(hamstring)).makeChanceResult()) {
-                            MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.SPEED, hamstring.getEffect(player.getSkillLevel(hamstring)).getX()), hamstring, null, false);
-                            long duration = SECONDS.toMillis(hamstring.getEffect(player.getSkillLevel(hamstring)).getY());
-                            monster.applyStatus(player, monsterStatusEffect, false, duration);
-                        }
-                    }
-                    if (player.getBuffedValue(BuffStat.SLOW) != null) {
-                        Skill slow = SkillFactory.getSkill(Evan.SLOW);
-                        if (slow.getEffect(player.getSkillLevel(slow)).makeChanceResult()) {
-                            MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.SPEED, slow.getEffect(player.getSkillLevel(slow)).getX()), slow, null, false);
-                            long duration = MINUTES.toMillis(slow.getEffect(player.getSkillLevel(slow)).getY());
-                            monster.applyStatus(player, monsterStatusEffect, false, duration);
-                        }
-                    }
-                    if (player.getBuffedValue(BuffStat.BLIND) != null) {
-                        Skill blind = SkillFactory.getSkill(Marksman.BLIND);
-                        if (blind.getEffect(player.getSkillLevel(blind)).makeChanceResult()) {
-                            MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.ACC, blind.getEffect(player.getSkillLevel(blind)).getX()), blind, null, false);
-                            long duration = SECONDS.toMillis(blind.getEffect(player.getSkillLevel(blind)).getY());
-                            monster.applyStatus(player, monsterStatusEffect, false, duration);
-                        }
-                    }
-                    if (job == 121 || job == 122) {
-                        for (int charge = 1211005; charge < 1211007; charge++) {
-                            Skill chargeSkill = SkillFactory.getSkill(charge);
-                            if (player.isBuffFrom(BuffStat.WK_CHARGE, chargeSkill)) {
-                                if (totDamageToOneMonster > 0) {
-                                    if (charge == WhiteKnight.BW_ICE_CHARGE || charge == WhiteKnight.SWORD_ICE_CHARGE) {
-                                        monster.setTempEffectiveness(Element.ICE, ElementalEffectiveness.WEAK, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY() * 1000);
-                                        // 修复冰技能不冰怪的问题，关键是冰和火都没有对应的异常状态，对应的异常只有冻结。如果这里把ICE改了，那火怎么办？所以，还是先注释掉。
-//                                        MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.FREEZE, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getX()), chargeSkill, null, false);
-//                                        long duration = SECONDS.toMillis(chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY());
-//                                        monster.applyStatus(player, monsterStatusEffect, false, duration);
-                                        break;
-                                    }
-                                    if (charge == WhiteKnight.BW_FIRE_CHARGE || charge == WhiteKnight.SWORD_FIRE_CHARGE) {
-                                        monster.setTempEffectiveness(Element.FIRE, ElementalEffectiveness.WEAK, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY() * 1000);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if (job == 122) {
-                            for (int charge = 1221003; charge < 1221004; charge++) {
-                                Skill chargeSkill = SkillFactory.getSkill(charge);
-                                if (player.isBuffFrom(BuffStat.WK_CHARGE, chargeSkill)) {
-                                    if (totDamageToOneMonster > 0) {
-                                        monster.setTempEffectiveness(Element.HOLY, ElementalEffectiveness.WEAK, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY() * 1000);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    } else if (player.getBuffedValue(BuffStat.COMBO_DRAIN) != null) {
-                        //战神技能 连环吸血 根据单次怪物伤害而非总伤害计算HP恢复。
-                        Skill skill = SkillFactory.getSkill(Aran.COMBO_DRAIN);
-                        player.addHP(((totDamageToOneMonster * skill.getEffect(player.getSkillLevel(skill)).getX()) / 100));
-                    } else if (job == 412 || job == 422 || job == 1411) {
-                        Skill type = SkillFactory.getSkill(player.getJob().getId() == 412 ? 4120005 : (player.getJob().getId() == 1411 ? 14110004 : 4220005));
-                        if (player.getSkillLevel(type) > 0) {
-                            StatEffect venomEffect = type.getEffect(player.getSkillLevel(type));
-                            for (int i = 0; i < attackCount; i++) {
-                                if (venomEffect.makeChanceResult()) {
-                                    if (monster.getVenomMulti() < 3) {
-                                        monster.setVenomMulti((monster.getVenomMulti() + 1));
-                                        MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.POISON, 1), type, null, false);
-                                        monster.applyStatus(player, monsterStatusEffect, false, venomEffect.getDuration(), true);
-                                    }
-                                }
-                            }
-                        }
-                    } else if (job >= 311 && job <= 322) {
-                        if (!monster.isBoss()) {
-                            Skill mortalBlow;
-                            if (job == 311 || job == 312) {
-                                mortalBlow = SkillFactory.getSkill(Ranger.MORTAL_BLOW);
-                            } else {
-                                mortalBlow = SkillFactory.getSkill(Sniper.MORTAL_BLOW);
-                            }
-
-                            int skillLevel = player.getSkillLevel(mortalBlow);
-                            if (skillLevel > 0) {
-                                StatEffect mortal = mortalBlow.getEffect(skillLevel);
-                                if (monster.getHp() <= (monster.getStats().getHp() * mortal.getX()) / 100) {
-                                    if (Randomizer.rand(1, 100) <= mortal.getY()) {
-                                        map.damageMonster(player, monster, Integer.MAX_VALUE);  // thanks Conrad for noticing reduced EXP gain from skill kill
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (attack.skill != 0) {
-                        if (attackEffect != null && attackEffect.getFixDamage() != -1) {
-                            if (player.getAutoBanManager().useAntiCheat() && totDamageToOneMonster != attackEffect.getFixDamage() && totDamageToOneMonster != 0) {
-                                retban = AutobanFactory.FIX_DAMAGE.addPoint(player.getAutoBanManager(),
-                                        "尝试使用: " + SkillFactory.getSkillName(attack.skill) + "[Lv." + attack.skilllevel + "](" + attack.skill + ")" +
-                                                " 对怪物" + (monster != null ? monster.getName() + "[Lv." + monster.getLevel() + "](" + monster.getId() + ")" : "null") +
-                                                " 造成固定伤害 " + totDamageToOneMonster + " 已作废"
-                                );
-                                if (retban == 0) {
-                                    player.getAutoBanManager().applyLoseHpMp(totDamageToOneMonster,totDamageToOneMonster,"检测到固定伤害，");
-                                }
-                                return;
-                            }
-
-                            int threeSnailsId = player.getJobType() * 10000000 + 1000;
-                            if (attack.skill == threeSnailsId) {
-                                if (GameConfig.getServerBoolean("use_ultra_three_snails")) {
-                                    int skillLv = player.getSkillLevel(threeSnailsId);
-
-                                    if (skillLv > 0) {
-                                        AbstractPlayerInteraction api = player.getAbstractPlayerInteraction();
-
-                                        int shellId = switch (skillLv) {
-                                            case 1 -> ItemId.SNAIL_SHELL;
-                                            case 2 -> ItemId.BLUE_SNAIL_SHELL;
-                                            default -> ItemId.RED_SNAIL_SHELL;
-                                        };
-
-                                        if (api.haveItem(shellId, 1)) {
-                                            api.gainItem(shellId, (short) -1, false);
-                                            totDamageToOneMonster *= player.getLevel();
-                                        } else {
-                                            player.dropMessage(5, "你的蜗牛壳已经用完了，无法使用蜗牛投掷术。");  //蜗牛壳消耗完了
-                                            totDamageToOneMonster = 0;
-                                        }
-                                    } else {
-                                        totDamageToOneMonster = 0;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // 应用怪物状态效果
                     if (totDamageToOneMonster > 0 && attackEffect != null) {
-                        Map<MonsterStatus, Integer> attackEffectStati = attackEffect.getMonsterStati();
-                        if (!attackEffectStati.isEmpty()) {
-                            if (attackEffect.makeChanceResult()) {
-                                monster.applyStatus(player, new MonsterStatusEffect(attackEffectStati, theSkill, null, false), attackEffect.isPoison(), attackEffect.getDuration());
-                            }
-                        }
+                        applyMonsterStatusEffects(monster, player, attackEffect, theSkill);
                     }
+
                     // 在伤害应用前更新怪物最后受到的技能ID和技能目标数，避免怪物被秒杀导致无法正确设置
                     monster.setLastSkillId(attack.skill);
                     monster.setLastSkillTargetCount(targetCount);
 
-                    if (attack.skill == Paladin.HEAVENS_HAMMER) {
-                        if (!monster.isBoss()) {
-                            damageMonsterWithSkill(player, map, monster, monster.getHp() - 1, attack.skill, 1777);
-                        } else {
-                            int HHDmg = (player.calculateMaxBaseDamage(player.getTotalWatk()) * (SkillFactory.getSkill(Paladin.HEAVENS_HAMMER).getEffect(player.getSkillLevel(SkillFactory.getSkill(Paladin.HEAVENS_HAMMER))).getDamage() / 100));
-                            damageMonsterWithSkill(player, map, monster, (int) (Math.floor(Math.random() * (HHDmg / 5) + HHDmg * .8)), attack.skill, 1777);
-                        }
-                    } else if (attack.skill == Aran.COMBO_TEMPEST) {
-                        if (!monster.isBoss()) {
-                            damageMonsterWithSkill(player, map, monster, monster.getHp(), attack.skill, 0);
-                        } else {
-                            int TmpDmg = (player.calculateMaxBaseDamage(player.getTotalWatk()) * (SkillFactory.getSkill(Aran.COMBO_TEMPEST).getEffect(player.getSkillLevel(SkillFactory.getSkill(Aran.COMBO_TEMPEST))).getDamage() / 100));
-                            damageMonsterWithSkill(player, map, monster, (int) (Math.floor(Math.random() * (TmpDmg / 5) + TmpDmg * .8)), attack.skill, 0);
-                        }
-                    } else {
-                        if (attack.skill == Aran.BODY_PRESSURE) {
-                            map.broadcastMessage(PacketCreator.damageMonster(monster.getObjectId(), totDamageToOneMonster));
-                        }
+                    // 实际造成伤害
+                    dealFinalDamage(player, map, monster, attack, totDamageToOneMonster);
 
-                        map.damageMonster(player, monster, totDamageToOneMonster);
-                    }
-                    if (monster.isBuffed(MonsterStatus.WEAPON_REFLECT) && !attack.magic) {
-                        for (MobSkillId msId : monster.getSkills()) {
-                            if (msId.type() == MobSkillType.PHYSICAL_AND_MAGIC_COUNTER) {
-                                MobSkill toUse = MobSkillFactory.getMobSkillOrThrow(MobSkillType.PHYSICAL_AND_MAGIC_COUNTER, msId.level());
-                                player.addHP(-toUse.getX());
-                                map.broadcastMessage(player, PacketCreator.damagePlayer(0, monster.getId(), player.getId(), toUse.getX(), 0, 0, false, 0, true, monster.getObjectId(), 0, 0), true);
-                            }
-                        }
-                    }
-                    if (monster.isBuffed(MonsterStatus.MAGIC_REFLECT) && attack.magic) {
-                        for (MobSkillId msId : monster.getSkills()) {
-                            if (msId.type() == MobSkillType.PHYSICAL_AND_MAGIC_COUNTER) {
-                                MobSkill toUse = MobSkillFactory.getMobSkillOrThrow(MobSkillType.PHYSICAL_AND_MAGIC_COUNTER, msId.level());
-                                player.addHP(-toUse.getY());
-                                map.broadcastMessage(player, PacketCreator.damagePlayer(0, monster.getId(), player.getId(), toUse.getY(), 0, 0, false, 0, true, monster.getObjectId(), 0, 0), true);
-                            }
-                        }
-                    }
+                    // 处理怪物反伤
+                    handleMonsterReflect(player, map, monster, attack);
                 }
             }
         } catch (Exception e) {
@@ -598,31 +290,18 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
         }
     }
 
-    private static void damageMonsterWithSkill(final Character attacker, final MapleMap map, final Monster monster, final int damage, int skillid, int fixedTime) {
-        int animationTime;
-
-        if (fixedTime == 0) {
-            animationTime = SkillFactory.getSkill(skillid).getAnimationTime();
-        } else {
-            animationTime = fixedTime;
-        }
-
-        if (animationTime > 0) { // 确保此处仅使用带动画时间的有限攻击
-            TimerManager.getInstance().schedule(() -> {
-                map.broadcastMessage(PacketCreator.damageMonster(monster.getObjectId(), damage), monster.getPosition());
-                map.damageMonster(attacker, monster, damage);
-            }, animationTime);
-        } else {
-            map.broadcastMessage(PacketCreator.damageMonster(monster.getObjectId(), damage), monster.getPosition());
-            map.damageMonster(attacker, monster, damage);
-        }
-    }
-
+    /**
+     * @param p 输入包
+     * @param chr 角色对象
+     * @param ranged 是否为远程攻击
+     * @param magic 是否为魔法攻击
+     * @return 攻击信息对象
+     * @description 解析客户端发送的伤害数据包，并进行初步的作弊检测。
+     */
     protected AttackInfo parseDamage(InPacket p, Character chr, boolean ranged, boolean magic) {
-        //2C 00 00 01 91 A1 12 00 A5 57 62 FC E2 75 99 10 00 47 80 01 04 01 C6 CC 02 DD FF 5F 00
-        boolean shadowPartner = chr.getBuffEffect(BuffStat.SHADOWPARTNER) != null;  //提前获取此次伤害的影分身状态，避免后续判断技能段数时影分身结束导致段数上限出错。
+        boolean shadowPartner = chr.getBuffEffect(BuffStat.SHADOWPARTNER) != null;
         AttackInfo ret = new AttackInfo();
-        p.readByte();   //总是为1，作用未知
+        p.readByte(); // 总是为1，作用未知
         ret.numAttackedAndDamage = p.readByte();
         ret.numAttacked = (ret.numAttackedAndDamage >>> 4) & 0xF;
         ret.numDamage = ret.numAttackedAndDamage & 0xF;
@@ -638,8 +317,12 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             }
         }
 
-        if (chr.getAutoBanManager().Detection_FastAttack(ret.skill,ret.skilllevel)) return null;//快速攻击检测
+        // 作弊检测：快速攻击
+        if (chr.getAutoBanManager().Detection_FastAttack(ret.skill, ret.skilllevel)) {
+            return null;
+        }
 
+        // 读取充能值
         if (ret.skill == Evan.ICE_BREATH || ret.skill == Evan.FIRE_BREATH || ret.skill == FPArchMage.BIG_BANG || ret.skill == ILArchMage.BIG_BANG || ret.skill == Bishop.BIG_BANG || ret.skill == Gunslinger.GRENADE || ret.skill == Brawler.CORKSCREW_BLOW || ret.skill == ThunderBreaker.CORKSCREW_BLOW || ret.skill == NightWalker.POISON_BOMB) {
             ret.charge = p.readInt();
         } else {
@@ -650,42 +333,13 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
         ret.display = p.readByte();
         ret.direction = p.readByte();
         ret.stance = p.readByte();
+
+        // 处理金钱炸弹技能的特殊解析
         if (ret.skill == ChiefBandit.MESO_EXPLOSION) {
-            if (ret.numAttackedAndDamage == 0) {
-                p.skip(10);
-                int bullets = p.readByte();
-                for (int j = 0; j < bullets; j++) {
-                    int mesoid = p.readInt();
-                    p.skip(1);
-                    ret.allDamage.put(mesoid, null);
-                }
-                return ret;
-            } else {
-                p.skip(6);
-            }
-            for (int i = 0; i < ret.numAttacked + 1; i++) {
-                int oid = p.readInt();
-                if (i < ret.numAttacked) {
-                    p.skip(12);
-                    int bullets = p.readByte();
-                    List<Integer> allDamageNumbers = new ArrayList<>();
-                    for (int j = 0; j < bullets; j++) {
-                        int damage = p.readInt();
-                        allDamageNumbers.add(damage);
-                    }
-                    ret.allDamage.put(oid, allDamageNumbers);
-                    p.skip(4);
-                } else {
-                    int bullets = p.readByte();
-                    for (int j = 0; j < bullets; j++) {
-                        int mesoid = p.readInt();
-                        p.skip(1);
-                        ret.allDamage.put(mesoid, null);
-                    }
-                }
-            }
-            return ret;
+            return parseMesoExplosionDamage(p, ret);
         }
+
+        // 读取攻击速度和方向
         if (ranged) {
             p.readByte();
             ret.speed = p.readByte();
@@ -701,11 +355,640 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             p.skip(4);
         }
 
-        // 查找基础伤害以进行进一步计算。
-        // 某些技能在此部分有其自己的公式。
-        long calcDmgMax;
+        // 计算最大伤害
+        long calcDmgMax = calculateMaxDamage(chr, ret);
 
-        if (magic && ret.skill != 0) {   // 感谢onechord注意到由于最大伤害为0导致的一些误报
+        StatEffect effect = null;
+        if (ret.skill != 0) {
+            Skill skill = SkillFactory.getSkill(ret.skill);
+            effect = skill.getEffect(ret.skilllevel);
+            calcDmgMax = applySkillSpecificDamageFormula(chr, ret, skill, effect, calcDmgMax);
+        }
+
+        // 应用Buff和能量条效果
+        calcDmgMax = applyBuffAndEnergyBarEffects(chr, ret, calcDmgMax);
+
+        boolean canCrit = chr.getJob().isA((Job.BOWMAN)) || chr.getJob().isA(Job.THIEF) || chr.getJob().isA(Job.NIGHTWALKER1) || chr.getJob().isA(Job.WINDARCHER1) || chr.getJob() == Job.ARAN3 || chr.getJob() == Job.ARAN4 || chr.getJob() == Job.MARAUDER || chr.getJob() == Job.BUCCANEER;
+        StatEffect sharpEyesEffect = chr.getBuffEffect(BuffStat.SHARP_EYES);
+        if (sharpEyesEffect != null) {
+            canCrit = true;
+            calcDmgMax = (long) Math.ceil(sharpEyesEffect.getY() / 100.0 * calcDmgMax);
+        }
+
+        if (ret.skill != 0) {
+            int fixed = ret.getAttackEffect(chr, SkillFactory.getSkill(ret.skill)).getFixDamage();
+            if (fixed > 0) {
+                calcDmgMax = fixed;
+            }
+        }
+
+        for (int i = 0; i < ret.numAttacked; i++) {
+            int oid = p.readInt();
+            p.skip(14);
+            List<Integer> allDamageNumbers = new ArrayList<>();
+            Monster monster = chr.getMap().getMonsterByOid(oid);
+
+            long currentCalcDmgMax = applyChargeAndElementalEffects(chr, ret, monster, calcDmgMax);
+
+            int maxattack = ret.numDamage;
+            // 作弊检测：伤害段数
+            if (chr.getAutoBanManager().useAntiCheat() && effect != null) {
+                maxattack = Math.max(effect.getBulletCount(), effect.getAttackCount());
+                if (shadowPartner) {
+                    maxattack = maxattack * 2;
+                }
+                ret.numDamage = chr.getAutoBanManager().checkDamageSegmentsHack(ret.numDamage, maxattack, ret.skill, ret.skilllevel, monster);
+            }
+
+            for (int j = 0; j < ret.numDamage; j++) {
+                long damage = (long) p.readInt();
+                long hitDmgMax = currentCalcDmgMax;
+
+                // 处理影分身和特殊技能的伤害修正
+                hitDmgMax = applyDamageModifiers(ret, j, shadowPartner, hitDmgMax);
+
+                // 作弊检测：伤害值
+                damage = chr.getAutoBanManager().checkDamageHack(damage, hitDmgMax * (canCrit ? 2 : 1), ret.skill, ret.skilllevel, monster);
+
+                if (ret.skill == Marksman.SNIPE || (canCrit && damage > hitDmgMax)) {
+                    // 如果技能是暴击，则反转伤害值以使其在客户端上正确显示。
+                    damage = -Integer.MAX_VALUE + damage - 1;
+                }
+                allDamageNumbers.add((int) damage);
+            }
+            if (ret.skill != Corsair.RAPID_FIRE || ret.skill != Aran.HIDDEN_FULL_DOUBLE || ret.skill != Aran.HIDDEN_FULL_TRIPLE || ret.skill != Aran.HIDDEN_OVER_DOUBLE || ret.skill != Aran.HIDDEN_OVER_TRIPLE) {
+                p.skip(4);
+            }
+            ret.allDamage.put(oid, allDamageNumbers);
+        }
+        if (ret.skill == NightWalker.POISON_BOMB) { // 毒炸弹
+            p.skip(4);
+            ret.position.setLocation(p.readShort(), p.readShort());
+        }
+        return ret;
+    }
+
+    // ==================================================
+    // ============== 私有辅助方法 ======================
+    // ==================================================
+
+    /**
+     * @param l 最小值
+     * @param u 最大值
+     * @return 随机整数
+     * @description 生成一个指定范围内的随机整数。
+     */
+    private static int rand(int l, int u) {
+        return (int) ((Math.random() * (u - l + 1)) + l);
+    }
+
+    /**
+     * @param attack 攻击信息
+     * @param map 地图对象
+     * @description 处理金钱炸弹技能的逻辑。
+     */
+    private void handleMesoExplosion(AttackInfo attack, final MapleMap map) {
+        int delay = 0;
+        for (Integer oned : attack.allDamage.keySet()) {
+            MapObject mapobject = map.getMapObject(oned);
+            if (mapobject != null && mapobject.getType() == MapObjectType.ITEM) {
+                final MapItem mapitem = (MapItem) mapobject;
+                if (mapitem.getMeso() == 0) {
+                    return;
+                }
+
+                mapitem.lockItem();
+                try {
+                    if (mapitem.isPickedUp()) {
+                        return;
+                    }
+                    TimerManager.getInstance().schedule(() -> {
+                        mapitem.lockItem();
+                        try {
+                            if (mapitem.isPickedUp()) {
+                                return;
+                            }
+                            map.pickItemDrop(PacketCreator.removeItemFromMap(mapitem.getObjectId(), 4, 0), mapitem);
+                        } finally {
+                            mapitem.unlockItem();
+                        }
+                    }, delay);
+                    delay += 100;
+                } finally {
+                    mapitem.unlockItem();
+                }
+            } else if (mapobject != null && mapobject.getType() != MapObjectType.MONSTER) {
+                return;
+            }
+        }
+    }
+
+    /**
+     * @param monster 怪物对象
+     * @param attack 攻击信息
+     * @param onedList 伤害列表
+     * @description 处理怪物免疫状态（魔法免疫或武器免疫）。
+     */
+    private void handleMonsterImmunity(Monster monster, AttackInfo attack, List<Integer> onedList) {
+        if (attack.magic) {
+            if (monster.isBuffed(MonsterStatus.MAGIC_IMMUNITY)) {
+                Collections.fill(onedList, 1);
+            }
+        } else {
+            if (monster.isBuffed(MonsterStatus.WEAPON_IMMUNITY)) {
+                Collections.fill(onedList, 1);
+            }
+        }
+    }
+
+    /**
+     * @param attack 攻击信息
+     * @param monster 怪物对象
+     * @param onedList 伤害列表
+     * @description 处理武陵道场Boss的伤害限制。
+     */
+    private void handleDojoBossDamageLimit(AttackInfo attack, Monster monster, List<Integer> onedList) {
+        if (attack.skill == 1009 || attack.skill == 10001009 || attack.skill == 20001009) {
+            int dmgLimit = (int) Math.ceil(0.3 * monster.getMaxHp());
+            List<Integer> _onedList = new LinkedList<>();
+            for (Integer i : onedList) {
+                _onedList.add(Math.min(i, dmgLimit));
+            }
+            onedList.clear();
+            onedList.addAll(_onedList);
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @param attack 攻击信息
+     * @param attackCount 攻击次数
+     * @param totDamageToOneMonster 对单个怪物的总伤害
+     * @param theSkill 技能对象
+     * @param job 玩家职业ID
+     * @param map 地图对象
+     * @description 应用各种技能效果，如偷窃、吸血、元素效果等。
+     */
+    private void applySkillEffects(Character player, Monster monster, AttackInfo attack, int attackCount, int totDamageToOneMonster, Skill theSkill, int job, MapleMap map) {
+        // 偷钱技能
+        if (player.getBuffedValue(BuffStat.PICKPOCKET) != null && (attack.skill == 0 || attack.skill == Rogue.DOUBLE_STAB || attack.skill == Bandit.SAVAGE_BLOW || attack.skill == ChiefBandit.ASSAULTER || attack.skill == ChiefBandit.BAND_OF_THIEVES || attack.skill == Shadower.ASSASSINATE || attack.skill == Shadower.TAUNT || attack.skill == Shadower.BOOMERANG_STEP)) {
+            handlePickpocket(player, monster, attack, map);
+        }
+        // 吸血技能
+        else if (attack.skill == Marauder.ENERGY_DRAIN || attack.skill == ThunderBreaker.ENERGY_DRAIN || attack.skill == NightWalker.VAMPIRE || attack.skill == Assassin.DRAIN) {
+            player.addHP(Math.min(monster.getMaxHp(), Math.min((int) ((double) totDamageToOneMonster * (double) SkillFactory.getSkill(attack.skill).getEffect(player.getSkillLevel(SkillFactory.getSkill(attack.skill))).getX() / 100.0), player.getCurrentMaxHp() / 2)));
+        }
+        // 神通术（偷取物品）
+        else if (attack.skill == Bandit.STEAL) {
+            handleStealSkill(player, monster, map);
+        }
+        // 元素效果技能
+        else if (attack.skill == FPArchMage.FIRE_DEMON) {
+            long duration = SECONDS.toMillis(SkillFactory.getSkill(FPArchMage.FIRE_DEMON).getEffect(player.getSkillLevel(SkillFactory.getSkill(FPArchMage.FIRE_DEMON))).getDuration());
+            monster.setTempEffectiveness(Element.ICE, ElementalEffectiveness.WEAK, duration);
+        } else if (attack.skill == ILArchMage.ICE_DEMON) {
+            long duration = SECONDS.toMillis(SkillFactory.getSkill(ILArchMage.ICE_DEMON).getEffect(player.getSkillLevel(SkillFactory.getSkill(ILArchMage.ICE_DEMON))).getDuration());
+            monster.setTempEffectiveness(Element.FIRE, ElementalEffectiveness.WEAK, duration);
+        }
+        // 追踪信标/靶心技能
+        else if (attack.skill == Outlaw.HOMING_BEACON || attack.skill == Corsair.BULLSEYE) {
+            StatEffect beacon = SkillFactory.getSkill(attack.skill).getEffect(player.getSkillLevel(attack.skill));
+            beacon.applyBeaconBuff(player, monster.getObjectId());
+        }
+        // 火焰喷射器技能
+        else if (attack.skill == Outlaw.FLAME_THROWER) {
+            handleFlameThrowerSkill(player, monster);
+        }
+
+        // 战神雪球冲刺
+        if (player.isAran()) {
+            handleAranSnowCharge(player, monster, totDamageToOneMonster);
+        }
+        // 弓箭手腿部束缚
+        if (player.getBuffedValue(BuffStat.HAMSTRING) != null) {
+            handleHamstring(player, monster);
+        }
+        // 龙神缓慢
+        if (player.getBuffedValue(BuffStat.SLOW) != null) {
+            handleEvanSlow(player, monster);
+        }
+        // 弩手致盲
+        if (player.getBuffedValue(BuffStat.BLIND) != null) {
+            handleMarksmanBlind(player, monster);
+        }
+        // 骑士团充能技能
+        if (job == 121 || job == 122) {
+            handleKnightChargeSkills(player, monster, totDamageToOneMonster, job);
+        }
+        // 战神连环吸血
+        else if (player.getBuffedValue(BuffStat.COMBO_DRAIN) != null) {
+            handleAranComboDrain(player, totDamageToOneMonster);
+        }
+        // 毒液技能（暗影双刀、侠盗）
+        else if (job == 412 || job == 422 || job == 1411) {
+            handleVenomSkills(player, monster, attackCount);
+        }
+        // 致命一击（神射手、箭神）
+        else if (job >= 311 && job <= 322) {
+            handleMortalBlowSkills(player, monster, map);
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @param attack 攻击信息
+     * @param map 地图对象
+     * @description 处理偷钱技能（Pickpocket）的逻辑。
+     */
+    private void handlePickpocket(Character player, Monster monster, AttackInfo attack, MapleMap map) {
+        Skill pickpocket = SkillFactory.getSkill(ChiefBandit.PICKPOCKET);
+        int picklv = (player.isGM()) ? pickpocket.getMaxLevel() : player.getSkillLevel(pickpocket);
+        if (picklv > 0) {
+            int delay = 0;
+            final int maxmeso = player.getBuffedValue(BuffStat.PICKPOCKET);
+            List<Integer> onedList = attack.allDamage.get(monster.getObjectId());
+            for (Integer eachd : onedList) {
+                eachd += Integer.MAX_VALUE;
+
+                if (pickpocket.getEffect(picklv).makeChanceResult()) {
+                    final int eachdf;
+                    if (eachd < 0) {
+                        eachdf = eachd + Integer.MAX_VALUE;
+                    } else {
+                        eachdf = eachd;
+                    }
+
+                    TimerManager.getInstance().schedule(() -> map.spawnMesoDrop(Math.min((int) Math.max(((double) eachdf / (double) 20000) * (double) maxmeso, 1), maxmeso), new Point((int) (monster.getPosition().getX() + Randomizer.nextInt(100) - 50), (int) (monster.getPosition().getY())), monster, player, true, (byte) 2), delay);
+                    delay += 100;
+                }
+            }
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @param map 地图对象
+     * @description 处理神通术（Steal）技能的逻辑。
+     */
+    private void handleStealSkill(Character player, Monster monster, MapleMap map) {
+        Skill steal = SkillFactory.getSkill(Bandit.STEAL);
+        if (monster.getStolen().isEmpty()) { // 每个怪物只能被偷取一次
+            if (steal.getEffect(player.getSkillLevel(steal)).makeChanceResult()) {
+                monster.addStolen(0);
+
+                MonsterInformationProvider mi = MonsterInformationProvider.getInstance();
+                List<Integer> dropPool = mi.retrieveDropPool(monster.getId());
+                if (dropPool != null && !dropPool.isEmpty()) {
+                    int rndPool = (int) Math.floor(Math.random() * dropPool.get(dropPool.size() - 1));
+
+                    int i = 0;
+                    while (rndPool >= dropPool.get(i)) {
+                        i++;
+                    }
+
+                    List<MonsterDropEntry> toSteal = new ArrayList<>();
+                    toSteal.add(mi.retrieveDrop(monster.getId()).get(i));
+
+                    map.dropItemsFromMonster(toSteal, player, monster);
+                    monster.addStolen(toSteal.get(0).itemId);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @description 处理火焰喷射器（Flame Thrower）技能的逻辑。
+     */
+    private void handleFlameThrowerSkill(Character player, Monster monster) {
+        if (!monster.isBoss()) {
+            Skill type = SkillFactory.getSkill(Outlaw.FLAME_THROWER);
+            if (player.getSkillLevel(type) > 0) {
+                StatEffect DoT = type.getEffect(player.getSkillLevel(type));
+                MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.POISON, 1), type, null, false);
+                monster.applyStatus(player, monsterStatusEffect, true, DoT.getDuration(), false);
+            }
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @param totDamageToOneMonster 对单个怪物的总伤害
+     * @description 处理战神雪球冲刺（Aran Snow Charge）技能的逻辑。
+     */
+    private void handleAranSnowCharge(Character player, Monster monster, int totDamageToOneMonster) {
+        if (player.getBuffedValue(BuffStat.WK_CHARGE) != null) {
+            Skill snowCharge = SkillFactory.getSkill(Aran.SNOW_CHARGE);
+            if (totDamageToOneMonster > 0) {
+                MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.SPEED, snowCharge.getEffect(player.getSkillLevel(snowCharge)).getX()), snowCharge, null, false);
+                long duration = SECONDS.toMillis(snowCharge.getEffect(player.getSkillLevel(snowCharge)).getY());
+                monster.applyStatus(player, monsterStatusEffect, false, duration);
+            }
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @description 处理弓箭手腿部束缚（Hamstring）技能的逻辑。
+     */
+    private void handleHamstring(Character player, Monster monster) {
+        Skill hamstring = SkillFactory.getSkill(Bowmaster.HAMSTRING);
+        if (hamstring.getEffect(player.getSkillLevel(hamstring)).makeChanceResult()) {
+            MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.SPEED, hamstring.getEffect(player.getSkillLevel(hamstring)).getX()), hamstring, null, false);
+            long duration = SECONDS.toMillis(hamstring.getEffect(player.getSkillLevel(hamstring)).getY());
+            monster.applyStatus(player, monsterStatusEffect, false, duration);
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @description 处理龙神缓慢（Evan Slow）技能的逻辑。
+     */
+    private void handleEvanSlow(Character player, Monster monster) {
+        Skill slow = SkillFactory.getSkill(Evan.SLOW);
+        if (slow.getEffect(player.getSkillLevel(slow)).makeChanceResult()) {
+            MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.SPEED, slow.getEffect(player.getSkillLevel(slow)).getX()), slow, null, false);
+            long duration = MINUTES.toMillis(slow.getEffect(player.getSkillLevel(slow)).getY());
+            monster.applyStatus(player, monsterStatusEffect, false, duration);
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @description 处理弩手致盲（Marksman Blind）技能的逻辑。
+     */
+    private void handleMarksmanBlind(Character player, Monster monster) {
+        Skill blind = SkillFactory.getSkill(Marksman.BLIND);
+        if (blind.getEffect(player.getSkillLevel(blind)).makeChanceResult()) {
+            MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.ACC, blind.getEffect(player.getSkillLevel(blind)).getX()), blind, null, false);
+            long duration = SECONDS.toMillis(blind.getEffect(player.getSkillLevel(blind)).getY());
+            monster.applyStatus(player, monsterStatusEffect, false, duration);
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @param totDamageToOneMonster 对单个怪物的总伤害
+     * @param job 玩家职业ID
+     * @description 处理骑士团充能技能的逻辑。
+     */
+    private void handleKnightChargeSkills(Character player, Monster monster, int totDamageToOneMonster, int job) {
+        for (int charge = 1211005; charge < 1211007; charge++) {
+            Skill chargeSkill = SkillFactory.getSkill(charge);
+            if (player.isBuffFrom(BuffStat.WK_CHARGE, chargeSkill)) {
+                if (totDamageToOneMonster > 0) {
+                    if (charge == WhiteKnight.BW_ICE_CHARGE || charge == WhiteKnight.SWORD_ICE_CHARGE) {
+                        monster.setTempEffectiveness(Element.ICE, ElementalEffectiveness.WEAK, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY() * 1000);
+                        // 修复冰技能不冰怪的问题，关键是冰和火都没有对应的异常状态，对应的异常只有冻结。如果这里把ICE改了，那火怎么办？所以，还是先注释掉。
+                        // MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.FREEZE, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getX()), chargeSkill, null, false);
+                        // long duration = SECONDS.toMillis(chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY());
+                        // monster.applyStatus(player, monsterStatusEffect, false, duration);
+                        break;
+                    }
+                    if (charge == WhiteKnight.BW_FIRE_CHARGE || charge == WhiteKnight.SWORD_FIRE_CHARGE) {
+                        monster.setTempEffectiveness(Element.FIRE, ElementalEffectiveness.WEAK, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY() * 1000);
+                        break;
+                    }
+                }
+            }
+        }
+        if (job == 122) {
+            for (int charge = 1221003; charge < 1221004; charge++) {
+                Skill chargeSkill = SkillFactory.getSkill(charge);
+                if (player.isBuffFrom(BuffStat.WK_CHARGE, chargeSkill)) {
+                    if (totDamageToOneMonster > 0) {
+                        monster.setTempEffectiveness(Element.HOLY, ElementalEffectiveness.WEAK, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY() * 1000);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param totDamageToOneMonster 对单个怪物的总伤害
+     * @description 处理战神连环吸血（Aran Combo Drain）技能的逻辑。
+     */
+    private void handleAranComboDrain(Character player, int totDamageToOneMonster) {
+        Skill skill = SkillFactory.getSkill(Aran.COMBO_DRAIN);
+        player.addHP(((totDamageToOneMonster * skill.getEffect(player.getSkillLevel(skill)).getX()) / 100));
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @param attackCount 攻击次数
+     * @description 处理毒液技能（Venom Skills）的逻辑。
+     */
+    private void handleVenomSkills(Character player, Monster monster, int attackCount) {
+        Skill type = SkillFactory.getSkill(player.getJob().getId() == 412 ? 4120005 : (player.getJob().getId() == 1411 ? 14110004 : 4220005));
+        if (player.getSkillLevel(type) > 0) {
+            StatEffect venomEffect = type.getEffect(player.getSkillLevel(type));
+            for (int i = 0; i < attackCount; i++) {
+                if (venomEffect.makeChanceResult()) {
+                    if (monster.getVenomMulti() < 3) {
+                        monster.setVenomMulti((monster.getVenomMulti() + 1));
+                        MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.POISON, 1), type, null, false);
+                        monster.applyStatus(player, monsterStatusEffect, false, venomEffect.getDuration(), true);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param monster 怪物对象
+     * @param map 地图对象
+     * @description 处理致命一击（Mortal Blow）技能的逻辑。
+     */
+    private void handleMortalBlowSkills(Character player, Monster monster, MapleMap map) {
+        if (!monster.isBoss()) {
+            Skill mortalBlow;
+            if (player.getJob().getId() == 311 || player.getJob().getId() == 312) {
+                mortalBlow = SkillFactory.getSkill(Ranger.MORTAL_BLOW);
+            } else {
+                mortalBlow = SkillFactory.getSkill(Sniper.MORTAL_BLOW);
+            }
+
+            int skillLevel = player.getSkillLevel(mortalBlow);
+            if (skillLevel > 0) {
+                StatEffect mortal = mortalBlow.getEffect(skillLevel);
+                if (monster.getHp() <= (monster.getStats().getHp() * mortal.getX()) / 100) {
+                    if (Randomizer.rand(1, 100) <= mortal.getY()) {
+                        map.damageMonster(player, monster, Integer.MAX_VALUE);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @param monster 怪物对象
+     * @param player 玩家角色
+     * @param attackEffect 攻击效果
+     * @param theSkill 技能对象
+     * @description 应用怪物状态效果。
+     */
+    private void applyMonsterStatusEffects(Monster monster, Character player, StatEffect attackEffect, Skill theSkill) {
+        Map<MonsterStatus, Integer> attackEffectStati = attackEffect.getMonsterStati();
+        if (!attackEffectStati.isEmpty()) {
+            if (attackEffect.makeChanceResult()) {
+                monster.applyStatus(player, new MonsterStatusEffect(attackEffectStati, theSkill, null, false), attackEffect.isPoison(), attackEffect.getDuration());
+            }
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param map 地图对象
+     * @param monster 怪物对象
+     * @param attack 攻击信息
+     * @param totDamageToOneMonster 对单个怪物的总伤害
+     * @description 实际造成伤害。
+     */
+    private void dealFinalDamage(Character player, MapleMap map, Monster monster, AttackInfo attack, int totDamageToOneMonster) {
+        if (attack.skill == Paladin.HEAVENS_HAMMER) {
+            if (!monster.isBoss()) {
+                damageMonsterWithSkill(player, map, monster, monster.getHp() - 1, attack.skill, 1777);
+            } else {
+                int HHDmg = (player.calculateMaxBaseDamage(player.getTotalWatk()) * (SkillFactory.getSkill(Paladin.HEAVENS_HAMMER).getEffect(player.getSkillLevel(SkillFactory.getSkill(Paladin.HEAVENS_HAMMER))).getDamage() / 100));
+                damageMonsterWithSkill(player, map, monster, (int) (Math.floor(Math.random() * (HHDmg / 5) + HHDmg * .8)), attack.skill, 1777);
+            }
+        } else if (attack.skill == Aran.COMBO_TEMPEST) {
+            if (!monster.isBoss()) {
+                damageMonsterWithSkill(player, map, monster, monster.getHp(), attack.skill, 0);
+            } else {
+                int TmpDmg = (player.calculateMaxBaseDamage(player.getTotalWatk()) * (SkillFactory.getSkill(Aran.COMBO_TEMPEST).getEffect(player.getSkillLevel(SkillFactory.getSkill(Aran.COMBO_TEMPEST))).getDamage() / 100));
+                damageMonsterWithSkill(player, map, monster, (int) (Math.floor(Math.random() * (TmpDmg / 5) + TmpDmg * .8)), attack.skill, 0);
+            }
+        } else {
+            if (attack.skill == Aran.BODY_PRESSURE) {
+                map.broadcastMessage(PacketCreator.damageMonster(monster.getObjectId(), totDamageToOneMonster));
+            }
+            map.damageMonster(player, monster, totDamageToOneMonster);
+        }
+    }
+
+    /**
+     * @param player 玩家角色
+     * @param map 地图对象
+     * @param monster 怪物对象
+     * @param attack 攻击信息
+     * @description 处理怪物反伤（武器反伤或魔法反伤）。
+     */
+    private void handleMonsterReflect(Character player, MapleMap map, Monster monster, AttackInfo attack) {
+        if (monster.isBuffed(MonsterStatus.WEAPON_REFLECT) && !attack.magic) {
+            for (MobSkillId msId : monster.getSkills()) {
+                if (msId.type() == MobSkillType.PHYSICAL_AND_MAGIC_COUNTER) {
+                    MobSkill toUse = MobSkillFactory.getMobSkillOrThrow(MobSkillType.PHYSICAL_AND_MAGIC_COUNTER, msId.level());
+                    player.addHP(-toUse.getX());
+                    map.broadcastMessage(player, PacketCreator.damagePlayer(0, monster.getId(), player.getId(), toUse.getX(), 0, 0, false, 0, true, monster.getObjectId(), 0, 0), true);
+                }
+            }
+        }
+        if (monster.isBuffed(MonsterStatus.MAGIC_REFLECT) && attack.magic) {
+            for (MobSkillId msId : monster.getSkills()) {
+                if (msId.type() == MobSkillType.PHYSICAL_AND_MAGIC_COUNTER) {
+                    MobSkill toUse = MobSkillFactory.getMobSkillOrThrow(MobSkillType.PHYSICAL_AND_MAGIC_COUNTER, msId.level());
+                    player.addHP(-toUse.getY());
+                    map.broadcastMessage(player, PacketCreator.damagePlayer(0, monster.getId(), player.getId(), toUse.getY(), 0, 0, false, 0, true, monster.getObjectId(), 0, 0), true);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param attacker 攻击者角色
+     * @param map 地图对象
+     * @param monster 怪物对象
+     * @param damage 伤害值
+     * @param skillid 技能ID
+     * @param fixedTime 固定动画时间
+     * @description 使用技能对怪物造成伤害，并处理动画延迟。
+     */
+    private static void damageMonsterWithSkill(final Character attacker, final MapleMap map, final Monster monster, final int damage, int skillid, int fixedTime) {
+        int animationTime;
+
+        if (fixedTime == 0) {
+            animationTime = SkillFactory.getSkill(skillid).getAnimationTime();
+        } else {
+            animationTime = fixedTime;
+        }
+
+        if (animationTime > 0) {
+            TimerManager.getInstance().schedule(() -> {
+                map.broadcastMessage(PacketCreator.damageMonster(monster.getObjectId(), damage), monster.getPosition());
+                map.damageMonster(attacker, monster, damage);
+            }, animationTime);
+        } else {
+            map.broadcastMessage(PacketCreator.damageMonster(monster.getObjectId(), damage), monster.getPosition());
+            map.damageMonster(attacker, monster, damage);
+        }
+    }
+
+    /**
+     * @param p 输入包
+     * @param ret 攻击信息对象
+     * @return 攻击信息对象
+     * @description 解析金钱炸弹技能的伤害数据。
+     */
+    private AttackInfo parseMesoExplosionDamage(InPacket p, AttackInfo ret) {
+        if (ret.numAttackedAndDamage == 0) {
+            p.skip(10);
+            int bullets = p.readByte();
+            for (int j = 0; j < bullets; j++) {
+                int mesoid = p.readInt();
+                p.skip(1);
+                ret.allDamage.put(mesoid, null);
+            }
+            return ret;
+        } else {
+            p.skip(6);
+        }
+        for (int i = 0; i < ret.numAttacked + 1; i++) {
+            int oid = p.readInt();
+            if (i < ret.numAttacked) {
+                p.skip(12);
+                int bullets = p.readByte();
+                List<Integer> allDamageNumbers = new ArrayList<>();
+                for (int j = 0; j < bullets; j++) {
+                    int damage = p.readInt();
+                    allDamageNumbers.add(damage);
+                }
+                ret.allDamage.put(oid, allDamageNumbers);
+                p.skip(4);
+            } else {
+                int bullets = p.readByte();
+                for (int j = 0; j < bullets; j++) {
+                    int mesoid = p.readInt();
+                    p.skip(1);
+                    ret.allDamage.put(mesoid, null);
+                }
+            }
+        }
+        return ret;
+    }
+
+    /**
+     * @param chr 角色对象
+     * @param ret 攻击信息对象
+     * @return 计算出的最大伤害值
+     * @description 根据角色属性和攻击类型计算基础最大伤害。
+     */
+    private long calculateMaxDamage(Character chr, AttackInfo ret) {
+        long calcDmgMax;
+        if (ret.magic && ret.skill != 0) {
             calcDmgMax = (long) (Math.ceil((chr.getTotalMagic() * Math.ceil(chr.getTotalMagic() / 1000.0) + chr.getTotalMagic()) / 30.0) + Math.ceil(chr.getTotalInt() / 200.0));
         } else if (ret.skill == Rogue.LUCKY_SEVEN || ret.skill == NightWalker.LUCKY_SEVEN || ret.skill == NightLord.TRIPLE_THROW) {
             calcDmgMax = (long) ((chr.getTotalLuk() * 5) * Math.ceil(chr.getTotalWatk() / 100.0));
@@ -716,70 +999,77 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
         } else {
             calcDmgMax = chr.calculateMaxBaseDamage(chr.getTotalWatk());
         }
+        return calcDmgMax;
+    }
 
-        StatEffect effect = null;
-        if (ret.skill != 0) {
-            Skill skill = SkillFactory.getSkill(ret.skill);
-            effect = skill.getEffect(ret.skilllevel);
-
-            if (magic) {
-                // 由于技能是基于魔法的，使用魔法公式
-                if (chr.getJob() == Job.IL_ARCHMAGE || chr.getJob() == Job.IL_MAGE) {
-                    int skillLvl = chr.getSkillLevel(ILMage.ELEMENT_AMPLIFICATION);
-                    if (skillLvl > 0) {
-                        calcDmgMax = calcDmgMax * SkillFactory.getSkill(ILMage.ELEMENT_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
-                    }
-                } else if (chr.getJob() == Job.FP_ARCHMAGE || chr.getJob() == Job.FP_MAGE) {
-                    int skillLvl = chr.getSkillLevel(FPMage.ELEMENT_AMPLIFICATION);
-                    if (skillLvl > 0) {
-                        calcDmgMax = calcDmgMax * SkillFactory.getSkill(FPMage.ELEMENT_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
-                    }
-                } else if (chr.getJob() == Job.BLAZEWIZARD3 || chr.getJob() == Job.BLAZEWIZARD4) {
-                    int skillLvl = chr.getSkillLevel(BlazeWizard.ELEMENT_AMPLIFICATION);
-                    if (skillLvl > 0) {
-                        calcDmgMax = calcDmgMax * SkillFactory.getSkill(BlazeWizard.ELEMENT_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
-                    }
-                } else if (chr.getJob() == Job.EVAN7 || chr.getJob() == Job.EVAN8 || chr.getJob() == Job.EVAN9 || chr.getJob() == Job.EVAN10) {
-                    int skillLvl = chr.getSkillLevel(Evan.MAGIC_AMPLIFICATION);
-                    if (skillLvl > 0) {
-                        calcDmgMax = calcDmgMax * SkillFactory.getSkill(Evan.MAGIC_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
-                    }
+    /**
+     * @param chr 角色对象
+     * @param ret 攻击信息对象
+     * @param skill 技能对象
+     * @param effect 技能效果
+     * @param calcDmgMax 当前最大伤害值
+     * @return 修正后的最大伤害值
+     * @description 应用技能特有的伤害公式。
+     */
+    private long applySkillSpecificDamageFormula(Character chr, AttackInfo ret, Skill skill, StatEffect effect, long calcDmgMax) {
+        if (ret.magic) {
+            if (chr.getJob() == Job.IL_ARCHMAGE || chr.getJob() == Job.IL_MAGE) {
+                int skillLvl = chr.getSkillLevel(ILMage.ELEMENT_AMPLIFICATION);
+                if (skillLvl > 0) {
+                    calcDmgMax = calcDmgMax * SkillFactory.getSkill(ILMage.ELEMENT_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
                 }
-
-                calcDmgMax *= effect.getMatk();
-                if (ret.skill == Cleric.HEAL) {
-                    // 这个公式仍然有些不稳定，但相当准确。
-                    calcDmgMax = (int) Math.round((chr.getTotalInt() * 4.8 + chr.getTotalLuk() * 4) * chr.getTotalMagic() / 1000);
-                    calcDmgMax = calcDmgMax * effect.getHp() / 100;
-
-                    ret.speed = 7;
+            } else if (chr.getJob() == Job.FP_ARCHMAGE || chr.getJob() == Job.FP_MAGE) {
+                int skillLvl = chr.getSkillLevel(FPMage.ELEMENT_AMPLIFICATION);
+                if (skillLvl > 0) {
+                    calcDmgMax = calcDmgMax * SkillFactory.getSkill(FPMage.ELEMENT_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
                 }
-            } else if (ret.skill == Hermit.SHADOW_MESO) {
-                // 暗器伤害有其独特的计算公式
-                calcDmgMax = effect.getMoneyCon() * 10;
-                calcDmgMax = (int) Math.floor(calcDmgMax * 1.5);
-            } else {
-                // 技能的普通伤害公式
-                calcDmgMax = calcDmgMax * effect.getDamage() / 100;
+            } else if (chr.getJob() == Job.BLAZEWIZARD3 || chr.getJob() == Job.BLAZEWIZARD4) {
+                int skillLvl = chr.getSkillLevel(BlazeWizard.ELEMENT_AMPLIFICATION);
+                if (skillLvl > 0) {
+                    calcDmgMax = calcDmgMax * SkillFactory.getSkill(BlazeWizard.ELEMENT_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
+                }
+            } else if (chr.getJob() == Job.EVAN7 || chr.getJob() == Job.EVAN8 || chr.getJob() == Job.EVAN9 || chr.getJob() == Job.EVAN10) {
+                int skillLvl = chr.getSkillLevel(Evan.MAGIC_AMPLIFICATION);
+                if (skillLvl > 0) {
+                    calcDmgMax = calcDmgMax * SkillFactory.getSkill(Evan.MAGIC_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
+                }
             }
+            calcDmgMax *= effect.getMatk();
+            if (ret.skill == Cleric.HEAL) {
+                calcDmgMax = (long) Math.round((chr.getTotalInt() * 4.8 + chr.getTotalLuk() * 4) * chr.getTotalMagic() / 1000);
+                calcDmgMax = calcDmgMax * effect.getHp() / 100;
+                ret.speed = 7;
+            }
+        } else if (ret.skill == Hermit.SHADOW_MESO) {
+            calcDmgMax = effect.getMoneyCon() * 10;
+            calcDmgMax = (long) Math.floor(calcDmgMax * 1.5);
+        } else {
+            calcDmgMax = calcDmgMax * effect.getDamage() / 100;
         }
+        return calcDmgMax;
+    }
 
+    /**
+     * @param chr 角色对象
+     * @param ret 攻击信息对象
+     * @param calcDmgMax 当前最大伤害值
+     * @return 修正后的最大伤害值
+     * @description 应用Buff和能量条效果对伤害进行修正。
+     */
+    private long applyBuffAndEnergyBarEffects(Character chr, AttackInfo ret, long calcDmgMax) {
         Integer comboBuff = chr.getBuffedValue(BuffStat.COMBO);
         if (comboBuff != null && comboBuff > 0) {
             int oid = chr.isCygnus() ? DawnWarrior.COMBO : Crusader.COMBO;
             int advcomboid = chr.isCygnus() ? DawnWarrior.ADVANCED_COMBO : Hero.ADVANCED_COMBO;
 
             if (comboBuff > 6) {
-                // 高级连击
                 StatEffect ceffect = SkillFactory.getSkill(advcomboid).getEffect(chr.getSkillLevel(advcomboid));
                 calcDmgMax = (long) Math.floor(calcDmgMax * (ceffect.getDamage() + 50) / 100 + 0.20 + (comboBuff - 5) * 0.04);
             } else {
-                // 普通连击
                 int skillLv = chr.getSkillLevel(oid);
                 if (skillLv <= 0 || chr.isGM()) {
                     skillLv = SkillFactory.getSkill(oid).getMaxLevel();
                 }
-
                 if (skillLv > 0) {
                     StatEffect ceffect = SkillFactory.getSkill(oid).getEffect(skillLv);
                     calcDmgMax = (long) Math.floor(calcDmgMax * (ceffect.getDamage() + 50) / 100 + Math.floor((comboBuff - 1) * (skillLv / 6)) / 100);
@@ -787,7 +1077,6 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             }
 
             if (GameConstants.isFinisherSkill(ret.skill)) {
-                // 终极剑气技能根据玩家拥有的斗气珠数量造成更多伤害
                 int orbs = comboBuff - 1;
                 if (orbs == 2) {
                     calcDmgMax *= 1.2;
@@ -821,195 +1110,113 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
         if (chr.getMapId() >= MapId.ARAN_TUTORIAL_START && chr.getMapId() <= MapId.ARAN_TUTORIAL_MAX) {
             calcDmgMax += 80000; // 战神教程.
         }
+        return calcDmgMax;
+    }
 
-        boolean canCrit = chr.getJob().isA((Job.BOWMAN)) || chr.getJob().isA(Job.THIEF) || chr.getJob().isA(Job.NIGHTWALKER1) || chr.getJob().isA(Job.WINDARCHER1) || chr.getJob() == Job.ARAN3 || chr.getJob() == Job.ARAN4 || chr.getJob() == Job.MARAUDER || chr.getJob() == Job.BUCCANEER;
-
-        StatEffect sharpEyesEffect = chr.getBuffEffect(BuffStat.SHARP_EYES);
-        if (sharpEyesEffect != null) {
-            // 任何拥有精准火眼技能的职业都可以暴击。此外，由于它与普通暴击叠加，继续计算进去。
-            // 并将其计算在内。
-            canCrit = true;
-            // 精确火眼按照当前等级计算伤害，而不是直接粗暴的取满级1.4，如果技改了wz，也能完全适配
-            calcDmgMax = (long) Math.ceil(sharpEyesEffect.getY() / 100.0 * calcDmgMax);
+    /**
+     * @param chr 角色对象
+     * @param ret 攻击信息对象
+     * @param monster 怪物对象
+     * @param calcDmgMax 当前最大伤害值
+     * @return 修正后的最大伤害值
+     * @description 应用充能和元素效果对伤害进行修正。
+     */
+    private long applyChargeAndElementalEffects(Character chr, AttackInfo ret, Monster monster, long calcDmgMax) {
+        if (chr.getBuffEffect(BuffStat.WK_CHARGE) != null) {
+            int sourceID = chr.getBuffSource(BuffStat.WK_CHARGE);
+            int level = chr.getBuffedValue(BuffStat.WK_CHARGE);
+            if (monster != null) {
+                if (sourceID == WhiteKnight.BW_FIRE_CHARGE || sourceID == WhiteKnight.SWORD_FIRE_CHARGE) {
+                    if (monster.getStats().getEffectiveness(Element.FIRE) == ElementalEffectiveness.WEAK) {
+                        calcDmgMax *= 1.05 + level * 0.015;
+                    }
+                } else if (sourceID == WhiteKnight.BW_ICE_CHARGE || sourceID == WhiteKnight.SWORD_ICE_CHARGE) {
+                    if (monster.getStats().getEffectiveness(Element.ICE) == ElementalEffectiveness.WEAK) {
+                        calcDmgMax *= 1.05 + level * 0.015;
+                    }
+                } else if (sourceID == WhiteKnight.BW_LIT_CHARGE || sourceID == WhiteKnight.SWORD_LIT_CHARGE) {
+                    if (monster.getStats().getEffectiveness(Element.LIGHTING) == ElementalEffectiveness.WEAK) {
+                        calcDmgMax *= 1.05 + level * 0.015;
+                    }
+                } else if (sourceID == Paladin.BW_HOLY_CHARGE || sourceID == Paladin.SWORD_HOLY_CHARGE) {
+                    if (monster.getStats().getEffectiveness(Element.HOLY) == ElementalEffectiveness.WEAK) {
+                        calcDmgMax *= 1.2 + level * 0.015;
+                    }
+                }
+            } else {
+                calcDmgMax *= 1.5;
+            }
         }
 
         if (ret.skill != 0) {
-            int fixed = ret.getAttackEffect(chr, SkillFactory.getSkill(ret.skill)).getFixDamage();
-            if (fixed > 0) {
-                calcDmgMax = fixed;
-            }
-        }
-        for (int i = 0; i < ret.numAttacked; i++) {
-            int oid = p.readInt();
-            p.skip(14);
-            List<Integer> allDamageNumbers = new ArrayList<>();
-            Monster monster = chr.getMap().getMonsterByOid(oid);
-
-            if (chr.getBuffEffect(BuffStat.WK_CHARGE) != null) {
-                // 充能攻击，现在需要检查元素相克效果
-                int sourceID = chr.getBuffSource(BuffStat.WK_CHARGE);
-                int level = chr.getBuffedValue(BuffStat.WK_CHARGE);
+            Skill skill = SkillFactory.getSkill(ret.skill);
+            if (skill.getElement() != Element.NEUTRAL && chr.getBuffedValue(BuffStat.ELEMENTAL_RESET) == null) {
                 if (monster != null) {
-                    if (sourceID == WhiteKnight.BW_FIRE_CHARGE || sourceID == WhiteKnight.SWORD_FIRE_CHARGE) {
-                        if (monster.getStats().getEffectiveness(Element.FIRE) == ElementalEffectiveness.WEAK) {
-                            calcDmgMax *= 1.05 + level * 0.015;
-                        }
-                    } else if (sourceID == WhiteKnight.BW_ICE_CHARGE || sourceID == WhiteKnight.SWORD_ICE_CHARGE) {
-                        if (monster.getStats().getEffectiveness(Element.ICE) == ElementalEffectiveness.WEAK) {
-                            calcDmgMax *= 1.05 + level * 0.015;
-                        }
-                    } else if (sourceID == WhiteKnight.BW_LIT_CHARGE || sourceID == WhiteKnight.SWORD_LIT_CHARGE) {
-                        if (monster.getStats().getEffectiveness(Element.LIGHTING) == ElementalEffectiveness.WEAK) {
-                            calcDmgMax *= 1.05 + level * 0.015;
-                        }
-                    } else if (sourceID == Paladin.BW_HOLY_CHARGE || sourceID == Paladin.SWORD_HOLY_CHARGE) {
-                        if (monster.getStats().getEffectiveness(Element.HOLY) == ElementalEffectiveness.WEAK) {
-                            calcDmgMax *= 1.2 + level * 0.015;
-                        }
+                    ElementalEffectiveness eff = monster.getElementalEffectiveness(skill.getElement());
+                    if (eff == ElementalEffectiveness.WEAK) {
+                        calcDmgMax *= 1.5;
+                    } else if (eff == ElementalEffectiveness.STRONG) {
+                        calcDmgMax *= 0.5;
                     }
                 } else {
-                    // 由于我们已经知道技能具有元素属性，但不知道怪物是否脆弱，所以
-                    // 采取保守的方法，假设它们是脆弱的。
                     calcDmgMax *= 1.5;
                 }
             }
-
-            if (ret.skill != 0) {
-                Skill skill = SkillFactory.getSkill(ret.skill);
-                if (skill.getElement() != Element.NEUTRAL && chr.getBuffedValue(BuffStat.ELEMENTAL_RESET) == null) {
-                    // 技能具有元素效果，因此我们需要将其考虑在内。
-                    if (monster != null) {
-                        ElementalEffectiveness eff = monster.getElementalEffectiveness(skill.getElement());
-                        if (eff == ElementalEffectiveness.WEAK) {
-                            calcDmgMax *= 1.5;
-                        } else if (eff == ElementalEffectiveness.STRONG) {
-                            //calcDmgMax *= 0.5;
-                        }
-                    } else {
-                        // 由于我们已经知道技能具有元素属性，但不知道怪物是否脆弱，所以
-                        // 采取保守的方法，假设它们是脆弱的。
-                        calcDmgMax *= 1.5;
-                    }
+            if (ret.skill == FPWizard.POISON_BREATH || ret.skill == FPMage.POISON_MIST || ret.skill == FPArchMage.FIRE_DEMON || ret.skill == ILArchMage.ICE_DEMON) {
+                if (monster != null) {
+                    // 毒素完全是服务器端处理的
+                    // calcDmgMax = monster.getHp() / (70 - chr.getSkillLevel(skill));
                 }
-                if (ret.skill == FPWizard.POISON_BREATH || ret.skill == FPMage.POISON_MIST || ret.skill == FPArchMage.FIRE_DEMON || ret.skill == ILArchMage.ICE_DEMON) {
-                    if (monster != null) {
-                        // 毒素完全是服务器端处理的，所以我不知道为什么要添加这个。 >.<
-                        //calcDmgMax = monster.getHp() / (70 - chr.getSkillLevel(skill));
-                    }
-                } else if (ret.skill == Hermit.SHADOW_WEB) {
-                    if (monster != null) {
-                        calcDmgMax = monster.getHp() / (50 - chr.getSkillLevel(skill));
-                    }
-                } else if (ret.skill == Hermit.SHADOW_MESO) {
-                    if (monster != null) {
-                        monster.debuffMob(Hermit.SHADOW_MESO);
-                    }
-                } else if (ret.skill == Aran.BODY_PRESSURE) {
-                    if (monster != null) {
-                        int bodyPressureDmg = (int) Math.ceil(monster.getMaxHp() * SkillFactory.getSkill(Aran.BODY_PRESSURE).getEffect(ret.skilllevel).getDamage() / 100.0);
-                        if (bodyPressureDmg > calcDmgMax) {
-                            calcDmgMax = bodyPressureDmg;
-                        }
+            } else if (ret.skill == Hermit.SHADOW_WEB) {
+                if (monster != null) {
+                    calcDmgMax = monster.getHp() / (50 - chr.getSkillLevel(skill));
+                }
+            } else if (ret.skill == Hermit.SHADOW_MESO) {
+                if (monster != null) {
+                    monster.debuffMob(Hermit.SHADOW_MESO);
+                }
+            } else if (ret.skill == Aran.BODY_PRESSURE) {
+                if (monster != null) {
+                    int bodyPressureDmg = (int) Math.ceil(monster.getMaxHp() * SkillFactory.getSkill(Aran.BODY_PRESSURE).getEffect(ret.skilllevel).getDamage() / 100.0);
+                    if (bodyPressureDmg > calcDmgMax) {
+                        calcDmgMax = bodyPressureDmg;
                     }
                 }
             }
-            int maxattack = ret.numDamage;
-            int retban = -1;
-            if(chr.getAutoBanManager().useAntiCheat() && effect != null) {
-                maxattack = Math.max(effect.getBulletCount(), effect.getAttackCount());
-                if (shadowPartner) {//影分身
-                    maxattack = maxattack * 2;
-                }
-                if (ret.numDamage > maxattack) {
-                    retban = AutobanFactory.DAMAGE_SEGMENTS_HACK.addPoint(chr.getAutoBanManager(),
-                            (ret.skill > 0 ? "技能: " + SkillFactory.getSkillName(ret.skill) + "[Lv." + ret.skilllevel + "](" + ret.skill + ")" : "普通攻击: ") +
-                            " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
-                            " 段数: " + ret.numDamage + " 上限: " + maxattack + " 已纠正: " + maxattack
-                    );
-                }
-            }
-
-            for (int j = 0; j < ret.numDamage; j++) {
-                long damage = (long) p.readInt();
-                long hitDmgMax = calcDmgMax;
-
-                if (chr.getAutoBanManager().useAntiCheat() && j > maxattack && retban == 0) {
-                    chr.getAutoBanManager().applyLoseHpMp((int) damage,(int) damage,"检测到修改技能段数，");
-                    damage = 0; // 将此段伤害取消，防止技能段数错误导致其他角色掉线报38错误。
-                }
-
-                if (ret.skill == Buccaneer.BARRAGE || ret.skill == ThunderBreaker.BARRAGE) {
-                    if (j > 3) {
-                        hitDmgMax *= Math.pow(2, (j - 3));
-                    }
-                }
-                if (shadowPartner) {
-                    // 对于影分身，后半段攻击只造成50%的伤害。所以要计算进去
-                    // 为了暴击效果而存在。
-                    if (j >= ret.numDamage / 2) {
-                        hitDmgMax *= 0.5;
-                    }
-                }
-
-                // 狙击技能特殊处理：固定伤害19.5万-20万
-                if (ret.skill == Marksman.SNIPE) {
-                    damage = 195000 + Randomizer.nextInt(5000);  // 195000-199999的随机伤害
-                    hitDmgMax = 200000;  // 设置最大伤害上限为20万
-                } 
-                // 竹林雨/竹林突刺技能特殊处理：用于武陵道场Boss战
-                else if (ret.skill == Beginner.BAMBOO_RAIN || ret.skill == Noblesse.BAMBOO_RAIN 
-                        || ret.skill == Evan.BAMBOO_THRUST || ret.skill == Legend.BAMBOO_THRUST) {
-                    hitDmgMax = 82569000; // 设置为武陵道场最强Boss最大血量的30%，即82569000
-                }
-
-                long maxWithCrit = hitDmgMax;
-                if (canCrit) // 职业可以暴击，所以提高上限。
-                {
-                    maxWithCrit *= 2;
-                }
-
-                // 如果伤害超过我们计算值的2.5倍，则添加一个自动封禁点数，并将伤害调整为上限值。
-                if (chr.getAutoBanManager().useAntiCheat() && (damage < 0 || damage > maxWithCrit * 2.5)) {
-                    int tmpretban = AutobanFactory.DAMAGE_HACK.addPoint(chr.getAutoBanManager(),
-                            (ret.skill > 0 ? "技能: " + SkillFactory.getSkillName(ret.skill) + "[Lv." + ret.skilllevel + "](" + ret.skill + ")" : "普通攻击: ") +
-                            " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
-                            " 伤害: " + damage + " 预警: " + maxWithCrit * 2.5 + " 已取消"
-                    );
-                    if (chr.getAutoBanManager().useAntiCheat() && tmpretban == 0) {
-                        int tmpdamge = (int) Math.min(damage - maxWithCrit,Integer.MAX_VALUE);
-                        chr.getAutoBanManager().applyLoseHpMp(tmpdamge,tmpdamge,"检测到使用倍攻，");
-                    }
-                    damage = 0; //负数伤害 或者 伤害过高，基本可以确定是开了倍攻，直接置零完事。
-                }
-
-                // 如果伤害超过我们计算值的2倍，则发出警告。
-                if (chr.getAutoBanManager().useAntiCheat() && damage > maxWithCrit * 2) {// 如果伤害超过2倍则进行纠正
-                    AutobanFactory.DAMAGE_HACK.alert(chr,
-                            (ret.skill > 0 ? "技能: " + SkillFactory.getSkillName(ret.skill) + "[Lv." + ret.skilllevel + "](" + ret.skill + ")" : "普通攻击: ") +
-                            " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
-                            " 伤害: " + damage + " 上限: " + maxWithCrit + " 已纠正: " + maxWithCrit
-                    );
-                    damage = (int) maxWithCrit;
-                }
-                if (ret.skill == Marksman.SNIPE || (canCrit && damage > hitDmgMax)) {
-                    // 如果技能是暴击，则反转伤害值以使其在客户端上正确显示。
-                    damage = -Integer.MAX_VALUE + damage - 1;
-                }
-                allDamageNumbers.add((int) damage);
-            }
-            if (ret.skill != Corsair.RAPID_FIRE || ret.skill != Aran.HIDDEN_FULL_DOUBLE || ret.skill != Aran.HIDDEN_FULL_TRIPLE || ret.skill != Aran.HIDDEN_OVER_DOUBLE || ret.skill != Aran.HIDDEN_OVER_TRIPLE) {
-                p.skip(4);
-            }
-            ret.allDamage.put(oid, allDamageNumbers);
         }
-        if (ret.skill == NightWalker.POISON_BOMB) { // 毒炸弹
-            p.skip(4);
-            ret.position.setLocation(p.readShort(), p.readShort());
-        }
-        return ret;
+        return calcDmgMax;
     }
 
-    private static int rand(int l, int u) {
-        return (int) ((Math.random() * (u - l + 1)) + l);
+    /**
+     * @param ret 攻击信息对象
+     * @param j 伤害段数索引
+     * @param shadowPartner 是否有影分身
+     * @param hitDmgMax 当前最大伤害值
+     * @return 修正后的最大伤害值
+     * @description 应用伤害修正，例如影分身和特殊技能。
+     */
+    private long applyDamageModifiers(AttackInfo ret, int j, boolean shadowPartner, long hitDmgMax) {
+        if (ret.skill == Buccaneer.BARRAGE || ret.skill == ThunderBreaker.BARRAGE) {
+            if (j > 3) {
+                hitDmgMax *= Math.pow(2, (j - 3));
+            }
+        }
+        if (shadowPartner) {
+            if (j >= ret.numDamage / 2) {
+                hitDmgMax *= 0.5;
+            }
+        }
+
+        // 狙击技能特殊处理：固定伤害19.5万-20万
+        if (ret.skill == Marksman.SNIPE) {
+            // damage = 195000 + Randomizer.nextInt(5000); // 客户端发送的伤害会被覆盖
+            hitDmgMax = 200000; // 设置最大伤害上限为20万
+        }
+        // 竹林雨/竹林突刺技能特殊处理：用于武陵道场Boss战
+        else if (ret.skill == Beginner.BAMBOO_RAIN || ret.skill == Noblesse.BAMBOO_RAIN
+                || ret.skill == Evan.BAMBOO_THRUST || ret.skill == Legend.BAMBOO_THRUST) {
+            hitDmgMax = 82569000; // 设置为武陵道场最强Boss最大血量的30%，即82569000
+        }
+        return hitDmgMax;
     }
 }

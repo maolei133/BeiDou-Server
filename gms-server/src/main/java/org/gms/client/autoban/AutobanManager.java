@@ -5,17 +5,15 @@
 
 package org.gms.client.autoban;
 
+import org.gms.client.*;
 import org.gms.client.Character;
-import org.gms.client.Disease;
-import org.gms.client.SkillFactory;
 import org.gms.client.cheatsystem.plugin.MobVacPlugin;
 import org.gms.config.GameConfig;
-import org.gms.constants.skills.Bowmaster;
-import org.gms.constants.skills.Corsair;
-import org.gms.constants.skills.WindArcher;
+import org.gms.constants.skills.*;
 import org.gms.logsystem.category.DynamicCategoryManager;
 import org.gms.logsystem.facade.SecurityLoggerFacade;
 import org.gms.net.server.Server;
+import org.gms.server.StatEffect;
 import org.gms.server.TimerManager;
 import org.gms.server.life.MobSkillFactory;
 import org.gms.server.life.MobSkillType;
@@ -25,6 +23,7 @@ import org.gms.util.PacketCreator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.*;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -58,7 +57,7 @@ public class AutobanManager {
         EXCLUDED_SKILLS.add(Corsair.RAPID_FIRE);
     }
     
-    private final Character chr; // 关联的玩家玩家
+    private final Character chr; // 关联的玩家角色
     private final Map<AutobanFactory, Integer> punishPoints = new ConcurrentHashMap<>(); // 惩罚点数存储
     private final Map<AutobanFactory, Integer> banPoints = new ConcurrentHashMap<>(); // 封号点数存储
     private final Map<AutobanFactory, Long> lastTime = new ConcurrentHashMap<>(); // 最后一次违规时间
@@ -75,7 +74,7 @@ public class AutobanManager {
 
     /**
      * 构造函数
-     * @param chr 关联的玩家玩家
+     * @param chr 关联的玩家角色
      */
     public AutobanManager(Character chr) {
         this.chr = chr;
@@ -238,7 +237,7 @@ public class AutobanManager {
     public void applyLoseHpMp(int hpToLose, int mpToLose) {
         if (!useAntiCheatLoseHpMp() || chr == null || chr.gmLevel() >= 4) {
             if (chr.gmLevel() >= 4) {
-                log.warn("[自动惩罚] 玩家 {} 因GM等级>=4 而未被施加扣除HP MP惩罚");
+                log.warn("[自动惩罚] 玩家 {} 因GM等级>=4 而未被施加扣除HP MP惩罚", chr.getName());
                 logSecurityEvent("因GM等级>=4 而未被施加扣除HP MP惩罚", "WARN");
             }
             return;
@@ -432,7 +431,7 @@ public class AutobanManager {
             if (currentCount >= times) {
                 if (useAutoBan()) {
                     chr.getClient().disconnect(false, false);
-                    log.info("自动封禁 - 玩家 {} 因频繁操作类型 {} 被断开连接", chr, type);
+                    log.info("自动封禁 - 玩家 {} 因频繁操作类型 {} 被断开连接", chr.getName(), type);
                     
                     // 记录安全日志 - 仅记录关键数据
                     logSecurityEvent(String.format("因频繁操作类型 %d 被断开连接", type), "INFO");
@@ -596,5 +595,184 @@ public class AutobanManager {
             }
         }
         return false; // 未检测到吸怪行为
+    }
+
+    /**
+     * 检测玩家MP消耗是否正常
+     * @param attackEffect 攻击效果
+     * @param skillId 技能ID
+     * @param skillLevel 技能等级
+     * @return 如果MP不足则返回true，否则返回false
+     */
+    public boolean checkMpCon(StatEffect attackEffect, int skillId, int skillLevel) {
+        if (!useAntiCheat()) return false;
+        if (chr.getMp() < attackEffect.getMpCon()) {
+            addPoint(AutobanFactory.MPCON,
+                " 尝试使用: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" +
+                " 所需MP: " + attackEffect.getMpCon() + " 当前MP: " + chr.getMp() + " 已作废"
+            );
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 检测玩家攻击的怪物数量是否超过技能上限
+     * @param attackEffect 攻击效果
+     * @param numAttacked 攻击的怪物数量
+     * @param skillId 技能ID
+     * @param skillLevel 技能等级
+     * @return 如果超过上限则返回true，否则返回false
+     */
+    public boolean checkMobCount(StatEffect attackEffect, int numAttacked, int skillId, int skillLevel) {
+        if (!useAntiCheat()) return false;
+        if (numAttacked > attackEffect.getMobCount()) {
+            addPoint(AutobanFactory.MOB_COUNT, "尝试使用: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" + " 目标数量: " + numAttacked + " 上限: " + attackEffect.getMobCount() + " 已作废");
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 检测玩家攻击距离是否过远
+     * @param monster 怪物
+     * @param attackInfo 攻击信息
+     * @return 如果距离过远则返回true，否则返回false
+     */
+    public boolean checkDistanceHack(Monster monster, org.gms.net.server.channel.handlers.AbstractDealDamageHandler.AttackInfo attackInfo) {
+        if (!useAntiCheat()) return false;
+
+        int distance = (int) chr.getPosition().distanceSq(monster.getPosition());
+        int distanceToDetect = 200000;
+
+        if (attackInfo.ranged) {
+            distanceToDetect += 400000;
+        }
+        if (attackInfo.magic) {
+            distanceToDetect += 250000;
+        }
+        if (chr.getJob().isA(Job.ARAN1)) {
+            distanceToDetect += 200000; // Arans have extra range over normal warriors.
+        }
+
+        if ((monster.getId() >= 8800000 && monster.getId() <= 8800010) ||    //扎昆
+                (monster.getId() >= 8810000 && monster.getId() <= 8810026)  //暗黑龙王
+        ) { //某些组合怪物的模型比较大，需要增加攻击距离。
+            distanceToDetect += 100000;
+        }
+
+        if (attackInfo.skill == Aran.COMBO_SMASH || attackInfo.skill == Aran.BODY_PRESSURE) {
+            distanceToDetect += 40000;
+        } else if (attackInfo.skill == Bishop.GENESIS || attackInfo.skill == ILArchMage.BLIZZARD || attackInfo.skill == FPArchMage.METEOR_SHOWER) {//圣光普照、落霜冰破、天降落星
+            distanceToDetect += 350000;
+        } else if (attackInfo.skill == Hero.BRANDISH || attackInfo.skill == DragonKnight.SPEAR_CRUSHER || attackInfo.skill == DragonKnight.POLE_ARM_CRUSHER || attackInfo.skill == DawnWarrior.BRANDISH) {
+            distanceToDetect += 100000;
+        } else if (attackInfo.skill == DragonKnight.DRAGON_ROAR || attackInfo.skill == SuperGM.SUPER_DRAGON_ROAR || attackInfo.skill == Crusader.SHOUT) { //龙咆哮 、 GM龙咆哮 、 虎咆哮
+            distanceToDetect += 350000;
+        } else if (attackInfo.skill == Shadower.BOOMERANG_STEP) { //一出双击
+            distanceToDetect += 200000;
+        } else if (attackInfo.skill == ILArchMage.CHAIN_LIGHTNING) { //链环闪电
+            distanceToDetect += attackInfo.numAttacked * 85000;
+        } else if (attackInfo.skill == ChiefBandit.ASSAULTER || attackInfo.skill == Corsair.AERIAL_STRIKE) { //落叶斩 、 地毯式空袭
+            distanceToDetect += 80000;
+        } else if (attackInfo.skill == ChiefBandit.BAND_OF_THIEVES) { //分身术
+            distanceToDetect += 150000;
+        }
+
+        if (distance > distanceToDetect * 1.15) {
+            addPoint(AutobanFactory.DISTANCE_HACK,
+                    " 尝试使用: " + (attackInfo.skill > 0 ? SkillFactory.getSkillName(attackInfo.skill) + "[Lv." + attackInfo.skilllevel + "](" + attackInfo.skill + ")" : "普通攻击") +
+                    " 对怪物：" + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null")+
+                    " 距离：" + distance + " 上限：" + distanceToDetect + " 已作废");
+            monster.refreshMobPosition();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 检测固定伤害技能的伤害值是否正确
+     * @param totDamageToOneMonster 对单个怪物的总伤害
+     * @param attackEffect 攻击效果
+     * @param skillId 技能ID
+     * @param skillLevel 技能等级
+     * @param monster 怪物
+     * @return 如果伤害值不正确则返回true，否则返回false
+     */
+    public boolean checkFixedDamage(int totDamageToOneMonster, StatEffect attackEffect, int skillId, int skillLevel, Monster monster) {
+        if (!useAntiCheat()) return false;
+        if (attackEffect.getFixDamage() != -1 && totDamageToOneMonster != attackEffect.getFixDamage() && totDamageToOneMonster != 0) {
+            int retban = addPoint(AutobanFactory.FIX_DAMAGE,
+                    "尝试使用: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" +
+                            " 对怪物" + (monster != null ? monster.getName() + "[Lv." + monster.getLevel() + "](" + monster.getId() + ")" : "null") +
+                            " 造成固定伤害 " + totDamageToOneMonster + " 已作废"
+            );
+            if (retban == 0) {
+                applyLoseHpMp(totDamageToOneMonster, totDamageToOneMonster, "检测到固定伤害，");
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 检测技能伤害段数是否正确
+     * @param numDamage 实际伤害段数
+     * @param maxAttack 技能最大伤害段数
+     * @param skillId 技能ID
+     * @param skillLevel 技能等级
+     * @param monster 怪物
+     * @return 修正后的伤害段数
+     */
+    public int checkDamageSegmentsHack(int numDamage, int maxAttack, int skillId, int skillLevel, Monster monster) {
+        if (!useAntiCheat() || numDamage <= maxAttack) {
+            return numDamage;
+        }
+        addPoint(AutobanFactory.DAMAGE_SEGMENTS_HACK,
+                (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
+                " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
+                " 段数: " + numDamage + " 上限: " + maxAttack + " 已纠正: " + maxAttack
+        );
+        return maxAttack;
+    }
+
+    /**
+     * 检测并处理过高的伤害值
+     * @param damage 原始伤害
+     * @param maxWithCrit 暴击时的最大伤害
+     * @param skillId 技能ID
+     * @param skillLevel 技能等级
+     * @param monster 怪物
+     * @return 修正后的伤害值
+     */
+    public long checkDamageHack(long damage, long maxWithCrit, int skillId, int skillLevel, Monster monster) {
+        if (!useAntiCheat()) {
+            return damage;
+        }
+
+        // 如果伤害超过我们计算值的2.5倍，则添加一个自动封禁点数，并将伤害调整为上限值。
+        if (damage < 0 || damage > maxWithCrit * 2.5) {
+            int tmpretban = addPoint(AutobanFactory.DAMAGE_HACK,
+                    (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
+                    " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
+                    " 伤害: " + damage + " 预警: " + maxWithCrit * 2.5 + " 已取消"
+            );
+            if (tmpretban == 0) {
+                int tmpdamge = (int) Math.min(damage - maxWithCrit, Integer.MAX_VALUE);
+                applyLoseHpMp(tmpdamge, tmpdamge, "检测到使用倍攻，");
+            }
+            return 0; //负数伤害 或者 伤害过高，基本可以确定是开了倍攻，直接置零完事。
+        }
+
+        // 如果伤害超过我们计算值的2倍，则发出警告。
+        if (damage > maxWithCrit * 2) {
+            AutobanFactory.DAMAGE_HACK.alert(chr,
+                    (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
+                    " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
+                    " 伤害: " + damage + " 上限: " + maxWithCrit + " 已纠正: " + maxWithCrit
+            );
+            return (int) maxWithCrit;
+        }
+        return damage;
     }
 }

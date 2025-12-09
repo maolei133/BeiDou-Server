@@ -43,7 +43,7 @@ public enum AutobanFactory {
     MOB_COUNT(1,SECONDS.toMillis(10),"篡改目标数"),
     GENERAL("通用检测"),
     FIX_DAMAGE(3,SECONDS.toMillis(10),"固定伤害"),
-    DAMAGE_HACK(8, MINUTES.toMillis(1), "篡改伤害"),
+    DAMAGE_HACK(10, SECONDS.toMillis(30), "篡改伤害"),
     DAMAGE_SEGMENTS_HACK(5, SECONDS.toMillis(10), "篡改段数"),
     DISTANCE_HACK(5, SECONDS.toMillis(30), "篡改距离"),
     PORTAL_DISTANCE(5, SECONDS.toMillis(30), "传送门距离"),
@@ -59,7 +59,7 @@ public enum AutobanFactory {
     ITEM_VAC("吸物"),
     MONSTER_VAC(8, SECONDS.toMillis(15), "吸怪"),
     FAST_ITEM_PICKUP(5, SECONDS.toMillis(30), "快速物品拾取"),
-    FAST_ATTACK(10, MILLISECONDS.toMillis(1000), "快速攻击"),
+    FAST_ATTACK(5, MILLISECONDS.toMillis(2000), "快速攻击"),
     MISS_HACK(7,SECONDS.toMillis(5), "MISS无敌"),
     MPCON(25, SECONDS.toMillis(30), "MP消耗");
 
