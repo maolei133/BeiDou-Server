@@ -25,11 +25,15 @@ import org.gms.util.PacketCreator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 /**
  * 自动封禁管理器
@@ -55,16 +59,16 @@ public class AutobanManager {
     }
     
     private final Character chr; // 关联的玩家玩家
-    private final Map<AutobanFactory, Integer> punishPoints = new HashMap<>(); // 惩罚点数存储
-    private final Map<AutobanFactory, Integer> banPoints = new HashMap<>(); // 封号点数存储
-    private final Map<AutobanFactory, Long> lastTime = new HashMap<>(); // 最后一次违规时间
-    private int misses = 0; // 未命中计数
-    private int lastmisses = 0; // 上一次的未命中计数
-    private int samemisscount = 0; // 相同未命中计数次数
-    private final long[] spam = new long[20]; // 频繁操作时间记录数组
-    private final int[] timestamp = new int[20]; // 时间戳记录数组
-    private final byte[] timestampcounter = new byte[20]; // 时间戳计数器
-    private final LinkedList<MonsterVacSample> monsterVacSamples = new LinkedList<>();
+    private final Map<AutobanFactory, Integer> punishPoints = new ConcurrentHashMap<>(); // 惩罚点数存储
+    private final Map<AutobanFactory, Integer> banPoints = new ConcurrentHashMap<>(); // 封号点数存储
+    private final Map<AutobanFactory, Long> lastTime = new ConcurrentHashMap<>(); // 最后一次违规时间
+    private final AtomicInteger misses = new AtomicInteger(0); // 未命中计数
+    private final AtomicInteger lastmisses = new AtomicInteger(0); // 上一次的未命中计数
+    private final AtomicInteger samemisscount = new AtomicInteger(0); // 相同未命中计数次数
+    private final AtomicLongArray spam = new AtomicLongArray(20); // 频繁操作时间记录数组
+    private final AtomicIntegerArray timestamp = new AtomicIntegerArray(20); // 时间戳记录数组
+    private final AtomicIntegerArray timestampcounter = new AtomicIntegerArray(20); // 时间戳计数器
+    private final ConcurrentLinkedQueue<MonsterVacSample> monsterVacSamples = new ConcurrentLinkedQueue<>();
     private static class MonsterVacSample { int x; int y; long ts; }
 
     /**
@@ -352,7 +356,7 @@ public class AutobanManager {
      * 用于检测miss无敌模式外挂
      */
     public void addMiss() {
-        this.misses++;
+        this.misses.incrementAndGet();
     }
 
     /**
@@ -361,21 +365,21 @@ public class AutobanManager {
      */
     public void resetMisses() {
         // 检测是否连续出现相同的高miss计数
-        if (lastmisses == misses && misses > 6) {
-            samemisscount++;
+        if (lastmisses.get() == misses.get() && misses.get() > 6) {
+            samemisscount.incrementAndGet();
         }
 
         // 连续多次相同高miss，使用点数系统处理
-        if (samemisscount > 4) {
-            int result = addPoint(AutobanFactory.MISS_HACK, "连续高miss计数: " + samemisscount);
+        if (samemisscount.get() > 4) {
+            int result = addPoint(AutobanFactory.MISS_HACK, "连续高miss计数: " + samemisscount.get());
             if (result == 0 || result == 1) {
                 chr.sendPolice("您将因miss无敌模式而被断开连接。");
             }
-            samemisscount = 0; // 重置计数
-        } else if (samemisscount > 0) {
-            this.lastmisses = misses;
+            samemisscount.set(0); // 重置计数
+        } else if (samemisscount.get() > 0) {
+            this.lastmisses.set(misses.get());
         }
-        this.misses = 0;
+        this.misses.set(0);
     }
 
     /**
@@ -383,7 +387,7 @@ public class AutobanManager {
      * @param type 操作类型
      */
     public void spam(int type) {
-        this.spam[type] = Server.getInstance().getCurrentTime();
+        this.spam.set(type, Server.getInstance().getCurrentTime());
     }
 
     /**
@@ -392,7 +396,7 @@ public class AutobanManager {
      * @param timestamp 时间戳
      */
     public void spam(int type, long timestamp) {
-        this.spam[type] = timestamp;
+        this.spam.set(type, timestamp);
     }
 
     /**
@@ -401,7 +405,7 @@ public class AutobanManager {
      * @return 最后一次操作的时间戳
      */
     public long getLastSpam(int type) {
-        return spam[type];
+        return spam.get(type);
     }
 
     /**
@@ -421,9 +425,9 @@ public class AutobanManager {
      * @param times 允许的最大次数
      */
     public void setTimestamp(int type, int time, int times) {
-        if (this.timestamp[type] == time) {
-            this.timestampcounter[type]++;
-            if (this.timestampcounter[type] >= times) {
+        if (this.timestamp.get(type) == time) {
+            int currentCount = this.timestampcounter.incrementAndGet(type);
+            if (currentCount >= times) {
                 if (useAutoBan()) {
                     chr.getClient().disconnect(false, false);
                     log.info("自动封禁 - 玩家 {} 因频繁操作类型 {} 被断开连接", chr, type);
@@ -433,8 +437,8 @@ public class AutobanManager {
                 }
             }
         } else {
-            this.timestamp[type] = time;
-            this.timestampcounter[type] = 0;
+            this.timestamp.set(type, time);
+            this.timestampcounter.set(type, 0);
         }
     }
 
@@ -516,26 +520,27 @@ public class AutobanManager {
         }
         long now = Server.getInstance().getCurrentTime(); // 获取当前服务器时间
         long expire = AutobanFactory.MONSTER_VAC.getExpire(); // 获取怪物吸怪检测的过期时间配置
-        while (!monsterVacSamples.isEmpty() && monsterVacSamples.getFirst().ts <= now - expire) { // 清理过期的采样数据
-            monsterVacSamples.removeFirst(); // 移除过期记录
+        while (!monsterVacSamples.isEmpty() && monsterVacSamples.peek().ts <= now - expire) { // 清理过期的采样数据
+            monsterVacSamples.poll(); // 移除过期记录
         }
         MonsterVacSample s = new MonsterVacSample(); // 创建新的怪物位置采样
         s.x = (int) monster.getPosition().getX(); // 怪物X坐标
         s.y = (int) monster.getPosition().getY(); // 怪物Y坐标
         s.ts = now; // 采样时间戳
-        monsterVacSamples.addLast(s); // 将新采样添加到队列末尾
+        monsterVacSamples.add(s); // 将新采样添加到队列末尾
         int maxSize = AutobanFactory.MONSTER_VAC.getMaximum(); // 获取最大采样数量配置
         while (monsterVacSamples.size() > maxSize) { // 保持采样队列在最大容量范围内
-            monsterVacSamples.removeFirst(); // 移除最旧的采样
+            monsterVacSamples.poll(); // 移除最旧的采样
         }
         if (monsterVacSamples.size() >= maxSize) { // 当采样数量达到最大值时开始检测
             int consistentCount = 0; // 统计在相近位置的怪物数量
             for (MonsterVacSample sample : monsterVacSamples) { // 遍历所有采样，检查位置一致性
-                if (Math.abs(sample.x - s.x) <= 70 && Math.abs(sample.y - s.y) <= 70) { // 如果怪物位置在70像素范围内，认为位置一致
+                if (Math.abs(sample.x - s.x) <= 60 && Math.abs(sample.y - s.y) <= 60) { // 如果怪物位置在60像素范围内，认为位置一致
                     consistentCount++; // 一致位置计数增加
                 }
             }
-            if (consistentCount * 1.0 / monsterVacSamples.size() >= 0.90) { // 如果90%以上的怪物都在相近位置，判定为吸怪
+            double consistencyRatio = consistentCount * 1.0 / monsterVacSamples.size(); // 计算一致位置比例
+            if (consistencyRatio >= 0.95) { // 如果90%以上的怪物都在相近位置，判定为吸怪
                 String reason = "怪物坐标: (" + s.x + "," + s.y + ") 附近一致性检测 " + consistentCount + "/" + monsterVacSamples.size(); // 构建违规原因描述
                 int ret = addPoint(AutobanFactory.MONSTER_VAC, reason); // 添加到反作弊积分系统
                 if (ret >= 1) { // 如果积分达到阈值，执行惩罚措施

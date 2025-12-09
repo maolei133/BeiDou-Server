@@ -57,7 +57,7 @@ public enum AutobanFactory {
     TUBI(20, SECONDS.toMillis(15), "图比"),
     SHORT_ITEM_VAC("短距离吸物"),
     ITEM_VAC("吸物"),
-    MONSTER_VAC(5, SECONDS.toMillis(15), "吸怪"),
+    MONSTER_VAC(8, SECONDS.toMillis(15), "吸怪"),
     FAST_ITEM_PICKUP(5, SECONDS.toMillis(30), "快速物品拾取"),
     FAST_ATTACK(10, MILLISECONDS.toMillis(1000), "快速攻击"),
     MISS_HACK(7,SECONDS.toMillis(5), "MISS无敌"),
