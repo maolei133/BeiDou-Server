@@ -64,19 +64,57 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
  * @author kevintjuh93
- * @version 1.1
+ * @version 1.5
  * @description 抽象伤害处理类，提供处理玩家攻击伤害的通用逻辑。
- *              包括伤害计算、技能效果应用、作弊检测等。
- *              此类经过重构，将作弊检测逻辑迁移到 AutobanManager，并优化了代码结构。
- * @since 2024/07/30
+ *              此类经过重构，将作弊检测逻辑迁移到 AutobanManager，并使用Map和函数式接口优化了内部的if-else结构，
+ *              同时恢复并修正了所有中文注释，并将硬编码ID替换为常量。
+ * @since 2024/07/31
  */
 public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
+
+    // 使用函数式接口来定义技能效果的应用逻辑
+    @FunctionalInterface
+    private interface SkillEffectApplicator {
+        void apply(AbstractDealDamageHandler handler, Character player, Monster monster, AttackInfo attack, int attackCount, int totDamage, Skill theSkill, int job, MapleMap map);
+    }
+
+    // 使用静态Map来注册和分发技能效果
+    private static final Map<Integer, SkillEffectApplicator> SKILL_EFFECT_APPLICATORS = new HashMap<>();
+
+    static {
+        // 侠客 - 神通术
+        SKILL_EFFECT_APPLICATORS.put(Bandit.STEAL, (h, p, m, atk, ac, td, sk, j, mp) -> h.handleStealSkill(p, m, mp));
+        // 火毒 - 火凤球
+        SKILL_EFFECT_APPLICATORS.put(FPArchMage.FIRE_DEMON, (h, p, m, atk, ac, td, sk, j, mp) -> {
+            long duration = SECONDS.toMillis(SkillFactory.getSkill(FPArchMage.FIRE_DEMON).getEffect(p.getSkillLevel(FPArchMage.FIRE_DEMON)).getDuration());
+            m.setTempEffectiveness(Element.ICE, ElementalEffectiveness.WEAK, duration);
+        });
+        // 冰雷 - 冰凤球
+        SKILL_EFFECT_APPLICATORS.put(ILArchMage.ICE_DEMON, (h, p, m, atk, ac, td, sk, j, mp) -> {
+            long duration = SECONDS.toMillis(SkillFactory.getSkill(ILArchMage.ICE_DEMON).getEffect(p.getSkillLevel(ILArchMage.ICE_DEMON)).getDuration());
+            m.setTempEffectiveness(Element.FIRE, ElementalEffectiveness.WEAK, duration);
+        });
+        // 海盗（神枪手） - 导航
+        SKILL_EFFECT_APPLICATORS.put(Outlaw.HOMING_BEACON, (h, p, m, atk, ac, td, sk, j, mp) -> {
+            StatEffect beacon = SkillFactory.getSkill(atk.skill).getEffect(p.getSkillLevel(atk.skill));
+            beacon.applyBeaconBuff(p, m.getObjectId());
+        });
+        // 船长 - 导航辅助
+        SKILL_EFFECT_APPLICATORS.put(Corsair.BULLSEYE, (h, p, m, atk, ac, td, sk, j, mp) -> {
+            StatEffect beacon = SkillFactory.getSkill(atk.skill).getEffect(p.getSkillLevel(atk.skill));
+            beacon.applyBeaconBuff(p, m.getObjectId());
+        });
+        // 神枪手 - 烈焰喷射
+        SKILL_EFFECT_APPLICATORS.put(Outlaw.FLAME_THROWER, (h, p, m, atk, ac, td, sk, j, mp) -> h.handleFlameThrowerSkill(p, m));
+    }
+
 
     /**
      * @author kevintjuh93
@@ -191,7 +229,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                         } else if (attack.skill == DawnWarrior.FINAL_ATTACK || attack.skill == WindArcher.FINAL_ATTACK) {
                             // 防止席格诺斯最终攻击技能刷新
                             mobCount = 15;
-                        } else if (attack.skill == NightWalker.POISON_BOMB) {
+                        } else if (attack.skill == NightWalker.POISON_BOMB) { // 奇袭者 - 毒炸弹
                             attackEffect.applyTo(player, new Point(attack.position.x, attack.position.y));
                         } else {
                             attackEffect.applyTo(player);
@@ -218,11 +256,16 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 return;
             }
 
+            //WTF IS THIS F3,1
+            /*if (attackCount != attack.numDamage && attack.skill != ChiefBandit.MESO_EXPLOSION && attack.skill != NightWalker.VAMPIRE && attack.skill != WindArcher.WIND_SHOT && attack.skill != Aran.COMBO_SMASH && attack.skill != Aran.COMBO_FENRIR && attack.skill != Aran.COMBO_TEMPEST && attack.skill != NightLord.NINJA_AMBUSH && attack.skill != Shadower.NINJA_AMBUSH) {
+                return;
+            }*/
+
             // 根据配置决定使用技能最大目标数还是实际伤害目标数
             int targetCount = GameConfig.getServerBoolean("use_skill_max_target_count") ? mobCount : attack.allDamage.size();
 
             // 处理金钱炸弹技能
-            if (attack.skill == ChiefBandit.MESO_EXPLOSION) {
+            if (attack.skill == ChiefBandit.MESO_EXPLOSION) { // 侠盗 - 金钱炸弹
                 handleMesoExplosion(attack, map);
                 return;
             }
@@ -335,7 +378,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
         ret.stance = p.readByte();
 
         // 处理金钱炸弹技能的特殊解析
-        if (ret.skill == ChiefBandit.MESO_EXPLOSION) {
+        if (ret.skill == ChiefBandit.MESO_EXPLOSION) { // 侠盗 - 金钱炸弹
             return parseMesoExplosionDamage(p, ret);
         }
 
@@ -421,7 +464,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             }
             ret.allDamage.put(oid, allDamageNumbers);
         }
-        if (ret.skill == NightWalker.POISON_BOMB) { // 毒炸弹
+        if (ret.skill == NightWalker.POISON_BOMB) { // 奇袭者 - 毒炸弹
             p.skip(4);
             ret.position.setLocation(p.readShort(), p.readShort());
         }
@@ -508,7 +551,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 处理武陵道场Boss的伤害限制。
      */
     private void handleDojoBossDamageLimit(AttackInfo attack, Monster monster, List<Integer> onedList) {
-        if (attack.skill == 1009 || attack.skill == 10001009 || attack.skill == 20001009) {
+        if (attack.skill == Beginner.BAMBOO_RAIN || attack.skill == Noblesse.BAMBOO_RAIN || attack.skill == Legend.BAMBOO_THRUST) {
             int dmgLimit = (int) Math.ceil(0.3 * monster.getMaxHp());
             List<Integer> _onedList = new LinkedList<>();
             for (Integer i : onedList) {
@@ -531,67 +574,41 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 应用各种技能效果，如偷窃、吸血、元素效果等。
      */
     private void applySkillEffects(Character player, Monster monster, AttackInfo attack, int attackCount, int totDamageToOneMonster, Skill theSkill, int job, MapleMap map) {
-        // 偷钱技能
+        // 优先处理需要覆盖或特殊判断的逻辑
         if (player.getBuffedValue(BuffStat.PICKPOCKET) != null && (attack.skill == 0 || attack.skill == Rogue.DOUBLE_STAB || attack.skill == Bandit.SAVAGE_BLOW || attack.skill == ChiefBandit.ASSAULTER || attack.skill == ChiefBandit.BAND_OF_THIEVES || attack.skill == Shadower.ASSASSINATE || attack.skill == Shadower.TAUNT || attack.skill == Shadower.BOOMERANG_STEP)) {
-            handlePickpocket(player, monster, attack, map);
-        }
-        // 吸血技能
-        else if (attack.skill == Marauder.ENERGY_DRAIN || attack.skill == ThunderBreaker.ENERGY_DRAIN || attack.skill == NightWalker.VAMPIRE || attack.skill == Assassin.DRAIN) {
+            handlePickpocket(player, monster, attack, map);// 敛财术
+        } else if (attack.skill == Marauder.ENERGY_DRAIN || attack.skill == ThunderBreaker.ENERGY_DRAIN || attack.skill == NightWalker.VAMPIRE || attack.skill == Assassin.DRAIN) {
+            // 吸血技能
             player.addHP(Math.min(monster.getMaxHp(), Math.min((int) ((double) totDamageToOneMonster * (double) SkillFactory.getSkill(attack.skill).getEffect(player.getSkillLevel(SkillFactory.getSkill(attack.skill))).getX() / 100.0), player.getCurrentMaxHp() / 2)));
-        }
-        // 神通术（偷取物品）
-        else if (attack.skill == Bandit.STEAL) {
-            handleStealSkill(player, monster, map);
-        }
-        // 元素效果技能
-        else if (attack.skill == FPArchMage.FIRE_DEMON) {
-            long duration = SECONDS.toMillis(SkillFactory.getSkill(FPArchMage.FIRE_DEMON).getEffect(player.getSkillLevel(SkillFactory.getSkill(FPArchMage.FIRE_DEMON))).getDuration());
-            monster.setTempEffectiveness(Element.ICE, ElementalEffectiveness.WEAK, duration);
-        } else if (attack.skill == ILArchMage.ICE_DEMON) {
-            long duration = SECONDS.toMillis(SkillFactory.getSkill(ILArchMage.ICE_DEMON).getEffect(player.getSkillLevel(SkillFactory.getSkill(ILArchMage.ICE_DEMON))).getDuration());
-            monster.setTempEffectiveness(Element.FIRE, ElementalEffectiveness.WEAK, duration);
-        }
-        // 追踪信标/靶心技能
-        else if (attack.skill == Outlaw.HOMING_BEACON || attack.skill == Corsair.BULLSEYE) {
-            StatEffect beacon = SkillFactory.getSkill(attack.skill).getEffect(player.getSkillLevel(attack.skill));
-            beacon.applyBeaconBuff(player, monster.getObjectId());
-        }
-        // 火焰喷射器技能
-        else if (attack.skill == Outlaw.FLAME_THROWER) {
-            handleFlameThrowerSkill(player, monster);
+        } else {
+            // 使用Map分发处理单一、独立的技能效果
+            SkillEffectApplicator applicator = SKILL_EFFECT_APPLICATORS.get(attack.skill);
+            if (applicator != null) {
+                applicator.apply(this, player, monster, attack, attackCount, totDamageToOneMonster, theSkill, job, map);
+            }
         }
 
-        // 战神雪球冲刺
+        // 处理基于Buff或职业的通用效果
         if (player.isAran()) {
-            handleAranSnowCharge(player, monster, totDamageToOneMonster);
+            handleAranSnowCharge(player, monster, totDamageToOneMonster);// 战神雪球冲刺
         }
-        // 弓箭手腿部束缚
         if (player.getBuffedValue(BuffStat.HAMSTRING) != null) {
-            handleHamstring(player, monster);
+            handleHamstring(player, monster);// 弓箭手腿部束缚
         }
-        // 龙神缓慢
         if (player.getBuffedValue(BuffStat.SLOW) != null) {
-            handleEvanSlow(player, monster);
+            handleEvanSlow(player, monster);// 龙神缓慢
         }
-        // 弩手致盲
         if (player.getBuffedValue(BuffStat.BLIND) != null) {
-            handleMarksmanBlind(player, monster);
+            handleMarksmanBlind(player, monster);// 弩手致盲
         }
-        // 骑士团充能技能
-        if (job == 121 || job == 122) {
-            handleKnightChargeSkills(player, monster, totDamageToOneMonster, job);
-        }
-        // 战神连环吸血
-        else if (player.getBuffedValue(BuffStat.COMBO_DRAIN) != null) {
-            handleAranComboDrain(player, totDamageToOneMonster);
-        }
-        // 毒液技能（暗影双刀、侠盗）
-        else if (job == 412 || job == 422 || job == 1411) {
-            handleVenomSkills(player, monster, attackCount);
-        }
-        // 致命一击（神射手、箭神）
-        else if (job >= 311 && job <= 322) {
-            handleMortalBlowSkills(player, monster, map);
+        if (job == Job.WHITEKNIGHT.getId() || job == Job.PALADIN.getId()) {
+            handleKnightChargeSkills(player, monster, totDamageToOneMonster, job);// 骑士团充能技能
+        } else if (player.getBuffedValue(BuffStat.COMBO_DRAIN) != null) {
+            handleAranComboDrain(player, totDamageToOneMonster);// 战神连环吸血
+        } else if (job == Job.SHADOWER.getId() || job == Job.NIGHTWALKER3.getId()) { // Dual Blader在v83中没有毒液技能
+            handleVenomSkills(player, monster, attackCount);// 毒液技能（夜行者、侠盗）
+        } else if (player.getJob().isA(Job.BOWMAN) && job >= Job.RANGER.getId() && job <= Job.SNIPER.getId()) {
+            handleMortalBlowSkills(player, monster, map);// 致命一击（神射手、箭神）
         }
     }
 
@@ -600,10 +617,10 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @param monster 怪物对象
      * @param attack 攻击信息
      * @param map 地图对象
-     * @description 处理偷钱技能（Pickpocket）的逻辑。
+     * @description 处理敛财术技能（Pickpocket）的逻辑。
      */
     private void handlePickpocket(Character player, Monster monster, AttackInfo attack, MapleMap map) {
-        Skill pickpocket = SkillFactory.getSkill(ChiefBandit.PICKPOCKET);
+        Skill pickpocket = SkillFactory.getSkill(ChiefBandit.PICKPOCKET); // 侠盗 - 敛财术
         int picklv = (player.isGM()) ? pickpocket.getMaxLevel() : player.getSkillLevel(pickpocket);
         if (picklv > 0) {
             int delay = 0;
@@ -634,7 +651,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 处理神通术（Steal）技能的逻辑。
      */
     private void handleStealSkill(Character player, Monster monster, MapleMap map) {
-        Skill steal = SkillFactory.getSkill(Bandit.STEAL);
+        Skill steal = SkillFactory.getSkill(Bandit.STEAL); // 飞侠 - 神通术
         if (monster.getStolen().isEmpty()) { // 每个怪物只能被偷取一次
             if (steal.getEffect(player.getSkillLevel(steal)).makeChanceResult()) {
                 monster.addStolen(0);
@@ -666,7 +683,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      */
     private void handleFlameThrowerSkill(Character player, Monster monster) {
         if (!monster.isBoss()) {
-            Skill type = SkillFactory.getSkill(Outlaw.FLAME_THROWER);
+            Skill type = SkillFactory.getSkill(Outlaw.FLAME_THROWER); // 侠盗 - 火焰喷射器
             if (player.getSkillLevel(type) > 0) {
                 StatEffect DoT = type.getEffect(player.getSkillLevel(type));
                 MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.POISON, 1), type, null, false);
@@ -679,11 +696,11 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @param player 玩家角色
      * @param monster 怪物对象
      * @param totDamageToOneMonster 对单个怪物的总伤害
-     * @description 处理战神雪球冲刺（Aran Snow Charge）技能的逻辑。
+     * @description 处理战神雪花连击（Aran Snow Charge）技能的逻辑。
      */
     private void handleAranSnowCharge(Character player, Monster monster, int totDamageToOneMonster) {
         if (player.getBuffedValue(BuffStat.WK_CHARGE) != null) {
-            Skill snowCharge = SkillFactory.getSkill(Aran.SNOW_CHARGE);
+            Skill snowCharge = SkillFactory.getSkill(Aran.SNOW_CHARGE); // 战神 - 雪花连击
             if (totDamageToOneMonster > 0) {
                 MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.SPEED, snowCharge.getEffect(player.getSkillLevel(snowCharge)).getX()), snowCharge, null, false);
                 long duration = SECONDS.toMillis(snowCharge.getEffect(player.getSkillLevel(snowCharge)).getY());
@@ -698,7 +715,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 处理弓箭手腿部束缚（Hamstring）技能的逻辑。
      */
     private void handleHamstring(Character player, Monster monster) {
-        Skill hamstring = SkillFactory.getSkill(Bowmaster.HAMSTRING);
+        Skill hamstring = SkillFactory.getSkill(Bowmaster.HAMSTRING); // 箭神 - 腿部束缚
         if (hamstring.getEffect(player.getSkillLevel(hamstring)).makeChanceResult()) {
             MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.SPEED, hamstring.getEffect(player.getSkillLevel(hamstring)).getX()), hamstring, null, false);
             long duration = SECONDS.toMillis(hamstring.getEffect(player.getSkillLevel(hamstring)).getY());
@@ -712,7 +729,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 处理龙神缓慢（Evan Slow）技能的逻辑。
      */
     private void handleEvanSlow(Character player, Monster monster) {
-        Skill slow = SkillFactory.getSkill(Evan.SLOW);
+        Skill slow = SkillFactory.getSkill(Evan.SLOW); // 龙神 - 缓慢
         if (slow.getEffect(player.getSkillLevel(slow)).makeChanceResult()) {
             MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.SPEED, slow.getEffect(player.getSkillLevel(slow)).getX()), slow, null, false);
             long duration = MINUTES.toMillis(slow.getEffect(player.getSkillLevel(slow)).getY());
@@ -726,7 +743,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 处理弩手致盲（Marksman Blind）技能的逻辑。
      */
     private void handleMarksmanBlind(Character player, Monster monster) {
-        Skill blind = SkillFactory.getSkill(Marksman.BLIND);
+        Skill blind = SkillFactory.getSkill(Marksman.BLIND); // 神射手 - 致盲
         if (blind.getEffect(player.getSkillLevel(blind)).makeChanceResult()) {
             MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.ACC, blind.getEffect(player.getSkillLevel(blind)).getX()), blind, null, false);
             long duration = SECONDS.toMillis(blind.getEffect(player.getSkillLevel(blind)).getY());
@@ -742,11 +759,11 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 处理骑士团充能技能的逻辑。
      */
     private void handleKnightChargeSkills(Character player, Monster monster, int totDamageToOneMonster, int job) {
-        for (int charge = 1211005; charge < 1211007; charge++) {
+        for (int charge = WhiteKnight.SWORD_ICE_CHARGE; charge < WhiteKnight.SWORD_LIT_CHARGE; charge++) {
             Skill chargeSkill = SkillFactory.getSkill(charge);
             if (player.isBuffFrom(BuffStat.WK_CHARGE, chargeSkill)) {
                 if (totDamageToOneMonster > 0) {
-                    if (charge == WhiteKnight.BW_ICE_CHARGE || charge == WhiteKnight.SWORD_ICE_CHARGE) {
+                    if (charge == WhiteKnight.BW_ICE_CHARGE || charge == WhiteKnight.SWORD_ICE_CHARGE) { // 准骑士 - 冰/剑冰属性
                         monster.setTempEffectiveness(Element.ICE, ElementalEffectiveness.WEAK, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY() * 1000);
                         // 修复冰技能不冰怪的问题，关键是冰和火都没有对应的异常状态，对应的异常只有冻结。如果这里把ICE改了，那火怎么办？所以，还是先注释掉。
                         // MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.FREEZE, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getX()), chargeSkill, null, false);
@@ -754,15 +771,15 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                         // monster.applyStatus(player, monsterStatusEffect, false, duration);
                         break;
                     }
-                    if (charge == WhiteKnight.BW_FIRE_CHARGE || charge == WhiteKnight.SWORD_FIRE_CHARGE) {
+                    if (charge == WhiteKnight.BW_FIRE_CHARGE || charge == WhiteKnight.SWORD_FIRE_CHARGE) { // 准骑士 - 火/剑火属性
                         monster.setTempEffectiveness(Element.FIRE, ElementalEffectiveness.WEAK, chargeSkill.getEffect(player.getSkillLevel(chargeSkill)).getY() * 1000);
                         break;
                     }
                 }
             }
         }
-        if (job == 122) {
-            for (int charge = 1221003; charge < 1221004; charge++) {
+        if (job == Job.PALADIN.getId()) { // 圣骑士
+            for (int charge = Paladin.SWORD_HOLY_CHARGE; charge < Paladin.BW_HOLY_CHARGE; charge++) {
                 Skill chargeSkill = SkillFactory.getSkill(charge);
                 if (player.isBuffFrom(BuffStat.WK_CHARGE, chargeSkill)) {
                     if (totDamageToOneMonster > 0) {
@@ -780,7 +797,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 处理战神连环吸血（Aran Combo Drain）技能的逻辑。
      */
     private void handleAranComboDrain(Character player, int totDamageToOneMonster) {
-        Skill skill = SkillFactory.getSkill(Aran.COMBO_DRAIN);
+        Skill skill = SkillFactory.getSkill(Aran.COMBO_DRAIN); // 战神 - 连环吸血
         player.addHP(((totDamageToOneMonster * skill.getEffect(player.getSkillLevel(skill)).getX()) / 100));
     }
 
@@ -791,15 +808,27 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 处理毒液技能（Venom Skills）的逻辑。
      */
     private void handleVenomSkills(Character player, Monster monster, int attackCount) {
-        Skill type = SkillFactory.getSkill(player.getJob().getId() == 412 ? 4120005 : (player.getJob().getId() == 1411 ? 14110004 : 4220005));
-        if (player.getSkillLevel(type) > 0) {
-            StatEffect venomEffect = type.getEffect(player.getSkillLevel(type));
-            for (int i = 0; i < attackCount; i++) {
-                if (venomEffect.makeChanceResult()) {
-                    if (monster.getVenomMulti() < 3) {
-                        monster.setVenomMulti((monster.getVenomMulti() + 1));
-                        MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.POISON, 1), type, null, false);
-                        monster.applyStatus(player, monsterStatusEffect, false, venomEffect.getDuration(), true);
+        int skillId = 0;
+        int jobId = player.getJob().getId();
+        if (jobId == Job.SHADOWER.getId()) {
+            skillId = Shadower.VENOMOUS_STAB;
+        } else if (jobId == Job.NIGHTWALKER3.getId()) {
+            skillId = NightWalker.VENOM;
+        } else if (jobId == Job.CHIEFBANDIT.getId()) {
+            // Chief Bandit doesn't have a specific venom skill, it's a passive in Shadower
+        }
+
+        if (skillId != 0) {
+            Skill type = SkillFactory.getSkill(skillId);
+            if (player.getSkillLevel(type) > 0) {
+                StatEffect venomEffect = type.getEffect(player.getSkillLevel(type));
+                for (int i = 0; i < attackCount; i++) {
+                    if (venomEffect.makeChanceResult()) {
+                        if (monster.getVenomMulti() < 3) {
+                            monster.setVenomMulti((monster.getVenomMulti() + 1));
+                            MonsterStatusEffect monsterStatusEffect = new MonsterStatusEffect(Collections.singletonMap(MonsterStatus.POISON, 1), type, null, false);
+                            monster.applyStatus(player, monsterStatusEffect, false, venomEffect.getDuration(), true);
+                        }
                     }
                 }
             }
@@ -815,9 +844,10 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
     private void handleMortalBlowSkills(Character player, Monster monster, MapleMap map) {
         if (!monster.isBoss()) {
             Skill mortalBlow;
-            if (player.getJob().getId() == 311 || player.getJob().getId() == 312) {
+            int jobId = player.getJob().getId();
+            if (jobId == Job.RANGER.getId() || jobId == Job.HUNTER.getId()) { // 游侠, 猎人
                 mortalBlow = SkillFactory.getSkill(Ranger.MORTAL_BLOW);
-            } else {
+            } else { // 箭神, 弩手
                 mortalBlow = SkillFactory.getSkill(Sniper.MORTAL_BLOW);
             }
 
@@ -858,14 +888,14 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 实际造成伤害。
      */
     private void dealFinalDamage(Character player, MapleMap map, Monster monster, AttackInfo attack, int totDamageToOneMonster) {
-        if (attack.skill == Paladin.HEAVENS_HAMMER) {
+        if (attack.skill == Paladin.HEAVENS_HAMMER) { // 圣骑士 - 天堂之锤
             if (!monster.isBoss()) {
                 damageMonsterWithSkill(player, map, monster, monster.getHp() - 1, attack.skill, 1777);
             } else {
                 int HHDmg = (player.calculateMaxBaseDamage(player.getTotalWatk()) * (SkillFactory.getSkill(Paladin.HEAVENS_HAMMER).getEffect(player.getSkillLevel(SkillFactory.getSkill(Paladin.HEAVENS_HAMMER))).getDamage() / 100));
                 damageMonsterWithSkill(player, map, monster, (int) (Math.floor(Math.random() * (HHDmg / 5) + HHDmg * .8)), attack.skill, 1777);
             }
-        } else if (attack.skill == Aran.COMBO_TEMPEST) {
+        } else if (attack.skill == Aran.COMBO_TEMPEST) { // 战神 - 连击风暴
             if (!monster.isBoss()) {
                 damageMonsterWithSkill(player, map, monster, monster.getHp(), attack.skill, 0);
             } else {
@@ -873,7 +903,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 damageMonsterWithSkill(player, map, monster, (int) (Math.floor(Math.random() * (TmpDmg / 5) + TmpDmg * .8)), attack.skill, 0);
             }
         } else {
-            if (attack.skill == Aran.BODY_PRESSURE) {
+            if (attack.skill == Aran.BODY_PRESSURE) { // 战神 - 体压
                 map.broadcastMessage(PacketCreator.damageMonster(monster.getObjectId(), totDamageToOneMonster));
             }
             map.damageMonster(player, monster, totDamageToOneMonster);
@@ -990,11 +1020,11 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
         long calcDmgMax;
         if (ret.magic && ret.skill != 0) {
             calcDmgMax = (long) (Math.ceil((chr.getTotalMagic() * Math.ceil(chr.getTotalMagic() / 1000.0) + chr.getTotalMagic()) / 30.0) + Math.ceil(chr.getTotalInt() / 200.0));
-        } else if (ret.skill == Rogue.LUCKY_SEVEN || ret.skill == NightWalker.LUCKY_SEVEN || ret.skill == NightLord.TRIPLE_THROW) {
+        } else if (ret.skill == Rogue.LUCKY_SEVEN || ret.skill == NightWalker.LUCKY_SEVEN || ret.skill == NightLord.TRIPLE_THROW) { // 飞侠/夜行者 - 双飞斩 / 标飞 - 三连环光击破
             calcDmgMax = (long) ((chr.getTotalLuk() * 5) * Math.ceil(chr.getTotalWatk() / 100.0));
-        } else if (ret.skill == DragonKnight.DRAGON_ROAR) {
+        } else if (ret.skill == DragonKnight.DRAGON_ROAR) { // 龙骑士 - 龙咆哮
             calcDmgMax = (long) ((chr.getTotalStr() * 4 + chr.getTotalDex()) * Math.ceil(chr.getTotalWatk() / 100.0));
-        } else if (ret.skill == NightLord.VENOMOUS_STAR || ret.skill == Shadower.VENOMOUS_STAB) {
+        } else if (ret.skill == NightLord.VENOMOUS_STAR || ret.skill == Shadower.VENOMOUS_STAB) { // 标飞 - 武器用毒液 / 侠盗 - 武器用毒液
             calcDmgMax = (long) (Math.ceil((18.5 * (chr.getTotalStr() + chr.getTotalLuk()) + chr.getTotalDex() * 2) / 100.0) * chr.calculateMaxBaseDamage(chr.getTotalWatk()));
         } else {
             calcDmgMax = chr.calculateMaxBaseDamage(chr.getTotalWatk());
@@ -1013,34 +1043,34 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      */
     private long applySkillSpecificDamageFormula(Character chr, AttackInfo ret, Skill skill, StatEffect effect, long calcDmgMax) {
         if (ret.magic) {
-            if (chr.getJob() == Job.IL_ARCHMAGE || chr.getJob() == Job.IL_MAGE) {
+            if (chr.getJob() == Job.IL_ARCHMAGE || chr.getJob() == Job.IL_MAGE) { // 冰雷大法师, 冰雷法师
                 int skillLvl = chr.getSkillLevel(ILMage.ELEMENT_AMPLIFICATION);
                 if (skillLvl > 0) {
                     calcDmgMax = calcDmgMax * SkillFactory.getSkill(ILMage.ELEMENT_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
                 }
-            } else if (chr.getJob() == Job.FP_ARCHMAGE || chr.getJob() == Job.FP_MAGE) {
+            } else if (chr.getJob() == Job.FP_ARCHMAGE || chr.getJob() == Job.FP_MAGE) { // 火毒大法师, 火毒法师
                 int skillLvl = chr.getSkillLevel(FPMage.ELEMENT_AMPLIFICATION);
                 if (skillLvl > 0) {
                     calcDmgMax = calcDmgMax * SkillFactory.getSkill(FPMage.ELEMENT_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
                 }
-            } else if (chr.getJob() == Job.BLAZEWIZARD3 || chr.getJob() == Job.BLAZEWIZARD4) {
+            } else if (chr.getJob() == Job.BLAZEWIZARD3 || chr.getJob() == Job.BLAZEWIZARD4) { // 炎术士 (3/4转)
                 int skillLvl = chr.getSkillLevel(BlazeWizard.ELEMENT_AMPLIFICATION);
                 if (skillLvl > 0) {
                     calcDmgMax = calcDmgMax * SkillFactory.getSkill(BlazeWizard.ELEMENT_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
                 }
-            } else if (chr.getJob() == Job.EVAN7 || chr.getJob() == Job.EVAN8 || chr.getJob() == Job.EVAN9 || chr.getJob() == Job.EVAN10) {
+            } else if (chr.getJob() == Job.EVAN7 || chr.getJob() == Job.EVAN8 || chr.getJob() == Job.EVAN9 || chr.getJob() == Job.EVAN10) { // 龙神 (7-10转)
                 int skillLvl = chr.getSkillLevel(Evan.MAGIC_AMPLIFICATION);
                 if (skillLvl > 0) {
                     calcDmgMax = calcDmgMax * SkillFactory.getSkill(Evan.MAGIC_AMPLIFICATION).getEffect(skillLvl).getY() / 100;
                 }
             }
             calcDmgMax *= effect.getMatk();
-            if (ret.skill == Cleric.HEAL) {
+            if (ret.skill == Cleric.HEAL) { // 牧师 - 群体治愈
                 calcDmgMax = (long) Math.round((chr.getTotalInt() * 4.8 + chr.getTotalLuk() * 4) * chr.getTotalMagic() / 1000);
                 calcDmgMax = calcDmgMax * effect.getHp() / 100;
                 ret.speed = 7;
             }
-        } else if (ret.skill == Hermit.SHADOW_MESO) {
+        } else if (ret.skill == Hermit.SHADOW_MESO) { // 隐士 - 金钱攻击
             calcDmgMax = effect.getMoneyCon() * 10;
             calcDmgMax = (long) Math.floor(calcDmgMax * 1.5);
         } else {
@@ -1167,15 +1197,15 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     // 毒素完全是服务器端处理的
                     // calcDmgMax = monster.getHp() / (70 - chr.getSkillLevel(skill));
                 }
-            } else if (ret.skill == Hermit.SHADOW_WEB) {
+            } else if (ret.skill == Hermit.SHADOW_WEB) { // 隐士 - 影网术
                 if (monster != null) {
                     calcDmgMax = monster.getHp() / (50 - chr.getSkillLevel(skill));
                 }
-            } else if (ret.skill == Hermit.SHADOW_MESO) {
+            } else if (ret.skill == Hermit.SHADOW_MESO) { // 隐士 - 金钱攻击
                 if (monster != null) {
                     monster.debuffMob(Hermit.SHADOW_MESO);
                 }
-            } else if (ret.skill == Aran.BODY_PRESSURE) {
+            } else if (ret.skill == Aran.BODY_PRESSURE) { // 战神 - 体压
                 if (monster != null) {
                     int bodyPressureDmg = (int) Math.ceil(monster.getMaxHp() * SkillFactory.getSkill(Aran.BODY_PRESSURE).getEffect(ret.skilllevel).getDamage() / 100.0);
                     if (bodyPressureDmg > calcDmgMax) {
@@ -1196,7 +1226,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
      * @description 应用伤害修正，例如影分身和特殊技能。
      */
     private long applyDamageModifiers(AttackInfo ret, int j, boolean shadowPartner, long hitDmgMax) {
-        if (ret.skill == Buccaneer.BARRAGE || ret.skill == ThunderBreaker.BARRAGE) {
+        if (ret.skill == Buccaneer.BARRAGE || ret.skill == ThunderBreaker.BARRAGE) { // 冲锋队长/拳手 - 连环攻击
             if (j > 3) {
                 hitDmgMax *= Math.pow(2, (j - 3));
             }
@@ -1208,9 +1238,10 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
         }
 
         // 狙击技能特殊处理：固定伤害19.5万-20万
-        if (ret.skill == Marksman.SNIPE) {
-            // damage = 195000 + Randomizer.nextInt(5000); // 客户端发送的伤害会被覆盖
-            hitDmgMax = 200000; // 设置最大伤害上限为20万
+        if (ret.skill == Marksman.SNIPE) { // 神射手 - 狙击
+            //damage = 195000 + Randomizer.nextInt(5000); // 客户端发送的伤害会被覆盖
+            //hitDmgMax = 200000; // 设置最大伤害上限为20万
+            hitDmgMax = 195000 + Randomizer.nextInt(5000); // 假设客户端伤害上限199,999
         }
         // 竹林雨/竹林突刺技能特殊处理：用于武陵道场Boss战
         else if (ret.skill == Beginner.BAMBOO_RAIN || ret.skill == Noblesse.BAMBOO_RAIN
