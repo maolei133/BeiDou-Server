@@ -514,12 +514,12 @@ public class AutobanManager {
      * @since 1.0.0
      */
     public boolean detectMonsterVac(Monster monster) {
-        if (!useAntiCheat() || chr == null || monster == null) return false; // 基础安全检查：反作弊启用且对象有效
+        if (!useAntiCheat() || chr == null || monster == null || monster.isBoss()) return false; // 基础安全检查：反作弊启用且对象有效
         MapleMap map = chr.getMap(); // 获取玩家所在地图
         if (map == null || MobVacPlugin.isMobVacActiveInMap(map)) { // 检查地图状态：跳过已启用合法聚集功能的地图
             return false; // 地图无效或已启用合法聚集功能，跳过检测
         }
-        
+
         // 获取怪物移动类型
         int movetype = monster.getStats().getMovetype(); // 获取怪物移动类型
         
