@@ -22,12 +22,12 @@
 package org.gms.constants.skills;
 
 /***
- * 狙击手 - 弓箭手职业狙击手分支常量
+ * 神射手手 - 弓箭手职业神射手手分支常量
  *
  * @author BubblesDev
  */
 public class Sniper {
-    // 狙击手技能常量
+    // 神射手手技能常量
     /*** 疾风步 */
     public static final int THRUST = 3210000;
     /*** 贯穿箭 */
