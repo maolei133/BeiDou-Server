@@ -32,7 +32,7 @@ public class WhiteKnight {
     public static final int IMPROVING_MP_RECOVERY = 1210000;
     /*** 盾防精通 */
     public static final int SHIELD_MASTERY = 1210001;
-    /*** 斗气集中 */
+    /*** 属性攻击 */
     public static final int CHARGE_BLOW = 1211002;
     /*** 烈焰之剑 */
     public static final int SWORD_FIRE_CHARGE = 1211003;
