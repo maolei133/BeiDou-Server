@@ -24,11 +24,9 @@ package org.gms.client.autoban;
 
 import org.gms.client.Character;
 import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.core.HighPerformanceLogger;
 import org.gms.logsystem.facade.SecurityLoggerFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -42,7 +40,7 @@ import static java.util.concurrent.TimeUnit.*;
 public enum AutobanFactory {
     MOB_COUNT(1,SECONDS.toMillis(10),"篡改目标数"),
     GENERAL("通用检测"),
-    FIX_DAMAGE(3,SECONDS.toMillis(10),"固定伤害"),
+    DAMAGE_FIX(3,SECONDS.toMillis(10),"固定伤害"),
     DAMAGE_HACK(10, SECONDS.toMillis(30), "篡改伤害"),
     DAMAGE_SEGMENTS_HACK(5, SECONDS.toMillis(10), "篡改段数"),
     DISTANCE_HACK(5, SECONDS.toMillis(30), "篡改距离"),
