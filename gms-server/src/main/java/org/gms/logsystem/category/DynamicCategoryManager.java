@@ -46,7 +46,31 @@ public class DynamicCategoryManager {
         public static final String MAJOR_CHEATSYSTEM = "cheatsystem";
         /** 安全相关 */
         public static final String MAJOR_SECURITY = "security";
-        
+        /** 玩家相关 */
+        public static final String MAJOR_PLAYER = "player";
+        /** 物品相关 */
+        public static final String MAJOR_ITEM = "item";
+        /** 经济相关 */
+        public static final String MAJOR_ECONOMY = "economy";
+        /** 任务相关 */
+        public static final String MAJOR_QUEST = "quest";
+        /** 副本相关 */
+        public static final String MAJOR_DUNGEON = "dungeon";
+        /** 装备相关 */
+        public static final String MAJOR_EQUIPMENT = "equipment";
+        /** 技能相关 */
+        public static final String MAJOR_SKILL = "skill";
+        /** 宠物相关 */
+        public static final String MAJOR_PET = "pet";
+        /** 公会相关 */
+        public static final String MAJOR_GUILD = "guild";
+        /** 社交相关 */
+        public static final String MAJOR_SOCIAL = "social";
+        /** 系统相关 */
+        public static final String MAJOR_SYSTEM = "system";
+        /** 网络包相关 */
+        public static final String MAJOR_PACKET = "packet";
+
         // 小类常量 - CheatSystem
         /** 插件激活 */
         public static final String MINOR_PLUGIN_ACTIVATION = "plugin_activation";
@@ -54,12 +78,112 @@ public class DynamicCategoryManager {
         public static final String MINOR_PLUGIN_OPERATION = "plugin_operation";
         /** 插件系统 */
         public static final String MINOR_PLUGIN_SYSTEM = "plugin_system";
-        
+
         // 小类常量 - Security
         /** 外挂检测 */
         public static final String MINOR_HACK_DETECTION = "hack_detection";
         /** 账号安全 */
         public static final String MINOR_ACCOUNT_SECURITY = "account_security";
+
+        // 小类常量 - Player
+        /** 玩家登录 */
+        public static final String MINOR_PLAYER_LOGIN = "login";
+        /** 玩家登出 */
+        public static final String MINOR_PLAYER_LOGOUT = "logout";
+        /** 玩家移动 */
+        public static final String MINOR_PLAYER_MOVEMENT = "movement";
+        /** 玩家战斗 */
+        public static final String MINOR_PLAYER_COMBAT = "combat";
+
+        // 小类常量 - Item
+        /** 物品获取 */
+        public static final String MINOR_ITEM_ACQUIRE = "acquire";
+        /** 物品使用 */
+        public static final String MINOR_ITEM_USE = "use";
+        /** 物品丢弃 */
+        public static final String MINOR_ITEM_DROP = "drop";
+        /** 物品交易 */
+        public static final String MINOR_ITEM_TRADE = "trade";
+
+        // 小类常量 - Economy
+        /** 经济交易 */
+        public static final String MINOR_ECONOMY_TRADE = "trade";
+        /** NPC商店 */
+        public static final String MINOR_ECONOMY_NPC_SHOP = "npc_shop";
+        /** 货币流动 */
+        public static final String MINOR_ECONOMY_CURRENCY = "currency";
+
+        // 小类常量 - Quest
+        /** 任务接取 */
+        public static final String MINOR_QUEST_ACCEPT = "accept";
+        /** 任务完成 */
+        public static final String MINOR_QUEST_COMPLETE = "complete";
+        /** 任务进度 */
+        public static final String MINOR_QUEST_PROGRESS = "progress";
+
+        // 小类常量 - Dungeon
+        /** 副本进入 */
+        public static final String MINOR_DUNGEON_ENTER = "enter";
+        /** 副本清除 */
+        public static final String MINOR_DUNGEON_CLEAR = "clear";
+        /** 副本失败 */
+        public static final String MINOR_DUNGEON_FAIL = "fail";
+
+        // 小类常量 - Equipment
+        /** 装备穿戴 */
+        public static final String MINOR_EQUIPMENT_EQUIP = "equip";
+        /** 装备卸下 */
+        public static final String MINOR_EQUIPMENT_UNEQUIP = "unequip";
+        /** 装备升级 */
+        public static final String MINOR_EQUIPMENT_UPGRADE = "upgrade";
+
+        // 小类常量 - Skill
+        /** 技能学习 */
+        public static final String MINOR_SKILL_LEARN = "learn";
+        /** 技能使用 */
+        public static final String MINOR_SKILL_USE = "use";
+        /** 技能冷却 */
+        public static final String MINOR_SKILL_COOLDOWN = "cooldown";
+
+        // 小类常量 - Pet
+        /** 宠物捕获 */
+        public static final String MINOR_PET_CAPTURE = "capture";
+        /** 宠物进化 */
+        public static final String MINOR_PET_EVOLVE = "evolve";
+        /** 宠物战斗 */
+        public static final String MINOR_PET_BATTLE = "battle";
+
+        // 小类常量 - Guild
+        /** 公会创建 */
+        public static final String MINOR_GUILD_CREATE = "create";
+        /** 公会加入 */
+        public static final String MINOR_GUILD_JOIN = "join";
+        /** 公会离开 */
+        public static final String MINOR_GUILD_LEAVE = "leave";
+
+        // 小类常量 - Social
+        /** 好友添加 */
+        public static final String MINOR_SOCIAL_FRIEND_ADD = "friend_add";
+        /** 好友移除 */
+        public static final String MINOR_SOCIAL_FRIEND_REMOVE = "friend_remove";
+        /** 聊天 */
+        public static final String MINOR_SOCIAL_CHAT = "chat";
+
+        // 小类常量 - System
+        /** 服务器事件 */
+        public static final String MINOR_SYSTEM_SERVER_EVENT = "server_event";
+        /** 系统错误 */
+        public static final String MINOR_SYSTEM_ERROR = "error";
+        /** 性能监控 */
+        public static final String MINOR_SYSTEM_PERFORMANCE = "performance";
+
+        // 小类常量 - Packet
+        /** 入站网络包 */
+        public static final String MINOR_PACKET_INBOUND = "inbound";
+        /** 出站网络包 */
+        public static final String MINOR_PACKET_OUTBOUND = "outbound";
+        /** 监控角色网络包 */
+        public static final String MINOR_PACKET_MONITOR = "monitor";
     }
     
     /**
@@ -87,66 +211,66 @@ public class DynamicCategoryManager {
         registerCategory(Category.MAJOR_SECURITY, Category.MINOR_ACCOUNT_SECURITY, "账号安全", "HIGH");
         
         // Player相关日志
-        registerCategory("player", "login", "玩家登录日志", "HIGH");
-        registerCategory("player", "logout", "玩家登出日志", "HIGH");
-        registerCategory("player", "movement", "玩家移动日志", "HIGH");
-        registerCategory("player", "combat", "玩家战斗日志", "MEDIUM");
+        registerCategory(Category.MAJOR_PLAYER, Category.MINOR_PLAYER_LOGIN, "玩家登录日志", "HIGH");
+        registerCategory(Category.MAJOR_PLAYER, Category.MINOR_PLAYER_LOGOUT, "玩家登出日志", "HIGH");
+        registerCategory(Category.MAJOR_PLAYER, Category.MINOR_PLAYER_MOVEMENT, "玩家移动日志", "HIGH");
+        registerCategory(Category.MAJOR_PLAYER, Category.MINOR_PLAYER_COMBAT, "玩家战斗日志", "MEDIUM");
 
         // Item相关日志
-        registerCategory("item", "acquire", "物品获取日志", "MEDIUM");
-        registerCategory("item", "use", "物品使用日志", "MEDIUM");
-        registerCategory("item", "drop", "物品丢弃日志", "MEDIUM");
-        registerCategory("item", "trade", "物品交易日志", "MEDIUM");
+        registerCategory(Category.MAJOR_ITEM, Category.MINOR_ITEM_ACQUIRE, "物品获取日志", "MEDIUM");
+        registerCategory(Category.MAJOR_ITEM, Category.MINOR_ITEM_USE, "物品使用日志", "MEDIUM");
+        registerCategory(Category.MAJOR_ITEM, Category.MINOR_ITEM_DROP, "物品丢弃日志", "MEDIUM");
+        registerCategory(Category.MAJOR_ITEM, Category.MINOR_ITEM_TRADE, "物品交易日志", "MEDIUM");
 
         // Economy相关日志
-        registerCategory("economy", "trade", "经济交易日志", "MEDIUM");
-        registerCategory("economy", "npc_shop", "NPC商店日志", "LOW");
-        registerCategory("economy", "currency", "货币流动日志", "MEDIUM");
+        registerCategory(Category.MAJOR_ECONOMY, Category.MINOR_ECONOMY_TRADE, "经济交易日志", "MEDIUM");
+        registerCategory(Category.MAJOR_ECONOMY, Category.MINOR_ECONOMY_NPC_SHOP, "NPC商店日志", "LOW");
+        registerCategory(Category.MAJOR_ECONOMY, Category.MINOR_ECONOMY_CURRENCY, "货币流动日志", "MEDIUM");
 
         // Quest相关日志
-        registerCategory("quest", "accept", "任务接取日志", "LOW");
-        registerCategory("quest", "complete", "任务完成日志", "LOW");
-        registerCategory("quest", "progress", "任务进度日志", "LOW");
+        registerCategory(Category.MAJOR_QUEST, Category.MINOR_QUEST_ACCEPT, "任务接取日志", "LOW");
+        registerCategory(Category.MAJOR_QUEST, Category.MINOR_QUEST_COMPLETE, "任务完成日志", "LOW");
+        registerCategory(Category.MAJOR_QUEST, Category.MINOR_QUEST_PROGRESS, "任务进度日志", "LOW");
 
         // Dungeon相关日志
-        registerCategory("dungeon", "enter", "副本进入日志", "MEDIUM");
-        registerCategory("dungeon", "clear", "副本清除日志", "MEDIUM");
-        registerCategory("dungeon", "fail", "副本失败日志", "LOW");
+        registerCategory(Category.MAJOR_DUNGEON, Category.MINOR_DUNGEON_ENTER, "副本进入日志", "MEDIUM");
+        registerCategory(Category.MAJOR_DUNGEON, Category.MINOR_DUNGEON_CLEAR, "副本清除日志", "MEDIUM");
+        registerCategory(Category.MAJOR_DUNGEON, Category.MINOR_DUNGEON_FAIL, "副本失败日志", "LOW");
 
         // Equipment相关日志
-        registerCategory("equipment", "equip", "装备穿戴日志", "MEDIUM");
-        registerCategory("equipment", "unequip", "装备卸下日志", "MEDIUM");
-        registerCategory("equipment", "upgrade", "装备升级日志", "MEDIUM");
+        registerCategory(Category.MAJOR_EQUIPMENT, Category.MINOR_EQUIPMENT_EQUIP, "装备穿戴日志", "MEDIUM");
+        registerCategory(Category.MAJOR_EQUIPMENT, Category.MINOR_EQUIPMENT_UNEQUIP, "装备卸下日志", "MEDIUM");
+        registerCategory(Category.MAJOR_EQUIPMENT, Category.MINOR_EQUIPMENT_UPGRADE, "装备升级日志", "MEDIUM");
 
         // Skill相关日志
-        registerCategory("skill", "learn", "技能学习日志", "LOW");
-        registerCategory("skill", "use", "技能使用日志", "HIGH");
-        registerCategory("skill", "cooldown", "技能冷却日志", "MEDIUM");
+        registerCategory(Category.MAJOR_SKILL, Category.MINOR_SKILL_LEARN, "技能学习日志", "LOW");
+        registerCategory(Category.MAJOR_SKILL, Category.MINOR_SKILL_USE, "技能使用日志", "HIGH");
+        registerCategory(Category.MAJOR_SKILL, Category.MINOR_SKILL_COOLDOWN, "技能冷却日志", "MEDIUM");
 
         // Pet相关日志
-        registerCategory("pet", "capture", "宠物捕获日志", "LOW");
-        registerCategory("pet", "evolve", "宠物进化日志", "LOW");
-        registerCategory("pet", "battle", "宠物战斗日志", "MEDIUM");
+        registerCategory(Category.MAJOR_PET, Category.MINOR_PET_CAPTURE, "宠物捕获日志", "LOW");
+        registerCategory(Category.MAJOR_PET, Category.MINOR_PET_EVOLVE, "宠物进化日志", "LOW");
+        registerCategory(Category.MAJOR_PET, Category.MINOR_PET_BATTLE, "宠物战斗日志", "MEDIUM");
 
         // Guild相关日志
-        registerCategory("guild", "create", "公会创建日志", "LOW");
-        registerCategory("guild", "join", "公会加入日志", "LOW");
-        registerCategory("guild", "leave", "公会离开日志", "LOW");
+        registerCategory(Category.MAJOR_GUILD, Category.MINOR_GUILD_CREATE, "公会创建日志", "LOW");
+        registerCategory(Category.MAJOR_GUILD, Category.MINOR_GUILD_JOIN, "公会加入日志", "LOW");
+        registerCategory(Category.MAJOR_GUILD, Category.MINOR_GUILD_LEAVE, "公会离开日志", "LOW");
 
         // Social相关日志
-        registerCategory("social", "friend_add", "好友添加日志", "LOW");
-        registerCategory("social", "friend_remove", "好友移除日志", "LOW");
-        registerCategory("social", "chat", "聊天日志", "HIGH");
+        registerCategory(Category.MAJOR_SOCIAL, Category.MINOR_SOCIAL_FRIEND_ADD, "好友添加日志", "LOW");
+        registerCategory(Category.MAJOR_SOCIAL, Category.MINOR_SOCIAL_FRIEND_REMOVE, "好友移除日志", "LOW");
+        registerCategory(Category.MAJOR_SOCIAL, Category.MINOR_SOCIAL_CHAT, "聊天日志", "HIGH");
 
         // System相关日志
-        registerCategory("system", "server_event", "服务器事件日志", "MEDIUM");
-        registerCategory("system", "error", "系统错误日志", "HIGH");
-        registerCategory("system", "performance", "性能监控日志", "MEDIUM");
+        registerCategory(Category.MAJOR_SYSTEM, Category.MINOR_SYSTEM_SERVER_EVENT, "服务器事件日志", "MEDIUM");
+        registerCategory(Category.MAJOR_SYSTEM, Category.MINOR_SYSTEM_ERROR, "系统错误日志", "HIGH");
+        registerCategory(Category.MAJOR_SYSTEM, Category.MINOR_SYSTEM_PERFORMANCE, "性能监控日志", "MEDIUM");
 
         // Packet相关日志
-        registerCategory("packet", "inbound", "入站网络包日志", "HIGH");
-        registerCategory("packet", "outbound", "出站网络包日志", "HIGH");
-        registerCategory("packet", "monitor", "监控角色网络包日志", "MEDIUM");
+        registerCategory(Category.MAJOR_PACKET, Category.MINOR_PACKET_INBOUND, "入站网络包日志", "HIGH");
+        registerCategory(Category.MAJOR_PACKET, Category.MINOR_PACKET_OUTBOUND, "出站网络包日志", "HIGH");
+        registerCategory(Category.MAJOR_PACKET, Category.MINOR_PACKET_MONITOR, "监控角色网络包日志", "MEDIUM");
 
         log.info("默认分类已初始化");
     }
