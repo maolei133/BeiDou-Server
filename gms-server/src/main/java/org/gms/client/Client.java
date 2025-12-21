@@ -1212,6 +1212,7 @@ public class Client extends ChannelInboundHandlerAdapter {
 
     public final void forceDisconnect() {
         if (canDisconnect()) {
+            timeoutDisconnect();
             disconnectInternal(true, false);
         }
     }
