@@ -34,6 +34,8 @@ public class Skill {
     private int animationTime;
     private final int job;
     private boolean action;
+    /** 技能类型：-1=被动，1=主动，2=BUFF */
+    private int skillType;
 
     public Skill(int id) {
         this.id = id;
@@ -45,6 +47,9 @@ public class Skill {
     }
 
     public StatEffect getEffect(int level) {
+        if (level < 1 || level > effects.size()) {
+            return null;
+        }
         return effects.get(level - 1);
     }
 
@@ -97,4 +102,13 @@ public class Skill {
     public void addLevelEffect(StatEffect effect) {
         effects.add(effect);
     }
+
+    public int getSkillType() {
+        return skillType;
+    }
+
+    public void setSkillType(int skillType) {
+        this.skillType = skillType;
+    }
+
 }

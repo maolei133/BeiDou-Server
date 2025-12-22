@@ -837,6 +837,129 @@ public class Character extends AbstractCharacterObject {
         return (maxbasedamage * 107) / 100;
     }
 
+    /**
+     * [新增] 计算并返回所有被动技能提供的暴击伤害总和。
+     * <p>
+     * 此方法会遍历角色所有已学会的技能，筛选出其中的被动技能，
+     * 并累加它们提供的 `criticalDamage` 值。
+     * <p>
+     * 被动技能的判断标准 (启发式规则):
+     * 1. 角色已学习该技能 (skillLevel > 0)。
+     * 2. 该技能效果没有冷却时间 (cooldown == 0)。
+     * 3. 该技能效果没有MP消耗 (mpCon == 0)。
+     * 4. 该技能效果没有持续时间 (duration <= 0)，以区别于主动Buff。
+     *
+     * @return 所有被动技能提供的暴击伤害百分比总和。
+     */
+    public int getPassiveCriticalDamageBonus() {
+        int passiveBonus = 0;
+        // 遍历角色所有已学习的技能
+        for (Map.Entry<Skill, SkillEntry> entry : getSkills().entrySet()) {
+            Skill skill = entry.getKey();
+            SkillEntry skillEntry = entry.getValue();
+
+            // 确保技能有效且已学习
+            if (skill == null || skillEntry.skillLevel <= 0) {
+                continue;
+            }
+
+            StatEffect effect = skill.getEffect(skillEntry.skillLevel);
+            if (effect == null) {
+                continue;
+            }
+
+            // 应用启发式规则判断是否为被动技能
+            // 规则：有概率、无冷却、无HP/MP消耗、无持续时间
+            boolean isPassive = skill.getSkillType() == -1 && effect.getProp() < 1 && effect.getDamage() > 100 && effect.getCooldown() == 0 && effect.getHpCon() == 0  && effect.getMpCon() == 0 && effect.getDuration() <= 0;
+            if (isPassive) {
+//                System.out.println("Skill: " + SkillFactory.getSkillName(skill.getId()) + "("+skill.getId()+"), 概率: " + effect.getProp() + ", 加成: " + effect.getDamage() + ", type: " + skill.getSkillType());
+                // 累加被动技能提供的暴击伤害
+                passiveBonus += effect.getDamage();
+            }
+        }
+        return passiveBonus;
+    }
+
+    /**
+     * [重构] 获取总暴击伤害加成（被动技能 + 主动Buff）。
+     * <p>
+     * 此方法整合了来自永久生效的被动技能和临时生效的主动Buff的所有暴击伤害加成，
+     * 提供了更清晰和准确的计算逻辑。
+     *
+     * @return 角色当前的总暴击伤害加成百分比。
+     */
+    public int getTotalCriticalBonus() {
+        // 1. 获取所有被动技能提供的基础暴击伤害加成
+        int totalBonus = getPassiveCriticalDamageBonus();
+
+        // 2. 累加所有当前生效的主动Buff提供的暴击伤害
+        // 特殊处理“火眼晶晶”，其暴击伤害值存储在buff value的低8位
+        Integer sharpEyesValue = getBuffedValue(BuffStat.SHARP_EYES);
+        if (sharpEyesValue != null) {
+            totalBonus += sharpEyesValue & 0xFF;
+        }
+
+        // 遍历其他Buff，查找除了火眼之外的暴击伤害来源
+        List<PlayerBuffValueHolder> allBuffs = getAllBuffs();
+        for (PlayerBuffValueHolder buff : allBuffs) {
+            if (buff.effect == null) {
+                continue;
+            }
+            // 跳过已经处理过的“火眼晶晶”
+            if (buff.effect.isSkill() && (buff.effect.getSourceId() == Bowmaster.SHARP_EYES || buff.effect.getSourceId() == Marksman.SHARP_EYES)) {
+                continue;
+            }
+            // 累加其他buff提供的暴击伤害
+            totalBonus += buff.effect.getCriticalDamage();
+        }
+
+        return totalBonus;
+    }
+
+    /**
+     * 获取物理职业的武器熟练度。
+     * <p>
+     * 该方法会遍历角色所有已学会的技能，查找适用于当前装备武器的“精准”类被动技能，
+     * 并返回其中最高的熟练度值。
+     *
+     * @return 最高的适用武器熟练度值（以小数形式，例如 0.6 表示 60%），如果没有则返回 0.0。
+     */
+    public double getWeaponMastery() {
+        Item weapon = getInventory(InventoryType.EQUIPPED).getItem((short) -11);
+        if (weapon == null) {
+            return 0.0;
+        }
+        WeaponType weaponType = ItemInformationProvider.getInstance().getWeaponType(weapon.getItemId());
+        double maxMastery = 1.0;
+
+        for (Map.Entry<Skill, SkillEntry> skillEntry : getSkills().entrySet()) {
+            List<WeaponType> applicableWeapons = SkillFactory.getMasterySkillWeaponTypes(skillEntry.getKey().getId());
+            if (applicableWeapons != null && applicableWeapons.contains(weaponType) && skillEntry.getValue().skillLevel > 0) {
+                double currentMastery = skillEntry.getKey().getEffect(skillEntry.getValue().skillLevel).getMastery();
+                if (currentMastery > maxMastery) {
+                    maxMastery = currentMastery;
+                }
+            }
+        }
+        return maxMastery;
+    }
+
+    /**
+     * 获取特定魔法技能的熟练度。
+     * <p>
+     * 对于法系职业，熟练度是每个攻击技能的固有属性。
+     *
+     * @param skill      要查询的技能对象。
+     * @param skillLevel 该技能的等级。
+     * @return 该技能的熟练度值（以小数形式），如果技能或等级无效则返回 0.0。
+     */
+    public double getMagicMastery(Skill skill, int skillLevel) {
+        if (skill == null || skillLevel <= 0) {
+            return 0.0;
+        }
+        return skill.getEffect(skillLevel).getMastery();
+    }
+
     public void setCombo(short count) {
         if (count < combocounter) {
             cancelEffectFromBuffStat(BuffStat.ARAN_COMBO);
@@ -845,6 +968,138 @@ public class Character extends AbstractCharacterObject {
         if (count > 0) {
             sendPacket(PacketCreator.showCombo(combocounter));
         }
+    }
+    /**
+     * 计算物理职业的最大攻击力。
+     * <p>
+     * 公式: (主属性 * 武器系数 + 副属性) / 100 * 装备攻击力
+     *
+     * @param watk 装备攻击力
+     * @param stance 攻击姿势/动作 <br>32 趴下 <br>标拳 / 海盗枪 / 弓 / 弩 <=20 近战挥 ，>20 远程
+     * @param direction 攻击方向 <br>-128 左边 <br>0 右边
+     * @return 最大攻击力
+     */
+    /**
+     * 计算物理职业的最大攻击力。
+     * <p>
+     * 公式: (主属性 * 武器系数 + 副属性) / 100 * 装备攻击力
+     *
+     * @param watk 装备攻击力
+     * @return 最大攻击力
+     */
+    public double calculatePhysicalMaxBaseAttack(int watk) {
+        Item weaponItem = getInventory(InventoryType.EQUIPPED).getItem((short) -11);// 获取角色装备栏中武器格子(-11)的物品
+        if (weaponItem == null) {
+            return 1;// 如果没有装备武器，返回基础攻击力1
+        }
+        WeaponType weaponType = ItemInformationProvider.getInstance().getWeaponType(weaponItem.getItemId());// 根据武器物品ID获取武器类型
+
+        // [修正] 如果是飞侠职业使用短刀，则切换为飞侠专用的短刀类型
+        if (getJob().isA(Job.THIEF) && weaponType == WeaponType.DAGGER_OTHER) {
+            weaponType = WeaponType.DAGGER_THIEVES;
+        }
+
+        int mainStat, secondaryStat;// 定义主属性和副属性变量
+        double weaponCoefficient = weaponType.getMaxDamageMultiplier();// 获取武器的最大伤害倍数系数
+
+        // 根据武器类型确定主属性和副属性的计算方式
+        if (weaponType == WeaponType.BOW || weaponType == WeaponType.CROSSBOW || weaponType == WeaponType.GUN) {
+            // 弓、弩、枪类武器：主属性为敏捷，副属性为力量
+            mainStat = getTotalDex();       // 主属性：敏捷
+            secondaryStat = getTotalStr();   // 副属性：力量
+        } else if (weaponType == WeaponType.CLAW || weaponType == WeaponType.DAGGER_THIEVES) {
+            // 拳套、飞侠短刀：主属性为运气，副属性为敏捷+力量
+            mainStat = getTotalLuk();                           // 主属性：运气
+            secondaryStat = getTotalDex() + getTotalStr();      // 副属性：敏捷+力量
+        } else {
+            // 其他近战武器：主属性为力量，副属性为敏捷
+            mainStat = getTotalStr();       // 主属性：力量
+            secondaryStat = getTotalDex();   // 副属性：敏捷
+        }
+
+        // 计算主属性加成：主属性值 * 武器系数
+        double mainStatBonus = mainStat * weaponCoefficient;
+        // 返回最终计算结果：(主属性加成 + 副属性) / 100 * 武器攻击力
+        return (mainStatBonus + secondaryStat) / 100.0 * watk;
+    }
+
+    /**
+     * 计算物理职业的最小攻击力。
+     * <p>
+     * 公式: (主属性 * 0.9 * 武器熟练度 + 副属性) / 100 * 装备攻击力
+     *
+     * @param watk 装备攻击力
+     * @return 最小攻击力
+     */
+    public double calculatePhysicalMinBaseAttack(int watk) {
+        Item weaponItem = getInventory(InventoryType.EQUIPPED).getItem((short) -11);
+        if (weaponItem == null) {
+            return 1;
+        }
+        WeaponType weaponType = ItemInformationProvider.getInstance().getWeaponType(weaponItem.getItemId());
+
+        // [修正] 如果是飞侠职业使用短刀，则切换为飞侠专用的短刀类型
+        if (getJob().isA(Job.THIEF) && weaponType == WeaponType.DAGGER_OTHER) {
+            weaponType = WeaponType.DAGGER_THIEVES;
+        }
+
+        int mainStat, secondaryStat;
+        double weaponCoefficient = weaponType.getMinDamageMultiplier();
+        double mastery = getWeaponMastery();
+
+        if (weaponType == WeaponType.BOW || weaponType == WeaponType.CROSSBOW || weaponType == WeaponType.GUN) {
+            mainStat = getTotalDex();
+            secondaryStat = getTotalStr();
+        } else if (weaponType == WeaponType.CLAW || weaponType == WeaponType.DAGGER_THIEVES) {
+            mainStat = getTotalLuk();
+            secondaryStat = getTotalDex() + getTotalStr();
+        } else {
+            mainStat = getTotalStr();
+            secondaryStat = getTotalDex();
+        }
+
+        double mainStatBonus = mainStat * weaponCoefficient * 0.9 * mastery;
+        return (mainStatBonus + secondaryStat) / 100.0 * watk;
+    }
+
+    /**
+     * 计算法师的最大魔法伤害。
+     * <p>
+     * 公式: ((魔法力^2 / 1000 + 魔法力) / 30 + 智力 / 200) * 技能攻击力
+     *
+     * @param skill 技能对象
+     * @param skillLevel 技能等级
+     * @return 最大魔法伤害
+     */
+    public double calculateMagicMaxDamage(Skill skill, int skillLevel) {
+        double magic = getTotalMagic();
+        double intel = getTotalInt();
+        double skillAtk = skill.getEffect(skillLevel).getMatk();
+        magic = Math.min(magic,switch (skill.getId()) {
+            case FPArchMage.ELQUINES , ILArchMage.IFRIT ,BlazeWizard.IFRIT -> 1999; //客户端没有针对召唤兽破功，所以需要做限制，否则伤害上限不正确
+            default -> magic;
+        });
+        double damage = ((magic * magic / 1000.0) + magic) / 30.0 + (intel / 50.0);
+        return damage * skillAtk;
+    }
+
+    /**
+     * 计算法师的最小魔法伤害。
+     * <p>
+     * 公式: ((魔法力^2 / 1000 + 魔法力 * 熟练度 * 0.9) / 30 + 智力 / 200) * 技能攻击力
+     *
+     * @param skill 技能对象
+     * @param skillLevel 技能等级
+     * @return 最小魔法伤害
+     */
+    public double calculateMagicMinDamage(Skill skill, int skillLevel) {
+        double magic = getTotalMagic();
+        double intel = getTotalInt();
+        double mastery = getMagicMastery(skill, skillLevel);
+        double skillAtk = skill.getEffect(skillLevel).getMatk();
+
+        double damage = ((magic * magic / 1000.0) + (magic * mastery * 0.9)) / 30.0 + (intel / 200.0);
+        return damage * skillAtk;
     }
 
     public short getCombo() {
@@ -6973,7 +7228,7 @@ public class Character extends AbstractCharacterObject {
 
             recalcEquipStats();
 
-            localmagic = Math.min(localmagic, 2000);
+//            localmagic = Math.min(localmagic, 2000);  // 需要注释，否则无法配合破功
 
             Integer hbhp = getBuffedValue(BuffStat.HYPERBODYHP);
             if (hbhp != null) {

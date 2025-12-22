@@ -97,6 +97,7 @@ public class Monster extends AbstractLoadedLife {
     private boolean controllerHasAggro, controllerKnowsAboutAggro, controllerHasPuppet;
     private final Collection<MonsterListener> listeners = new LinkedList<>();
     private final EnumMap<MonsterStatus, MonsterStatusEffect> stati = new EnumMap<>(MonsterStatus.class);
+    private final Map<Element, ElementalEffectiveness> tempEffectiveness = new EnumMap<>(Element.class);
     private final ArrayList<MonsterStatus> alreadyBuffed = new ArrayList<>();
     private MapleMap map;
     private int VenomMultiplier = 0;
@@ -116,6 +117,7 @@ public class Monster extends AbstractLoadedLife {
     private ScheduledFuture<?> monsterItemDrop = null;
     private Runnable removeAfterAction = null;
     private boolean availablePuppetUpdate = true;
+    private int markedBy = 0; // 新增字段，用于存储标记该怪物的玩家ID
 
     private final Lock externalLock = new ReentrantLock();
     private final Lock monsterLock = new ReentrantLock(true);
@@ -469,6 +471,7 @@ public class Monster extends AbstractLoadedLife {
                         } else {
                             pq.kill();
                         }
+                        killed = true;
                     } else {
                         pq.miss();
                     }
@@ -1864,25 +1867,27 @@ public class Monster extends AbstractLoadedLife {
     public void setTempEffectiveness(Element e, ElementalEffectiveness ee, long milli) {
         monsterLock.lock();
         try {
-            final Element fE = e;
-            final ElementalEffectiveness fEE = stats.getEffectiveness(e);
-            if (!fEE.equals(ElementalEffectiveness.WEAK)) {
-                stats.setEffectiveness(e, ee);
-
-                MapleMap mmap = this.getMap();
-                Runnable r = () -> {
-                    monsterLock.lock();
-                    try {
-                        stats.removeEffectiveness(fE);
-                        stats.setEffectiveness(fE, fEE);
-                    } finally {
-                        monsterLock.unlock();
-                    }
-                };
-
-                MobClearSkillService service = (MobClearSkillService) mmap.getChannelServer().getServiceAccess(ChannelServices.MOB_CLEAR_SKILL);
-                service.registerMobClearSkillAction(mmap.getId(), r, milli);
+            tempEffectiveness.put(e, ee);
+        } finally {
+            monsterLock.unlock();
+        }
+        TimerManager.getInstance().schedule(new Runnable() {
+            @Override
+            public void run() {
+                monsterLock.lock();
+                try {
+                    tempEffectiveness.remove(e);
+                } finally {
+                    monsterLock.unlock();
+                }
             }
+        }, milli);
+    }
+
+    public ElementalEffectiveness getTempEffectiveness(Element e) {
+        monsterLock.lock();
+        try {
+            return tempEffectiveness.get(e);
         } finally {
             monsterLock.unlock();
         }
@@ -2385,5 +2390,13 @@ public class Monster extends AbstractLoadedLife {
         }
 
         this.getMap().dismissRemoveAfter(this);
+    }
+
+    public int getMarkedBy() {
+        return markedBy;
+    }
+
+    public void setMarkedBy(int playerId) {
+        this.markedBy = playerId;
     }
 }

@@ -95,6 +95,8 @@ import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.provider.Data;
 import org.gms.provider.DataTool;
+import org.gms.provider.wz.DataType;
+import org.gms.server.life.Element;
 import org.gms.server.life.MobSkill;
 import org.gms.server.life.MobSkillFactory;
 import org.gms.server.life.MobSkillType;
@@ -130,6 +132,7 @@ public class StatEffect {
     private short watk, matk, wdef, mdef, acc, avoid, speed, jump;
     private short hp, mp;
     private double hpR, mpR;
+    private double mastery;
     private short mhpRRate, mmpRRate, mobSkill, mobSkillLevel;
     private byte mhpR, mmpR;
     private short mpCon, hpCon;
@@ -146,10 +149,12 @@ public class StatEffect {
     private double prop;
     private int itemCon, itemConNo;
     private int damage, attackCount, fixdamage;
+    private int criticalDamage;
     private Point lt, rb;
     private short bulletCount, bulletConsume;
     private byte mapProtection;
     private CardItemupStats cardStats;
+    private Element element = Element.NEUTRAL;
 
     private static class CardItemupStats {
         protected int itemCode, prob;
@@ -248,6 +253,18 @@ public class StatEffect {
         int iprop = DataTool.getInt("prop", source, 100);
         ret.prop = iprop / 100.0;
 
+        Data masteryNode = source.getChildByPath("mastery");
+        if (masteryNode != null) {
+            // WZ数据明确表明mastery是整数，但为健壮性考虑，兼容其他类型
+            if (masteryNode.getType() == DataType.INT) {
+                ret.mastery = DataTool.getInt(masteryNode, 0) / 100.0;
+            } else {
+                ret.mastery = DataTool.getDouble(masteryNode);
+            }
+        } else {
+            ret.mastery = 0.0;
+        }
+
         ret.cp = DataTool.getInt("cp", source, 0);
         List<Disease> cure = new ArrayList<>(5);
         if (DataTool.getInt("poison", source, 0) > 0) {
@@ -295,6 +312,12 @@ public class StatEffect {
         }
         ret.sourceid = sourceid;
         ret.skill = skill;
+
+        String elemAttr = DataTool.getString("elemAttr", source, null);
+        if (elemAttr != null) {
+            ret.element = Element.getFromChar(elemAttr.charAt(0));
+        }
+
         if (!ret.skill && ret.duration > -1) {
             ret.overTime = true;
         } else {
@@ -312,6 +335,7 @@ public class StatEffect {
         ret.expbuff = DataTool.getInt("expBuff", source, 0);
         ret.speed = (short) DataTool.getInt("speed", source, 0);
         ret.jump = (short) DataTool.getInt("jump", source, 0);
+        ret.criticalDamage = DataTool.getInt("criticalDamage", source, 0);
 
         ret.barrier = DataTool.getInt("barrier", source, 0);
         addBuffStatPairToListIfNotZero(statups, BuffStat.AURA, ret.barrier);
@@ -842,6 +866,7 @@ public class StatEffect {
                 case ILArchMage.ICE_DEMON:
                     monsterStatus.put(MonsterStatus.POISON, 1);
                     monsterStatus.put(MonsterStatus.FREEZE, 1);
+                    monsterStatus.put(MonsterStatus.ELEMENTAL_ATTRIBUTE, 1);
                     break;
                 case Evan.PHANTOM_IMPRINT:
                     monsterStatus.put(MonsterStatus.PHANTOM_IMPRINT, x);
@@ -1954,5 +1979,21 @@ public class StatEffect {
 
     public Map<MonsterStatus, Integer> getMonsterStati() {
         return monsterStatus;
+    }
+
+    public double getMastery() {
+        return mastery;
+    }
+
+    public int getCriticalDamage() {
+        return criticalDamage;
+    }
+
+    public Element getElemental() {
+        return element;
+    }
+
+    public double getProp() {
+        return prop;
     }
 }

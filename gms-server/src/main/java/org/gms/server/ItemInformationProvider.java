@@ -677,12 +677,26 @@ public class ItemInformationProvider {
     }
 
     public WeaponType getWeaponType(int itemId) {
-        int cat = (itemId / 10000) % 100;
-        WeaponType[] type = {WeaponType.SWORD1H, WeaponType.GENERAL1H_SWING, WeaponType.GENERAL1H_SWING, WeaponType.DAGGER_OTHER, WeaponType.NOT_A_WEAPON, WeaponType.NOT_A_WEAPON, WeaponType.NOT_A_WEAPON, WeaponType.WAND, WeaponType.STAFF, WeaponType.NOT_A_WEAPON, WeaponType.SWORD2H, WeaponType.GENERAL2H_SWING, WeaponType.GENERAL2H_SWING, WeaponType.SPEAR_STAB, WeaponType.POLE_ARM_SWING, WeaponType.BOW, WeaponType.CROSSBOW, WeaponType.CLAW, WeaponType.KNUCKLE, WeaponType.GUN};
-        if (cat < 30 || cat > 49) {
-            return WeaponType.NOT_A_WEAPON;
+        int cat = itemId / 10000;
+        switch (cat) {
+            case 130: return WeaponType.SWORD1H;
+            case 131: return WeaponType.GENERAL1H_SWING; // Axe
+            case 132: return WeaponType.GENERAL1H_SWING; // Blunt
+            case 133: return WeaponType.DAGGER_OTHER;
+            case 137: return WeaponType.WAND;
+            case 138: return WeaponType.STAFF;
+            case 140: return WeaponType.SWORD2H;
+            case 141: return WeaponType.GENERAL2H_SWING; // Axe
+            case 142: return WeaponType.GENERAL2H_SWING; // Blunt
+            case 143: return WeaponType.SPEAR_STAB;
+            case 144: return WeaponType.POLE_ARM_SWING;
+            case 145: return WeaponType.BOW;
+            case 146: return WeaponType.CROSSBOW;
+            case 147: return WeaponType.CLAW;
+            case 148: return WeaponType.KNUCKLE;
+            case 149: return WeaponType.GUN;
+            default: return WeaponType.NOT_A_WEAPON;
         }
-        return type[cat - 30];
     }
 
     private static double testYourLuck(double prop, int dices) {   // revamped testYourLuck author: David A.
@@ -1782,15 +1796,15 @@ public class ItemInformationProvider {
 
     public final boolean isTwoHanded(int itemId) {
         switch (getWeaponType(itemId)) {
-            case GENERAL2H_SWING:
-            case BOW:
-            case CLAW:
-            case CROSSBOW:
-            case POLE_ARM_SWING:
-            case SPEAR_STAB:
             case SWORD2H:
-            case GUN:
+            case GENERAL2H_SWING:
+            case SPEAR_STAB:
+            case POLE_ARM_SWING:
+            case BOW:
+            case CROSSBOW:
+            case CLAW:
             case KNUCKLE:
+            case GUN:
                 return true;
             default:
                 return false;

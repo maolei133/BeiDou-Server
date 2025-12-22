@@ -22,48 +22,51 @@
 package org.gms.client.status;
 
 public enum MonsterStatus {
-    WATK(0x1),
-    WDEF(0x2),
-    NEUTRALISE(0x2, true),
-    PHANTOM_IMPRINT(0x4, true), // needs testing
-    MATK(0x4),
-    MDEF(0x8),
-    ACC(0x10),
-    AVOID(0x20),
-    SPEED(0x40),
-    STUN(0x80),
-    FREEZE(0x100),
-    POISON(0x200),
-    SEAL(0x400),
-    SHOWDOWN(0x800),
-    WEAPON_ATTACK_UP(0x1000),
-    WEAPON_DEFENSE_UP(0x2000),
-    MAGIC_ATTACK_UP(0x4000),
-    MAGIC_DEFENSE_UP(0x8000),
-    DOOM(0x10000),
-    SHADOW_WEB(0x20000),
-    WEAPON_IMMUNITY(0x40000),
-    MAGIC_IMMUNITY(0x80000),
-    HARD_SKIN(0x200000), // just added
-    NINJA_AMBUSH(0x400000),
-    ELEMENTAL_ATTRIBUTE(0x800000), // just added
-    VENOMOUS_WEAPON(0x1000000),
-    BLIND(0x2000000), // just added
-    SEAL_SKILL(0x4000000),
-    INERTMOB(0x10000000),
-    WEAPON_REFLECT(0x20000000, true),
-    MAGIC_REFLECT(0x40000000, true);
+    WATK(0x1, "物攻"),
+    WDEF(0x2, "物防"),
+    NEUTRALISE(0x2, "中和", true),
+    PHANTOM_IMPRINT(0x4, "幻影印记", true), // needs testing
+    MATK(0x4, "魔攻"),
+    MDEF(0x8, "魔防"),
+    ACC(0x10, "命中"),
+    AVOID(0x20, "回避"),
+    SPEED(0x40, "速度"),
+    STUN(0x80, "眩晕"),
+    FREEZE(0x100, "冰冻"),
+    POISON(0x200, "中毒"),
+    SEAL(0x400, "封印"),
+    SHOWDOWN(0x800, "挑衅"),
+    WEAPON_ATTACK_UP(0x1000, "武器攻击提升"),
+    WEAPON_DEFENSE_UP(0x2000, "武器防御提升"),
+    MAGIC_ATTACK_UP(0x4000, "魔法攻击提升"),
+    MAGIC_DEFENSE_UP(0x8000, "魔法防御提升"),
+    DOOM(0x10000, "厄运"),
+    SHADOW_WEB(0x20000, "影网"),
+    WEAPON_IMMUNITY(0x40000, "物理免疫"),
+    MAGIC_IMMUNITY(0x80000, "魔法免疫"),
+    HARD_SKIN(0x200000, "硬皮"), // just added
+    NINJA_AMBUSH(0x400000, "忍术伏击"),
+    ELEMENTAL_ATTRIBUTE(0x800000, "元素属性"), // just added
+    VENOMOUS_WEAPON(0x1000000, "涂毒"),
+    BLIND(0x2000000, "致盲"), // just added
+    SEAL_SKILL(0x4000000, "技能封印"),
+    INERTMOB(0x10000000, "呆滞"),
+    WEAPON_REFLECT(0x20000000, "物理反伤", true),
+    MAGIC_REFLECT(0x40000000, "魔法反伤", true);
 
     private final int i;
+    private final String chineseName;
     private final boolean first;
 
-    MonsterStatus(int i) {
+    MonsterStatus(int i, String chineseName) {
         this.i = i;
+        this.chineseName = chineseName;
         this.first = false;
     }
 
-    MonsterStatus(int i, boolean first) {
+    MonsterStatus(int i, String chineseName, boolean first) {
         this.i = i;
+        this.chineseName = chineseName;
         this.first = first;
     }
 
@@ -73,5 +76,9 @@ public enum MonsterStatus {
 
     public int getValue() {
         return i;
+    }
+
+    public String getChineseName() {
+        return chineseName;
     }
 }

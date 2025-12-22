@@ -22,20 +22,34 @@
 package org.gms.server.life;
 
 public enum ElementalEffectiveness {
-    NORMAL, IMMUNE, STRONG, WEAK, NEUTRAL;
+    NORMAL("普通", 0),
+    IMMUNE("免疫", 1),
+    STRONG("抵抗", 2),
+    WEAK("弱点", 3),
+    NEUTRAL("中和", 4);
+
+    private final String chineseName;
+    private final int value;
+
+    ElementalEffectiveness(String chineseName, int value) {
+        this.chineseName = chineseName;
+        this.value = value;
+    }
+
+    public String getChineseName() {
+        return chineseName;
+    }
+
+    public int getValue() {
+        return value;
+    }
 
     public static ElementalEffectiveness getByNumber(int num) {
-        switch (num) {
-            case 1:
-                return IMMUNE;
-            case 2:
-                return STRONG;
-            case 3:
-                return WEAK;
-            case 4:
-                return NEUTRAL;
-            default:
-                throw new IllegalArgumentException("Unkown effectiveness: " + num);
+        for (ElementalEffectiveness e : values()) {
+            if (e.getValue() == num) {
+                return e;
+            }
         }
+        throw new IllegalArgumentException("Unkown effectiveness: " + num);
     }
 }

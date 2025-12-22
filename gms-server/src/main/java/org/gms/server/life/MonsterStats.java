@@ -34,6 +34,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringJoiner;
 
 /**
  * @author Frz
@@ -167,12 +168,31 @@ public class MonsterStats {
     }
 
     public ElementalEffectiveness getEffectiveness(Element e) {
-        ElementalEffectiveness elementalEffectiveness = resistance.get(e);
-        if (elementalEffectiveness == null) {
+        ElementalEffectiveness effectiveness = resistance.get(e);
+        if (effectiveness == null) {
             return ElementalEffectiveness.NORMAL;
-        } else {
-            return elementalEffectiveness;
         }
+        return effectiveness;
+    }
+
+    public String getResistancesString() {
+        if (resistance.isEmpty()) {
+            return "无";
+        }
+        StringJoiner sj = new StringJoiner(", ");
+        for (Map.Entry<Element, ElementalEffectiveness> entry : resistance.entrySet()) {
+            Element element = entry.getKey();
+            ElementalEffectiveness effectiveness = entry.getValue();
+            if (effectiveness != ElementalEffectiveness.NORMAL) {
+                sj.add(String.format("%s%s(%c%d)",
+                        effectiveness.getChineseName(),
+                        element.getChineseName(),
+                        element.getChar(),
+                        effectiveness.getValue()));
+            }
+        }
+        String result = sj.toString();
+        return result.isEmpty() ? "无" : result;
     }
 
     public String getName() {
@@ -236,7 +256,7 @@ public class MonsterStats {
         return buffToGive;
     }
 
-    void removeEffectiveness(Element e) {
+    public void removeEffectiveness(Element e) {
         resistance.remove(e);
     }
 

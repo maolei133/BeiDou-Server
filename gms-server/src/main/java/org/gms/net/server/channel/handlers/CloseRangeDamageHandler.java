@@ -71,7 +71,7 @@ public final class CloseRangeDamageHandler extends AbstractDealDamageHandler {
             c.sendPacket(PacketCreator.getEnergy("energy", chr.getDojoEnergy()));
         }
 
-        chr.getMap().broadcastMessage(chr, PacketCreator.closeRangeAttack(chr, attack.skill, attack.skilllevel, attack.stance, attack.numAttackedAndDamage, attack.allDamage, attack.speed, attack.direction, attack.display), false, true);
+        chr.getMap().broadcastMessage(chr, PacketCreator.closeRangeAttack(chr, attack.skill, attack.skilllevel, attack.direction, attack.numAttackedAndDamage, attack.allDamage, attack.speed, attack.stance, attack.display), false, true);
         int numFinisherOrbs = 0;
         Integer comboBuff = chr.getBuffedValue(BuffStat.COMBO);
         if (GameConstants.isFinisherSkill(attack.skill)) {

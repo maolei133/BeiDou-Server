@@ -68,7 +68,7 @@ public class LifeFactory {
         } else if (type.equalsIgnoreCase("m")) {
             return getMonster(id);
         } else {
-            log.warn("Unknown Life type: {}", type);
+            log.warn("不支持的生物类型: {}", type);
             return null;
         }
     }
@@ -267,7 +267,7 @@ public class LifeFactory {
     public static Monster getMonster(int mid) {
         try {
             MonsterStats stats = monsterStats.get(mid);
-            if (stats == null) {
+                if (stats == null) {
                 Pair<MonsterStats, List<MobAttackInfoHolder>> mobStats = getMonsterStats(mid);
                 stats = mobStats.getLeft();
                 setMonsterAttackInfo(mid, mobStats.getRight());

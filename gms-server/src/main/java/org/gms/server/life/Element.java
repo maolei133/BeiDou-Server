@@ -22,17 +22,30 @@
 package org.gms.server.life;
 
 public enum Element {
-    NEUTRAL(0), PHYSICAL(1), FIRE(2, true), ICE(3, true), LIGHTING(4), POISON(5), HOLY(6, true), DARKNESS(7);
+    NEUTRAL(0, "无", 'N'),
+    PHYSICAL(1, "物理", 'P'),
+    FIRE(2, "火", 'F', true),
+    ICE(3, "冰", 'I', true),
+    LIGHTING(4, "雷", 'L'),
+    POISON(5, "毒", 'S'),
+    HOLY(6, "神圣", 'H', true),
+    DARKNESS(7, "暗", 'D');
 
     private final int value;
+    private final String chineseName;
+    private final char elemChar;
     private boolean special = false;
 
-    Element(int v) {
+    Element(int v, String chineseName, char elemChar) {
         this.value = v;
+        this.chineseName = chineseName;
+        this.elemChar = elemChar;
     }
 
-    Element(int v, boolean special) {
+    Element(int v, String chineseName, char elemChar, boolean special) {
         this.value = v;
+        this.chineseName = chineseName;
+        this.elemChar = elemChar;
         this.special = special;
     }
 
@@ -41,26 +54,23 @@ public enum Element {
     }
 
     public static Element getFromChar(char c) {
-        switch (Character.toUpperCase(c)) {
-            case 'F':
-                return FIRE;
-            case 'I':
-                return ICE;
-            case 'L':
-                return LIGHTING;
-            case 'S':
-                return POISON;
-            case 'H':
-                return HOLY;
-            case 'D':
-                return DARKNESS;
-            case 'P':
-                return NEUTRAL;
+        for (Element e : values()) {
+            if (e.elemChar == Character.toUpperCase(c)) {
+                return e;
+            }
         }
-        throw new IllegalArgumentException("unknown elemnt char " + c);
+        throw new IllegalArgumentException("unknown element char " + c);
     }
 
     public int getValue() {
         return value;
+    }
+
+    public String getChineseName() {
+        return chineseName;
+    }
+
+    public char getChar() {
+        return elemChar;
     }
 }

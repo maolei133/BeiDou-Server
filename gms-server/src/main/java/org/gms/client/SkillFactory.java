@@ -21,57 +21,8 @@
 */
 package org.gms.client;
 
-import org.gms.constants.skills.Aran;
-import org.gms.constants.skills.Archer;
-import org.gms.constants.skills.Assassin;
-import org.gms.constants.skills.Bandit;
-import org.gms.constants.skills.Beginner;
-import org.gms.constants.skills.Bishop;
-import org.gms.constants.skills.BlazeWizard;
-import org.gms.constants.skills.Bowmaster;
-import org.gms.constants.skills.Buccaneer;
-import org.gms.constants.skills.ChiefBandit;
-import org.gms.constants.skills.Cleric;
-import org.gms.constants.skills.Corsair;
-import org.gms.constants.skills.Crossbowman;
-import org.gms.constants.skills.Crusader;
-import org.gms.constants.skills.DarkKnight;
-import org.gms.constants.skills.DawnWarrior;
-import org.gms.constants.skills.DragonKnight;
-import org.gms.constants.skills.Evan;
-import org.gms.constants.skills.FPArchMage;
-import org.gms.constants.skills.FPMage;
-import org.gms.constants.skills.FPWizard;
-import org.gms.constants.skills.Fighter;
-import org.gms.constants.skills.GM;
-import org.gms.constants.skills.Gunslinger;
-import org.gms.constants.skills.Hermit;
-import org.gms.constants.skills.Hero;
-import org.gms.constants.skills.Hunter;
-import org.gms.constants.skills.ILArchMage;
-import org.gms.constants.skills.ILMage;
-import org.gms.constants.skills.ILWizard;
-import org.gms.constants.skills.Legend;
-import org.gms.constants.skills.Magician;
-import org.gms.constants.skills.Marauder;
-import org.gms.constants.skills.Marksman;
-import org.gms.constants.skills.NightLord;
-import org.gms.constants.skills.NightWalker;
-import org.gms.constants.skills.Noblesse;
-import org.gms.constants.skills.Page;
-import org.gms.constants.skills.Paladin;
-import org.gms.constants.skills.Pirate;
-import org.gms.constants.skills.Priest;
-import org.gms.constants.skills.Ranger;
-import org.gms.constants.skills.Rogue;
-import org.gms.constants.skills.Shadower;
-import org.gms.constants.skills.Sniper;
-import org.gms.constants.skills.Spearman;
-import org.gms.constants.skills.SuperGM;
-import org.gms.constants.skills.ThunderBreaker;
-import org.gms.constants.skills.Warrior;
-import org.gms.constants.skills.WhiteKnight;
-import org.gms.constants.skills.WindArcher;
+import org.gms.client.inventory.WeaponType;
+import org.gms.constants.skills.*;
 import org.gms.provider.Data;
 import org.gms.provider.DataDirectoryEntry;
 import org.gms.provider.DataFileEntry;
@@ -82,25 +33,60 @@ import org.gms.provider.wz.WZFiles;
 import org.gms.server.StatEffect;
 import org.gms.server.life.Element;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class SkillFactory {
     private static volatile Map<Integer, Skill> skills = new HashMap<>();
     private static final DataProvider datasource = DataProviderFactory.getDataProvider(WZFiles.SKILL);
+    private static final Map<Integer, List<WeaponType>> masterySkillWeaponMap = new HashMap<>();
+
+    static {
+        // 战士 - 剑客
+        masterySkillWeaponMap.put(Fighter.SWORD_MASTERY, Arrays.asList(WeaponType.SWORD1H, WeaponType.SWORD2H)); // 精准剑
+        masterySkillWeaponMap.put(Fighter.AXE_MASTERY, Arrays.asList(WeaponType.GENERAL1H_SWING, WeaponType.GENERAL2H_SWING)); // 精准斧
+
+        // 战士 - 准骑士
+        masterySkillWeaponMap.put(Page.SWORD_MASTERY, Arrays.asList(WeaponType.SWORD1H, WeaponType.SWORD2H)); // 精准剑
+        masterySkillWeaponMap.put(Page.BW_MASTERY, Arrays.asList(WeaponType.GENERAL1H_SWING, WeaponType.GENERAL2H_SWING)); // 精准钝器
+
+        // 战士 - 枪战士
+        masterySkillWeaponMap.put(Spearman.POLEARM_MASTERY, Arrays.asList(WeaponType.POLE_ARM_SWING, WeaponType.POLE_ARM_STAB)); // 精准枪
+        masterySkillWeaponMap.put(Spearman.SPEAR_MASTERY, Arrays.asList(WeaponType.SPEAR_SWING, WeaponType.SPEAR_STAB)); // 精准矛
+
+        // 弓箭手
+        masterySkillWeaponMap.put(Hunter.BOW_MASTERY, Arrays.asList(WeaponType.BOW)); // 精准弓
+        masterySkillWeaponMap.put(Bowmaster.BOW_EXPERT, Arrays.asList(WeaponType.BOW)); // 神箭手
+        masterySkillWeaponMap.put(Crossbowman.CROSSBOW_MASTERY, Arrays.asList(WeaponType.CROSSBOW)); // 精准弩
+        masterySkillWeaponMap.put(Marksman.MARKSMAN_BOOST, Arrays.asList(WeaponType.CROSSBOW)); // 神弩手
+
+        // 飞侠
+        masterySkillWeaponMap.put(Assassin.CLAW_MASTERY, Arrays.asList(WeaponType.CLAW)); // 精准暗器
+        masterySkillWeaponMap.put(Bandit.DAGGER_MASTERY, Arrays.asList(WeaponType.DAGGER_THIEVES, WeaponType.DAGGER_OTHER)); // 精准短刀
+
+        // 海盗
+        masterySkillWeaponMap.put(Brawler.KNUCKLER_MASTERY, Arrays.asList(WeaponType.KNUCKLE)); // 精准拳
+        masterySkillWeaponMap.put(Gunslinger.GUN_MASTERY, Arrays.asList(WeaponType.GUN)); // 精准枪
+    }
 
     public static Skill getSkill(int id) {
         return skills.get(id);
     }
 
+    public static List<WeaponType> getMasterySkillWeaponTypes(int skillId) {
+        return masterySkillWeaponMap.get(skillId);
+    }
+
     public static void loadAllSkills() {
         final Map<Integer, Skill> loadedSkills = new HashMap<>();
         final DataDirectoryEntry root = datasource.getRoot();
-        for (DataFileEntry topDir : root.getFiles()) { // Loop thru jobs
+        for (DataFileEntry topDir : root.getFiles()) { // 遍历职业
             if (topDir.getName().length() <= 8) {
-                for (Data data : datasource.getData(topDir.getName())) { // Loop thru each jobs
+                for (Data data : datasource.getData(topDir.getName())) { // 遍历每个职业
                     if (data.getName().equals("skill")) {
-                        for (Data data2 : data) { // Loop thru each jobs
+                        for (Data data2 : data) { // 遍历每个技能
                             if (data2 != null) {
                                 int skillId = Integer.parseInt(data2.getName());
                                 loadedSkills.put(skillId, loadFromData(skillId, data2));
@@ -119,6 +105,7 @@ public class SkillFactory {
         boolean isBuff = false;
         int skillType = DataTool.getInt("skillType", data, -1);
         String elem = DataTool.getString("elemAttr", data, null);
+        ret.setSkillType(skillType);
         if (elem != null) {
             ret.setElement(Element.getFromChar(elem.charAt(0)));
         } else {

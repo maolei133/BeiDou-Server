@@ -32,12 +32,9 @@ import org.gms.client.inventory.WeaponType;
 import org.gms.client.status.MonsterStatusEffect;
 import org.gms.constants.skills.Outlaw;
 import org.gms.net.packet.InPacket;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.StatEffect;
 import org.gms.server.life.Monster;
-import org.gms.server.life.MonsterInformationProvider;
 import org.gms.server.maps.Summon;
 import org.gms.util.PacketCreator;
 
@@ -45,7 +42,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class SummonDamageHandler extends AbstractDealDamageHandler {
-    private static final Logger log = LoggerFactory.getLogger(SummonDamageHandler.class);
 
     public final class SummonAttackEntry {
 
@@ -102,20 +98,57 @@ public final class SummonDamageHandler extends AbstractDealDamageHandler {
             return;
         }
 
-        boolean magic = summonEffect.getWatk() == 0;
-        int maxDmg = calcMaxDamage(summonEffect, player, magic);    // thanks Darter (YungMoozi) for reporting unchecked max dmg
+        boolean isMagicAttack = summonEffect.getWatk() == 0;
+
         for (SummonAttackEntry attackEntry : allDamage) {
             int damage = attackEntry.getDamage();
             Monster target = player.getMap().getMonsterByOid(attackEntry.getMonsterOid());
             if (target != null) {
-                if (damage > maxDmg) {
-                    AutobanFactory.DAMAGE_HACK.alert(c.getPlayer(), "Possible packet editing summon damage exploit.");
-                    final String mobName = MonsterInformationProvider.getInstance().getMobNameFromId(target.getId());
-                    log.info("Possible exploit - chr {} used a summon of skillId {} to attack {} with damage {} (max: {})",
-                            c.getPlayer().getName(), summon.getSkill(), mobName, damage, maxDmg);
-                    damage = maxDmg;
+                // 构造一个临时的AttackInfo以复用基类方法
+                AttackInfo attack = new AttackInfo();
+                attack.skill = summon.getSkill();
+                attack.skilllevel = summon.getSkillLevel();
+                attack.magic = isMagicAttack;
+
+                long baseDamage;
+                // 1. 区分并计算基础伤害
+                if (isMagicAttack) {
+                    // 魔法召唤兽：完全复用玩家的魔法伤害计算流程
+                    baseDamage = (long) player.calculateMagicMaxDamage(summonSkill, summon.getSkillLevel());
+//                    baseDamage = calculateMagicMaxDamage(player, summonSkill, summon.getSkillLevel()) * 1;
+//                    baseDamage = calcMaxDamage(summonEffect, player, isMagicAttack);
+//                    baseDamage = Math.max(player.getTotalMagic(), 14) * summonEffect.getMatk() / 100.0;
+                } else {
+                    // 物理召唤兽：使用玩家的物理面板攻击力
+//                    baseDamage = player.calculatePhysicalMaxBaseAttack(player.getTotalWatk());
+                    //备用公式：基于文档的物理召唤兽伤害公式
+                    baseDamage = (long) ((player.getTotalDex() * 2.5 + player.getTotalStr()) * summonEffect.getWatk() / 100.0);
                 }
 
+                // 2. 应用技能百分比、BUFF等通用加成
+                baseDamage = applyBullseyeDamage(player, target, attack.skill, baseDamage);
+                baseDamage = applySkillSpecificDamageFormula(player, attack, summonSkill, summonEffect, baseDamage);
+                baseDamage = applyBuffAndEnergyBarEffects(player, attack, baseDamage);
+
+                // 3. 应用元素克制和充能效果
+                baseDamage = applyChargeAndElementalEffects(player, attack, target, baseDamage);
+
+                // 4. 应用防御减伤
+//                int mobDef = isMagicAttack ? target.getStats().getMDDamage() : target.getStats().getPDDamage();
+//                baseDamage = (long) calculateDamageAfterDefense(baseDamage, target.getStats().getLevel(), player.getLevel(), mobDef);
+
+                // 5. 作弊检测
+                if (damage > baseDamage * 1.05) { // 允许5%的浮动误差
+                    String alertMessage = String.format(
+                            "召唤兽伤害异常. 召唤兽ID: %d, 怪物: %s(OID: %d), 客户端伤害: %d, 服务端最大伤害: %d",
+                            summon.getSkill(), target.getStats().getName(), target.getObjectId(), damage, baseDamage
+                    );
+//                    System.out.println(alertMessage);
+                    AutobanFactory.DAMAGE_HACK.alert(player, alertMessage);
+                    damage = (int) baseDamage;
+                }
+
+                // 6. 应用伤害和状态效果
                 if (damage > 0 && summonEffect.getMonsterStati().size() > 0) {
                     if (summonEffect.makeChanceResult()) {
                         target.applyStatus(player, new MonsterStatusEffect(summonEffect.getMonsterStati(), summonSkill, null, false), summonEffect.isPoison(), 4000);
@@ -129,7 +162,26 @@ public final class SummonDamageHandler extends AbstractDealDamageHandler {
             player.cancelEffect(summonEffect, false, -1);
         }
     }
+    /**
+     * 计算召唤兽的最大魔法伤害。
+     * <p>
+     * 公式: ((魔法力^2 / 1000 + 魔法力) / 30 + 智力 / 200) * 技能攻击力
+     *
+     * @param skill 技能对象
+     * @param skillLevel 技能等级
+     * @return 最大魔法伤害
+     */
+    public double calculateMagicMaxDamage(Character player,Skill skill, int skillLevel) {
+        double magic = Math.min(player.getTotalMagic(), 1999);  //应该是召唤兽计算上限没有突破1999，导致客户端最多也只能打15万左右
+        double intel = player.getTotalInt();
+        double skillAtk = skill.getEffect(skillLevel).getMatk();
 
+        double damage = ((magic * magic / 1000.0) + magic) / 40. + (intel / 200.0);
+        return damage * skillAtk;
+    }
+    /**
+     * 计算召唤兽的最大伤害（旧方案，已弃用）
+     */
     private static int calcMaxDamage(StatEffect summonEffect, Character player, boolean magic) {
         double maxDamage;
 
