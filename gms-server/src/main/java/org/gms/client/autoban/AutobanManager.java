@@ -14,7 +14,6 @@ import org.gms.logsystem.category.DynamicCategoryManager;
 import org.gms.logsystem.facade.SecurityLoggerFacade;
 import org.gms.net.server.Server;
 import org.gms.server.StatEffect;
-import org.gms.server.TimerManager;
 import org.gms.server.life.MobSkillFactory;
 import org.gms.server.life.MobSkillType;
 import org.gms.server.life.Monster;
@@ -23,7 +22,6 @@ import org.gms.util.PacketCreator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.awt.*;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -31,7 +29,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
 
 /**
@@ -70,7 +67,7 @@ public class AutobanManager {
     private final ConcurrentLinkedQueue<MonsterVacSample> landMonsterVacSamples = new ConcurrentLinkedQueue<>();    // 陆地怪物采样集合
     private final ConcurrentLinkedQueue<MonsterVacSample> flyMonsterVacSamples = new ConcurrentLinkedQueue<>();     // 飞行怪物采样集合
     private final ConcurrentLinkedQueue<MonsterVacSample> otherMonsterVacSamples = new ConcurrentLinkedQueue<>();    // 其他类型怪物采样集合
-    private static class MonsterVacSample { int x; int y; long ts; }
+    private static class MonsterVacSample { int oid; int x; int y; long ts; }
 
     /**
      * 构造函数
@@ -342,10 +339,12 @@ public class AutobanManager {
             if (result == 0) {
                 // 需要惩罚，设置惩罚间隔
                 int banPoints = getBanPoints(AutobanFactory.FAST_ATTACK);
-                int punishmentDuration = banPoints * PUNISHMENT_DURATION_BASE; // 惩罚间隔至少10秒
-                applyDebuffPunishment(punishmentDuration);
+                if (banPoints > 1) {//降低误报的概率
+                    int punishmentDuration = banPoints * PUNISHMENT_DURATION_BASE; // 惩罚间隔至少10秒
+                    applyDebuffPunishment(punishmentDuration);
 //                AutobanFactory.FAST_ATTACK.alert(chr, "惩罚时间: " + punishmentDuration + "ms ,攻击间隔: " + timeBetweenAttacks + "ms");
-                chr.sendPacket(PacketCreator.earnTitleMessage("由于攻速过快，还需等待 " + (punishmentDuration / 1000f) + " 秒后才能恢复攻击。"));
+                    chr.sendPacket(PacketCreator.earnTitleMessage("由于攻速过快，还需等待 " + (punishmentDuration / 1000f) + " 秒后才能恢复攻击。"));
+                }
             }
             return getPunishPoints(AutobanFactory.FAST_ATTACK) > 3;
         }
@@ -540,8 +539,13 @@ public class AutobanManager {
         while (!currentSamples.isEmpty() && currentSamples.peek().ts <= now - expire) {
             currentSamples.poll(); // 移除过期记录
         }
+
+        // 移除已存在的相同OID的样本，确保每个怪物只保留最新的位置信息
+        int oid = monster.getObjectId();
+        currentSamples.removeIf(sample -> sample.oid == oid);
         
         MonsterVacSample s = new MonsterVacSample(); // 创建新的怪物位置采样
+        s.oid = oid; // 记录怪物OID
         s.x = (int) monster.getPosition().getX(); // 怪物X坐标
         s.y = (int) monster.getPosition().getY(); // 怪物Y坐标
         s.ts = now; // 采样时间戳
@@ -564,8 +568,8 @@ public class AutobanManager {
             
             // 根据移动类型设置参数：1=陆地，2=飞行，其它=未知
             if (movetype == 0) { // 陆地类型
-                pixelRange = 150; // 采样范围100像素点
-                consistencyThreshold = 0.95; // 相似率95%
+                pixelRange = 125; // 采样范围100像素点
+                consistencyThreshold = 0.98; // 相似率98%
             } else if (movetype == 1) { // 飞行类型
                 pixelRange = 50; // 采样范围50像素点
                 consistencyThreshold = 0.98; // 相似率98%
@@ -702,7 +706,7 @@ public class AutobanManager {
     public boolean checkFixedDamage(int totDamageToOneMonster, StatEffect attackEffect, int skillId, int skillLevel, Monster monster) {
         if (!useAntiCheat()) return false;
         if (attackEffect.getFixDamage() != -1 && totDamageToOneMonster != attackEffect.getFixDamage() && totDamageToOneMonster != 0) {
-            int retban = addPoint(AutobanFactory.FIX_DAMAGE,
+            int retban = addPoint(AutobanFactory.DAMAGE_FIX,
                     "尝试使用: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" +
                             " 对怪物" + (monster != null ? monster.getName() + "[Lv." + monster.getLevel() + "](" + monster.getId() + ")" : "null") +
                             " 造成固定伤害 " + totDamageToOneMonster + " 已作废"
@@ -750,28 +754,28 @@ public class AutobanManager {
             return damage;
         }
 
-        // 如果伤害超过我们计算值的2.5倍，则添加一个自动封禁点数，并将伤害调整为上限值。
-        if (damage < 0 || damage > maxWithCrit * 2.5) {
+        // 如果伤害超过我们计算值的1.2倍，则添加一个自动封禁点数，并将伤害调整为上限值。
+        if (damage < 0 || damage > maxWithCrit * 1.25) {
             int tmpretban = addPoint(AutobanFactory.DAMAGE_HACK,
                     (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
                     " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
-                    " 伤害: " + damage + " 预警: " + maxWithCrit * 2.5 + " 已取消"
+                    " 伤害: " + damage + " 预警: " + (long) (maxWithCrit * 1.25) + " 已打折： " + (long) (maxWithCrit * 0.5)
             );
             if (tmpretban == 0) {
                 int tmpdamge = (int) Math.min(damage - maxWithCrit, Integer.MAX_VALUE);
                 applyLoseHpMp(tmpdamge, tmpdamge, "检测到使用倍攻，");
             }
-            return 0; //负数伤害 或者 伤害过高，基本可以确定是开了倍攻，直接置零完事。
+            damage = 0; //负数伤害 或者 伤害过高，基本可以确定是开了倍攻，直接置零完事。
         }
 
-        // 如果伤害超过我们计算值的2倍，则发出警告。
-        if (damage > maxWithCrit * 2) {
+        // 如果伤害超过我们计算值的1.1倍，则发出警告。
+        if (damage > maxWithCrit * 1.1) {
             AutobanFactory.DAMAGE_HACK.alert(chr,
                     (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
                     " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
                     " 伤害: " + damage + " 上限: " + maxWithCrit + " 已纠正: " + maxWithCrit
             );
-            return (int) maxWithCrit;
+            damage =  (long) maxWithCrit;
         }
         return damage;
     }
