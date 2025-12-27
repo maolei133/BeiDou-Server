@@ -294,9 +294,9 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                         continue;
                     }
                     // 作弊检测：吸怪
-                    if (player.getAutoBanManager().detectMonsterVac(monster)) {
+/*                    if (player.getAutoBanManager().detectMonsterVac(monster)) {
                         continue;
-                    }
+                    }*/
                     /** 对单个怪物的总伤害 */
                     int totDamageToOneMonster = 0;
                     /** 对单个怪物造成的多段伤害列表 */

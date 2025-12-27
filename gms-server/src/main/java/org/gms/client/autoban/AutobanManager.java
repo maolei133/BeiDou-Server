@@ -754,22 +754,22 @@ public class AutobanManager {
             return damage;
         }
 
-        // 如果伤害超过我们计算值的1.2倍，则添加一个自动封禁点数，并将伤害调整为上限值。
-        if (damage < 0 || damage > maxWithCrit * 1.25) {
+        // 如果伤害超过我们计算值的2.00倍，则添加一个自动封禁点数，并将伤害调整为上限值。
+        if (damage < 0 || damage > maxWithCrit * 2.0) {
             int tmpretban = addPoint(AutobanFactory.DAMAGE_HACK,
                     (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
                     " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
-                    " 伤害: " + damage + " 预警: " + (long) (maxWithCrit * 1.25) + " 已打折： " + (long) (maxWithCrit * 0.5)
+                    " 伤害: " + damage + " 预警: " + (long) (maxWithCrit * 2.0) + " 已打折： " + (long) (maxWithCrit * 0.5)
             );
             if (tmpretban == 0) {
                 int tmpdamge = (int) Math.min(damage - maxWithCrit, Integer.MAX_VALUE);
                 applyLoseHpMp(tmpdamge, tmpdamge, "检测到使用倍攻，");
             }
-            damage = 0; //负数伤害 或者 伤害过高，基本可以确定是开了倍攻，直接置零完事。
+            damage = (long) (maxWithCrit * 0.5); //负数伤害 或者 伤害过高，基本可以确定是开了倍攻，直接置零完事。
         }
 
-        // 如果伤害超过我们计算值的1.1倍，则发出警告。
-        if (damage > maxWithCrit * 1.1) {
+        // 如果伤害超过我们计算值的1.5倍，则发出警告。
+        if (damage > maxWithCrit * 1.5) {
             AutobanFactory.DAMAGE_HACK.alert(chr,
                     (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
                     " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
