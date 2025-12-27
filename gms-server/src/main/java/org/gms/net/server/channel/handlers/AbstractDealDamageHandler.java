@@ -566,10 +566,11 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     hitDmgMax = applyDamageModifiers(ret, j, shadowPartner, hitDmgMax);
 
                     // 作弊检测：伤害值 (仅在怪物存在时检测)
-                    if (monster != null) {
+                    if (monster != null && damage != 0) {//伤害为0则代表miss
+                        if (ret.skill == Shadower.ASSASSINATE) hitDmgMax = 199999;  // 暂时放宽暗杀的上限
                         damage = chr.getAutoBanManager().checkDamageHack(damage, (long) (hitDmgMax * (canCrit ? totalCritMultiplier : 1)), ret.skill, ret.skilllevel, monster);
+                        isCheat = !isCheat && damage <= 0 || damage == hitDmgMax;  //如果为篡改伤害则标记
                     }
-                    isCheat = !isCheat && damage <= 0 || damage == hitDmgMax;  //如果为篡改伤害则标记
                     if (ret.skill == Marksman.SNIPE || (canCrit && damage >= hitDmgMax)) {
                         // 如果伤害是暴击，则反转伤害值以使其在客户端上正确显示。
                         damage = -Integer.MAX_VALUE + damage - 1;
