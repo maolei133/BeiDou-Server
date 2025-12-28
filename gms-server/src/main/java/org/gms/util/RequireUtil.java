@@ -84,6 +84,10 @@ public class RequireUtil {
         return empty;
     }
 
+    public static boolean isNotEmpty(Object obj) {
+        return !isEmpty(obj);
+    }
+
     public static boolean isZero(Number obj) {
         if (obj == null) {
             return false;

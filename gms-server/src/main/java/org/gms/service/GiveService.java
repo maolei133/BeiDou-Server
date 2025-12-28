@@ -17,6 +17,7 @@ import org.gms.exception.BizException;
 import org.gms.net.server.Server;
 import org.gms.server.CashShop;
 import org.gms.server.ItemInformationProvider;
+import org.gms.server.maps.MapleMap;
 import org.gms.util.I18nUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,6 +64,9 @@ public class GiveService {
                 break;
             case 6: // equip
                 giveEquipAllOnlineChr(submitData);
+                break;
+            case 13: // change map
+                changeMapAllOnlineChr(submitData.getQuantity());
                 break;
             // 全服没有设置倍率的操作
             // case 7: // expRate
@@ -134,7 +138,7 @@ public class GiveService {
                 giveFameChr(chr, submitData.getQuantity());
                 break;
             case 13:
-                changeMap(chr, submitData.getQuantity());
+                changeMap(chr, submitData.getQuantity(), true);
                 break;
         }
     }
@@ -419,15 +423,31 @@ public class GiveService {
         log.info(I18nUtil.getLogMessage("Give.Fame.Chr.info1", chr.getId(), chr.getName(), fame));
     }
 
-    private void changeMap(Character chr, Integer mapId) {
+    private void changeMap(Character chr, Integer mapId, boolean showLog) {
         if (910000000 == mapId) {
             chr.saveLocation("FREE_MARKET");
             chr.changeMap(mapId, "out00");
         } else {
             chr.changeMap(mapId);
         }
-        chr.message(I18nUtil.getMessage("Give.Map.Chr", mapId));
-        log.info(I18nUtil.getLogMessage("Give.Map.Chr.info1", chr.getId(), chr.getName(), mapId));
+        String mapName = chr.getMap().getMapName();
+        chr.message(I18nUtil.getMessage("Give.Map.Chr", mapName));
+        if (showLog) {
+            log.info(I18nUtil.getLogMessage("Give.Map.Chr.info1", chr.getId(), chr.getName(), mapName + " [" + mapId + "]"));
+        }
+    }
+
+    private void changeMapAllOnlineChr(Integer mapId) {
+        String[] mapName = {null};
+        Server.getInstance().getWorlds().forEach(world -> world.getPlayerStorage().getAllCharacters().forEach(chr -> {
+            changeMap(chr, mapId, false);
+            if (mapName[0] == null) {
+                mapName[0] = chr.getMap().getMapName();
+            }
+        }));
+        if (mapName[0] != null) {
+            log.info(I18nUtil.getLogMessage("Give.Map.All.info1", mapName[0] + " [" + mapId + "]"));
+        }
     }
 
     private void doGainCash(Character chr, int type, int quantity) {

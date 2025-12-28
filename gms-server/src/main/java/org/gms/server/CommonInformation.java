@@ -14,10 +14,12 @@ import org.gms.util.RequireUtil;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class CommonInformation {
     private static CommonInformation instance;
     private final DataProvider stringData;
+    private List<InformationResult> cachedMaps;
 
     private CommonInformation() {
         stringData = DataProviderFactory.getDataProvider(WZFiles.STRING);
@@ -28,6 +30,58 @@ public class CommonInformation {
             instance = new CommonInformation();
         }
         return instance;
+    }
+
+    /**
+     * 获取所有地图信息，带缓存
+     */
+    public List<InformationResult> getAllMaps() {
+        if (cachedMaps != null) {
+            return cachedMaps;
+        }
+        synchronized (this) {
+            if (cachedMaps != null) {
+                return cachedMaps;
+            }
+            List<InformationResult> results = new ArrayList<>();
+            Data data = stringData.getData("Map.img");
+            if (data != null) {
+                for (Data child : data.getChildren()) {
+                    for (Data map : child.getChildren()) {
+                        String id = map.getName();
+                        // 过滤非数字ID的节点
+                        if (!id.matches("\\d+")) {
+                            continue;
+                        }
+                        String name = DataTool.getString("mapName", map, "");
+                        String desc = DataTool.getString("streetName", map, "");
+                        results.add(InformationResult.builder()
+                                .type(InformationType.MAP.getType())
+                                .id(Integer.parseInt(id))
+                                .name(name)
+                                .desc(desc)
+                                .build());
+                    }
+                }
+            }
+            cachedMaps = results;
+            return cachedMaps;
+        }
+    }
+
+    public List<String> getStreetNames() {
+        return getAllMaps().stream()
+                .map(InformationResult::getDesc)
+                .filter(RequireUtil::isNotEmpty)
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    public List<InformationResult> getMapsByStreetName(String streetName) {
+        return getAllMaps().stream()
+                .filter(map -> streetName.equals(map.getDesc()))
+                .collect(Collectors.toList());
     }
 
     /**

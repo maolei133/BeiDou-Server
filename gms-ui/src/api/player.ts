@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { PageState } from '@/store/page';
 
 export interface GiveForm {
   worldId?: number;
@@ -27,6 +28,27 @@ export interface GiveForm {
   expire?: number;
 }
 
+export interface OnlinePlayer {
+  world: number;
+  accountId: number;
+  id: number;
+  name: string;
+  map: number;
+  mapName: string;
+  job: number;
+  jobName: string;
+  level: number;
+  gm: number;
+  maxHp: number;
+  maxMp: number;
+  guildName?: string;
+  guildId: number;
+  gender: number;
+  partyId: number;
+  channel: number;
+  fame: number;
+}
+
 export function getPlayerList(
   pageNo: number,
   pageSize: number,
@@ -34,7 +56,7 @@ export function getPlayerList(
   name?: string,
   map?: number
 ) {
-  return axios.post('/character/v1/online/list', {
+  return axios.post<PageState<OnlinePlayer>>('/character/v1/online/list', {
     pageNo,
     pageSize,
     id,

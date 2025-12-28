@@ -105,13 +105,23 @@ public class CharacterService {
                         && (RequireUtil.isEmpty(request.getName()) || chr.getName().contains(request.getName()))
                         && (Objects.isNull(request.getMap()) || Objects.equals(chr.getMap().getId(), request.getMap())))
                 .page(chr -> ChrOnlineListRtnDTO.builder()
+                        .accountId(chr.getAccountId())
                         .id(chr.getId())
                         .name(chr.getName())
                         .map(chr.getMap().getId())
+                        .mapName(chr.getMap().getMapName())
                         .job(chr.getJob().getId())
                         .jobName(chr.getJob().getName())
                         .level(chr.getLevel())
                         .gm(chr.gmLevel())
+                        .maxHp(chr.getMaxHp())
+                        .maxMp(chr.getMaxMp())
+                        .guildId(chr.getGuildId())
+                        .guildName(chr.getGuild() != null ? chr.getGuild().getName() : null)
+                        .gender(chr.getGender())
+                        .partyId(chr.getPartyId())
+                        .channel(chr.getClient().getChannel())
+                        .fame(chr.getFame())
                         .build());
     }
 

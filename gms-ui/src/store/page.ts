@@ -1,5 +1,5 @@
-export interface PageState {
-  records: any;
+export interface PageState<T> {
+  records: T[];
   pageNumber: number;
   pageSize: number;
   totalPage: number;

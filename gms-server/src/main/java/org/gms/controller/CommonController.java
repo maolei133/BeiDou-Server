@@ -9,9 +9,12 @@ import org.gms.model.dto.*;
 import org.gms.model.pojo.InformationSearch;
 import org.gms.model.pojo.InformationResult;
 import org.gms.service.CommonService;
+import org.gms.model.dto.SubmitBody;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -42,5 +45,26 @@ public class CommonController {
     @PostMapping("/" + ApiConstant.LATEST + "/informationSearch")
     public ResultBody<List<InformationResult>> informationSearch(@RequestBody SubmitBody<InformationSearch> submitBody) {
         return ResultBody.success(commonService.getInformation(submitBody.getData()));
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取所有地图信息")
+    @GetMapping("/" + ApiConstant.LATEST + "/getAllMaps")
+    public ResultBody<List<InformationResult>> getAllMaps() {
+        return ResultBody.success(commonService.getAllMaps());
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取所有区域名称")
+    @GetMapping("/" + ApiConstant.LATEST + "/getStreetNames")
+    public ResultBody<List<String>> getStreetNames() {
+        return ResultBody.success(commonService.getStreetNames());
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "根据区域名称获取地图")
+    @GetMapping("/" + ApiConstant.LATEST + "/getMapsByStreetName")
+    public ResultBody<List<InformationResult>> getMapsByStreetName(@RequestParam String streetName) {
+        return ResultBody.success(commonService.getMapsByStreetName(streetName));
     }
 }

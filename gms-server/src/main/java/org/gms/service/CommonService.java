@@ -95,4 +95,16 @@ public class CommonService {
         return CommonInformation.getInstance().getStringInformation(condition);
     }
 
+    public List<InformationResult> getAllMaps() {
+        return CommonInformation.getInstance().getAllMaps();
+    }
+
+    public List<String> getStreetNames() {
+        return CommonInformation.getInstance().getStreetNames();
+    }
+
+    public List<InformationResult> getMapsByStreetName(String streetName) {
+        return CommonInformation.getInstance().getMapsByStreetName(streetName);
+    }
+
 }
