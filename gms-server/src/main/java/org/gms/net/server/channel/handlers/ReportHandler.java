@@ -23,15 +23,14 @@ package org.gms.net.server.channel.handlers;
 
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.dao.entity.ReportsDO;
+import org.gms.dao.mapper.ReportsMapper;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 
@@ -82,17 +81,16 @@ public final class ReportHandler extends AbstractPacketHandler {
     }
 
     private void addReport(int reporterid, int victimid, int reason, String description, String chatlog) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO reports (`reporttime`, `reporterid`, `victimid`, `reason`, `chatlog`, `description`) VALUES (?, ?, ?, ?, ?, ?)")) {
-            ps.setTimestamp(1, Timestamp.from(Instant.now()));
-            ps.setInt(2, reporterid);
-            ps.setInt(3, victimid);
-            ps.setInt(4, reason);
-            ps.setString(5, chatlog);
-            ps.setString(6, description);
-            ps.executeUpdate();
-        } catch (SQLException ex) {
-            ex.printStackTrace();
+        ReportsMapper mapper = SpringContextUtil.getBean(ReportsMapper.class);
+        if (mapper != null) {
+            ReportsDO report = new ReportsDO();
+            report.setReporttime(Timestamp.from(Instant.now()));
+            report.setReporterid(reporterid);
+            report.setVictimid(victimid);
+            report.setReason(reason);
+            report.setChatlog(chatlog);
+            report.setDescription(description);
+            mapper.insert(report);
         }
     }
 }

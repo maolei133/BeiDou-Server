@@ -23,30 +23,28 @@
 */
 package org.gms.net.server.channel.handlers;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
+import org.gms.dao.entity.NxcodeDO;
+import org.gms.dao.entity.NxcodeItemsDO;
+import org.gms.dao.mapper.NxcodeItemsMapper;
+import org.gms.dao.mapper.NxcodeMapper;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.server.CashShop;
 import org.gms.server.ItemInformationProvider;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.gms.util.SpringContextUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.math.BigInteger;
+import java.util.*;
 import java.util.Map.Entry;
 
 /**
@@ -56,32 +54,32 @@ import java.util.Map.Entry;
 public final class CouponCodeHandler extends AbstractPacketHandler {
     private static final Logger log = LoggerFactory.getLogger(CouponCodeHandler.class);
 
-    private static List<Pair<Integer, Pair<Integer, Integer>>> getNXCodeItems(Character chr, Connection con, int codeid) throws SQLException {
+    private static List<Pair<Integer, Pair<Integer, Integer>>> getNXCodeItems(Character chr, int codeid) {
         Map<Integer, Integer> couponItems = new HashMap<>();
         Map<Integer, Integer> couponPoints = new HashMap<>(5);
 
-        try (PreparedStatement ps = con.prepareStatement("SELECT * FROM nxcode_items WHERE codeid = ?")) {
-            ps.setInt(1, codeid);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    int type = rs.getInt("type"), quantity = rs.getInt("quantity");
-                    if (type < 5) {
-                        Integer i = couponPoints.get(type);
-                        if (i != null) {
-                            couponPoints.put(type, i + quantity);
-                        } else {
-                            couponPoints.put(type, quantity);
-                        }
+        NxcodeItemsMapper mapper = SpringContextUtil.getBean(NxcodeItemsMapper.class);
+        if (mapper != null) {
+            List<NxcodeItemsDO> items = mapper.selectListByQuery(new QueryWrapper().eq("codeid", codeid));
+            for (NxcodeItemsDO itemDO : items) {
+                int type = itemDO.getType();
+                int quantity = itemDO.getQuantity();
+                
+                if (type < 5) {
+                    Integer i = couponPoints.get(type);
+                    if (i != null) {
+                        couponPoints.put(type, i + quantity);
                     } else {
-                        int item = rs.getInt("item");
+                        couponPoints.put(type, quantity);
+                    }
+                } else {
+                    int item = itemDO.getItem();
 
-                        Integer i = couponItems.get(item);
-                        if (i != null) {
-                            couponItems.put(item, i + quantity);
-                        } else {
-                            couponItems.put(item, quantity);
-                        }
+                    Integer i = couponItems.get(item);
+                    if (i != null) {
+                        couponItems.put(item, i + quantity);
+                    } else {
+                        couponItems.put(item, quantity);
                     }
                 }
             }
@@ -96,7 +94,7 @@ public final class CouponCodeHandler extends AbstractPacketHandler {
                     item = 4000000;
                     qty = 1;
 
-                    log.warn("Error trying to redeem itemid {} from coupon codeid {}", item, codeid);
+                    log.warn("尝试从优惠券代码ID {} 兑换物品ID {} 时出错", codeid, item);
                 }
 
                 if (!chr.canHold(item, qty)) {
@@ -119,45 +117,40 @@ public final class CouponCodeHandler extends AbstractPacketHandler {
     private static Pair<Integer, List<Pair<Integer, Pair<Integer, Integer>>>> getNXCodeResult(Character chr, String code) {
         Client c = chr.getClient();
         List<Pair<Integer, Pair<Integer, Integer>>> ret = new LinkedList<>();
-        try {
-            if (!c.attemptCsCoupon()) {
-                return new Pair<>(-5, null);
+        
+        if (!c.attemptCsCoupon()) {
+            return new Pair<>(-5, null);
+        }
+
+        NxcodeMapper mapper = SpringContextUtil.getBean(NxcodeMapper.class);
+        if (mapper != null) {
+            NxcodeDO nxcode = mapper.selectOneByQuery(new QueryWrapper().eq("code", code));
+            
+            if (nxcode == null) {
+                return new Pair<>(-1, null);
             }
 
-            try (Connection con = DatabaseConnection.getConnection()) {
-                try (PreparedStatement ps = con.prepareStatement("SELECT * FROM nxcode WHERE code = ?")) {
-                    ps.setString(1, code);
-
-                    try (ResultSet rs = ps.executeQuery()) {
-                        if (!rs.next()) {
-                            return new Pair<>(-1, null);
-                        }
-
-                        if (rs.getString("retriever") != null) {
-                            return new Pair<>(-2, null);
-                        }
-
-                        if (rs.getLong("expiration") < Server.getInstance().getCurrentTime()) {
-                            return new Pair<>(-3, null);
-                        }
-
-                        final int codeid = rs.getInt("id");
-
-                        ret = getNXCodeItems(chr, con, codeid);
-                        if (ret == null) {
-                            return new Pair<>(-4, null);
-                        }
-                    }
-                }
-
-                try (PreparedStatement ps = con.prepareStatement("UPDATE nxcode SET retriever = ? WHERE code = ?")) {
-                    ps.setString(1, chr.getName());
-                    ps.setString(2, code);
-                    ps.executeUpdate();
-                }
+            if (nxcode.getRetriever() != null) {
+                return new Pair<>(-2, null);
             }
-        } catch (SQLException ex) {
-            ex.printStackTrace();
+
+            // 修复 BigInteger 与 long 比较的错误
+            BigInteger expiration = nxcode.getExpiration();
+            long currentTime = Server.getInstance().getCurrentTime();
+            if (expiration != null && expiration.compareTo(BigInteger.valueOf(currentTime)) < 0) {
+                return new Pair<>(-3, null);
+            }
+
+            final int codeid = nxcode.getId().intValue();
+
+            ret = getNXCodeItems(chr, codeid);
+            if (ret == null) {
+                return new Pair<>(-4, null);
+            }
+            
+            // Update retriever
+            nxcode.setRetriever(chr.getName());
+            mapper.update(nxcode);
         }
 
         c.resetCsCoupon();

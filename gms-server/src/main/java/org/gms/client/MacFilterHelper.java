@@ -1,27 +1,23 @@
 package org.gms.client;
 
-import org.gms.util.DatabaseConnection;
+import com.mybatisflex.core.query.QueryWrapper;
+import org.gms.dao.entity.MacfiltersDO;
+import org.gms.dao.mapper.MacfiltersMapper;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * MAC过滤规则操作工具类
  * 提供对macfilters表的增删改查操作
- * 自动管理数据库连接
+ * 已改造为使用 MyBatis DAO
  */
 public class MacFilterHelper {
 
-    /**
-     * 获取数据库连接
-     * @return 数据库连接
-     * @throws SQLException 数据库异常
-     */
-    private static Connection getConnection() throws SQLException {
-        return DatabaseConnection.getConnection();
+    private static MacfiltersMapper getMapper() {
+        return SpringContextUtil.getBean(MacfiltersMapper.class);
     }
 
     /**
@@ -29,17 +25,12 @@ public class MacFilterHelper {
      * @return 过滤规则列表
      */
     public static List<String> getAllFilters() {
-        List<String> filters = new ArrayList<>();
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT filter FROM macfilters");
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                filters.add(rs.getString("filter"));
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        MacfiltersMapper mapper = getMapper();
+        if (mapper == null) {
+            return new ArrayList<>();
         }
-        return filters;
+        List<MacfiltersDO> list = mapper.selectAll();
+        return list.stream().map(MacfiltersDO::getFilter).collect(Collectors.toList());
     }
 
     /**
@@ -48,14 +39,13 @@ public class MacFilterHelper {
      * @return 是否添加成功
      */
     public static boolean addFilter(String filter) {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO macfilters (filter) VALUES (?)")) {
-            ps.setString(1, filter);
-            return ps.executeUpdate() > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
+        MacfiltersMapper mapper = getMapper();
+        if (mapper == null) {
             return false;
         }
+        MacfiltersDO entity = new MacfiltersDO();
+        entity.setFilter(filter);
+        return mapper.insert(entity) > 0;
     }
 
     /**
@@ -89,11 +79,13 @@ public class MacFilterHelper {
      * @return 是否删除成功
      */
     public static boolean deleteFilter(String filter) {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement("DELETE FROM macfilters WHERE filter = ?")) {
-            ps.setString(1, filter);
-            return ps.executeUpdate() > 0;
-        } catch (SQLException e) {
+        MacfiltersMapper mapper = getMapper();
+        if (mapper == null) {
+            return false;
+        }
+        try {
+             return mapper.deleteByQuery(new QueryWrapper().eq("filter", filter)) > 0;
+        } catch (Exception e) {
             e.printStackTrace();
             return false;
         }

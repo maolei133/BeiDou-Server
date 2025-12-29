@@ -20,20 +20,20 @@
 
 package org.gms.net.server.channel.handlers;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.config.GameConfig;
+import org.gms.dao.entity.WorldtransfersDO;
+import org.gms.dao.mapper.WorldtransfersMapper;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.List;
 
 /**
  * @author Ronan
@@ -60,12 +60,16 @@ public final class TransferWorldHandler extends AbstractPacketHandler {
             c.sendPacket(PacketCreator.sendWorldTransferRules(worldTransferError, c));
             return;
         }
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT completionTime FROM worldtransfers WHERE characterid=?")) {
-            ps.setInt(1, chr.getId());
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                Timestamp completedTimestamp = rs.getTimestamp("completionTime");
+        
+        // DAO 改造
+        WorldtransfersMapper mapper = SpringContextUtil.getBean(WorldtransfersMapper.class);
+        if (mapper != null) {
+            List<WorldtransfersDO> list = mapper.selectListByQuery(
+                    new QueryWrapper().select("completionTime").eq("characterid", chr.getId())
+            );
+            
+            for (WorldtransfersDO record : list) {
+                Timestamp completedTimestamp = record.getCompletionTime();
                 if (completedTimestamp == null) { //has pending world transfer
                     c.sendPacket(PacketCreator.sendWorldTransferRules(6, c));
                     return;
@@ -74,10 +78,8 @@ public final class TransferWorldHandler extends AbstractPacketHandler {
                     return;
                 }
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return;
         }
+
         c.sendPacket(PacketCreator.sendWorldTransferRules(0, c));
     }
 }

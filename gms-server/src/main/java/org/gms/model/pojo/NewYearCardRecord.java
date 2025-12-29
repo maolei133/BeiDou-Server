@@ -19,24 +19,18 @@
 */
 package org.gms.model.pojo;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.gms.client.Character;
 import org.gms.dao.entity.NewyearDO;
+import org.gms.dao.mapper.NewyearMapper;
 import org.gms.manager.ServerManager;
 import org.gms.net.server.Server;
 import org.gms.server.TimerManager;
 import org.gms.service.NewYearCardService;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -97,30 +91,22 @@ public class NewYearCardRecord {
     }
 
     public static void saveNewYearCard(NewYearCardRecord newyear) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("INSERT INTO newyear VALUES (DEFAULT, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
-                ps.setInt(1, newyear.senderId);
-                ps.setString(2, newyear.senderName);
-                ps.setInt(3, newyear.receiverId);
-                ps.setString(4, newyear.receiverName);
-
-                ps.setString(5, newyear.message);
-
-                ps.setBoolean(6, newyear.senderDiscardCard);
-                ps.setBoolean(7, newyear.receiverDiscardCard);
-                ps.setBoolean(8, newyear.receiverReceivedCard);
-
-                ps.setLong(9, newyear.dateSent);
-                ps.setLong(10, newyear.dateReceived);
-
-                ps.executeUpdate();
-                try (ResultSet rs = ps.getGeneratedKeys()) {
-                    rs.next();
-                    newyear.id = rs.getInt(1);
-                }
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+        NewyearMapper mapper = SpringContextUtil.getBean(NewyearMapper.class);
+        if (mapper != null) {
+            NewyearDO entity = new NewyearDO();
+            entity.setSenderid(newyear.senderId);
+            entity.setSendername(newyear.senderName);
+            entity.setReceiverid(newyear.receiverId);
+            entity.setReceivername(newyear.receiverName);
+            entity.setMessage(newyear.message);
+            entity.setSenderdiscard(newyear.senderDiscardCard);
+            entity.setReceiverdiscard(newyear.receiverDiscardCard);
+            entity.setReceived(newyear.receiverReceivedCard);
+            entity.setTimesent(newyear.dateSent);
+            entity.setTimereceived(newyear.dateReceived);
+            
+            mapper.insert(entity);
+            newyear.id = entity.getId().intValue();
         }
     }
 
@@ -128,15 +114,13 @@ public class NewYearCardRecord {
         newyear.receiverReceivedCard = true;
         newyear.dateReceived = System.currentTimeMillis();
 
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("UPDATE newyear SET received=1, timereceived=? WHERE id=?")) {
-                ps.setLong(1, newyear.dateReceived);
-                ps.setInt(2, newyear.id);
-
-                ps.executeUpdate();
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+        NewyearMapper mapper = SpringContextUtil.getBean(NewyearMapper.class);
+        if (mapper != null) {
+            NewyearDO entity = new NewyearDO();
+            entity.setId((long) newyear.id);
+            entity.setReceived(true);
+            entity.setTimereceived(newyear.dateReceived);
+            mapper.update(entity);
         }
     }
 
@@ -146,21 +130,16 @@ public class NewYearCardRecord {
             return nyc;
         }
 
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("SELECT * FROM newyear WHERE id = ?")) {
-                ps.setInt(1, cardid);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        NewYearCardRecord newyear = new NewYearCardRecord(rs.getInt("senderid"), rs.getString("sendername"), rs.getInt("receiverid"), rs.getString("receivername"), rs.getString("message"));
-                        newyear.setExtraNewYearCardRecord(rs.getInt("id"), rs.getBoolean("senderdiscard"), rs.getBoolean("receiverdiscard"), rs.getBoolean("received"), rs.getLong("timesent"), rs.getLong("timereceived"));
+        NewyearMapper mapper = SpringContextUtil.getBean(NewyearMapper.class);
+        if (mapper != null) {
+            NewyearDO entity = mapper.selectOneById(cardid);
+            if (entity != null) {
+                NewYearCardRecord newyear = new NewYearCardRecord(entity.getSenderid(), entity.getSendername(), entity.getReceiverid(), entity.getReceivername(), entity.getMessage());
+                newyear.setExtraNewYearCardRecord(entity.getId().intValue(), entity.getSenderdiscard(), entity.getReceiverdiscard(), entity.getReceived(), entity.getTimesent(), entity.getTimereceived());
 
-                        Server.getInstance().setNewYearCard(newyear);
-                        return newyear;
-                    }
-                }
+                Server.getInstance().setNewYearCard(newyear);
+                return newyear;
             }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
         }
 
         return null;
@@ -237,13 +216,9 @@ public class NewYearCardRecord {
     private static void deleteNewYearCard(int id) {
         Server.getInstance().removeNewYearCard(id);
 
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("DELETE FROM newyear WHERE id = ?")) {
-                ps.setInt(1, id);
-                ps.executeUpdate();
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+        NewyearMapper mapper = SpringContextUtil.getBean(NewyearMapper.class);
+        if (mapper != null) {
+            mapper.deleteById(id);
         }
     }
 

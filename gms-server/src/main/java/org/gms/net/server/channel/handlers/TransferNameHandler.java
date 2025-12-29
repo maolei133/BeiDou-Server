@@ -20,20 +20,20 @@
 
 package org.gms.net.server.channel.handlers;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.config.GameConfig;
+import org.gms.dao.entity.NamechangesDO;
+import org.gms.dao.mapper.NamechangesMapper;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
+import java.util.List;
 
 import static java.util.concurrent.TimeUnit.DAYS;
 
@@ -64,13 +64,16 @@ public final class TransferNameHandler extends AbstractPacketHandler {
             c.sendPacket(PacketCreator.sendNameTransferRules(2));
             return;
         }
-        //sql queries
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT completionTime FROM namechanges WHERE characterid=?")) { //double check, just in case
-            ps.setInt(1, chr.getId());
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                Timestamp completedTimestamp = rs.getTimestamp("completionTime");
+        
+        // DAO 改造
+        NamechangesMapper mapper = SpringContextUtil.getBean(NamechangesMapper.class);
+        if (mapper != null) {
+            List<NamechangesDO> list = mapper.selectListByQuery(
+                    new QueryWrapper().select("completionTime").eq("characterid", chr.getId())
+            );
+            
+            for (NamechangesDO record : list) {
+                Timestamp completedTimestamp = record.getCompletionTime();
                 if (completedTimestamp == null) { //has pending name request
                     c.sendPacket(PacketCreator.sendNameTransferRules(1));
                     return;
@@ -79,10 +82,8 @@ public final class TransferNameHandler extends AbstractPacketHandler {
                     return;
                 }
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return;
         }
+
         c.sendPacket(PacketCreator.sendNameTransferRules(0));
     }
 }
