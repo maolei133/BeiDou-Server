@@ -21,6 +21,7 @@
 */
 package org.gms.net.server.channel.handlers;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.BuddyList;
 import org.gms.client.BuddyList.BuddyAddResult;
 import org.gms.client.BuddyList.BuddyOperation;
@@ -28,16 +29,15 @@ import org.gms.client.BuddylistEntry;
 import org.gms.client.Character;
 import org.gms.client.CharacterNameAndId;
 import org.gms.client.Client;
+import org.gms.dao.entity.BuddiesDO;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.dao.mapper.BuddiesMapper;
+import org.gms.dao.mapper.CharactersMapper;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.world.World;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import org.gms.util.SpringContextUtil;
 
 public class BuddylistModifyHandler extends AbstractPacketHandler {
     private static class CharacterIdNameBuddyCapacity extends CharacterNameAndId {
@@ -60,21 +60,20 @@ public class BuddylistModifyHandler extends AbstractPacketHandler {
         }
     }
 
-    private CharacterIdNameBuddyCapacity getCharacterIdAndNameFromDatabase(String name) throws SQLException {
-        CharacterIdNameBuddyCapacity ret = null;
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT id, name, buddyCapacity FROM characters WHERE name LIKE ?")) {
-            ps.setString(1, name);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    ret = new CharacterIdNameBuddyCapacity(rs.getInt("id"), rs.getString("name"), rs.getInt("buddyCapacity"));
-                }
+    private CharacterIdNameBuddyCapacity getCharacterIdAndNameFromDatabase(String name) {
+        CharactersMapper mapper = SpringContextUtil.getBean(CharactersMapper.class);
+        if (mapper != null) {
+            CharactersDO character = mapper.selectOneByQuery(
+                    new QueryWrapper()
+                            .select(CharactersDO::getId, CharactersDO::getName, CharactersDO::getBuddyCapacity)
+                            .where(CharactersDO::getName).like(name)
+            );
+            
+            if (character != null) {
+                return new CharacterIdNameBuddyCapacity(character.getId(), character.getName(), character.getBuddyCapacity());
             }
         }
-
-        return ret;
+        return null;
     }
 
     @Override
@@ -82,17 +81,17 @@ public class BuddylistModifyHandler extends AbstractPacketHandler {
         int mode = p.readByte();
         Character player = c.getPlayer();
         BuddyList buddylist = player.getBuddylist();
-        if (mode == 1) { // add
+        if (mode == 1) { // 添加
             String addName = p.readString();
             String group = p.readString();
             if (group.length() > 16 || addName.length() < 2 || addName.length() > 13) {
-                return; //hax.
+                return; // 非法操作
             }
             BuddylistEntry ble = buddylist.get(addName);
             if (ble != null && !ble.isVisible() && group.equals(ble.getGroup())) {
-                c.sendPacket(PacketCreator.serverNotice(1, "You already have \"" + ble.getName() + "\" on your Buddylist"));
+                c.sendPacket(PacketCreator.serverNotice(1, "你的好友列表中已经有 \"" + ble.getName() + "\" 了"));
             } else if (buddylist.isFull() && ble == null) {
-                c.sendPacket(PacketCreator.serverNotice(1, "Your buddylist is already full"));
+                c.sendPacket(PacketCreator.serverNotice(1, "你的好友列表已满"));
             } else if (ble == null) {
                 try {
                     World world = c.getWorldServer();
@@ -111,33 +110,31 @@ public class BuddylistModifyHandler extends AbstractPacketHandler {
                         if (channel != -1) {
                             buddyAddResult = world.requestBuddyAdd(addName, c.getChannel(), player.getId(), player.getName());
                         } else {
-                            try (Connection con = DatabaseConnection.getConnection()) {
-                                try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) as buddyCount FROM buddies WHERE characterid = ? AND pending = 0")) {
-                                    ps.setInt(1, charWithId.getId());
-
-                                    try (ResultSet rs = ps.executeQuery()) {
-                                        if (!rs.next()) {
-                                            throw new RuntimeException("Result set expected");
-                                        } else if (rs.getInt("buddyCount") >= charWithId.getBuddyCapacity()) {
-                                            buddyAddResult = BuddyAddResult.BUDDYLIST_FULL;
-                                        }
-                                    }
+                            BuddiesMapper buddiesMapper = SpringContextUtil.getBean(BuddiesMapper.class);
+                            if (buddiesMapper != null) {
+                                long buddyCount = buddiesMapper.selectCountByQuery(
+                                        new QueryWrapper()
+                                                .eq(BuddiesDO::getCharacterid, charWithId.getId())
+                                                .eq(BuddiesDO::getPending, 0)
+                                );
+                                
+                                if (buddyCount >= charWithId.getBuddyCapacity()) {
+                                    buddyAddResult = BuddyAddResult.BUDDYLIST_FULL;
                                 }
 
-                                try (PreparedStatement ps = con.prepareStatement("SELECT pending FROM buddies WHERE characterid = ? AND buddyid = ?")) {
-                                    ps.setInt(1, charWithId.getId());
-                                    ps.setInt(2, player.getId());
-
-                                    try (ResultSet rs = ps.executeQuery()) {
-                                        if (rs.next()) {
-                                            buddyAddResult = BuddyAddResult.ALREADY_ON_LIST;
-                                        }
-                                    }
+                                BuddiesDO existing = buddiesMapper.selectOneByQuery(
+                                        new QueryWrapper()
+                                                .eq(BuddiesDO::getCharacterid, charWithId.getId())
+                                                .eq(BuddiesDO::getBuddyid, player.getId())
+                                );
+                                
+                                if (existing != null) {
+                                    buddyAddResult = BuddyAddResult.ALREADY_ON_LIST;
                                 }
                             }
                         }
                         if (buddyAddResult == BuddyAddResult.BUDDYLIST_FULL) {
-                            c.sendPacket(PacketCreator.serverNotice(1, "\"" + addName + "\"'s Buddylist is full"));
+                            c.sendPacket(PacketCreator.serverNotice(1, "\"" + addName + "\" 的好友列表已满"));
                         } else {
                             int displayChannel;
                             displayChannel = -1;
@@ -146,58 +143,57 @@ public class BuddylistModifyHandler extends AbstractPacketHandler {
                                 displayChannel = channel;
                                 notifyRemoteChannel(c, channel, otherCid, BuddyOperation.ADDED);
                             } else if (buddyAddResult != BuddyAddResult.ALREADY_ON_LIST && channel == -1) {
-                                try (Connection con = DatabaseConnection.getConnection();
-                                     PreparedStatement ps = con.prepareStatement("INSERT INTO buddies (characterid, `buddyid`, `pending`) VALUES (?, ?, 1)")) {
-                                    ps.setInt(1, charWithId.getId());
-                                    ps.setInt(2, player.getId());
-                                    ps.executeUpdate();
+                                BuddiesMapper buddiesMapper = SpringContextUtil.getBean(BuddiesMapper.class);
+                                if (buddiesMapper != null) {
+                                    BuddiesDO newBuddy = new BuddiesDO();
+                                    newBuddy.setCharacterid(charWithId.getId());
+                                    newBuddy.setBuddyid(player.getId());
+                                    newBuddy.setPending(1);
+                                    buddiesMapper.insert(newBuddy);
                                 }
                             }
                             buddylist.put(new BuddylistEntry(charWithId.getName(), group, otherCid, displayChannel, true));
                             c.sendPacket(PacketCreator.updateBuddylist(buddylist.getBuddies()));
                         }
                     } else {
-                        c.sendPacket(PacketCreator.serverNotice(1, "A character called \"" + addName + "\" does not exist"));
+                        c.sendPacket(PacketCreator.serverNotice(1, "名为 \"" + addName + "\" 的角色不存在"));
                     }
-                } catch (SQLException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
             } else {
                 ble.changeGroup(group);
                 c.sendPacket(PacketCreator.updateBuddylist(buddylist.getBuddies()));
             }
-        } else if (mode == 2) { // accept buddy
+        } else if (mode == 2) { // 接受好友
             int otherCid = p.readInt();
             if (!buddylist.isFull()) {
                 try {
-                    int channel = c.getWorldServer().find(otherCid);//worldInterface.find(otherCid);
+                    int channel = c.getWorldServer().find(otherCid);
                     String otherName = null;
                     Character otherChar = c.getChannelServer().getPlayerStorage().getCharacterById(otherCid);
                     if (otherChar == null) {
-                        try (Connection con = DatabaseConnection.getConnection();
-                             PreparedStatement ps = con.prepareStatement("SELECT name FROM characters WHERE id = ?")) {
-                            ps.setInt(1, otherCid);
-
-                            try (ResultSet rs = ps.executeQuery()) {
-                                if (rs.next()) {
-                                    otherName = rs.getString("name");
-                                }
+                        CharactersMapper mapper = SpringContextUtil.getBean(CharactersMapper.class);
+                        if (mapper != null) {
+                            CharactersDO character = mapper.selectOneById(otherCid);
+                            if (character != null) {
+                                otherName = character.getName();
                             }
                         }
                     } else {
                         otherName = otherChar.getName();
                     }
                     if (otherName != null) {
-                        buddylist.put(new BuddylistEntry(otherName, "Default Group", otherCid, channel, true));
+                        buddylist.put(new BuddylistEntry(otherName, "默认分组", otherCid, channel, true));
                         c.sendPacket(PacketCreator.updateBuddylist(buddylist.getBuddies()));
                         notifyRemoteChannel(c, channel, otherCid, BuddyOperation.ADDED);
                     }
-                } catch (SQLException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
             nextPendingRequest(c);
-        } else if (mode == 3) { // delete
+        } else if (mode == 3) { // 删除
             int otherCid = p.readInt();
             player.deleteBuddy(otherCid);
         }

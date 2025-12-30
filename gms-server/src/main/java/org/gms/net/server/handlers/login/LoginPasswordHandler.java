@@ -21,22 +21,26 @@
  */
 package org.gms.net.server.handlers.login;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Client;
 import org.gms.client.DefaultDates;
 import org.gms.config.GameConfig;
+import org.gms.dao.entity.AccountsDO;
+import org.gms.dao.mapper.AccountsMapper;
 import org.gms.net.PacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
 import org.gms.net.server.coordinator.session.Hwid;
 import org.gms.util.BCrypt;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.HexTool;
 import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.security.NoSuchAlgorithmException;
-import java.sql.*;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 
@@ -53,7 +57,7 @@ public final class LoginPasswordHandler implements PacketHandler {
     public final void handlePacket(InPacket p, Client c) {
         String remoteHost = c.getRemoteAddress();
         if (remoteHost.contentEquals("null")) {
-            c.sendPacket(PacketCreator.getLoginFailed(14));          // thanks Alchemist for noting remoteHost could be null
+            c.sendPacket(PacketCreator.getLoginFailed(14));          // 感谢 Alchemist 指出 remoteHost 可能为 null
             return;
         } else if (c.getAccID() == -5) {
             c.sendPacket(PacketCreator.serverNotice(1,"服务器已限制非法方式进入游戏\r\n请使用服务器指定的方式进入游戏。"));
@@ -64,43 +68,43 @@ public final class LoginPasswordHandler implements PacketHandler {
         String pwd = p.readString();
         c.setAccountName(login);
 
-        p.skip(6);   // localhost masked the initial part with zeroes...
+        p.skip(6);   // localhost 用零掩盖了初始部分...
         byte[] hwidNibbles = p.readBytes(4);
         Hwid hwid = new Hwid(HexTool.toCompactHexString(hwidNibbles));
         int loginok = c.login(login, pwd, hwid);
 
         if (GameConfig.getServerBoolean("automatic_register") && loginok == 5) {
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("INSERT INTO accounts (name, password, birthday, tempban) VALUES (?, ?, ?, ?);", Statement.RETURN_GENERATED_KEYS)) { //Jayd: Added birthday, tempban
-                ps.setString(1, login);
-                ps.setString(2, GameConfig.getServerBoolean("bcrypt_migration") ? BCrypt.hashpw(pwd, BCrypt.gensalt(12)) : BCrypt.hashpwSHA512(pwd));
-                ps.setDate(3, Date.valueOf(DefaultDates.getBirthday()));
-                ps.setTimestamp(4, Timestamp.valueOf(DefaultDates.getTempban()));
-                ps.executeUpdate();
-
-                try (ResultSet rs = ps.getGeneratedKeys()) {
-                    rs.next();
-                    c.setAccID(rs.getInt(1));
+            AccountsMapper mapper = SpringContextUtil.getBean(AccountsMapper.class);
+            if (mapper != null) {
+                try {
+                    AccountsDO newAccount = new AccountsDO();
+                    newAccount.setName(login);
+                    newAccount.setPassword(GameConfig.getServerBoolean("bcrypt_migration") ? BCrypt.hashpw(pwd, BCrypt.gensalt(12)) : BCrypt.hashpwSHA512(pwd));
+                    newAccount.setBirthday(Date.valueOf(DefaultDates.getBirthday()));
+                    newAccount.setTempban(Timestamp.valueOf(DefaultDates.getTempban()));
+                    
+                    mapper.insert(newAccount);
+                    c.setAccID(newAccount.getId());
+                } catch (NoSuchAlgorithmException e) {
+                    c.setAccID(-1);
+                    log.error("自动注册账号 {} 失败: {}", login, e.getMessage());
+                } finally {
+                    loginok = c.login(login, pwd, hwid);
                 }
-            } catch (SQLException | NoSuchAlgorithmException e) {
-                c.setAccID(-1);
-                e.printStackTrace();
-            } finally {
-                loginok = c.login(login, pwd, hwid);
             }
         }
 
-        if (GameConfig.getServerBoolean("bcrypt_migration") && (loginok <= -10)) { // -10 means migration to bcrypt, -23 means TOS wasn't accepted
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("UPDATE accounts SET password = ? WHERE name = ?;")) {
-                ps.setString(1, BCrypt.hashpw(pwd, BCrypt.gensalt(12)));
-                ps.setString(2, login);
-                ps.executeUpdate();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            } finally {
-                loginok = (loginok == -10) ? 0 : 23;    //发送协议确认
+        if (GameConfig.getServerBoolean("bcrypt_migration") && (loginok <= -10)) { // -10 表示迁移到 bcrypt, -23 表示 TOS 未接受
+            AccountsMapper mapper = SpringContextUtil.getBean(AccountsMapper.class);
+            if (mapper != null) {
+                AccountsDO account = mapper.selectOneByQuery(new QueryWrapper().eq(AccountsDO::getName, login));
+                if (account != null) {
+                    // BCrypt.hashpw 不会抛出 NoSuchAlgorithmException，因此不需要 try-catch
+                    account.setPassword(BCrypt.hashpw(pwd, BCrypt.gensalt(12)));
+                    mapper.update(account);
+                }
             }
+            loginok = (loginok == -10) ? 0 : 23;    //发送协议确认
         }
 
         if (c.hasBannedIP() || c.hasBannedMac() || c.hasBannedHWID()) {
@@ -144,7 +148,7 @@ public final class LoginPasswordHandler implements PacketHandler {
             if (loginCount >= loginCountMax || loginCount >= loginCountMax) {
                 c.sendPacket(PacketCreator.serverNotice(1,"您的设备今天累计登录账号数已超过服务端允许，无法继续登录账号。"));
                 c.sendPacket(PacketCreator.getLoginFailed(1));          //通知客户端恢复操作
-                log.warn("客户端 {} 尝试登录账号 {} ，已乐基登录数量 {} ，最大允许登录数量 {} ，已限制登录。",c.getRemoteAddress(),login,loginCount,loginCountMax);
+                log.warn("客户端 {} 尝试登录账号 {} ，已累计登录数量 {} ，最大允许登录数量 {} ，已限制登录。",c.getRemoteAddress(),login,loginCount,loginCountMax);
                 return;
             }
         }

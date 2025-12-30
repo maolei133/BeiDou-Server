@@ -39,6 +39,7 @@ public class RingsDO implements Serializable {
 
     private Integer itemid;
 
-    private String partnername;
+    @Column("partnerName")
+    private String partnerName;
 
 }

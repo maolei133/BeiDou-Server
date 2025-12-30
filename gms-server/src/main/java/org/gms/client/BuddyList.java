@@ -21,21 +21,18 @@
 */
 package org.gms.client;
 
+import com.mybatisflex.core.query.QueryWrapper;
+import com.mybatisflex.core.row.Row;
+import org.gms.dao.mapper.BuddiesMapper;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.PlayerStorage;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.Map;
+import java.util.*;
+
+import static org.gms.dao.entity.table.BuddiesDOTableDef.BUDDIES_D_O;
+import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
 
 public class BuddyList {
     public enum BuddyOperation {
@@ -144,27 +141,35 @@ public class BuddyList {
     }
 
     public void loadFromDb(int characterId) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("SELECT b.buddyid, b.pending, b.group, c.name as buddyname FROM buddies as b, characters as c WHERE c.id = b.buddyid AND b.characterid = ?")) {
-                ps.setInt(1, characterId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        if (rs.getInt("pending") == 1) {
-                            pendingRequests.push(new CharacterNameAndId(rs.getInt("buddyid"), rs.getString("buddyname")));
-                        } else {
-                            put(new BuddylistEntry(rs.getString("buddyname"), rs.getString("group"), rs.getInt("buddyid"), (byte) -1, true));
-                        }
-                    }
+        BuddiesMapper buddiesMapper = SpringContextUtil.getBean(BuddiesMapper.class);
+        if (buddiesMapper == null) return;
+
+        QueryWrapper query = QueryWrapper.create()
+                .select(BUDDIES_D_O.BUDDYID, BUDDIES_D_O.PENDING, BUDDIES_D_O.GROUP, CHARACTERS_D_O.NAME.as("buddyname"))
+                .from(BUDDIES_D_O)
+                .join(CHARACTERS_D_O).on(CHARACTERS_D_O.ID.eq(BUDDIES_D_O.BUDDYID))
+                .where(BUDDIES_D_O.CHARACTERID.eq(characterId));
+        
+        List<Row> results = buddiesMapper.selectRowsByQuery(query);
+        
+        if (results != null) {
+            for (Row row : results) {
+                int buddyId = ((Number) row.get("buddyid")).intValue();
+                String buddyName = (String) row.get("buddyname");
+                int pending = ((Number) row.get("pending")).intValue();
+                String group = (String) row.get("group");
+                
+                if (pending == 1) {
+                    pendingRequests.push(new CharacterNameAndId(buddyId, buddyName));
+                } else {
+                    put(new BuddylistEntry(buddyName, group, buddyId, (byte) -1, true));
                 }
             }
-
-            try (PreparedStatement ps = con.prepareStatement("DELETE FROM buddies WHERE pending = 1 AND characterid = ?")) {
-                ps.setInt(1, characterId);
-                ps.executeUpdate();
-            }
-        } catch (SQLException ex) {
-            ex.printStackTrace();
         }
+
+        buddiesMapper.deleteByQuery(
+                QueryWrapper.create().where(BUDDIES_D_O.PENDING.eq(1)).and(BUDDIES_D_O.CHARACTERID.eq(characterId))
+        );
     }
 
     public CharacterNameAndId pollPendingRequest() {
@@ -172,7 +177,7 @@ public class BuddyList {
     }
 
     public void addBuddyRequest(Client c, int cidFrom, String nameFrom, int channelFrom) {
-        put(new BuddylistEntry(nameFrom, "Default Group", cidFrom, channelFrom, false));
+        put(new BuddylistEntry(nameFrom, "默认分组", cidFrom, channelFrom, false));
         if (pendingRequests.isEmpty()) {
             c.sendPacket(PacketCreator.requestBuddylistAdd(cidFrom, c.getPlayer().getId(), nameFrom));
         } else {

@@ -21,6 +21,7 @@
 */
 package org.gms.net.server.channel.handlers;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.Ring;
@@ -30,24 +31,23 @@ import org.gms.client.inventory.Item;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.client.processor.npc.DueyProcessor;
 import org.gms.constants.id.ItemId;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.dao.entity.InventoryitemsDO;
+import org.gms.dao.mapper.CharactersMapper;
+import org.gms.dao.mapper.InventoryitemsMapper;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.channel.Channel;
 import org.gms.net.server.world.World;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.EventInstanceManager;
 import org.gms.server.ItemInformationProvider;
 import org.gms.service.NoteService;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.gms.util.SpringContextUtil;
 import org.gms.util.packets.WeddingPackets;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Jvlaple
@@ -78,68 +78,67 @@ public final class RingActionHandler extends AbstractPacketHandler {
         final Character target = c.getChannelServer().getPlayerStorage().getCharacterByName(name);
         final Character source = c.getPlayer();
 
-        // TODO: get the correct packet bytes for these popups
         if (source.isMarried()) {
-            source.dropMessage(1, "You're already married!");
+            source.dropMessage(1, "你已经结婚了！");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (source.getPartnerId() > 0) {
-            source.dropMessage(1, "You're already engaged!");
+            source.dropMessage(1, "你已经订婚了！");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (source.getMarriageItemId() > 0) {
-            source.dropMessage(1, "You're already engaging someone!");
+            source.dropMessage(1, "你已经在向某人求婚了！");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (target == null) {
-            source.dropMessage(1, "Unable to find " + name + " on this channel.");
+            source.dropMessage(1, "在这个频道找不到 " + name + "。");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (target == source) {
-            source.dropMessage(1, "You can't engage yourself.");
+            source.dropMessage(1, "你不能向自己求婚。");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (target.getLevel() < 50) {
-            source.dropMessage(1, "You can only propose to someone level 50 or higher.");
+            source.dropMessage(1, "你只能向50级或以上的玩家求婚。");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (source.getLevel() < 50) {
-            source.dropMessage(1, "You can only propose being level 50 or higher.");
+            source.dropMessage(1, "你必须达到50级或以上才能求婚。");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (!target.getMap().equals(source.getMap())) {
-            source.dropMessage(1, "Make sure your partner is on the same map!");
+            source.dropMessage(1, "请确保你的伴侣在同一张地图上！");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (!source.haveItem(itemid) || itemid < ItemId.ENGAGEMENT_BOX_MIN || itemid > ItemId.ENGAGEMENT_BOX_MAX) {
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (target.isMarried()) {
-            source.dropMessage(1, "The player is already married!");
+            source.dropMessage(1, "该玩家已经结婚了！");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (target.getPartnerId() > 0 || target.getMarriageItemId() > 0) {
-            source.dropMessage(1, "The player is already engaged!");
+            source.dropMessage(1, "该玩家已经订婚了！");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (target.haveWeddingRing()) {
-            source.dropMessage(1, "The player already holds a marriage ring...");
+            source.dropMessage(1, "该玩家已经拥有结婚戒指了...");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (source.haveWeddingRing()) {
-            source.dropMessage(1, "You can't propose while holding a marriage ring!");
+            source.dropMessage(1, "你不能在拥有结婚戒指时求婚！");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (target.getGender() == source.getGender()) {
-            source.dropMessage(1, "You may only propose to a " + (source.getGender() == 1 ? "male" : "female") + "!");
+            source.dropMessage(1, "你只能向" + (source.getGender() == 1 ? "男性" : "女性") + "求婚！");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (!InventoryManipulator.checkSpace(c, newBoxId, 1, "")) {
-            source.dropMessage(5, "You don't have a ETC slot available right now!");
+            source.dropMessage(5, "你现在没有可用的其他栏空间！");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         } else if (!InventoryManipulator.checkSpace(target.getClient(), newBoxId + 1, 1, "")) {
-            source.dropMessage(5, "The girl you proposed doesn't have a ETC slot available right now.");
+            source.dropMessage(5, "你求婚的对象现在没有可用的其他栏空间。");
             source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
             return;
         }
@@ -149,43 +148,39 @@ public final class RingActionHandler extends AbstractPacketHandler {
     }
 
     private static void eraseEngagementOffline(int characterId) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            eraseEngagementOffline(characterId, con);
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        }
-    }
-
-    private static void eraseEngagementOffline(int characterId, Connection con) throws SQLException {
-        try (PreparedStatement ps = con.prepareStatement("UPDATE characters SET marriageItemId=-1, partnerId=-1 WHERE id=?")) {
-            ps.setInt(1, characterId);
-            ps.executeUpdate();
+        CharactersMapper mapper = SpringContextUtil.getBean(CharactersMapper.class);
+        if (mapper != null) {
+            CharactersDO updateEntity = new CharactersDO();
+            updateEntity.setId(characterId);
+            updateEntity.setMarriageItemId(-1);
+            updateEntity.setPartnerId(-1);
+            mapper.update(updateEntity);
         }
     }
 
     private static void breakEngagementOffline(int characterId) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT marriageItemId FROM characters WHERE id=?")) {
-            ps.setInt(1, characterId);
+        CharactersMapper charMapper = SpringContextUtil.getBean(CharactersMapper.class);
+        InventoryitemsMapper itemsMapper = SpringContextUtil.getBean(InventoryitemsMapper.class);
+        
+        if (charMapper != null) {
+            CharactersDO character = charMapper.selectOneById(characterId);
+            
+            if (character != null) {
+                int marriageItemId = character.getMarriageItemId();
 
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    int marriageItemId = rs.getInt("marriageItemId");
-
-                    if (marriageItemId > 0) {
-                        try (PreparedStatement ps2 = con.prepareStatement("UPDATE inventoryitems SET expiration=0 WHERE itemid=? AND characterid=?")) {
-                            ps2.setInt(1, marriageItemId);
-                            ps2.setInt(2, characterId);
-
-                            ps2.executeUpdate();
-                        }
-                    }
+                if (marriageItemId > 0 && itemsMapper != null) {
+                    InventoryitemsDO updateEntity = new InventoryitemsDO();
+                    updateEntity.setExpiration(0L);
+                    
+                    itemsMapper.updateByQuery(updateEntity, 
+                            new QueryWrapper()
+                                    .eq(InventoryitemsDO::getItemid, marriageItemId)
+                                    .eq(InventoryitemsDO::getCharacterid, characterId)
+                    );
                 }
             }
-
-            eraseEngagementOffline(characterId, con);
-        } catch (SQLException ex) {
-            log.error("Error updating offline breakup", ex);
+            
+            eraseEngagementOffline(characterId);
         }
     }
 
@@ -202,9 +197,7 @@ public final class RingActionHandler extends AbstractPacketHandler {
         if (partner == null) {
             eraseEngagementOffline(partnerid);
         } else {
-            partner.dropMessage(5, chr.getName() + " has decided to break up the marriage.");
-
-            //partner.sendPacket(Wedding.OnMarriageResult((byte) 0)); ok, how to gracefully unengage someone without the need to cc?
+            partner.dropMessage(5, chr.getName() + " 决定解除婚姻关系。");
             partner.sendPacket(WeddingPackets.OnNotifyWeddingPartnerTransfer(0, 0));
             resetRingId(partner);
             partner.setPartnerId(-1);
@@ -212,9 +205,7 @@ public final class RingActionHandler extends AbstractPacketHandler {
             partner.setMarriageRing(null);
         }
 
-        chr.dropMessage(5, "You have successfully break the marriage with " + Character.getNameById(partnerid) + ".");
-
-        //chr.sendPacket(Wedding.OnMarriageResult((byte) 0));
+        chr.dropMessage(5, "你已成功解除与 " + Character.getNameById(partnerid) + " 的婚姻关系。");
         chr.sendPacket(WeddingPackets.OnNotifyWeddingPartnerTransfer(0, 0));
         resetRingId(chr);
         chr.setPartnerId(-1);
@@ -246,14 +237,13 @@ public final class RingActionHandler extends AbstractPacketHandler {
         if (partner == null) {
             breakEngagementOffline(partnerid);
         } else {
-            partner.dropMessage(5, chr.getName() + " has decided to break up the engagement.");
+            partner.dropMessage(5, chr.getName() + " 决定解除婚约。");
 
             int partnerMarriageitemid = marriageitemid + ((chr.getGender() == 0) ? 1 : -1);
             if (partner.haveItem(partnerMarriageitemid)) {
                 InventoryManipulator.removeById(partner.getClient(), InventoryType.ETC, partnerMarriageitemid, (short) 1, false, false);
             }
 
-            //partner.sendPacket(Wedding.OnMarriageResult((byte) 0)); ok, how to gracefully unengage someone without the need to cc?
             partner.sendPacket(WeddingPackets.OnNotifyWeddingPartnerTransfer(0, 0));
             partner.setPartnerId(-1);
             partner.setMarriageItemId(-1);
@@ -262,9 +252,7 @@ public final class RingActionHandler extends AbstractPacketHandler {
         if (chr.haveItem(marriageitemid)) {
             InventoryManipulator.removeById(chr.getClient(), InventoryType.ETC, marriageitemid, (short) 1, false, false);
         }
-        chr.dropMessage(5, "You have successfully break the engagement with " + Character.getNameById(partnerid) + ".");
-
-        //chr.sendPacket(Wedding.OnMarriageResult((byte) 0));
+        chr.dropMessage(5, "你已成功解除与 " + Character.getNameById(partnerid) + " 的婚约。");
         chr.sendPacket(WeddingPackets.OnNotifyWeddingPartnerTransfer(0, 0));
         chr.setPartnerId(-1);
         chr.setMarriageItemId(-1);
@@ -316,17 +304,17 @@ public final class RingActionHandler extends AbstractPacketHandler {
         String name;
         byte slot;
         switch (mode) {
-            case 0: // Send Proposal
+            case 0: // 发送求婚
                 sendEngageProposal(c, p.readString(), p.readInt());
                 break;
 
-            case 1: // Cancel Proposal
+            case 1: // 取消求婚
                 if (c.getPlayer().getMarriageItemId() / 1000000 != 4) {
                     c.getPlayer().setMarriageItemId(-1);
                 }
                 break;
 
-            case 2: // Accept/Deny Proposal
+            case 2: // 接受/拒绝求婚
                 final boolean accepted = p.readByte() > 0;
                 name = p.readString();
                 final int id = p.readInt();
@@ -356,7 +344,7 @@ public final class RingActionHandler extends AbstractPacketHandler {
                         InventoryManipulator.removeById(source.getClient(), InventoryType.USE, itemid, 1, false, false);
 
                         int marriageId = c.getWorldServer().createRelationship(source.getId(), target.getId());
-                        source.setPartnerId(target.getId()); // engage them (new marriageitemid, partnerid for both)
+                        source.setPartnerId(target.getId()); // 订婚（新的 marriageitemid，双方的 partnerid）
                         target.setPartnerId(source.getId());
 
                         source.setMarriageItemId(newItemId);
@@ -371,24 +359,24 @@ public final class RingActionHandler extends AbstractPacketHandler {
                         source.sendPacket(WeddingPackets.OnNotifyWeddingPartnerTransfer(target.getId(), target.getMapId()));
                         target.sendPacket(WeddingPackets.OnNotifyWeddingPartnerTransfer(source.getId(), source.getMapId()));
                     } catch (Exception e) {
-                        log.error("Error with engagement", e);
+                        log.error("订婚出错", e);
                     }
                 } else {
-                    source.dropMessage(1, "She has politely declined your engagement request.");
+                    source.dropMessage(1, "她礼貌地拒绝了你的订婚请求。");
                     source.sendPacket(WeddingPackets.OnMarriageResult((byte) 0));
 
                     source.setMarriageItemId(-1);
                 }
                 break;
 
-            case 3: // Break Engagement
+            case 3: // 解除婚约
                 breakMarriageRing(c.getPlayer(), p.readInt());
                 break;
 
-            case 5: // Invite %s to Wedding
+            case 5: // 邀请 %s 参加婚礼
                 name = p.readString();
                 int marriageId = p.readInt();
-                slot = p.readByte(); // this is an int
+                slot = p.readByte(); // 这是一个 int
 
                 int itemId;
                 try {
@@ -407,7 +395,7 @@ public final class RingActionHandler extends AbstractPacketHandler {
                 String bride = Character.getNameById(c.getPlayer().getPartnerId());
                 int guest = Character.getIdByName(name);
                 if (groom == null || bride == null || groom.equals("") || bride.equals("") || guest <= 0) {
-                    c.getPlayer().dropMessage(5, "Unable to find " + name + "!");
+                    c.getPlayer().dropMessage(5, "找不到 " + name + "！");
                     return;
                 }
 
@@ -425,14 +413,14 @@ public final class RingActionHandler extends AbstractPacketHandler {
                             if (resStatus > 0) {
                                 long expiration = cserv.getWeddingTicketExpireTime(resStatus + 1);
 
-                                String baseMessage = "You've been invited to %s and %s's Wedding!".formatted(groom, bride);
+                                String baseMessage = "你被邀请参加 %s 和 %s 的婚礼！".formatted(groom, bride);
                                 Character guestChr = c.getWorldServer().getPlayerStorage().getCharacterById(guest);
                                 if (guestChr != null && InventoryManipulator.checkSpace(guestChr.getClient(), newItemId, 1, "") && InventoryManipulator.addById(guestChr.getClient(), newItemId, (short) 1, expiration)) {
-                                    guestChr.dropMessage(6, "[Wedding] %s".formatted(baseMessage));
+                                    guestChr.dropMessage(6, "[婚礼] %s".formatted(baseMessage));
                                 } else {
-                                    String dueyMessage = baseMessage + " Receive your invitation from Duey!";
+                                    String dueyMessage = baseMessage + " 从 Duey 那里领取你的邀请函！";
                                     if (guestChr != null && guestChr.isLoggedInWorld()) {
-                                        guestChr.dropMessage(6, "[Wedding] %s".formatted(dueyMessage));
+                                        guestChr.dropMessage(6, "[婚礼] %s".formatted(dueyMessage));
                                     } else {
                                         noteService.sendNormal(dueyMessage, groom, name);
                                     }
@@ -443,13 +431,13 @@ public final class RingActionHandler extends AbstractPacketHandler {
                                     DueyProcessor.dueyCreatePackage(weddingTicket, 0, groom, guest);
                                 }
                             } else {
-                                c.getPlayer().dropMessage(5, "Wedding is already under way. You cannot invite any more guests for the event.");
+                                c.getPlayer().dropMessage(5, "婚礼已经在进行中。你不能再邀请更多客人了。");
                             }
                         } else {
-                            c.getPlayer().dropMessage(5, "'" + name + "' is already invited for your marriage.");
+                            c.getPlayer().dropMessage(5, "'" + name + "' 已经被邀请参加你的婚礼了。");
                         }
                     } else {
-                        c.getPlayer().dropMessage(5, "Invitation was not sent to '" + name + "'. Either the time for your marriage reservation already came or it was not found.");
+                        c.getPlayer().dropMessage(5, "邀请函未发送给 '" + name + "'。要么你的婚礼预定时间已经到了，要么未找到。");
                     }
 
                 } catch (Exception ex) {
@@ -460,7 +448,7 @@ public final class RingActionHandler extends AbstractPacketHandler {
                 c.getAbstractPlayerInteraction().gainItem(itemId, (short) -1);
                 break;
 
-            case 6: // Open Wedding Invitation
+            case 6: // 打开婚礼邀请函
                 slot = (byte) p.readInt();
                 int invitationid = p.readInt();
 
@@ -471,7 +459,7 @@ public final class RingActionHandler extends AbstractPacketHandler {
                         return;
                     }
 
-                    // collision case: most soon-to-come wedding will show up
+                    // 冲突情况：最近的婚礼将会显示
                     Pair<Integer, Integer> coupleId = c.getWorldServer().getWeddingCoupleForGuest(c.getPlayer().getId(), invitationid == ItemId.RECEIVED_INVITATION_CATHEDRAL);
                     if (coupleId != null) {
                         int groomId = coupleId.getLeft(), brideId = coupleId.getRight();
@@ -484,7 +472,7 @@ public final class RingActionHandler extends AbstractPacketHandler {
             case 9:
                 try {
                     // By -- Dragoso (Drago)
-                    // Groom and Bride's Wishlist
+                    // 新郎和新娘的愿望清单
 
                     Character player = c.getPlayer();
 
@@ -522,7 +510,7 @@ public final class RingActionHandler extends AbstractPacketHandler {
                 break;
 
             default:
-                log.warn("Unhandled RING_ACTION mode. Packet: {}", p);
+                log.warn("未处理的 RING_ACTION 模式。数据包: {}", p);
                 break;
         }
 

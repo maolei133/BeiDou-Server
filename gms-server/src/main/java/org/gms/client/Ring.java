@@ -21,14 +21,16 @@
 */
 package org.gms.client;
 
+import com.mybatisflex.core.query.QueryWrapper;
+import org.gms.dao.entity.InventoryequipmentDO;
+import org.gms.dao.entity.RingsDO;
+import org.gms.dao.mapper.InventoryequipmentMapper;
+import org.gms.dao.mapper.RingsMapper;
 import org.gms.util.CashIdGenerator;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.Pair;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.util.Arrays;
 
 /**
  * @author Danny
@@ -50,94 +52,72 @@ public class Ring implements Comparable<Ring> {
     }
 
     public static Ring loadFromDb(int ringId) {
-        Ring ret = null;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT * FROM rings WHERE id = ?")) {
-            ps.setInt(1, ringId);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    ret = new Ring(ringId, rs.getInt("partnerRingId"), rs.getInt("partnerChrId"), rs.getInt("itemid"), rs.getString("partnerName"));
-                }
+        RingsMapper mapper = SpringContextUtil.getBean(RingsMapper.class);
+        if (mapper != null) {
+            RingsDO ring = mapper.selectOneById(ringId);
+            if (ring != null) {
+                return new Ring(ringId, ring.getPartnerRingId(), ring.getPartnerChrId(), ring.getItemid(), ring.getPartnerName());
             }
-            return ret;
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            return null;
         }
+        return null;
     }
 
     public static void removeRing(final Ring ring) {
-        try {
-            if (ring == null) {
-                return;
-            }
+        if (ring == null) {
+            return;
+        }
+        
+        RingsMapper ringsMapper = SpringContextUtil.getBean(RingsMapper.class);
+        InventoryequipmentMapper equipMapper = SpringContextUtil.getBean(InventoryequipmentMapper.class);
+        
+        if (ringsMapper != null) {
+            ringsMapper.deleteByQuery(new QueryWrapper().in("id", Arrays.asList(ring.getRingId(), ring.getPartnerRingId())));
+        }
 
-            try (Connection con = DatabaseConnection.getConnection()) {
-                try (PreparedStatement ps = con.prepareStatement("DELETE FROM rings WHERE id=?")) {
-                    ps.setInt(1, ring.getRingId());
-                    ps.addBatch();
+        CashIdGenerator.freeCashId(ring.getRingId());
+        CashIdGenerator.freeCashId(ring.getPartnerRingId());
 
-                    ps.setInt(1, ring.getPartnerRingId());
-                    ps.addBatch();
-
-                    ps.executeBatch();
-                }
-
-                CashIdGenerator.freeCashId(ring.getRingId());
-                CashIdGenerator.freeCashId(ring.getPartnerRingId());
-
-                try (PreparedStatement ps = con.prepareStatement("UPDATE inventoryequipment SET ringid=-1 WHERE ringid=?")) {
-                    ps.setInt(1, ring.getRingId());
-                    ps.addBatch();
-
-                    ps.setInt(1, ring.getPartnerRingId());
-                    ps.addBatch();
-
-                    ps.executeBatch();
-                }
-            }
-        } catch (SQLException ex) {
-            ex.printStackTrace();
+        if (equipMapper != null) {
+            InventoryequipmentDO updateEntity = new InventoryequipmentDO();
+            updateEntity.setRingid(-1);
+            
+            equipMapper.updateByQuery(updateEntity, new QueryWrapper().in("ringid", Arrays.asList(ring.getRingId(), ring.getPartnerRingId())));
         }
     }
 
     public static Pair<Integer, Integer> createRing(int itemid, final Character partner1, final Character partner2) {
-        try {
-            if (partner1 == null) {
-                return new Pair<>(-3, -3);
-            } else if (partner2 == null) {
-                return new Pair<>(-2, -2);
-            }
-
-            int[] ringID = new int[2];
-            ringID[0] = CashIdGenerator.generateCashId();
-            ringID[1] = CashIdGenerator.generateCashId();
-
-            try (Connection con = DatabaseConnection.getConnection()) {
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO rings (id, itemid, partnerRingId, partnerChrId, partnername) VALUES (?, ?, ?, ?, ?)")) {
-                    ps.setInt(1, ringID[0]);
-                    ps.setInt(2, itemid);
-                    ps.setInt(3, ringID[1]);
-                    ps.setInt(4, partner2.getId());
-                    ps.setString(5, partner2.getName());
-                    ps.executeUpdate();
-                }
-
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO rings (id, itemid, partnerRingId, partnerChrId, partnername) VALUES (?, ?, ?, ?, ?)")) {
-                    ps.setInt(1, ringID[1]);
-                    ps.setInt(2, itemid);
-                    ps.setInt(3, ringID[0]);
-                    ps.setInt(4, partner1.getId());
-                    ps.setString(5, partner1.getName());
-                    ps.executeUpdate();
-                }
-            }
-            return new Pair<>(ringID[0], ringID[1]);
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            return new Pair<>(-1, -1);
+        if (partner1 == null) {
+            return new Pair<>(-3, -3);
+        } else if (partner2 == null) {
+            return new Pair<>(-2, -2);
         }
+
+        int[] ringID = new int[2];
+        ringID[0] = CashIdGenerator.generateCashId();
+        ringID[1] = CashIdGenerator.generateCashId();
+
+        RingsMapper mapper = SpringContextUtil.getBean(RingsMapper.class);
+        if (mapper != null) {
+            RingsDO r1 = new RingsDO();
+            r1.setId(ringID[0]);
+            r1.setItemid(itemid);
+            r1.setPartnerRingId(ringID[1]);
+            r1.setPartnerChrId(partner2.getId());
+            r1.setPartnerName(partner2.getName());
+            mapper.insert(r1);
+
+            RingsDO r2 = new RingsDO();
+            r2.setId(ringID[1]);
+            r2.setItemid(itemid);
+            r2.setPartnerRingId(ringID[0]);
+            r2.setPartnerChrId(partner1.getId());
+            r2.setPartnerName(partner1.getName());
+            mapper.insert(r2);
+            
+            return new Pair<>(ringID[0], ringID[1]);
+        }
+        
+        return new Pair<>(-1, -1);
     }
 
     public int getRingId() {
