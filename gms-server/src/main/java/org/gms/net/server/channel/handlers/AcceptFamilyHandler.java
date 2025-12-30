@@ -26,20 +26,19 @@ import org.gms.client.Client;
 import org.gms.client.Family;
 import org.gms.client.FamilyEntry;
 import org.gms.config.GameConfig;
+import org.gms.dao.entity.FamilyCharacterDO;
+import org.gms.dao.mapper.CharactersMapper;
+import org.gms.dao.mapper.FamilyCharacterMapper;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.coordinator.world.InviteCoordinator;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResult;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResultType;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteType;
+import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.util.DatabaseConnection;
-import org.gms.util.PacketCreator;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 
 /**
  * @author Jay Estrella
@@ -47,6 +46,14 @@ import java.sql.SQLException;
  */
 public final class AcceptFamilyHandler extends AbstractPacketHandler {
     private static final Logger log = LoggerFactory.getLogger(AcceptFamilyHandler.class);
+
+    private static FamilyCharacterMapper familyCharacterMapper;
+    private static CharactersMapper charactersMapper;
+
+    static {
+        familyCharacterMapper = SpringContextUtil.getBean(FamilyCharacterMapper.class);
+        charactersMapper = SpringContextUtil.getBean(CharactersMapper.class);
+    }
 
     @Override
     public void handlePacket(InPacket p, Client c) {
@@ -129,26 +136,21 @@ public final class AcceptFamilyHandler extends AbstractPacketHandler {
     }
 
     private static void insertNewFamilyRecord(int characterID, int familyID, int seniorID, boolean updateChar) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("INSERT INTO family_character (cid, familyid, seniorid) VALUES (?, ?, ?)")) {
-                ps.setInt(1, characterID);
-                ps.setInt(2, familyID);
-                ps.setInt(3, seniorID);
-                ps.executeUpdate();
-            } catch (SQLException e) {
-                log.error("Could not save new family record for chrId {}", characterID, e);
+        try {
+            FamilyCharacterDO familyCharacterDO = new FamilyCharacterDO();
+            familyCharacterDO.setCid(characterID);
+            familyCharacterDO.setFamilyid(familyID);
+            familyCharacterDO.setSeniorid(seniorID);
+            familyCharacterMapper.insert(familyCharacterDO);
+        } catch (Exception e) {
+            log.error("Could not save new family record for chrId {}", characterID, e);
+        }
+        if (updateChar) {
+            try {
+                charactersMapper.updateFamilyId(characterID, familyID);
+            } catch (Exception e) {
+                log.error("Could not update 'characters' 'familyid' record for chrId {}", characterID, e);
             }
-            if (updateChar) {
-                try (PreparedStatement ps = con.prepareStatement("UPDATE characters SET familyid = ? WHERE id = ?")) {
-                    ps.setInt(1, familyID);
-                    ps.setInt(2, characterID);
-                    ps.executeUpdate();
-                } catch (SQLException e) {
-                    log.error("Could not update 'characters' 'familyid' record for chrId {}", characterID, e);
-                }
-            }
-        } catch (SQLException e) {
-            log.error("Could not get connection to DB while inserting new family record", e);
         }
     }
 }

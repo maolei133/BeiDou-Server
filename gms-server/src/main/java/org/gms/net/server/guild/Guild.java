@@ -21,9 +21,14 @@
 */
 package org.gms.net.server.guild;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.config.GameConfig;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.dao.entity.GuildsDO;
+import org.gms.dao.mapper.CharactersMapper;
+import org.gms.dao.mapper.GuildsMapper;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.PlayerStorage;
 import org.gms.net.server.Server;
@@ -32,23 +37,13 @@ import org.gms.net.server.coordinator.matchchecker.MatchCheckerCoordinator;
 import org.gms.net.server.coordinator.world.InviteCoordinator;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResult;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteType;
+import org.gms.service.NoteService;
+import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.service.NoteService;
-import org.gms.util.DatabaseConnection;
-import org.gms.util.PacketCreator;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -69,49 +64,45 @@ public class Guild {
     private final Map<Integer, List<Integer>> notifications = new LinkedHashMap<>();
     private boolean bDirty = true;
 
+    private static GuildsMapper guildsMapper;
+    private static CharactersMapper charactersMapper;
+
+    static {
+        guildsMapper = SpringContextUtil.getBean(GuildsMapper.class);
+        charactersMapper = SpringContextUtil.getBean(CharactersMapper.class);
+    }
+
     public Guild(int guildid, int world) {
         this.world = world;
         members = new ArrayList<>();
 
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("SELECT * FROM guilds WHERE guildid = " + guildid);
-                 ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    id = -1;
-                    return;
-                }
-                id = guildid;
-                name = rs.getString("name");
-                gp = rs.getInt("GP");
-                logo = rs.getInt("logo");
-                logoColor = rs.getInt("logoColor");
-                logoBG = rs.getInt("logoBG");
-                logoBGColor = rs.getInt("logoBGColor");
-                capacity = rs.getInt("capacity");
-                for (int i = 1; i <= 5; i++) {
-                    rankTitles[i - 1] = rs.getString("rank" + i + "title");
-                }
-                leader = rs.getInt("leader");
-                notice = rs.getString("notice");
-                signature = rs.getInt("signature");
-                allianceId = rs.getInt("allianceId");
-            }
+        GuildsDO guildDO = guildsMapper.selectOneById(guildid);
+        if (guildDO == null) {
+            id = -1;
+            return;
+        }
 
-            try (PreparedStatement ps = con.prepareStatement("SELECT id, name, level, job, guildrank, allianceRank FROM characters WHERE guildid = ? ORDER BY guildrank ASC, name ASC")) {
-                ps.setInt(1, guildid);
+        id = guildid;
+        name = guildDO.getName();
+        gp = guildDO.getGp() != null ? guildDO.getGp().intValue() : 0;
+        logo = guildDO.getLogo() != null ? guildDO.getLogo().intValue() : 0;
+        logoColor = guildDO.getLogoColor() != null ? guildDO.getLogoColor() : 0;
+        logoBG = guildDO.getLogoBG() != null ? guildDO.getLogoBG().intValue() : 0;
+        logoBGColor = guildDO.getLogoBGColor() != null ? guildDO.getLogoBGColor() : 0;
+        capacity = guildDO.getCapacity() != null ? guildDO.getCapacity().intValue() : 0;
+        rankTitles[0] = guildDO.getRank1title();
+        rankTitles[1] = guildDO.getRank2title();
+        rankTitles[2] = guildDO.getRank3title();
+        rankTitles[3] = guildDO.getRank4title();
+        rankTitles[4] = guildDO.getRank5title();
+        leader = guildDO.getLeader() != null ? guildDO.getLeader().intValue() : 0;
+        notice = guildDO.getNotice();
+        signature = guildDO.getSignature() != null ? guildDO.getSignature() : 0;
+        allianceId = guildDO.getAllianceId() != null ? guildDO.getAllianceId().intValue() : 0;
 
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) {
-                        return;
-                    }
-
-                    do {
-                        members.add(new GuildCharacter(null, rs.getInt("id"), rs.getInt("level"), rs.getString("name"), (byte) -1, world, rs.getInt("job"), rs.getInt("guildrank"), guildid, false, rs.getInt("allianceRank")));
-                    } while (rs.next());
-                }
-            }
-        } catch (SQLException se) {
-            log.error("Unable to read guild information from sql", se);
+        List<CharactersDO> memberList = charactersMapper.selectGuildMembers(guildid);
+        for (CharactersDO member : memberList) {
+            members.add(new GuildCharacter(null, member.getId(), member.getLevel(), member.getName(), (byte) -1, world, member.getJob(), member.getGuildrank(), guildid, false, member.getAllianceRank()));
         }
     }
 
@@ -157,49 +148,32 @@ public class Guild {
     }
 
     public void writeToDB(boolean bDisband) {
-        try (Connection con = DatabaseConnection.getConnection()) {
+        if (!bDisband) {
+            GuildsDO guildDO = new GuildsDO();
+            guildDO.setGuildid((long) this.id);
+            guildDO.setGp((long) gp);
+            guildDO.setLogo((long) logo);
+            guildDO.setLogoColor(logoColor);
+            guildDO.setLogoBG((long) logoBG);
+            guildDO.setLogoBGColor(logoBGColor);
+            guildDO.setRank1title(rankTitles[0]);
+            guildDO.setRank2title(rankTitles[1]);
+            guildDO.setRank3title(rankTitles[2]);
+            guildDO.setRank4title(rankTitles[3]);
+            guildDO.setRank5title(rankTitles[4]);
+            guildDO.setCapacity((long) capacity);
+            guildDO.setNotice(notice);
+            guildsMapper.update(guildDO);
+        } else {
+            charactersMapper.resetGuildInfoByGuildId(this.id);
+            guildsMapper.deleteById(this.id);
 
-            if (!bDisband) {
-                StringBuilder builder = new StringBuilder();
-                builder.append("UPDATE guilds SET GP = ?, logo = ?, logoColor = ?, logoBG = ?, logoBGColor = ?, ");
-                for (int i = 0; i < 5; i++) {
-                    builder.append("rank").append(i + 1).append("title = ?, ");
-                }
-                builder.append("capacity = ?, notice = ? WHERE guildid = ?");
-                try (PreparedStatement ps = con.prepareStatement(builder.toString())) {
-                    ps.setInt(1, gp);
-                    ps.setInt(2, logo);
-                    ps.setInt(3, logoColor);
-                    ps.setInt(4, logoBG);
-                    ps.setInt(5, logoBGColor);
-                    for (int i = 6; i < 11; i++) {
-                        ps.setString(i, rankTitles[i - 6]);
-                    }
-                    ps.setInt(11, capacity);
-                    ps.setString(12, notice);
-                    ps.setInt(13, this.id);
-                    ps.executeUpdate();
-                }
-            } else {
-                try (PreparedStatement ps = con.prepareStatement("UPDATE characters SET guildid = 0, guildrank = 5 WHERE guildid = ?")) {
-                    ps.setInt(1, this.id);
-                    ps.executeUpdate();
-                }
-
-                try (PreparedStatement ps = con.prepareStatement("DELETE FROM guilds WHERE guildid = ?")) {
-                    ps.setInt(1, this.id);
-                    ps.executeUpdate();
-                }
-
-                membersLock.lock();
-                try {
-                    this.broadcast(GuildPackets.guildDisband(this.id));
-                } finally {
-                    membersLock.unlock();
-                }
+            membersLock.lock();
+            try {
+                this.broadcast(GuildPackets.guildDisband(this.id));
+            } finally {
+                membersLock.unlock();
             }
-        } catch (SQLException se) {
-            se.printStackTrace();
         }
     }
 
@@ -430,39 +404,22 @@ public class Guild {
     }
 
     public static int createGuild(int leaderId, String name) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-
-            try (PreparedStatement ps = con.prepareStatement("SELECT guildid FROM guilds WHERE name = ?")) {
-                ps.setString(1, name);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        return 0;
-                    }
-                }
+        try {
+            GuildsDO existingGuild = guildsMapper.selectOneByQuery(QueryWrapper.create().where("name = ?", name));
+            if (existingGuild != null) {
+                return 0;
             }
 
-            try (PreparedStatement ps = con.prepareStatement("INSERT INTO guilds (`leader`, `name`, `signature`) VALUES (?, ?, ?)")) {
-                ps.setInt(1, leaderId);
-                ps.setString(2, name);
-                ps.setInt(3, (int) System.currentTimeMillis());
-                ps.executeUpdate();
-            }
+            GuildsDO newGuild = new GuildsDO();
+            newGuild.setLeader((long) leaderId);
+            newGuild.setName(name);
+            newGuild.setSignature((int) System.currentTimeMillis());
+            guildsMapper.insert(newGuild);
 
-            final int guildId;
-            try (PreparedStatement ps = con.prepareStatement("SELECT guildid FROM guilds WHERE leader = ?")) {
-                ps.setInt(1, leaderId);
+            GuildsDO createdGuild = guildsMapper.selectOneByQuery(QueryWrapper.create().where("leader = ?", leaderId));
+            int guildId = createdGuild.getGuildid().intValue();
 
-                try (ResultSet rs = ps.executeQuery()) {
-                    rs.next();
-                    guildId = rs.getInt("guildid");
-                }
-            }
-
-            try (PreparedStatement ps = con.prepareStatement("UPDATE characters SET guildid = ? WHERE id = ?")) {
-                ps.setInt(1, guildId);
-                ps.setInt(2, leaderId);
-                ps.executeUpdate();
-            }
+            charactersMapper.updateGuildInfo(leaderId, guildId, 1);
 
             return guildId;
         } catch (Exception e) {
@@ -759,13 +716,13 @@ public class Guild {
     }
 
     public static void displayGuildRanks(Client c, int npcid) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT `name`, `GP`, `logoBG`, `logoBGColor`, `logo`, `logoColor` FROM guilds ORDER BY `GP` DESC LIMIT 50", ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
-             ResultSet rs = ps.executeQuery()) {
-            c.sendPacket(GuildPackets.showGuildRanks(npcid, rs));
-        } catch (SQLException e) {
-            log.error("Failed to display guild ranks.", e);
-        }
+        List<GuildsDO> guilds = guildsMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .select("name", "GP", "logoBG", "logoBGColor", "logo", "logoColor")
+                        .orderBy("GP", false)
+                        .limit(50)
+        );
+        c.sendPacket(GuildPackets.showGuildRanks(npcid, guilds));
     }
 
     public int getAllianceId() {
@@ -774,38 +731,25 @@ public class Guild {
 
     public void setAllianceId(int aid) {
         this.allianceId = aid;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE guilds SET allianceId = ? WHERE guildid = ?")) {
-            ps.setInt(1, aid);
-            ps.setInt(2, id);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        GuildsDO guildDO = new GuildsDO();
+        guildDO.setGuildid((long) id);
+        guildDO.setAllianceId((long) aid);
+        guildsMapper.update(guildDO);
     }
 
     public void resetAllianceGuildPlayersRank() {
+        membersLock.lock();
         try {
-            membersLock.lock();
-            try {
-                for (GuildCharacter mgc : members) {
-                    if (mgc.isOnline()) {
-                        mgc.setAllianceRank(5);
-                    }
+            for (GuildCharacter mgc : members) {
+                if (mgc.isOnline()) {
+                    mgc.setAllianceRank(5);
                 }
-            } finally {
-                membersLock.unlock();
             }
-
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("UPDATE characters SET allianceRank = ? WHERE guildid = ?")) {
-                ps.setInt(1, 5);
-                ps.setInt(2, id);
-                ps.executeUpdate();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        } finally {
+            membersLock.unlock();
         }
+
+        charactersMapper.updateAllianceRankByGuildId(id, 5);
     }
 
     public static int getIncreaseGuildCost(int size) {

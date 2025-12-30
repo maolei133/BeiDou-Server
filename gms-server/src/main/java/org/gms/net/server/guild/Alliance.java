@@ -21,8 +21,13 @@
 */
 package org.gms.net.server.guild;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.dao.entity.AllianceDO;
+import org.gms.dao.entity.AllianceguildsDO;
+import org.gms.dao.mapper.AllianceMapper;
+import org.gms.dao.mapper.AllianceguildsMapper;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.Server;
 import org.gms.net.server.coordinator.world.InviteCoordinator;
@@ -30,12 +35,8 @@ import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResult;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteType;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
-import org.gms.util.DatabaseConnection;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -52,6 +53,14 @@ public class Alliance {
     private String notice = "";
     private String[] rankTitles = new String[5];
 
+    private static AllianceMapper allianceMapper;
+    private static AllianceguildsMapper allianceguildsMapper;
+
+    static {
+        allianceMapper = SpringContextUtil.getBean(AllianceMapper.class);
+        allianceguildsMapper = SpringContextUtil.getBean(AllianceguildsMapper.class);
+    }
+
     public Alliance(String name, int id) {
         this.name = name;
         allianceId = id;
@@ -66,21 +75,8 @@ public class Alliance {
             return false;
         }
 
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT name FROM alliance WHERE name = ?")) {
-            ps.setString(1, name);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return false;
-                }
-            }
-
-            return true;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
+        AllianceDO alliance = allianceMapper.selectOneByQuery(QueryWrapper.create().where("name = ?", name));
+        return alliance == null;
     }
 
     private static List<Character> getPartyGuildMasters(Party party) {
@@ -155,27 +151,19 @@ public class Alliance {
     public static Alliance createAllianceOnDb(List<Integer> guilds, String name) {
         // will create an alliance, where the first guild listed is the leader and the alliance name MUST BE already checked for unicity.
 
-        int id = -1;
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("INSERT INTO `alliance` (`name`) VALUES (?)", PreparedStatement.RETURN_GENERATED_KEYS)) {
-                ps.setString(1, name);
-                ps.executeUpdate();
-                try (ResultSet rs = ps.getGeneratedKeys()) {
-                    rs.next();
-                    id = rs.getInt(1);
-                }
-            }
+        AllianceDO allianceDO = new AllianceDO();
+        allianceDO.setName(name);
+        allianceMapper.insert(allianceDO);
+        
+        // 获取生成的ID
+        // MyBatis Flex insert后会自动回填ID到实体类
+        int id = allianceDO.getId().intValue();
 
-            for (int guild : guilds) {
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO `allianceguilds` (`allianceid`, `guildid`) VALUES (?, ?)")) {
-                    ps.setInt(1, id);
-                    ps.setInt(2, guild);
-                    ps.executeUpdate();
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return null;
+        for (int guild : guilds) {
+            AllianceguildsDO allianceguildsDO = new AllianceguildsDO();
+            allianceguildsDO.setAllianceid(id);
+            allianceguildsDO.setGuildid(guild);
+            allianceguildsMapper.insert(allianceguildsDO);
         }
 
         return new Alliance(name, id);
@@ -186,108 +174,68 @@ public class Alliance {
             return null;
         }
         Alliance alliance = new Alliance(null, -1);
-        try (Connection con = DatabaseConnection.getConnection()) {
+        
+        AllianceDO allianceDO = allianceMapper.selectOneById(id);
+        if (allianceDO == null) {
+            return null;
+        }
 
-            try (PreparedStatement ps = con.prepareStatement("SELECT * FROM alliance WHERE id = ?")) {
-                ps.setInt(1, id);
+        alliance.allianceId = id;
+        alliance.capacity = allianceDO.getCapacity() != null ? allianceDO.getCapacity().intValue() : 0;
+        alliance.name = allianceDO.getName();
+        alliance.notice = allianceDO.getNotice();
 
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) {
-                        return null;
-                    }
+        String[] ranks = new String[5];
+        ranks[0] = allianceDO.getRank1();
+        ranks[1] = allianceDO.getRank2();
+        ranks[2] = allianceDO.getRank3();
+        ranks[3] = allianceDO.getRank4();
+        ranks[4] = allianceDO.getRank5();
+        alliance.rankTitles = ranks;
 
-                    alliance.allianceId = id;
-                    alliance.capacity = rs.getInt("capacity");
-                    alliance.name = rs.getString("name");
-                    alliance.notice = rs.getString("notice");
-
-                    String[] ranks = new String[5];
-                    ranks[0] = rs.getString("rank1");
-                    ranks[1] = rs.getString("rank2");
-                    ranks[2] = rs.getString("rank3");
-                    ranks[3] = rs.getString("rank4");
-                    ranks[4] = rs.getString("rank5");
-                    alliance.rankTitles = ranks;
-                }
-            }
-
-            try (PreparedStatement ps = con.prepareStatement("SELECT guildid FROM allianceguilds WHERE allianceid = ?")) {
-                ps.setInt(1, id);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        alliance.addGuild(rs.getInt("guildid"));
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        List<AllianceguildsDO> guildList = allianceguildsMapper.selectListByQuery(
+                QueryWrapper.create().where("allianceid = ?", id)
+        );
+        
+        for (AllianceguildsDO ag : guildList) {
+            alliance.addGuild(ag.getGuildid());
         }
 
         return alliance;
     }
 
     public void saveToDB() {
-        try (Connection con = DatabaseConnection.getConnection()) {
+        AllianceDO allianceDO = new AllianceDO();
+        allianceDO.setId((long) this.allianceId);
+        allianceDO.setCapacity((long) this.capacity);
+        allianceDO.setNotice(this.notice);
+        allianceDO.setRank1(this.rankTitles[0]);
+        allianceDO.setRank2(this.rankTitles[1]);
+        allianceDO.setRank3(this.rankTitles[2]);
+        allianceDO.setRank4(this.rankTitles[3]);
+        allianceDO.setRank5(this.rankTitles[4]);
+        allianceMapper.update(allianceDO);
 
-            try (PreparedStatement ps = con.prepareStatement("UPDATE `alliance` SET capacity = ?, notice = ?, rank1 = ?, rank2 = ?, rank3 = ?, rank4 = ?, rank5 = ? WHERE id = ?")) {
-                ps.setInt(1, this.capacity);
-                ps.setString(2, this.notice);
+        allianceguildsMapper.deleteByQuery(QueryWrapper.create().where("allianceid = ?", this.allianceId));
 
-                ps.setString(3, this.rankTitles[0]);
-                ps.setString(4, this.rankTitles[1]);
-                ps.setString(5, this.rankTitles[2]);
-                ps.setString(6, this.rankTitles[3]);
-                ps.setString(7, this.rankTitles[4]);
-
-                ps.setInt(8, this.allianceId);
-                ps.executeUpdate();
-            }
-
-            try (PreparedStatement ps = con.prepareStatement("DELETE FROM `allianceguilds` WHERE allianceid = ?")) {
-                ps.setInt(1, this.allianceId);
-                ps.executeUpdate();
-            }
-
-            for (int guild : guilds) {
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO `allianceguilds` (`allianceid`, `guildid`) VALUES (?, ?)")) {
-                    ps.setInt(1, this.allianceId);
-                    ps.setInt(2, guild);
-                    ps.executeUpdate();
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        for (int guild : guilds) {
+            AllianceguildsDO allianceguildsDO = new AllianceguildsDO();
+            allianceguildsDO.setAllianceid(this.allianceId);
+            allianceguildsDO.setGuildid(guild);
+            allianceguildsMapper.insert(allianceguildsDO);
         }
     }
 
     public static void disbandAlliance(int allianceId) {
-        try (Connection con = DatabaseConnection.getConnection()) {
+        allianceMapper.deleteById(allianceId);
+        allianceguildsMapper.deleteByQuery(QueryWrapper.create().where("allianceid = ?", allianceId));
 
-            try (PreparedStatement ps = con.prepareStatement("DELETE FROM `alliance` WHERE id = ?")) {
-                ps.setInt(1, allianceId);
-                ps.executeUpdate();
-            }
-
-            try (PreparedStatement ps = con.prepareStatement("DELETE FROM `allianceguilds` WHERE allianceid = ?")) {
-                ps.setInt(1, allianceId);
-                ps.executeUpdate();
-            }
-
-            Server.getInstance().allianceMessage(allianceId, GuildPackets.disbandAlliance(allianceId), -1, -1);
-            Server.getInstance().disbandAlliance(allianceId);
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        }
+        Server.getInstance().allianceMessage(allianceId, GuildPackets.disbandAlliance(allianceId), -1, -1);
+        Server.getInstance().disbandAlliance(allianceId);
     }
 
     private static void removeGuildFromAllianceOnDb(int guildId) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("DELETE FROM `allianceguilds` WHERE guildid = ?")) {
-            ps.setInt(1, guildId);
-            ps.executeUpdate();
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        }
+        allianceguildsMapper.deleteByQuery(QueryWrapper.create().where("guildid = ?", guildId));
     }
 
     public static boolean removeGuildFromAlliance(int allianceId, int guildId, int worldId) {
@@ -306,7 +254,7 @@ public class Alliance {
         srv.allianceMessage(alliance.getId(), GuildPackets.allianceNotice(alliance.getId(), alliance.getNotice()), -1, -1);
         srv.guildMessage(guildId, GuildPackets.disbandAlliance(alliance.getId()));
 
-        alliance.dropMessage("[" + srv.getGuild(guildId, worldId).getName() + "] guild has left the union.");
+        alliance.dropMessage("[" + srv.getGuild(guildId, worldId).getName() + "] 家族离开了联盟。");
         return true;
     }
 
@@ -438,19 +386,19 @@ public class Alliance {
     public static void sendInvitation(Client c, String targetGuildName, int allianceId) {
         Guild mg = Server.getInstance().getGuildByName(targetGuildName);
         if (mg == null) {
-            c.getPlayer().dropMessage(5, "The entered guild does not exist.");
+            c.getPlayer().dropMessage(5, "输入的家族不存在。");
         } else {
             if (mg.getAllianceId() > 0) {
-                c.getPlayer().dropMessage(5, "The entered guild is already registered on a guild alliance.");
+                c.getPlayer().dropMessage(5, "输入的家族已经加入了家族联盟。");
             } else {
                 Character victim = mg.getMGC(mg.getLeaderId()).getCharacter();
                 if (victim == null) {
-                    c.getPlayer().dropMessage(5, "The master of the guild that you offered an invitation is currently not online.");
+                    c.getPlayer().dropMessage(5, "你邀请的家族族长当前不在线。");
                 } else {
                     if (InviteCoordinator.createInvite(InviteType.ALLIANCE, c.getPlayer(), allianceId, victim.getId())) {
                         victim.sendPacket(GuildPackets.allianceInvite(allianceId, c.getPlayer()));
                     } else {
-                        c.getPlayer().dropMessage(5, "The master of the guild that you offered an invitation is currently managing another invite.");
+                        c.getPlayer().dropMessage(5, "你邀请的家族族长当前正在处理另一个邀请。");
                     }
                 }
             }
@@ -467,11 +415,11 @@ public class Alliance {
                 return true;
 
             case DENIED:
-                msg = "[" + targetGuildName + "] guild has denied your guild alliance invitation.";
+                msg = "[" + targetGuildName + "] 家族拒绝了你的家族联盟邀请。";
                 break;
 
             default:
-                msg = "The guild alliance request has not been accepted, since the invitation expired.";
+                msg = "家族联盟请求未被接受，因为邀请已过期。";
         }
 
         if (sender != null) {

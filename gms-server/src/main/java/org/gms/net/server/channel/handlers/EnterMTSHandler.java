@@ -21,12 +21,15 @@
 */
 package org.gms.net.server.channel.handlers;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.Equip;
 import org.gms.client.inventory.Item;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.NpcId;
+import org.gms.dao.entity.MtsItemsDO;
+import org.gms.dao.mapper.MtsItemsMapper;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
@@ -34,18 +37,19 @@ import org.gms.scripting.npc.NPCScriptManager;
 import org.gms.server.MTSItemInfo;
 import org.gms.server.maps.FieldLimit;
 import org.gms.server.maps.MiniDungeonInfo;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-
 public final class EnterMTSHandler extends AbstractPacketHandler {
+
+    private static MtsItemsMapper mtsItemsMapper;
+
+    static {
+        mtsItemsMapper = SpringContextUtil.getBean(MtsItemsMapper.class);
+    }
 
     @Override
     public void handlePacket(InPacket p, Client c) {
@@ -57,19 +61,19 @@ public final class EnterMTSHandler extends AbstractPacketHandler {
         }
 
         if (chr.getEventInstance() != null) {
-            c.sendPacket(PacketCreator.serverNotice(5, "Entering Cash Shop or MTS are disabled when registered on an event."));
+            c.sendPacket(PacketCreator.serverNotice(5, "注册活动时禁止进入商城或拍卖行。"));
             c.sendPacket(PacketCreator.enableActions());
             return;
         }
 
         if (MiniDungeonInfo.isDungeonMap(chr.getMapId())) {
-            c.sendPacket(PacketCreator.serverNotice(5, "Changing channels or entering Cash Shop or MTS are disabled when inside a Mini-Dungeon."));
+            c.sendPacket(PacketCreator.serverNotice(5, "在迷你副本中禁止切换频道或进入商城/拍卖行。"));
             c.sendPacket(PacketCreator.enableActions());
             return;
         }
 
         if (FieldLimit.CANNOTMIGRATE.check(chr.getMap().getFieldLimit())) {
-            chr.dropMessage(1, "You can't do it here in this map.");
+            chr.dropMessage(1, "你不能在这个地图这样做。");
             c.sendPacket(PacketCreator.enableActions());
             return;
         }
@@ -118,57 +122,57 @@ public final class EnterMTSHandler extends AbstractPacketHandler {
         c.sendPacket(PacketCreator.showMTSCash(c.getPlayer()));
         List<MTSItemInfo> items = new ArrayList<>();
         int pages = 0;
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("SELECT * FROM mts_items WHERE tab = 1 AND transfer = 0 ORDER BY id DESC LIMIT 16, 16");
-                 ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    if (rs.getInt("type") != 1) {
-                        Item i = new Item(rs.getInt("itemid"), (short) 0, (short) rs.getInt("quantity"));
-                        i.setOwner(rs.getString("owner"));
-                        items.add(new MTSItemInfo(i, rs.getInt("price") + 100 + (int) (rs.getInt("price") * 0.1), rs.getInt("id"), rs.getInt("seller"), rs.getString("sellername"), rs.getString("sell_ends")));
-                    } else {
-                        Equip equip = new Equip(rs.getInt("itemid"), (byte) rs.getInt("position"), -1);
-                        equip.setOwner(rs.getString("owner"));
-                        equip.setQuantity((short) 1);
-                        equip.setAcc((short) rs.getInt("acc"));
-                        equip.setAvoid((short) rs.getInt("avoid"));
-                        equip.setDex((short) rs.getInt("dex"));
-                        equip.setHands((short) rs.getInt("hands"));
-                        equip.setHp((short) rs.getInt("hp"));
-                        equip.setInt((short) rs.getInt("int"));
-                        equip.setJump((short) rs.getInt("jump"));
-                        equip.setVicious((short) rs.getInt("vicious"));
-                        equip.setFlag((short) rs.getInt("flag"));
-                        equip.setLuk((short) rs.getInt("luk"));
-                        equip.setMatk((short) rs.getInt("matk"));
-                        equip.setMdef((short) rs.getInt("mdef"));
-                        equip.setMp((short) rs.getInt("mp"));
-                        equip.setSpeed((short) rs.getInt("speed"));
-                        equip.setStr((short) rs.getInt("str"));
-                        equip.setWatk((short) rs.getInt("watk"));
-                        equip.setWdef((short) rs.getInt("wdef"));
-                        equip.setUpgradeSlots((byte) rs.getInt("upgradeslots"));
-                        equip.setLevel((byte) rs.getInt("level"));
-                        equip.setItemLevel(rs.getByte("itemlevel"));
-                        equip.setItemExp(rs.getInt("itemexp"));
-                        equip.setRingId(rs.getInt("ringid"));
-                        equip.setExpiration(rs.getLong("expiration"));
-                        equip.setGiftFrom(rs.getString("giftFrom"));
 
-                        items.add(new MTSItemInfo(equip, rs.getInt("price") + 100 + (int) (rs.getInt("price") * 0.1), rs.getInt("id"), rs.getInt("seller"), rs.getString("sellername"), rs.getString("sell_ends")));
-                    }
-                }
-            }
+        List<MtsItemsDO> result = mtsItemsMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .where("tab = 1 AND transfer = 0")
+                        .orderBy("id", false)
+                        .limit(16, 16)
+        );
 
-            try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM mts_items");
-                 ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    pages = (int) Math.ceil(rs.getInt(1) / 16);
-                }
+        for (MtsItemsDO rs : result) {
+            if (rs.getType() != 1) {
+                Item i = new Item(rs.getItemid().intValue(), (short) 0, (short) rs.getQuantity().intValue());
+                i.setOwner(rs.getOwner());
+                items.add(new MTSItemInfo(i, rs.getPrice() + 100 + (int) (rs.getPrice() * 0.1), rs.getId().intValue(), rs.getSeller(), rs.getSellername(), rs.getSellEnds()));
+            } else {
+                Equip equip = new Equip(rs.getItemid().intValue(), (byte) rs.getPosition().intValue(), -1);
+                equip.setOwner(rs.getOwner());
+                equip.setQuantity((short) 1);
+                equip.setAcc(rs.getAcc() != null ? rs.getAcc().shortValue() : 0);
+                equip.setAvoid(rs.getAvoid() != null ? rs.getAvoid().shortValue() : 0);
+                equip.setDex(rs.getDex() != null ? rs.getDex().shortValue() : 0);
+                equip.setHands(rs.getHands() != null ? rs.getHands().shortValue() : 0);
+                equip.setHp(rs.getHp() != null ? rs.getHp().shortValue() : 0);
+                equip.setInt(rs.getInte() != null ? rs.getInte().shortValue() : 0);
+                equip.setJump(rs.getJump() != null ? rs.getJump().shortValue() : 0);
+                equip.setVicious(rs.getVicious() != null ? rs.getVicious().byteValue() : 0);
+                equip.setFlag(rs.getFlag() != null ? rs.getFlag().shortValue() : 0);
+                equip.setLuk(rs.getLuk() != null ? rs.getLuk().shortValue() : 0);
+                equip.setMatk(rs.getMatk() != null ? rs.getMatk().shortValue() : 0);
+                equip.setMdef(rs.getMdef() != null ? rs.getMdef().shortValue() : 0);
+                equip.setMp(rs.getMp() != null ? rs.getMp().shortValue() : 0);
+                equip.setSpeed(rs.getSpeed() != null ? rs.getSpeed().shortValue() : 0);
+                equip.setStr(rs.getStr() != null ? rs.getStr().shortValue() : 0);
+                equip.setWatk(rs.getWatk() != null ? rs.getWatk().shortValue() : 0);
+                equip.setWdef(rs.getWdef() != null ? rs.getWdef().shortValue() : 0);
+                equip.setUpgradeSlots(rs.getUpgradeslots() != null ? rs.getUpgradeslots().byteValue() : 0);
+                equip.setLevel(rs.getLevel() != null ? rs.getLevel().byteValue() : 0);
+                equip.setItemLevel(rs.getItemlevel() != null ? rs.getItemlevel().byteValue() : 0);
+                equip.setItemExp(rs.getItemexp() != null ? rs.getItemexp().intValue() : 0);
+                equip.setRingId(rs.getRingid() != null ? rs.getRingid() : -1);
+                equip.setExpiration(rs.getExpiration() != null ? rs.getExpiration() : -1);
+                equip.setGiftFrom(rs.getGiftFrom());
+
+                items.add(new MTSItemInfo(equip, rs.getPrice() + 100 + (int) (rs.getPrice() * 0.1), rs.getId().intValue(), rs.getSeller(), rs.getSellername(), rs.getSellEnds()));
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
+
+        long count = mtsItemsMapper.selectCountByQuery(QueryWrapper.create());
+        if (count > 0) {
+            pages = (int) Math.ceil((double) count / 16);
+        }
+
         c.sendPacket(PacketCreator.sendMTS(items, 1, 0, 0, pages));
         c.sendPacket(PacketCreator.transferInventory(getTransfer(chr.getId())));
         c.sendPacket(PacketCreator.notYetSoldInv(getNotYetSold(chr.getId())));
@@ -176,100 +180,94 @@ public final class EnterMTSHandler extends AbstractPacketHandler {
 
     private List<MTSItemInfo> getNotYetSold(int cid) {
         List<MTSItemInfo> items = new ArrayList<>();
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT * FROM mts_items WHERE seller = ? AND transfer = 0 ORDER BY id DESC")) {
-            ps.setInt(1, cid);
+        List<MtsItemsDO> result = mtsItemsMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .where("seller = ? AND transfer = 0", cid)
+                        .orderBy("id", false)
+        );
 
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    if (rs.getInt("type") != 1) {
-                        Item i = new Item(rs.getInt("itemid"), (short) 0, (short) rs.getInt("quantity"));
-                        i.setOwner(rs.getString("owner"));
-                        items.add(new MTSItemInfo(i, rs.getInt("price"), rs.getInt("id"), rs.getInt("seller"), rs.getString("sellername"), rs.getString("sell_ends")));
-                    } else {
-                        Equip equip = new Equip(rs.getInt("itemid"), (byte) rs.getInt("position"), -1);
-                        equip.setOwner(rs.getString("owner"));
-                        equip.setQuantity((short) 1);
-                        equip.setAcc((short) rs.getInt("acc"));
-                        equip.setAvoid((short) rs.getInt("avoid"));
-                        equip.setDex((short) rs.getInt("dex"));
-                        equip.setHands((short) rs.getInt("hands"));
-                        equip.setHp((short) rs.getInt("hp"));
-                        equip.setInt((short) rs.getInt("int"));
-                        equip.setJump((short) rs.getInt("jump"));
-                        equip.setVicious((short) rs.getInt("vicious"));
-                        equip.setLuk((short) rs.getInt("luk"));
-                        equip.setMatk((short) rs.getInt("matk"));
-                        equip.setMdef((short) rs.getInt("mdef"));
-                        equip.setMp((short) rs.getInt("mp"));
-                        equip.setSpeed((short) rs.getInt("speed"));
-                        equip.setStr((short) rs.getInt("str"));
-                        equip.setWatk((short) rs.getInt("watk"));
-                        equip.setWdef((short) rs.getInt("wdef"));
-                        equip.setUpgradeSlots((byte) rs.getInt("upgradeslots"));
-                        equip.setLevel((byte) rs.getInt("level"));
-                        equip.setItemLevel(rs.getByte("itemlevel"));
-                        equip.setItemExp(rs.getInt("itemexp"));
-                        equip.setRingId(rs.getInt("ringid"));
-                        equip.setFlag((short) rs.getInt("flag"));
-                        equip.setExpiration(rs.getLong("expiration"));
-                        equip.setGiftFrom(rs.getString("giftFrom"));
-                        items.add(new MTSItemInfo(equip, rs.getInt("price"), rs.getInt("id"), rs.getInt("seller"), rs.getString("sellername"), rs.getString("sell_ends")));
-                    }
-                }
+        for (MtsItemsDO rs : result) {
+            if (rs.getType() != 1) {
+                Item i = new Item(rs.getItemid().intValue(), (short) 0, (short) rs.getQuantity().intValue());
+                i.setOwner(rs.getOwner());
+                items.add(new MTSItemInfo(i, rs.getPrice(), rs.getId().intValue(), rs.getSeller(), rs.getSellername(), rs.getSellEnds()));
+            } else {
+                Equip equip = new Equip(rs.getItemid().intValue(), (byte) rs.getPosition().intValue(), -1);
+                equip.setOwner(rs.getOwner());
+                equip.setQuantity((short) 1);
+                equip.setAcc(rs.getAcc() != null ? rs.getAcc().shortValue() : 0);
+                equip.setAvoid(rs.getAvoid() != null ? rs.getAvoid().shortValue() : 0);
+                equip.setDex(rs.getDex() != null ? rs.getDex().shortValue() : 0);
+                equip.setHands(rs.getHands() != null ? rs.getHands().shortValue() : 0);
+                equip.setHp(rs.getHp() != null ? rs.getHp().shortValue() : 0);
+                equip.setInt(rs.getInte() != null ? rs.getInte().shortValue() : 0);
+                equip.setJump(rs.getJump() != null ? rs.getJump().shortValue() : 0);
+                equip.setVicious(rs.getVicious() != null ? rs.getVicious().byteValue() : 0);
+                equip.setLuk(rs.getLuk() != null ? rs.getLuk().shortValue() : 0);
+                equip.setMatk(rs.getMatk() != null ? rs.getMatk().shortValue() : 0);
+                equip.setMdef(rs.getMdef() != null ? rs.getMdef().shortValue() : 0);
+                equip.setMp(rs.getMp() != null ? rs.getMp().shortValue() : 0);
+                equip.setSpeed(rs.getSpeed() != null ? rs.getSpeed().shortValue() : 0);
+                equip.setStr(rs.getStr() != null ? rs.getStr().shortValue() : 0);
+                equip.setWatk(rs.getWatk() != null ? rs.getWatk().shortValue() : 0);
+                equip.setWdef(rs.getWdef() != null ? rs.getWdef().shortValue() : 0);
+                equip.setUpgradeSlots(rs.getUpgradeslots() != null ? rs.getUpgradeslots().byteValue() : 0);
+                equip.setLevel(rs.getLevel() != null ? rs.getLevel().byteValue() : 0);
+                equip.setItemLevel(rs.getItemlevel() != null ? rs.getItemlevel().byteValue() : 0);
+                equip.setItemExp(rs.getItemexp() != null ? rs.getItemexp().intValue() : 0);
+                equip.setRingId(rs.getRingid() != null ? rs.getRingid() : -1);
+                equip.setFlag(rs.getFlag() != null ? rs.getFlag().shortValue() : 0);
+                equip.setExpiration(rs.getExpiration() != null ? rs.getExpiration() : -1);
+                equip.setGiftFrom(rs.getGiftFrom());
+                items.add(new MTSItemInfo(equip, rs.getPrice(), rs.getId().intValue(), rs.getSeller(), rs.getSellername(), rs.getSellEnds()));
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
         return items;
     }
 
     private List<MTSItemInfo> getTransfer(int cid) {
         List<MTSItemInfo> items = new ArrayList<>();
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT * FROM mts_items WHERE transfer = 1 AND seller = ? ORDER BY id DESC")) {
-            ps.setInt(1, cid);
+        List<MtsItemsDO> result = mtsItemsMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .where("transfer = 1 AND seller = ?", cid)
+                        .orderBy("id", false)
+        );
 
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    if (rs.getInt("type") != 1) {
-                        Item i = new Item(rs.getInt("itemid"), (short) 0, (short) rs.getInt("quantity"));
-                        i.setOwner(rs.getString("owner"));
-                        items.add(new MTSItemInfo(i, rs.getInt("price"), rs.getInt("id"), rs.getInt("seller"), rs.getString("sellername"), rs.getString("sell_ends")));
-                    } else {
-                        Equip equip = new Equip(rs.getInt("itemid"), (byte) rs.getInt("position"), -1);
-                        equip.setOwner(rs.getString("owner"));
-                        equip.setQuantity((short) 1);
-                        equip.setAcc((short) rs.getInt("acc"));
-                        equip.setAvoid((short) rs.getInt("avoid"));
-                        equip.setDex((short) rs.getInt("dex"));
-                        equip.setHands((short) rs.getInt("hands"));
-                        equip.setHp((short) rs.getInt("hp"));
-                        equip.setInt((short) rs.getInt("int"));
-                        equip.setJump((short) rs.getInt("jump"));
-                        equip.setVicious((short) rs.getInt("vicious"));
-                        equip.setLuk((short) rs.getInt("luk"));
-                        equip.setMatk((short) rs.getInt("matk"));
-                        equip.setMdef((short) rs.getInt("mdef"));
-                        equip.setMp((short) rs.getInt("mp"));
-                        equip.setSpeed((short) rs.getInt("speed"));
-                        equip.setStr((short) rs.getInt("str"));
-                        equip.setWatk((short) rs.getInt("watk"));
-                        equip.setWdef((short) rs.getInt("wdef"));
-                        equip.setUpgradeSlots((byte) rs.getInt("upgradeslots"));
-                        equip.setLevel((byte) rs.getInt("level"));
-                        equip.setItemLevel(rs.getByte("itemlevel"));
-                        equip.setItemExp(rs.getInt("itemexp"));
-                        equip.setRingId(rs.getInt("ringid"));
-                        equip.setFlag((short) rs.getInt("flag"));
-                        equip.setExpiration(rs.getLong("expiration"));
-                        equip.setGiftFrom(rs.getString("giftFrom"));
-                        items.add(new MTSItemInfo(equip, rs.getInt("price"), rs.getInt("id"), rs.getInt("seller"), rs.getString("sellername"), rs.getString("sell_ends")));
-                    }
-                }
+        for (MtsItemsDO rs : result) {
+            if (rs.getType() != 1) {
+                Item i = new Item(rs.getItemid().intValue(), (short) 0, (short) rs.getQuantity().intValue());
+                i.setOwner(rs.getOwner());
+                items.add(new MTSItemInfo(i, rs.getPrice(), rs.getId().intValue(), rs.getSeller(), rs.getSellername(), rs.getSellEnds()));
+            } else {
+                Equip equip = new Equip(rs.getItemid().intValue(), (byte) rs.getPosition().intValue(), -1);
+                equip.setOwner(rs.getOwner());
+                equip.setQuantity((short) 1);
+                equip.setAcc(rs.getAcc() != null ? rs.getAcc().shortValue() : 0);
+                equip.setAvoid(rs.getAvoid() != null ? rs.getAvoid().shortValue() : 0);
+                equip.setDex(rs.getDex() != null ? rs.getDex().shortValue() : 0);
+                equip.setHands(rs.getHands() != null ? rs.getHands().shortValue() : 0);
+                equip.setHp(rs.getHp() != null ? rs.getHp().shortValue() : 0);
+                equip.setInt(rs.getInte() != null ? rs.getInte().shortValue() : 0);
+                equip.setJump(rs.getJump() != null ? rs.getJump().shortValue() : 0);
+                equip.setVicious(rs.getVicious() != null ? rs.getVicious().byteValue() : 0);
+                equip.setLuk(rs.getLuk() != null ? rs.getLuk().shortValue() : 0);
+                equip.setMatk(rs.getMatk() != null ? rs.getMatk().shortValue() : 0);
+                equip.setMdef(rs.getMdef() != null ? rs.getMdef().shortValue() : 0);
+                equip.setMp(rs.getMp() != null ? rs.getMp().shortValue() : 0);
+                equip.setSpeed(rs.getSpeed() != null ? rs.getSpeed().shortValue() : 0);
+                equip.setStr(rs.getStr() != null ? rs.getStr().shortValue() : 0);
+                equip.setWatk(rs.getWatk() != null ? rs.getWatk().shortValue() : 0);
+                equip.setWdef(rs.getWdef() != null ? rs.getWdef().shortValue() : 0);
+                equip.setUpgradeSlots(rs.getUpgradeslots() != null ? rs.getUpgradeslots().byteValue() : 0);
+                equip.setLevel(rs.getLevel() != null ? rs.getLevel().byteValue() : 0);
+                equip.setItemLevel(rs.getItemlevel() != null ? rs.getItemlevel().byteValue() : 0);
+                equip.setItemExp(rs.getItemexp() != null ? rs.getItemexp().intValue() : 0);
+                equip.setRingId(rs.getRingid() != null ? rs.getRingid() : -1);
+                equip.setFlag(rs.getFlag() != null ? rs.getFlag().shortValue() : 0);
+                equip.setExpiration(rs.getExpiration() != null ? rs.getExpiration() : -1);
+                equip.setGiftFrom(rs.getGiftFrom());
+                items.add(new MTSItemInfo(equip, rs.getPrice(), rs.getId().intValue(), rs.getSeller(), rs.getSellername(), rs.getSellEnds()));
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
         return items;
     }

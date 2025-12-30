@@ -21,4 +21,7 @@ public interface AccountsMapper extends BaseMapper<AccountsDO> {
     
     @Insert("INSERT INTO accounts(name, password, birthday, tempban, language) VALUES (#{name}, #{password}, #{birthday}, #{tempban}, #{language})")
     void addAccount(AccountsDO accountsDO);
+
+    @Update("UPDATE accounts SET nxPrepaid = nxPrepaid + #{amount} WHERE id = #{accountId}")
+    void addNxPrepaid(int accountId, int amount);
 }

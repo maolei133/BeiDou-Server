@@ -4,6 +4,7 @@ import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.dao.entity.BbsRepliesDO;
 import org.gms.dao.entity.BbsThreadsDO;
+import org.gms.dao.entity.GuildsDO;
 import org.gms.net.opcodes.SendOpcode;
 import org.gms.net.packet.OutPacket;
 import org.gms.net.packet.Packet;
@@ -392,6 +393,26 @@ public class GuildPackets {
             p.writeInt(rs.getInt("logoColor"));
             p.writeInt(rs.getInt("logoBG"));
             p.writeInt(rs.getInt("logoBGColor"));
+        }
+        return p;
+    }
+
+    public static Packet showGuildRanks(int npcid, List<GuildsDO> guilds) {
+        OutPacket p = OutPacket.create(SendOpcode.GUILD_OPERATION);
+        p.writeByte(0x49);
+        p.writeInt(npcid);
+        if (guilds.isEmpty()) {
+            p.writeInt(0);
+            return p;
+        }
+        p.writeInt(guilds.size());
+        for (GuildsDO guild : guilds) {
+            p.writeString(guild.getName());
+            p.writeInt(guild.getGp().intValue());
+            p.writeInt(guild.getLogo().intValue());
+            p.writeInt(guild.getLogoColor());
+            p.writeInt(guild.getLogoBG().intValue());
+            p.writeInt(guild.getLogoBGColor());
         }
         return p;
     }
