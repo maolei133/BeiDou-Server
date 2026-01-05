@@ -19,26 +19,24 @@
 */
 package org.gms.net.server.channel.handlers;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.Item;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.dao.mapper.CharactersMapper;
 import org.gms.model.pojo.NewYearCardRecord;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import org.gms.util.SpringContextUtil;
 
 /**
+ * 新年贺卡处理器
  * @author Ronan
- * <p>
  * Header layout thanks to Eric
  */
 public final class NewYearCardHandler extends AbstractPacketHandler {
@@ -46,22 +44,22 @@ public final class NewYearCardHandler extends AbstractPacketHandler {
     @Override
     public final void handlePacket(InPacket p, Client c) {
         final Character player = c.getPlayer();
-        byte reqMode = p.readByte();                 //[00] -> NewYearReq (0 = Send)
+        byte reqMode = p.readByte();
 
-        if (reqMode == 0) {  // card has been sent
-            if (player.haveItem(ItemId.NEW_YEARS_CARD)) {  // new year's card
-                short slot = p.readShort();                      //[00 2C] -> nPOS (Item Slot Pos)
-                int itemid = p.readInt();                        //[00 20 F5 E5] -> nItemID (item id)
+        if (reqMode == 0) {  // 发送贺卡
+            if (player.haveItem(ItemId.NEW_YEARS_CARD)) {
+                short slot = p.readShort();
+                int itemid = p.readInt();
 
                 int status = getValidNewYearCardStatus(itemid, player, slot);
                 if (status == 0) {
                     if (player.canHold(ItemId.NEW_YEARS_CARD_SEND, 1)) {
-                        String receiver = p.readString();  //[04 00 54 65 73 74] -> sReceiverName (person to send to)
+                        String receiver = p.readString();
 
                         int receiverid = getReceiverId(receiver, c.getWorld());
                         if (receiverid != -1) {
                             if (receiverid != c.getPlayer().getId()) {
-                                String message = p.readString();   //[06 00 4C 65 74 74 65 72] -> sContent (message)
+                                String message = p.readString();
 
                                 NewYearCardRecord newyear = new NewYearCardRecord(player.getId(), player.getName(), receiverid, receiver, message);
                                 NewYearCardRecord.saveNewYearCard(newyear);
@@ -72,23 +70,23 @@ public final class NewYearCardHandler extends AbstractPacketHandler {
 
                                 Server.getInstance().setNewYearCard(newyear);
                                 newyear.startNewYearCardTask();
-                                player.sendPacket(PacketCreator.onNewYearCardRes(player, newyear, 4, 0));    // successfully sent
+                                player.sendPacket(PacketCreator.onNewYearCardRes(player, newyear, 4, 0));    // 发送成功
                             } else {
-                                player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0xF));   // cannot send to yourself
+                                player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0xF));   // 不能发送给自己
                             }
                         } else {
-                            player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0x13));  // cannot find such character
+                            player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0x13));  // 找不到该角色
                         }
                     } else {
-                        player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0x10));  // inventory full
+                        player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0x10));  // 背包已满
                     }
                 } else {
-                    player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, status));  // item and inventory errors
+                    player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, status));  // 物品和背包错误
                 }
             } else {
-                player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0x11));  // have no card to send
+                player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0x11));  // 没有贺卡可发送
             }
-        } else {    //receiver accepted the card
+        } else {    // 接收者接受贺卡
             int cardid = p.readInt();
 
             NewYearCardRecord newyear = NewYearCardRecord.loadNewYearCard(cardid);
@@ -101,49 +99,43 @@ public final class NewYearCardHandler extends AbstractPacketHandler {
 
                         player.getAbstractPlayerInteraction().gainItem(ItemId.NEW_YEARS_CARD_RECEIVED, (short) 1);
                         if (!newyear.getMessage().isEmpty()) {
-                            player.dropMessage(6, "[New Year] " + newyear.getSenderName() + ": " + newyear.getMessage());
+                            player.dropMessage(6, "[新年] " + newyear.getSenderName() + ": " + newyear.getMessage());
                         }
 
                         player.addNewYearRecord(newyear);
-                        player.sendPacket(PacketCreator.onNewYearCardRes(player, newyear, 6, 0));    // successfully rcvd
+                        player.sendPacket(PacketCreator.onNewYearCardRes(player, newyear, 6, 0));    // 接收成功
 
                         player.getMap().broadcastMessage(PacketCreator.onNewYearCardRes(player, newyear, 0xD, 0));
 
                         Character sender = c.getWorldServer().getPlayerStorage().getCharacterById(newyear.getSenderId());
                         if (sender != null && sender.isLoggedInWorld()) {
                             sender.getMap().broadcastMessage(PacketCreator.onNewYearCardRes(sender, newyear, 0xD, 0));
-                            sender.dropMessage(6, "[New Year] Your addressee successfully received the New Year card.");
+                            sender.dropMessage(6, "[新年] 您的收件人已成功收到新年贺卡。");
                         }
                     } else {
-                        player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0x10));  // inventory full
+                        player.sendPacket(PacketCreator.onNewYearCardRes(player, -1, 5, 0x10));  // 背包已满
                     }
                 } else {
-                    player.dropMessage(6, "[New Year] The sender of the New Year card already dropped it. Nothing to receive.");
+                    player.dropMessage(6, "[新年] 新年贺卡的发送者已经丢弃了它。无法接收。");
                 }
             } else {
                 if (newyear == null) {
-                    player.dropMessage(6, "[New Year] The sender of the New Year card already dropped it. Nothing to receive.");
+                    player.dropMessage(6, "[新年] 新年贺卡的发送者已经丢弃了它。无法接收。");
                 }
             }
         }
     }
 
     private static int getReceiverId(String receiver, int world) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("SELECT id, world FROM characters WHERE name LIKE ?")) {
-                ps.setString(1, receiver);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        if (rs.getInt("world") == world) {
-                            return rs.getInt("id");
-                        }
-                    }
-                }
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        }
+        CharactersMapper mapper = SpringContextUtil.getBean(CharactersMapper.class);
+        QueryWrapper query = QueryWrapper.create()
+                .select(CharactersDO::getId, CharactersDO::getWorld)
+                .where(CharactersDO::getName).like(receiver);
 
+        CharactersDO result = mapper.selectOneByQuery(query);
+        if (result != null && result.getWorld() == world) {
+            return result.getId();
+        }
         return -1;
     }
 

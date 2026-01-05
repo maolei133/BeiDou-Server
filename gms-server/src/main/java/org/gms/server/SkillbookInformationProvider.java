@@ -19,7 +19,10 @@
 */
 package org.gms.server;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
+import org.gms.dao.entity.ReactordropsDO;
+import org.gms.dao.mapper.ReactordropsMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.provider.Data;
@@ -27,26 +30,20 @@ import org.gms.provider.DataProvider;
 import org.gms.provider.DataProviderFactory;
 import org.gms.provider.DataTool;
 import org.gms.provider.wz.WZFiles;
-import org.gms.util.DatabaseConnection;
+import org.gms.util.SpringContextUtil;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
+ * 技能书信息提供者
+ * 仅用于一个脚本，为玩家提供关于技能书来源的信息。
  * @author RonanLana
- */
-
-/**
- * Only used in 1 script that gives players information about where skillbooks can be found
  */
 public class SkillbookInformationProvider {
     private static final Logger log = LoggerFactory.getLogger(SkillbookInformationProvider.class);
@@ -62,7 +59,7 @@ public class SkillbookInformationProvider {
     }
 
     private static final int SKILLBOOK_MIN_ITEMID = 2280000;
-    private static final int SKILLBOOK_MAX_ITEMID = 2300000;  // exclusively
+    private static final int SKILLBOOK_MAX_ITEMID = 2300000;  // 不包含
 
     public static void loadAllSkillbookInformation() {
         Map<Integer, SkillBookEntry> loadedSkillbooks = new HashMap<>();
@@ -147,7 +144,7 @@ public class SkillbookInformationProvider {
                         for (Data questSkillData : questNodeData.getChildren()) {
                             int skillId = DataTool.getInt("id", questSkillData, 0);
                             if (is4thJobSkill(skillId)) {
-                                // negative itemids are skill rewards
+                                // 负的 itemid 是技能奖励
 
                                 int questbook = fetchQuestbook(checkData, questData.getName());
                                 if (questbook < 0) {
@@ -167,21 +164,16 @@ public class SkillbookInformationProvider {
 
     private static Map<Integer, SkillBookEntry> fetchSkillbooksFromReactors() {
         Map<Integer, SkillBookEntry> loadedSkillbooks = new HashMap<>();
+        ReactordropsMapper mapper = SpringContextUtil.getBean(ReactordropsMapper.class);
 
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT itemid FROM reactordrops WHERE itemid >= ? AND itemid < ?;")) {
-            ps.setInt(1, SKILLBOOK_MIN_ITEMID);
-            ps.setInt(2, SKILLBOOK_MAX_ITEMID);
+        QueryWrapper query = QueryWrapper.create()
+                .select(ReactordropsDO::getItemid)
+                .where(ReactordropsDO::getItemid).ge(SKILLBOOK_MIN_ITEMID)
+                .and(ReactordropsDO::getItemid).lt(SKILLBOOK_MAX_ITEMID);
 
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.isBeforeFirst()) {
-                    while (rs.next()) {
-                        loadedSkillbooks.put(rs.getInt("itemid"), SkillBookEntry.REACTOR);
-                    }
-                }
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+        List<ReactordropsDO> results = mapper.selectListByQuery(query);
+        for (ReactordropsDO result : results) {
+            loadedSkillbooks.put(result.getItemid(), SkillBookEntry.REACTOR);
         }
 
         return loadedSkillbooks;
@@ -190,7 +182,7 @@ public class SkillbookInformationProvider {
     private static void listFiles(String directoryName, ArrayList<Path> files) {
         Path directory = Path.of(directoryName);
 
-        // get all the files from a directory
+        // 获取目录下的所有文件
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
             for (Path path : stream) {
 
@@ -201,8 +193,7 @@ public class SkillbookInformationProvider {
                 }
             }
         } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            log.error("读取目录时发生IO异常", e);
         }
     }
 
@@ -250,7 +241,7 @@ public class SkillbookInformationProvider {
                 scriptFileSkillbooks.put(skillbookId, SkillBookEntry.SCRIPT);
             }
         } catch (IOException ioe) {
-            log.error("Failed to read file:{}", file.getFileName(), ioe);
+            log.error("读取文件失败:{}", file.getFileName(), ioe);
         }
 
         return scriptFileSkillbooks;

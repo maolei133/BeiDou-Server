@@ -21,14 +21,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.client;
 
+import com.mybatisflex.core.row.*;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.timeout.IdleStateEvent;
 import lombok.Getter;
 import org.gms.client.inventory.InventoryType;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.MapId;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.handler.timeout.IdleStateEvent;
+import org.gms.dao.entity.AccountsDO;
+import org.gms.manager.ServerManager;
 import org.gms.net.PacketHandler;
 import org.gms.net.PacketProcessor;
 import org.gms.net.netty.InvalidPacketHeaderException;
@@ -50,10 +53,6 @@ import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.PartyOperation;
 import org.gms.net.server.world.World;
-import org.gms.server.SystemRescue;
-import org.gms.util.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.scripting.AbstractPlayerInteraction;
 import org.gms.scripting.event.EventInstanceManager;
 import org.gms.scripting.event.EventManager;
@@ -62,12 +61,21 @@ import org.gms.scripting.npc.NPCScriptManager;
 import org.gms.scripting.quest.QuestActionManager;
 import org.gms.scripting.quest.QuestScriptManager;
 import org.gms.server.MapleLeafLogger;
+import org.gms.server.SystemRescue;
 import org.gms.server.ThreadManager;
 import org.gms.server.TimerManager;
 import org.gms.server.life.Monster;
 import org.gms.server.maps.FieldLimit;
 import org.gms.server.maps.MapleMap;
 import org.gms.server.maps.MiniDungeonInfo;
+import org.gms.service.AccountService;
+import org.gms.util.BCrypt;
+import org.gms.util.HexTool;
+import org.gms.util.I18nUtil;
+import org.gms.util.PacketCreator;
+import org.gms.util.ThreadLocalUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.script.ScriptEngine;
 import java.io.IOException;
@@ -76,9 +84,6 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.*;
@@ -142,6 +147,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     // 提供公共方法来获取 sysRescue
     @Getter
     private static SystemRescue sysRescue;
+    private static final AccountService accountService = ServerManager.getApplicationContext().getBean(AccountService.class);
 
     public enum Type {
         LOGIN,
@@ -349,21 +355,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     private List<CharNameAndId> loadCharactersInternal(int worldId) {
-        List<CharNameAndId> chars = new ArrayList<>(15);
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT id, name FROM characters WHERE accountid = ? AND world = ?")) {
-            ps.setInt(1, this.getAccID());
-            ps.setInt(2, worldId);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    chars.add(new CharNameAndId(rs.getString("name"), rs.getInt("id")));
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return chars;
+        return accountService.loadCharactersInternal(getAccID(), worldId);
     }
 
     public boolean isLoggedIn() {
@@ -371,40 +363,14 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public boolean hasBannedIP() {
-        boolean ret = false;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM ipbans WHERE ? LIKE CONCAT(ip, '%')")) {
-            ps.setString(1, remoteAddress);
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                if (rs.getInt(1) > 0) {
-                    ret = true;
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return ret;
+        return accountService.hasBannedIP(remoteAddress);
     }
 
     public int getVoteTime() {
         if (voteTime != -1) {
             return voteTime;
         }
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT date FROM bit_votingrecords WHERE UPPER(account) = UPPER(?)")) {
-            ps.setString(1, accountName);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return -1;
-                }
-                voteTime = rs.getInt("date");
-            }
-        } catch (SQLException e) {
-            log.error("获取投票时间时出错");
-            return -1;
-        }
+        voteTime = accountService.getVoteTime(accountName);
         return voteTime;
     }
 
@@ -423,88 +389,27 @@ public class Client extends ChannelInboundHandlerAdapter {
         if (hwid == null) {
             return false;
         }
-
-        boolean ret = false;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM hwidbans WHERE hwid LIKE ?")) {
-            ps.setString(1, hwid.hwid());
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs != null && rs.next()) {
-                    if (rs.getInt(1) > 0) {
-                        ret = true;
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-
-        return ret;
+        return accountService.hasBannedHWID(hwid.hwid());
     }
 
     public boolean hasBannedMac() {
-        if (macs.isEmpty()) {
-            return false;
-        }
-        boolean ret = false;
-        int i;
-        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM macbans WHERE mac IN (");
-        for (i = 0; i < macs.size(); i++) {
-            sql.append("?");
-            if (i != macs.size() - 1) {
-                sql.append(", ");
-            }
-        }
-        sql.append(")");
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement(sql.toString())) {
-            i = 0;
-            for (String mac : macs) {
-                ps.setString(++i, mac);
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                if (rs.getInt(1) > 0) {
-                    ret = true;
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return ret;
+        return accountService.hasBannedMac(macs);
     }
 
     private void loadHWIDIfNescessary() throws SQLException {
         if (hwid == null) {
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("SELECT hwid FROM accounts WHERE id = ?")) {
-                ps.setInt(1, accId);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        hwid = new Hwid(rs.getString("hwid"));
-                    }
-                }
-            }
+            hwid = new Hwid(accountService.loadHwid(accId));
         }
     }
 
     // TODO: Recode to close statements...
     private void loadMacsIfNescessary() throws SQLException {
         if (macs.isEmpty()) {
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("SELECT macs FROM accounts WHERE id = ?")) {
-                ps.setInt(1, accId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        for (String mac : rs.getString("macs").split(", ")) {
-                            if (!mac.equals("")) {
-                                macs.add(mac);
-                            }
-                        }
+            String macsString = accountService.loadMacs(accId);
+            if (macsString != null) {
+                for (String mac : macsString.split(", ")) {
+                    if (!mac.equals("")) {
+                        macs.add(mac);
                     }
                 }
             }
@@ -514,12 +419,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     public void banHWID() {
         try {
             loadHWIDIfNescessary();
-
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("INSERT INTO hwidbans (hwid) VALUES (?)")) {
-                ps.setString(1, hwid.hwid());
-                ps.executeUpdate();
-            }
+            accountService.banHwid(hwid.hwid());
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -531,20 +431,10 @@ public class Client extends ChannelInboundHandlerAdapter {
      */
     public boolean banIP() {
         String ip = getRemoteAddress();
-        try (Connection con = DatabaseConnection.getConnection()) {
-            if (ip.matches("[0-9]{1,3}\\..*") && !ip.equals("127.0.0.1")) {
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO ipbans VALUES (DEFAULT, ?, ?)")) {
-                    ps.setString(1, ip);
-                    ps.setInt(2, getAccID());
-
-                    if (ps.executeUpdate() > 0) {
-                        log.info("封禁IP地址：{}",ip);
-                        return true;
-                    }
-                }
-            }
-        } catch (SQLException ex) {
-            ex.printStackTrace();
+        if (ip.matches("[0-9]{1,3}\\..*") && !ip.equals("127.0.0.1")) {
+            accountService.banIp(ip, getAccID());
+            log.info("封禁IP地址：{}",ip);
+            return true;
         }
         return false;
     }
@@ -557,81 +447,8 @@ public class Client extends ChannelInboundHandlerAdapter {
         List<String> MacList = new ArrayList<>();
         try {
             loadMacsIfNescessary();
-
-            // 设置阈值，出现次数超过此值的MAC将被视为虚拟机MAC而不被封禁
-            final int VIRTUAL_MAC_THRESHOLD = Optional.of(GameConfig.getServerInt("ban_mac_ignore_majority")).filter(v -> (v > 2)).orElse(5);    //阈值不应该低于2，否则容易产生误判
-
-            Map<String, Integer> macOccurrences = new HashMap<>(); // 存储MAC出现次数
-
-            try (Connection con = DatabaseConnection.getConnection()) {
-                // 使用工具类检查MAC地址，获取未匹配过滤规则的MAC地址
-                List<String> macsToCheck = MacFilterHelper.checkMacs(new ArrayList<>(macs));
-
-                // 如果存在需要检查的MAC地址，查询它们在系统中的出现次数（按HWID去重）
-                if (!macsToCheck.isEmpty()) {
-                    // 使用参数化查询构建SQL语句
-                    String occurrenceQuery =
-                            "SELECT " +
-                                    "    mac_address, " +
-                                    "    COUNT(*) AS count " +
-                                    "FROM (" +
-                                    "    SELECT DISTINCT " +
-                                    "        hwid, " +
-                                    "        TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(macs, ',', numbers.n), ',', -1)) AS mac_address " +
-                                    "    FROM " +
-                                    "        accounts " +
-                                    "    JOIN " +
-                                    "        (SELECT 1 n UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) numbers " +
-                                    "        ON CHAR_LENGTH(macs) - CHAR_LENGTH(REPLACE(macs, ',', '')) >= numbers.n - 1 " +
-                                    "    WHERE " +
-                                    "        macs IS NOT NULL " +
-                                    "        AND macs != '' " +
-                                    "        AND hwid IS NOT NULL " +
-                                    ") AS distinct_macs " +
-                                    "WHERE " +
-                                    "    mac_address IN (";
-
-                    // 添加占位符
-                    String[] placeholders = new String[macsToCheck.size()];
-                    Arrays.fill(placeholders, "?");
-                    occurrenceQuery += String.join(",", placeholders) + ") " +
-                            "GROUP BY " +
-                            "    mac_address";
-
-                    try (PreparedStatement ps = con.prepareStatement(occurrenceQuery)) {
-                        // 设置查询参数 - 使用增强for循环
-                        int index = 1;
-                        for (String mac : macsToCheck) {
-                            ps.setString(index++, mac);
-                        }
-
-                        ResultSet rs = ps.executeQuery();
-                        while (rs.next()) {
-                            macOccurrences.put(rs.getString("mac_address"), rs.getInt("count"));
-                        }
-                    }
-                }
-
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO macbans (mac, aid) VALUES (?, ?)")) {
-                    for (String mac : macsToCheck) {
-                        // 检查MAC出现次数，超过阈值则跳过（视为虚拟机MAC）
-                        Integer occurrence = macOccurrences.get(mac);
-                        if (occurrence != null && occurrence > VIRTUAL_MAC_THRESHOLD) {
-                            MacFilterHelper.addFilter(mac);// 自动添加到过滤规则
-                            log.warn("封禁时跳过Mac地址：{}，出现次数：{}，已加入到过滤规则。",mac,occurrence);
-                            continue;
-                        }
-
-                        // 封禁MAC地址
-                        ps.setString(1, mac);
-                        ps.setString(2, String.valueOf(getAccID()));
-                        ps.executeUpdate();
-
-                        // 添加到返回列表
-                        MacList.add(mac);
-                    }
-                }
-            }
+            accountService.banMacs(macs, getAccID());
+            MacList.addAll(macs);
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -645,34 +462,10 @@ public class Client extends ChannelInboundHandlerAdapter {
      * @return 匹配的记录数量
      */
     public int getActiveRecordCount(String searchValue) {
-        int count = 0;
-
-        // 如果搜索值为null或空，直接返回0
         if (searchValue == null || searchValue.isEmpty()) {
             return 0;
         }
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement(
-                     "SELECT COUNT(*) as record_count FROM accounts WHERE loggedin > 0 " +
-                             "AND (ip LIKE ? OR macs LIKE ? OR hwid LIKE ?)")) {
-
-            // 对三个字段都使用相同的模糊匹配模式
-            String searchPattern = "%" + searchValue + "%";
-            ps.setString(1, searchPattern);
-            ps.setString(2, searchPattern);
-            ps.setString(3, searchPattern);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    count = rs.getInt("record_count");
-                }
-            }
-        } catch (SQLException e) {
-            log.error("getActiveRecordCount 出错 ", e);
-        }
-
-        return count;
+        return accountService.getActiveRecordCount(searchValue);
     }
 
     /**
@@ -681,35 +474,10 @@ public class Client extends ChannelInboundHandlerAdapter {
      * @return 今天登录的账号数量
      */
     public int getTodayLoginCount(String searchValue) {
-        int count = 0;
-
-        // 如果搜索值为null或空，直接返回0
         if (searchValue == null || searchValue.isEmpty()) {
             return 0;
         }
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement(
-                     "SELECT COUNT(*) as record_count FROM accounts WHERE loggedin > 0 " +
-                             "AND (ip LIKE ? OR macs LIKE ? OR hwid LIKE ?) " +
-                             "AND DATE(lastlogin) = CURDATE()")) {
-
-            // 对三个字段都使用相同的模糊匹配模式
-            String searchPattern = "%" + searchValue + "%";
-            ps.setString(1, searchPattern);
-            ps.setString(2, searchPattern);
-            ps.setString(3, searchPattern);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    count = rs.getInt("record_count");
-                }
-            }
-        } catch (SQLException e) {
-            log.error("getTodayLoginCount 出错 ", e);
-        }
-
-        return count;
+        return accountService.getTodayLoginCount(searchValue);
     }
 
     public int finishLogin() {
@@ -729,14 +497,7 @@ public class Client extends ChannelInboundHandlerAdapter {
 
     public void setPin(String pin) {
         this.pin = pin;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE accounts SET pin = ? WHERE id = ?")) {
-            ps.setString(1, pin);
-            ps.setInt(2, accId);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        accountService.setPin(accId, pin);
     }
 
     public String getPin() {
@@ -762,14 +523,7 @@ public class Client extends ChannelInboundHandlerAdapter {
 
     public void setPic(String pic) {
         this.pic = pic;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE accounts SET pic = ? WHERE id = ?")) {
-            ps.setString(1, pic);
-            ps.setInt(2, accId);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        accountService.setPic(accId, pic);
     }
 
     public String getPic() {
@@ -803,57 +557,50 @@ public class Client extends ChannelInboundHandlerAdapter {
             return 6;   // thanks Survival_Project for finding out an issue with AUTOMATIC_REGISTER here
         }
 
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT id, password, gender, banned, pin, pic, characterslots, tos, language FROM accounts WHERE name = ?")) {
-            ps.setString(1, login);
+        AccountsDO rs = accountService.findByName(login);
 
-            try (ResultSet rs = ps.executeQuery()) {
-                accId = -2;
-                if (rs.next()) {
-                    accId = rs.getInt("id");
-                    if (accId <= 0) {
-                        log.warn("尝试使用accId登录 {}", accId);
-                        return 15;
-                    }
-
-                    boolean banned = (rs.getByte("banned") == 1);
-                    gmlevel = 0;
-                    pin = rs.getString("pin");
-                    pic = rs.getString("pic");
-                    gender = rs.getByte("gender");
-                    characterSlots = rs.getByte("characterslots");
-                    lang = rs.getInt("language");
-                    String passhash = rs.getString("password");
-                    byte tos = rs.getByte("tos");
-
-                    if (banned) {
-                        return 3;
-                    }
-
-                    if (getLoginState() > LOGIN_NOTLOGGEDIN) { // already loggedin
-                        loggedIn = false;
-                        loginok = 7;
-                    } else if (GameConfig.getServerBoolean("use_debug") && GameConfig.getServerBoolean("no_password")) {
-                        return 0;
-                    } else if (passhash.charAt(0) == '$' && passhash.charAt(1) == '2' && BCrypt.checkpw(pwd, passhash)) {
-                        loginok = (tos == 0) ? 23 : 0;
-                    } else if (pwd.equals(passhash) || checkHash(passhash, "SHA-1", pwd) || checkHash(passhash, "SHA-512", pwd)) {
-                        // thanks GabrielSin for detecting some no-bcrypt inconsistencies here
-                        loginok = (tos == 0) ? (!GameConfig.getServerBoolean("bcrypt_migration") ? 23 : -23) : (!GameConfig.getServerBoolean("bcrypt_migration") ? 0 : -10); // migrate to bcrypt
-                    } else {
-                        loggedIn = false;
-                        loginok = 4;
-                    }
-                } else {
-                    accId = -3;
-                }
+        accId = -2;
+        if (rs != null) {
+            accId = rs.getId();
+            if (accId <= 0) {
+                log.warn("尝试使用accId登录 {}", accId);
+                return 15;
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
+
+            boolean banned = Optional.ofNullable(rs.getBanned()).orElse(false);
+            gmlevel = 0;
+            pin = rs.getPin();
+            pic = rs.getPic();
+            gender = Optional.ofNullable(rs.getGender()).map(Integer::byteValue).orElse((byte)0);
+            characterSlots = Optional.ofNullable(rs.getCharacterslots()).map(Integer::byteValue).orElse((byte)3);
+            lang = Optional.ofNullable(rs.getLanguage()).orElse(0);
+            String passhash = rs.getPassword();
+            boolean tos = Optional.ofNullable(rs.getTos()).orElse(false);
+
+            if (banned) {
+                return 3;
+            }
+
+            if (getLoginState() > LOGIN_NOTLOGGEDIN) { // already loggedin
+                loggedIn = false;
+                loginok = 7;
+            } else if (GameConfig.getServerBoolean("use_debug") && GameConfig.getServerBoolean("no_password")) {
+                loginok = 0;
+            } else if (passhash != null && passhash.length() > 1 && passhash.charAt(0) == '$' && passhash.charAt(1) == '2' && BCrypt.checkpw(pwd, passhash)) {
+                loginok = (!tos) ? 23 : 0;
+            } else if (passhash != null && (pwd.equals(passhash) || checkHash(passhash, "SHA-1", pwd) || checkHash(passhash, "SHA-512", pwd))) {
+                // thanks GabrielSin for detecting some no-bcrypt inconsistencies here
+                loginok = (!tos) ? (!GameConfig.getServerBoolean("bcrypt_migration") ? 23 : -23) : (!GameConfig.getServerBoolean("bcrypt_migration") ? 0 : -10); // migrate to bcrypt
+            } else {
+                loggedIn = false;
+                loginok = 4;
+            }
+        } else {
+            accId = -3;
         }
 
         if (loginok == 0 || loginok == 4) {
-            AntiMulticlientResult res = SessionCoordinator.getInstance().attemptLoginSession(this, hwid, accId, loginok == 4);  //loginok == 4，但是会导致限制多开参数 deterred_multi_client == true 时密码错误一次返回REMOTE_REACHED_LIMIT，需要重开客户端
+            AntiMulticlientResult res = SessionCoordinator.getInstance().attemptLoginSession(this, hwid, accId, loginok == 4);
 
             return switch (res) {
                 case SUCCESS -> {
@@ -880,56 +627,22 @@ public class Client extends ChannelInboundHandlerAdapter {
      * @return 账号封禁原因字符串，查询失败或为空时返回空字符串
      */
     public String getBanreasonFromDB() {
-        String banReason = "";
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT `banreason` FROM accounts WHERE id = ?")) {
-
-            ps.setInt(1, getAccID());
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    String reason = rs.getString("banreason");
-                    // 检查是否为空或默认值（根据实际情况可能需要调整默认值的判断）
-                    if (reason != null && !reason.trim().isEmpty()) {
-                        banReason = reason;
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-
-        return banReason;
+        AccountsDO account = accountService.findById(getAccID());
+        return account != null ? account.getBanreason() : "";
     }
 
     public Calendar getTempBanCalendarFromDB() {
         final Calendar lTempban = Calendar.getInstance();
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT `tempban` FROM accounts WHERE id = ?")) {
-            ps.setInt(1, getAccID());
-
-            final Timestamp tempban;
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return null;
-                }
-
-                tempban = rs.getTimestamp("tempban");
-                if (tempban.toLocalDateTime().equals(DefaultDates.getTempban())) {
-                    return null;
-                }
+        AccountsDO account = accountService.findById(getAccID());
+        if (account != null) {
+            Timestamp tempban = account.getTempban();
+            if (tempban != null && !tempban.toLocalDateTime().equals(DefaultDates.getTempban())) {
+                lTempban.setTimeInMillis(tempban.getTime());
+                tempBanCalendar = lTempban;
+                return lTempban;
             }
-
-            lTempban.setTimeInMillis(tempban.getTime());
-            tempBanCalendar = lTempban;
-            return lTempban;
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
-
-        return null;//why oh why!?!
+        return null;
     }
 
     public Calendar getTempBanCalendar() {
@@ -955,15 +668,7 @@ public class Client extends ChannelInboundHandlerAdapter {
 
     public void updateHwid(Hwid hwid) {
         this.hwid = hwid;
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE accounts SET hwid = ? WHERE id = ?")) {
-            ps.setString(1, hwid.hwid());
-            ps.setInt(2, accId);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        accountService.updateHwid(accId, hwid.hwid());
     }
 
     public void updateMacs(String macData) {
@@ -977,15 +682,7 @@ public class Client extends ChannelInboundHandlerAdapter {
                 newMacData.append(", ");
             }
         }
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE accounts SET macs = ? WHERE id = ?")) {
-            ps.setString(1, newMacData.toString());
-            ps.setInt(2, accId);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        accountService.updateMacs(accId, newMacData.toString());
     }
     
     public void setMacs(String macData) {
@@ -1034,19 +731,8 @@ public class Client extends ChannelInboundHandlerAdapter {
      * 将IP列表更新到数据库
      */
     private boolean updateIpsToDatabase(int accId, String ipData) {
-        String sql = "UPDATE accounts SET ip = ? WHERE id = ?";
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, ipData);
-            ps.setInt(2, accId);
-
-            int affectedRows = ps.executeUpdate();
-            return affectedRows > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return false;
+        accountService.updateIps(accId, ipData);
+        return true;
     }
     public void setAccID(int id) {
         this.accId = id;
@@ -1061,18 +747,7 @@ public class Client extends ChannelInboundHandlerAdapter {
         if (newState == LOGIN_LOGGEDIN) {
             SessionCoordinator.getInstance().updateOnlineClient(this);
         }
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE accounts SET loggedin = ?, lastlogin = ? WHERE id = ?")) {
-            // using sql currenttime here could potentially break the login, thanks Arnah for pointing this out
-
-            ps.setInt(1, newState);
-            ps.setTimestamp(2, new java.sql.Timestamp(Server.getInstance().getCurrentTime()));
-            ps.setInt(3, getAccID());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        accountService.updateLoginState(getAccID(), newState);
 
         if (newState == LOGIN_NOTLOGGEDIN) {
             loggedIn = false;
@@ -1086,51 +761,35 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public int getLoginState() {  // 0 = LOGIN_NOTLOGGEDIN, 1= LOGIN_SERVER_TRANSITION, 2 = LOGIN_LOGGEDIN
-        try (Connection con = DatabaseConnection.getConnection()) {
-            int state;
-            try (PreparedStatement ps = con.prepareStatement("SELECT loggedin, lastlogin, birthday FROM accounts WHERE id = ?")) {
-                ps.setInt(1, getAccID());
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) {
-                        throw new RuntimeException("获取登录状态-客户端账号：" + getAccID());
-                    }
-
-                    birthday = Calendar.getInstance();
-                    try {
-                        birthday.setTime(rs.getDate("birthday"));
-                    } catch (SQLException e) {
-                    }
-
-                    state = rs.getInt("loggedin");
-                    if (state == LOGIN_SERVER_TRANSITION) {
-                        Timestamp lastlogin = rs.getTimestamp("lastlogin");
-                        // 兼容历史已经创建的账号，和自动注册但未登录的账号
-                        if (lastlogin == null || lastlogin.getTime() + 30000 < Server.getInstance().getCurrentTime()) {
-                            int accountId = accId;
-                            state = LOGIN_NOTLOGGEDIN;
-                            updateLoginState(Client.LOGIN_NOTLOGGEDIN);   // ACCID = 0, issue found thanks to Tochi & K u ssss o & Thora & Omo Oppa
-                            this.setAccID(accountId);
-                        }
-                    }
-                }
-            }
-            if (state == LOGIN_LOGGEDIN) {
-                loggedIn = true;
-            } else if (state == LOGIN_SERVER_TRANSITION) {
-                try (PreparedStatement ps2 = con.prepareStatement("UPDATE accounts SET loggedin = 0 WHERE id = ?")) {
-                    ps2.setInt(1, getAccID());
-                    ps2.executeUpdate();
-                }
-            } else {
-                loggedIn = false;
-            }
-            return state;
-        } catch (SQLException e) {
-            loggedIn = false;
-            e.printStackTrace();
-            throw new RuntimeException("登录状态");
+        AccountsDO account = accountService.getLoginState(getAccID());
+        if (account == null) {
+            throw new RuntimeException("获取登录状态-客户端账号：" + getAccID());
         }
+        birthday = Calendar.getInstance();
+        try {
+            birthday.setTime(account.getBirthday());
+        } catch (Exception e) {
+        }
+
+        int state = account.getLoggedin();
+        if (state == LOGIN_SERVER_TRANSITION) {
+            Timestamp lastlogin = account.getLastlogin();
+            // 兼容历史已经创建的账号，和自动注册但未登录的账号
+            if (lastlogin == null || lastlogin.getTime() + 30000 < Server.getInstance().getCurrentTime()) {
+                int accountId = accId;
+                state = LOGIN_NOTLOGGEDIN;
+                updateLoginState(Client.LOGIN_NOTLOGGEDIN);   // ACCID = 0, issue found thanks to Tochi & K u ssss o & Thora & Omo Oppa
+                this.setAccID(accountId);
+            }
+        }
+        if (state == LOGIN_LOGGEDIN) {
+            loggedIn = true;
+        } else if (state == LOGIN_SERVER_TRANSITION) {
+            accountService.update(AccountsDO.builder().id(getAccID()).loggedin(0).build());
+        } else {
+            loggedIn = false;
+        }
+        return state;
     }
 
     public boolean checkBirthDate(Calendar date) {
@@ -1455,37 +1114,19 @@ public class Client extends ChannelInboundHandlerAdapter {
         this.macs = macs;
     }
 
-    public Set<String> getIps() {
-        return Collections.unmodifiableSet(ips);
-    }
-
     /**
      * 从数据库读取指定账号的IP列表
      * @param accId 账号ID
      * @return IP地址列表，如果记录不存在返回空列表
      */
     public List<String> getIpsFromDB(int accId) {
-        String sql = "SELECT ip FROM accounts WHERE id = ?";
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, accId);
-
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                String ipData = rs.getString("ip");
-                if (ipData != null && !ipData.trim().isEmpty()) {
-                    // 使用更高效的分割方式
-                    return Arrays.stream(ipData.split(","))
-                            .map(String::trim)
-                            .filter(ip -> !ip.isEmpty())
-                            .collect(Collectors.toList());
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        AccountsDO account = accountService.findById(accId);
+        if (account != null && account.getIp() != null && !account.getIp().trim().isEmpty()) {
+            return Arrays.stream(account.getIp().split(","))
+                    .map(String::trim)
+                    .filter(ip -> !ip.isEmpty())
+                    .collect(Collectors.toList());
         }
-
         return new ArrayList<>();
     }
     public int getGMLevel() {
@@ -1520,29 +1161,7 @@ public class Client extends ChannelInboundHandlerAdapter {
         if (accountName == null) {
             return true;
         }
-
-        boolean disconnect = false;
-        try (Connection con = DatabaseConnection.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement("SELECT `tos` FROM accounts WHERE id = ?")) {
-                ps.setInt(1, accId);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        if (rs.getByte("tos") == 1) {
-                            disconnect = true;
-                        }
-                    }
-                }
-            }
-
-            try (PreparedStatement ps = con.prepareStatement("UPDATE accounts SET tos = 1 WHERE id = ?")) {
-                ps.setInt(1, accId);
-                ps.executeUpdate();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return disconnect;
+        return accountService.acceptToS(accId);
     }
 
     public void checkChar(int accid) {  /// issue with multiple chars from same account login found by shavit, resinate
@@ -1562,20 +1181,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public int getVotePoints() {
-        int points = 0;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT `votepoints` FROM accounts WHERE id = ?")) {
-            ps.setInt(1, accId);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    points = rs.getInt("votepoints");
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        votePoints = points;
+        votePoints = accountService.getVotePoints(accId);
         return votePoints;
     }
 
@@ -1595,14 +1201,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     private void saveVotePoints() {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE accounts SET votepoints = ? WHERE id = ?")) {
-            ps.setInt(1, votePoints);
-            ps.setInt(2, accId);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        accountService.saveVotePoints(accId, votePoints);
     }
 
     public void lockClient() {
@@ -1641,7 +1240,7 @@ public class Client extends ChannelInboundHandlerAdapter {
         actionsSemaphore.release();
     }
 
-    private static class CharNameAndId {
+    public static class CharNameAndId {
 
         public String name;
         public int id;
@@ -1688,35 +1287,15 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public synchronized boolean gainCharacterSlot() {
-        if (canGainCharacterSlot()) {
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("UPDATE accounts SET characterslots = ? WHERE id = ?")) {
-                ps.setInt(1, this.characterSlots += 1);
-                ps.setInt(2, accId);
-                ps.executeUpdate();
-
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
+        if (accountService.gainCharacterSlot(accId, characterSlots)) {
+            characterSlots++;
             return true;
         }
         return false;
     }
 
     public final byte getGReason() {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT `greason` FROM `accounts` WHERE id = ?")) {
-            ps.setInt(1, accId);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getByte("greason");
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return 0;
+        return accountService.getGReason(accId);
     }
 
     public byte getGender() {
@@ -1725,15 +1304,7 @@ public class Client extends ChannelInboundHandlerAdapter {
 
     public void setGender(byte m) {
         this.gender = m;
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE accounts SET gender = ? WHERE id = ?")) {
-            ps.setByte(1, gender);
-            ps.setInt(2, accId);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        accountService.setGender(accId, gender);
     }
 
     private void announceDisableServerMessage() {

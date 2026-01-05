@@ -4996,15 +4996,11 @@ public class PacketCreator {
         p.skip(5);
         p.writeInt(chr.getMerchantNetMeso());
         p.writeByte(0);
-        try {
-            List<Pair<Item, InventoryType>> items = ItemFactory.MERCHANT.loadItems(chr.getId(), false);
-            p.writeByte(items.size());
+        List<Pair<Item, InventoryType>> items = ItemFactory.MERCHANT.loadItems(chr.getId(), false);
+        p.writeByte(items.size());
 
-            for (Pair<Item, InventoryType> item : items) {
-                addItemInfo(p, item.getLeft(), true);
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        for (Pair<Item, InventoryType> item : items) {
+            addItemInfo(p, item.getLeft(), true);
         }
         p.skip(3);
         return p;

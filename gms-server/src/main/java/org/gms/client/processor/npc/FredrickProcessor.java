@@ -23,6 +23,8 @@
 */
 package org.gms.client.processor.npc;
 
+import com.mybatisflex.core.query.QueryWrapper;
+import com.mybatisflex.core.update.UpdateChain;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.Inventory;
@@ -30,6 +32,14 @@ import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.ItemFactory;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.dao.entity.FredstorageDO;
+import org.gms.dao.entity.InventoryitemsDO;
+import org.gms.dao.entity.NotesDO;
+import org.gms.dao.mapper.CharactersMapper;
+import org.gms.dao.mapper.FredstorageMapper;
+import org.gms.dao.mapper.InventoryitemsMapper;
+import org.gms.dao.mapper.NotesMapper;
 import org.gms.net.server.Server;
 import org.gms.net.server.world.World;
 import org.slf4j.Logger;
@@ -37,21 +47,22 @@ import org.slf4j.LoggerFactory;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.maps.HiredMerchant;
 import org.gms.service.NoteService;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.gms.util.SpringContextUtil;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.DAYS;
 
 /**
+ * 弗雷德里克（雇佣商人管理员）处理器
  * @author RonanLana - synchronization of Fredrick modules and operation results
  */
 public class FredrickProcessor {
@@ -93,6 +104,9 @@ public class FredrickProcessor {
     }
 
     public static int timestampElapsedDays(Timestamp then, long timeNow) {
+        if (then == null) {
+            return 0;
+        }
         return (int) ((timeNow - then.getTime()) / DAYS.toMillis(1));
     }
 
@@ -109,211 +123,186 @@ public class FredrickProcessor {
     }
 
     public static void removeFredrickLog(int cid) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            removeFredrickLog(con, cid);
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        }
-    }
-
-    private static void removeFredrickLog(Connection con, int cid) throws SQLException {
-        try (PreparedStatement ps = con.prepareStatement("DELETE FROM `fredstorage` WHERE `cid` = ?")) {
-            ps.setInt(1, cid);
-            ps.executeUpdate();
-        }
+        FredstorageMapper mapper = SpringContextUtil.getBean(FredstorageMapper.class);
+        mapper.deleteById(cid);
     }
 
     public static void insertFredrickLog(int cid) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-
-            removeFredrickLog(con, cid);
-            try (PreparedStatement ps = con.prepareStatement("INSERT INTO `fredstorage` (`cid`, `daynotes`, `timestamp`) VALUES (?, 0, ?)")) {
-                ps.setInt(1, cid);
-                ps.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
-                ps.executeUpdate();
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        }
+        FredstorageMapper mapper = SpringContextUtil.getBean(FredstorageMapper.class);
+        FredstorageDO logEntry = new FredstorageDO();
+        logEntry.setCid((long) cid);
+        logEntry.setDaynotes(0L);
+        logEntry.setTimestamp(new Timestamp(System.currentTimeMillis()));
+        mapper.insert(logEntry, true); // Overwrite if exists
     }
 
     private static void removeFredrickReminders(List<Pair<Integer, Integer>> expiredCids) {
-        List<String> expiredCnames = new LinkedList<>();
-        for (Pair<Integer, Integer> id : expiredCids) {
-            String name = Character.getNameById(id.getLeft());
-            if (name != null) {
-                expiredCnames.add(name);
-            }
-        }
+        NotesMapper mapper = SpringContextUtil.getBean(NotesMapper.class);
+        List<String> expiredCnames = expiredCids.stream()
+                .map(p -> Character.getNameById(p.getLeft()))
+                .filter(name -> name != null)
+                .collect(Collectors.toList());
 
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("DELETE FROM `notes` WHERE `from` LIKE ? AND `to` LIKE ?")) {
-            ps.setString(1, "FREDRICK");
-
-            for (String cname : expiredCnames) {
-                ps.setString(2, cname);
-                ps.executeBatch();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        if (!expiredCnames.isEmpty()) {
+            QueryWrapper query = QueryWrapper.create()
+                    .where(NotesDO::getFrom).eq("FREDRICK")
+                    .and(NotesDO::getTo).in(expiredCnames);
+            mapper.deleteByQuery(query);
         }
     }
 
+    @Transactional
     public void runFredrickSchedule() {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            List<Pair<Integer, Integer>> expiredCids = new LinkedList<>();
-            List<Pair<Pair<Integer, String>, Integer>> notifCids = new LinkedList<>();
-            try (PreparedStatement ps = con.prepareStatement("SELECT * FROM fredstorage f LEFT JOIN (SELECT id, name, world, lastLogoutTime FROM characters) AS c ON c.id = f.cid");
-                 ResultSet rs = ps.executeQuery()) {
-                long curTime = System.currentTimeMillis();
+        FredstorageMapper fredstorageMapper = SpringContextUtil.getBean(FredstorageMapper.class);
+        InventoryitemsMapper inventoryitemsMapper = SpringContextUtil.getBean(InventoryitemsMapper.class);
 
-                while (rs.next()) {
-                    int cid = rs.getInt("cid");
-                    int world = rs.getInt("world");
-                    Timestamp ts = rs.getTimestamp("timestamp");
-                    int daynotes = Math.min(dailyReminders.length - 1, rs.getInt("daynotes"));
+        List<Pair<Integer, Integer>> expiredCids = new LinkedList<>();
+        List<Pair<Pair<Integer, String>, Integer>> notifCids = new LinkedList<>();
 
-                    int elapsedDays = timestampElapsedDays(ts, curTime);
-                    if (elapsedDays > 100) {
-                        expiredCids.add(new Pair<>(cid, world));
-                    } else {
-                        int notifDay = dailyReminders[daynotes];
+        QueryWrapper query = QueryWrapper.create()
+                .select("f.*", "c.name", "c.world", "c.lastLogoutTime")
+                .from(FredstorageDO.class).as("f")
+                .leftJoin(CharactersDO.class).as("c").on("c.id = f.cid");
 
-                        if (elapsedDays >= notifDay) {
-                            do {
-                                daynotes++;
-                                notifDay = dailyReminders[daynotes];
-                            } while (elapsedDays >= notifDay);
+        List<FredrickStorageInfoDTO> results = fredstorageMapper.selectListByQueryAs(query, FredrickStorageInfoDTO.class);
+        long curTime = System.currentTimeMillis();
 
-                            Timestamp logoutTs = rs.getTimestamp("lastLogoutTime");
-                            int inactivityDays = timestampElapsedDays(logoutTs, curTime);
+        for (FredrickStorageInfoDTO fredData : results) {
+            int cid = fredData.getCid();
+            int world = fredData.getWorld();
+            Timestamp ts = fredData.getTimestamp();
+            int daynotes = Math.min(dailyReminders.length - 1, fredData.getDaynotes());
 
-                            if (inactivityDays < 7 || daynotes >= dailyReminders.length - 1) {  // don't spam inactive players
-                                String name = rs.getString("name");
-                                notifCids.add(new Pair<>(new Pair<>(cid, name), daynotes));
-                            }
-                        }
+            int elapsedDays = timestampElapsedDays(ts, curTime);
+            if (elapsedDays > 100) {
+                expiredCids.add(new Pair<>(cid, world));
+            } else {
+                int notifDay = dailyReminders[daynotes];
+                if (elapsedDays >= notifDay) {
+                    do {
+                        daynotes++;
+                        notifDay = dailyReminders[daynotes];
+                    } while (elapsedDays >= notifDay);
+
+                    Timestamp logoutTs = fredData.getLastLogoutTime();
+                    int inactivityDays = timestampElapsedDays(logoutTs, curTime);
+
+                    if (inactivityDays < 7 || daynotes >= dailyReminders.length - 1) {
+                        String name = fredData.getName();
+                        notifCids.add(new Pair<>(new Pair<>(cid, name), daynotes));
                     }
                 }
-
             }
+        }
 
-            if (!expiredCids.isEmpty()) {
-                try (PreparedStatement ps = con.prepareStatement("DELETE FROM `inventoryitems` WHERE `type` = ? AND `characterid` = ?")) {
-                    ps.setInt(1, ItemFactory.MERCHANT.getValue());
+        if (!expiredCids.isEmpty()) {
+            List<Integer> cidsToRemove = expiredCids.stream().map(Pair::getLeft).collect(Collectors.toList());
 
-                    for (Pair<Integer, Integer> cid : expiredCids) {
-                        ps.setInt(2, cid.getLeft());
-                        ps.addBatch();
+            QueryWrapper deleteItemsQuery = QueryWrapper.create()
+                    .where(InventoryitemsDO::getType).eq(ItemFactory.MERCHANT.getValue())
+                    .and(InventoryitemsDO::getCharacterid).in(cidsToRemove);
+            inventoryitemsMapper.deleteByQuery(deleteItemsQuery);
+
+            UpdateChain.of(CharactersDO.class)
+                    .set(CharactersDO::getMerchantmesos, 0)
+                    .where(CharactersDO::getId).in(cidsToRemove)
+                    .update();
+
+            for (Pair<Integer, Integer> cidPair : expiredCids) {
+                World wserv = Server.getInstance().getWorld(cidPair.getRight());
+                if (wserv != null) {
+                    Character chr = wserv.getPlayerStorage().getCharacterById(cidPair.getLeft());
+                    if (chr != null) {
+                        chr.setMerchantMeso(0);
                     }
-
-                    ps.executeBatch();
-                }
-
-                try (PreparedStatement ps = con.prepareStatement("UPDATE `characters` SET `MerchantMesos` = 0 WHERE `id` = ?")) {
-                    for (Pair<Integer, Integer> cid : expiredCids) {
-                        ps.setInt(1, cid.getLeft());
-                        ps.addBatch();
-
-                        World wserv = Server.getInstance().getWorld(cid.getRight());
-                        if (wserv != null) {
-                            Character chr = wserv.getPlayerStorage().getCharacterById(cid.getLeft());
-                            if (chr != null) {
-                                chr.setMerchantMeso(0);
-                            }
-                        }
-                    }
-
-                    ps.executeBatch();
-                }
-
-                removeFredrickReminders(expiredCids);
-
-                try (PreparedStatement ps = con.prepareStatement("DELETE FROM `fredstorage` WHERE `cid` = ?")) {
-                    for (Pair<Integer, Integer> cid : expiredCids) {
-                        ps.setInt(1, cid.getLeft());
-                        ps.addBatch();
-                    }
-
-                    ps.executeBatch();
                 }
             }
 
-            if (!notifCids.isEmpty()) {
-                try (PreparedStatement ps = con.prepareStatement("UPDATE `fredstorage` SET `daynotes` = ? WHERE `cid` = ?")) {
-                    for (Pair<Pair<Integer, String>, Integer> cid : notifCids) {
-                        ps.setInt(1, cid.getRight());
-                        ps.setInt(2, cid.getLeft().getLeft());
-                        ps.addBatch();
+            removeFredrickReminders(expiredCids);
+            fredstorageMapper.deleteBatchByIds(cidsToRemove);
+        }
 
-                        String msg = fredrickReminderMessage(cid.getRight() - 1);
-                        noteService.sendNormal(msg, "FREDRICK", cid.getLeft().getRight());
-                    }
+        if (!notifCids.isEmpty()) {
+            for (Pair<Pair<Integer, String>, Integer> cidInfo : notifCids) {
+                UpdateChain.of(FredstorageDO.class)
+                        .set(FredstorageDO::getDaynotes, (long) cidInfo.getRight())
+                        .where(FredstorageDO::getCid).eq(cidInfo.getLeft().getLeft())
+                        .update();
 
-                    ps.executeBatch();
-                }
+                String msg = fredrickReminderMessage(cidInfo.getRight() - 1);
+                noteService.sendNormal(msg, "FREDRICK", cidInfo.getLeft().getRight());
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
 
     private static boolean deleteFredrickItems(int cid) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("DELETE FROM `inventoryitems` WHERE `type` = ? AND `characterid` = ?")) {
-            ps.setInt(1, ItemFactory.MERCHANT.getValue());
-            ps.setInt(2, cid);
-            ps.executeUpdate();
-
-            return true;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
+        InventoryitemsMapper mapper = SpringContextUtil.getBean(InventoryitemsMapper.class);
+        QueryWrapper query = QueryWrapper.create()
+                .where(InventoryitemsDO::getType).eq(ItemFactory.MERCHANT.getValue())
+                .and(InventoryitemsDO::getCharacterid).eq(cid);
+        return mapper.deleteByQuery(query) > 0;
     }
 
-    public void fredrickRetrieveItems(Client c) {     // thanks Gustav for pointing out the dupe on Fredrick handling
+    public void fredrickRetrieveItems(Client c) {
         if (c.tryacquireClient()) {
             try {
                 Character chr = c.getPlayer();
 
                 List<Pair<Item, InventoryType>> items;
-                try {
-                    items = ItemFactory.MERCHANT.loadItems(chr.getId(), false);
+                items = ItemFactory.MERCHANT.loadItems(chr.getId(), false);
 
-                    byte response = canRetrieveFromFredrick(chr, items);
-                    if (response != 0) {
-                        chr.sendPacket(PacketCreator.fredrickMessage(response));
-                        return;
+                byte response = canRetrieveFromFredrick(chr, items);
+                if (response != 0) {
+                    chr.sendPacket(PacketCreator.fredrickMessage(response));
+                    return;
+                }
+
+                chr.withdrawMerchantMesos();
+
+                if (deleteFredrickItems(chr.getId())) {
+                    HiredMerchant merchant = chr.getHiredMerchant();
+
+                    if (merchant != null) {
+                        merchant.clearItems();
                     }
 
-                    chr.withdrawMerchantMesos();
-
-                    if (deleteFredrickItems(chr.getId())) {
-                        HiredMerchant merchant = chr.getHiredMerchant();
-
-                        if (merchant != null) {
-                            merchant.clearItems();
-                        }
-
-                        for (Pair<Item, InventoryType> it : items) {
-                            Item item = it.getLeft();
-                            InventoryManipulator.addFromDrop(chr.getClient(), item, false);
-                            String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
-                            log.debug("Chr {} gained {}x {} ({})", chr.getName(), item.getQuantity(), itemName, item.getItemId());
-                        }
-
-                        chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x1E));
-                        removeFredrickLog(chr.getId());
-                    } else {
-                        chr.message("An unknown error has occured.");
+                    for (Pair<Item, InventoryType> it : items) {
+                        Item item = it.getLeft();
+                        InventoryManipulator.addFromDrop(chr.getClient(), item, false);
+                        String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
+                        log.debug("角色 {} 获得了 {}x {} ({})", chr.getName(), item.getQuantity(), itemName, item.getItemId());
                     }
-                } catch (SQLException ex) {
-                    ex.printStackTrace();
+
+                    chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x1E));
+                    removeFredrickLog(chr.getId());
+                } else {
+                    chr.message("发生未知错误。");
                 }
             } finally {
                 c.releaseClient();
             }
         }
+    }
+
+    public static class FredrickStorageInfoDTO {
+        private Integer cid;
+        private Integer daynotes;
+        private Timestamp timestamp;
+        private String name;
+        private Integer world;
+        private Timestamp lastLogoutTime;
+
+        public Integer getCid() { return cid; }
+        public void setCid(Integer cid) { this.cid = cid; }
+        public Integer getDaynotes() { return daynotes; }
+        public void setDaynotes(Integer daynotes) { this.daynotes = daynotes; }
+        public Timestamp getTimestamp() { return timestamp; }
+        public void setTimestamp(Timestamp timestamp) { this.timestamp = timestamp; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public Integer getWorld() { return world; }
+        public void setWorld(Integer world) { this.world = world; }
+        public Timestamp getLastLogoutTime() { return lastLogoutTime; }
+        public void setLastLogoutTime(Timestamp lastLogoutTime) { this.lastLogoutTime = lastLogoutTime; }
     }
 }

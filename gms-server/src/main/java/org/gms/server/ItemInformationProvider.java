@@ -39,7 +39,10 @@ import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.skills.Assassin;
 import org.gms.constants.skills.Gunslinger;
 import org.gms.constants.skills.NightWalker;
+import org.gms.dao.entity.MakercreatedataDO;
+import org.gms.manager.ServerManager;
 import org.gms.net.server.Server;
+import org.gms.service.ItemInformationService;
 import org.gms.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,10 +57,6 @@ import org.gms.server.MakerItemFactory.MakerItemCreateEntry;
 import org.gms.server.life.LifeFactory;
 import org.gms.server.life.MonsterInformationProvider;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -75,9 +74,15 @@ import java.util.Set;
 public class ItemInformationProvider {
     private static final Logger log = LoggerFactory.getLogger(ItemInformationProvider.class);
     private final static ItemInformationProvider instance = new ItemInformationProvider();
+    private static ItemInformationService itemInformationService;
 
     public static ItemInformationProvider getInstance() {
         return instance;
+    }
+
+    public static void initItemInformationService() {
+        itemInformationService = ServerManager.getApplicationContext().getBean(ItemInformationService.class);
+        instance.loadCardIdData();
     }
 
     protected DataProvider itemData;
@@ -138,7 +143,6 @@ public class ItemInformationProvider {
     protected Map<Integer, ItemCashInfo> itemCashInfoCache = new HashMap<>();
 
     private ItemInformationProvider() {
-        loadCardIdData();
         itemData = DataProviderFactory.getDataProvider(WZFiles.ITEM);
         equipData = DataProviderFactory.getDataProvider(WZFiles.CHARACTER);
         stringData = DataProviderFactory.getDataProvider(WZFiles.STRING);
@@ -1642,15 +1646,7 @@ public class ItemInformationProvider {
     }
 
     private void loadCardIdData() {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT cardid, mobid FROM monstercarddata");
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                monsterBookID.put(rs.getInt(1), rs.getInt(2));
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        monsterBookID.putAll(itemInformationService.loadCardIdData());
     }
 
     public int getCardMobId(int id) {
@@ -2116,108 +2112,43 @@ public class ItemInformationProvider {
     }
 
     public Pair<String, Integer> getMakerReagentStatUpgrade(int itemId) {
-        try {
-            Pair<String, Integer> statUpgd = statUpgradeMakerCache.get(itemId);
-            if (statUpgd != null) {
-                return statUpgd;
-            } else if (statUpgradeMakerCache.containsKey(itemId)) {
-                return null;
-            }
-
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("SELECT stat, value FROM makerreagentdata WHERE itemid = ?")) {
-                ps.setInt(1, itemId);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        String statType = rs.getString("stat");
-                        int statGain = rs.getInt("value");
-
-                        statUpgd = new Pair<>(statType, statGain);
-                    }
-                }
-            }
-
-            statUpgradeMakerCache.put(itemId, statUpgd);
-            return statUpgd;
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
+        if (statUpgradeMakerCache.containsKey(itemId)) {
+            return statUpgradeMakerCache.get(itemId);
         }
+        Pair<String, Integer> statUpgd = itemInformationService.getMakerReagentStatUpgrade(itemId);
+        statUpgradeMakerCache.put(itemId, statUpgd);
+        return statUpgd;
     }
 
     public int getMakerCrystalFromLeftover(Integer leftoverId) {
-        try {
-            Integer itemid = mobCrystalMakerCache.get(leftoverId);
-            if (itemid != null) {
-                return itemid;
-            }
-
-            itemid = -1;
-
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("SELECT dropperid FROM drop_data WHERE itemid = ? ORDER BY dropperid;")) {
-                ps.setInt(1, leftoverId);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        int dropperid = rs.getInt("dropperid");
-                        itemid = getCrystalForLevel(LifeFactory.getMonsterLevel(dropperid));
-                    }
-                }
-            }
-
-            mobCrystalMakerCache.put(leftoverId, itemid);
-            return itemid;
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (mobCrystalMakerCache.containsKey(leftoverId)) {
+            return mobCrystalMakerCache.get(leftoverId);
         }
-
-        return -1;
+        int itemid = -1;
+        List<Integer> dropperIds = itemInformationService.getMakerCrystalFromLeftover(leftoverId);
+        if (!dropperIds.isEmpty()) {
+            int dropperid = dropperIds.get(0);
+            itemid = getCrystalForLevel(LifeFactory.getMonsterLevel(dropperid));
+        }
+        mobCrystalMakerCache.put(leftoverId, itemid);
+        return itemid;
     }
 
     public MakerItemCreateEntry getMakerItemEntry(int toCreate) {
-        MakerItemCreateEntry makerEntry;
-
-        if ((makerEntry = makerItemCache.get(toCreate)) != null) {
-            return new MakerItemCreateEntry(makerEntry);
-        } else {
-            try (Connection con = DatabaseConnection.getConnection()) {
-                int reqLevel = -1;
-                int reqMakerLevel = -1;
-                int cost = -1;
-                int toGive = -1;
-                try (PreparedStatement ps = con.prepareStatement("SELECT req_level, req_maker_level, req_meso, quantity FROM makercreatedata WHERE itemid = ?")) {
-                    ps.setInt(1, toCreate);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        if (rs.next()) {
-                            reqLevel = rs.getInt("req_level");
-                            reqMakerLevel = rs.getInt("req_maker_level");
-                            cost = rs.getInt("req_meso");
-                            toGive = rs.getInt("quantity");
-                        }
-                    }
-                }
-
-                makerEntry = new MakerItemCreateEntry(cost, reqLevel, reqMakerLevel);
-                makerEntry.addGainItem(toCreate, toGive);
-
-                try (PreparedStatement ps = con.prepareStatement("SELECT req_item, count FROM makerrecipedata WHERE itemid = ?")) {
-                    ps.setInt(1, toCreate);
-
-                    try (ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            makerEntry.addReqItem(rs.getInt("req_item"), rs.getInt("count"));
-                        }
-                    }
-                }
-                makerItemCache.put(toCreate, new MakerItemCreateEntry(makerEntry));
-            } catch (SQLException sqle) {
-                sqle.printStackTrace();
-                makerEntry = null;
-            }
+        if (makerItemCache.containsKey(toCreate)) {
+            return new MakerItemCreateEntry(makerItemCache.get(toCreate));
         }
-
+        MakercreatedataDO createdata = itemInformationService.getMakerItemEntry(toCreate);
+        if (createdata == null) {
+            return null;
+        }
+        MakerItemCreateEntry makerEntry = new MakerItemCreateEntry(createdata.getReqMeso(), createdata.getReqLevel(), createdata.getReqMakerLevel());
+        makerEntry.addGainItem(toCreate, createdata.getQuantity());
+        List<Pair<Integer, Integer>> recipe = itemInformationService.getMakerItemRecipe(toCreate);
+        for (Pair<Integer, Integer> req : recipe) {
+            makerEntry.addReqItem(req.getLeft(), req.getRight());
+        }
+        makerItemCache.put(toCreate, new MakerItemCreateEntry(makerEntry));
         return makerEntry;
     }
 
@@ -2242,42 +2173,17 @@ public class ItemInformationProvider {
     }
 
     public List<Pair<Integer, Integer>> getMakerDisassembledItems(Integer itemId) {
-        List<Pair<Integer, Integer>> items = new LinkedList<>();
-
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT req_item, count FROM makerrecipedata WHERE itemid = ? AND req_item >= 4260000 AND req_item < 4270000")) {
-            ps.setInt(1, itemId);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    items.add(new Pair<>(rs.getInt("req_item"), rs.getInt("count") / 2));   // return to the player half of the crystals needed
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return items;
+        return itemInformationService.getMakerDisassembledItems(itemId);
     }
 
     public int getMakerDisassembledFee(Integer itemId) {
-        int fee = -1;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT req_meso FROM makercreatedata WHERE itemid = ?")) {
-            ps.setInt(1, itemId);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {   // cost is 13.6363~ % of the original value, trim by 1000.
-                    float val = (float) (rs.getInt("req_meso") * 0.13636363636364);
-                    fee = (int) (val / 1000);
-                    fee *= 1000;
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
+        Integer meso = itemInformationService.getMakerDisassembledFee(itemId);
+        if (meso != null) {
+            float val = (float) (meso * 0.13636363636364);
+            int fee = (int) (val / 1000);
+            return fee * 1000;
         }
-
-        return fee;
+        return -1;
     }
 
     public int getMakerStimulant(int itemId) {  // thanks to Arnah
@@ -2302,22 +2208,13 @@ public class ItemInformationProvider {
 
     public Set<String> getWhoDrops(Integer itemId) {
         Set<String> list = new HashSet<>();
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT dropperid FROM drop_data WHERE itemid = ? LIMIT 50")) {
-            ps.setInt(1, itemId);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    String resultName = MonsterInformationProvider.getInstance().getMobNameFromId(rs.getInt("dropperid"));
-                    if (!resultName.isEmpty()) {
-                        list.add(resultName);
-                    }
-                }
+        List<Integer> dropperIds = itemInformationService.getWhoDrops(itemId);
+        for (Integer dropperId : dropperIds) {
+            String resultName = MonsterInformationProvider.getInstance().getMobNameFromId(dropperId);
+            if (resultName != null && !resultName.isEmpty()) {
+                list.add(resultName);
             }
-        } catch (Exception e) {
-            e.printStackTrace();
         }
-
         return list;
     }
 

@@ -13,6 +13,7 @@ import org.gms.server.quest.Quest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -33,6 +34,57 @@ public class QuestService {
         medalmapsMapper.deleteByQuery(QueryWrapper.create().where(MEDALMAPS_D_O.CHARACTERID.eq(cid)));
         questprogressMapper.deleteByQuery(QueryWrapper.create().where(QUESTPROGRESS_D_O.CHARACTERID.eq(cid)));
         queststatusMapper.deleteByQuery(QueryWrapper.create().where(QUESTSTATUS_D_O.CHARACTERID.eq(cid)));
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void saveQuestStatus(int cid, List<QuestStatus> questStatusList) {
+        deleteQuestProgressByCharacter(cid);
+
+        if (questStatusList == null || questStatusList.isEmpty()) {
+            return;
+        }
+
+        List<QueststatusDO> queststatusDOList = new ArrayList<>();
+        List<QuestprogressDO> questprogressDOList = new ArrayList<>();
+        List<MedalmapsDO> medalmapsDOList = new ArrayList<>();
+
+        for (QuestStatus qs : questStatusList) {
+            QueststatusDO queststatusDO = new QueststatusDO();
+            queststatusDO.setCharacterid(cid);
+            queststatusDO.setQuest((int) qs.getQuest().getId());
+            queststatusDO.setStatus(qs.getStatus().getId());
+            queststatusDO.setTime((int) (qs.getCompletionTime() / 1000));
+            queststatusDO.setExpires(qs.getExpirationTime());
+            queststatusDO.setForfeited(qs.getForfeited());
+            queststatusDO.setCompleted(qs.getCompleted());
+            queststatusMapper.insert(queststatusDO); // Insert to get ID
+
+            long questStatusId = queststatusDO.getQueststatusid();
+
+            for (int mob : qs.getProgress().keySet()) {
+                QuestprogressDO questprogressDO = new QuestprogressDO();
+                questprogressDO.setCharacterid(cid);
+                questprogressDO.setQueststatusid(questStatusId);
+                questprogressDO.setProgressid(mob);
+                questprogressDO.setProgress(qs.getProgress(mob));
+                questprogressDOList.add(questprogressDO);
+            }
+
+            for (int mapId : qs.getMedalMaps()) {
+                MedalmapsDO medalmapsDO = new MedalmapsDO();
+                medalmapsDO.setCharacterid(cid);
+                medalmapsDO.setQueststatusid(questStatusId);
+                medalmapsDO.setMapid(mapId);
+                medalmapsDOList.add(medalmapsDO);
+            }
+        }
+
+        if (!questprogressDOList.isEmpty()) {
+            questprogressMapper.insertBatch(questprogressDOList);
+        }
+        if (!medalmapsDOList.isEmpty()) {
+            medalmapsMapper.insertBatch(medalmapsDOList);
+        }
     }
 
     public List<QuestStatus> getQuestStatusByCharacter(int cid) {

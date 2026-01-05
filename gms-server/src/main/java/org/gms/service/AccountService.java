@@ -5,6 +5,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import lombok.AllArgsConstructor;
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.client.Client.CharNameAndId;
 import org.gms.client.DefaultDates;
 import org.gms.config.GameConfig;
 import org.gms.dao.entity.*;
@@ -25,13 +26,18 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 import static org.gms.client.Client.LOGIN_LOGGEDIN;
 import static org.gms.client.Client.LOGIN_NOTLOGGEDIN;
+import static org.gms.dao.entity.table.AccountsDOTableDef.ACCOUNTS_D_O;
 import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
+import static org.gms.dao.entity.table.HwidbansDOTableDef.HWIDBANS_D_O;
 import static org.gms.dao.entity.table.IpbansDOTableDef.IPBANS_D_O;
+import static org.gms.dao.entity.table.MacbansDOTableDef.MACBANS_D_O;
 
 @Service
 @AllArgsConstructor
@@ -40,7 +46,9 @@ public class AccountService {
     private final CharactersMapper charactersMapper;
     private final IpbansMapper ipbansMapper;
     private final MacbansMapper macbansMapper;
+    private final HwidbansMapper hwidbansMapper;
     private final QuickslotkeymappedMapper quickslotkeymappedMapper;
+    private final VotingrecordsMapper votingrecordsMapper;
 
     public AccountsDO findByName(String name) {
         return accountsMapper.selectOneByName(name);
@@ -273,5 +281,154 @@ public class AccountService {
 
     public QuickslotkeymappedDO getQuickSlotKeyMap(int accountId) {
         return quickslotkeymappedMapper.selectOneById(accountId);
+    }
+
+    public List<Integer> getAllAccountIds() {
+        return accountsMapper.selectListByQuery(QueryWrapper.create().select(ACCOUNTS_D_O.ID)).stream().map(AccountsDO::getId).toList();
+    }
+
+    public boolean hasBannedIP(String remoteAddress) {
+        return ipbansMapper.selectCountByQuery(QueryWrapper.create().where(IPBANS_D_O.IP.like(remoteAddress))) > 0;
+    }
+
+    public boolean hasBannedHWID(String hwid) {
+        return hwidbansMapper.selectCountByQuery(QueryWrapper.create().where(HWIDBANS_D_O.HWID.like(hwid))) > 0;
+    }
+
+    public boolean hasBannedMac(Set<String> macs) {
+        if (macs.isEmpty()) {
+            return false;
+        }
+        return macbansMapper.selectCountByQuery(QueryWrapper.create().where(MACBANS_D_O.MAC.in(macs))) > 0;
+    }
+
+    public List<CharNameAndId> loadCharactersInternal(int accountId, int worldId) {
+        List<CharactersDO> charsDO = charactersMapper.selectListByQuery(
+                QueryWrapper.create().where(CHARACTERS_D_O.ACCOUNTID.eq(accountId)).and(CHARACTERS_D_O.WORLD.eq(worldId)));
+        List<CharNameAndId> chars = new ArrayList<>();
+        for (CharactersDO c : charsDO) {
+            chars.add(new CharNameAndId(c.getName(), c.getId()));
+        }
+        return chars;
+    }
+
+    public int getVoteTime(String accountName) {
+        VotingrecordsDO record = votingrecordsMapper.selectOneByQuery(
+                QueryWrapper.create().where("UPPER(account) = UPPER(?)", accountName));
+        if (record != null) {
+            return record.getDate();
+        }
+        return -1;
+    }
+
+    public String loadHwid(int accountId) {
+        AccountsDO account = accountsMapper.selectOneById(accountId);
+        return account != null ? account.getHwid() : null;
+    }
+
+    public String loadMacs(int accountId) {
+        AccountsDO account = accountsMapper.selectOneById(accountId);
+        return account != null ? account.getMacs() : null;
+    }
+
+    public void banHwid(String hwid) {
+        hwidbansMapper.insert(HwidbansDO.builder().hwid(hwid).build());
+    }
+
+    public void banIp(String ip, int accountId) {
+        ipbansMapper.insert(IpbansDO.builder().ip(ip).aid(String.valueOf(accountId)).build());
+    }
+
+    public void banMacs(Set<String> macs, int accountId) {
+        for (String mac : macs) {
+            macbansMapper.insert(MacbansDO.builder().mac(mac).aid(String.valueOf(accountId)).build());
+        }
+    }
+
+    public int getActiveRecordCount(String searchValue) {
+        String searchPattern = "%" + searchValue + "%";
+        return (int) accountsMapper.selectCountByQuery(QueryWrapper.create()
+                .where(ACCOUNTS_D_O.LOGGEDIN.gt(0))
+                .and(ACCOUNTS_D_O.IP.like(searchPattern)
+                        .or(ACCOUNTS_D_O.MACS.like(searchPattern))
+                        .or(ACCOUNTS_D_O.HWID.like(searchPattern))));
+    }
+
+    public int getTodayLoginCount(String searchValue) {
+        String searchPattern = "%" + searchValue + "%";
+        return (int) accountsMapper.selectCountByQuery(QueryWrapper.create()
+                .where(ACCOUNTS_D_O.LOGGEDIN.gt(0))
+                .and(ACCOUNTS_D_O.IP.like(searchPattern)
+                        .or(ACCOUNTS_D_O.MACS.like(searchPattern))
+                        .or(ACCOUNTS_D_O.HWID.like(searchPattern)))
+                .and(ACCOUNTS_D_O.LASTLOGIN.isNotNull())
+                .and("DATE(lastlogin) = CURDATE()"));
+    }
+
+    public void setPin(int accountId, String pin) {
+        accountsMapper.update(AccountsDO.builder().id(accountId).pin(pin).build());
+    }
+
+    public void setPic(int accountId, String pic) {
+        accountsMapper.update(AccountsDO.builder().id(accountId).pic(pic).build());
+    }
+
+    public AccountsDO getLoginState(int accountId) {
+        return accountsMapper.selectOneById(accountId);
+    }
+
+    public void updateLoginState(int accountId, int newState) {
+        accountsMapper.update(AccountsDO.builder()
+                .id(accountId)
+                .loggedin(newState)
+                .lastlogin(new Timestamp(System.currentTimeMillis()))
+                .build());
+    }
+
+    public void updateHwid(int accountId, String hwid) {
+        accountsMapper.update(AccountsDO.builder().id(accountId).hwid(hwid).build());
+    }
+
+    public void updateMacs(int accountId, String macs) {
+        accountsMapper.update(AccountsDO.builder().id(accountId).macs(macs).build());
+    }
+
+    public void updateIps(int accountId, String ips) {
+        accountsMapper.update(AccountsDO.builder().id(accountId).ip(ips).build());
+    }
+
+    public boolean acceptToS(int accountId) {
+        AccountsDO account = accountsMapper.selectOneById(accountId);
+        if (account != null && Boolean.TRUE.equals(account.getTos())) {
+            return true;
+        }
+        accountsMapper.update(AccountsDO.builder().id(accountId).tos(true).build());
+        return false;
+    }
+
+    public int getVotePoints(int accountId) {
+        AccountsDO account = accountsMapper.selectOneById(accountId);
+        return account != null ? account.getVotepoints() : 0;
+    }
+
+    public void saveVotePoints(int accountId, int points) {
+        accountsMapper.update(AccountsDO.builder().id(accountId).votepoints(points).build());
+    }
+
+    public boolean gainCharacterSlot(int accountId, int currentSlots) {
+        if (currentSlots < 15) {
+            accountsMapper.update(AccountsDO.builder().id(accountId).characterslots(currentSlots + 1).build());
+            return true;
+        }
+        return false;
+    }
+
+    public byte getGReason(int accountId) {
+        AccountsDO account = accountsMapper.selectOneById(accountId);
+        return account != null ? account.getGreason().byteValue() : 0;
+    }
+
+    public void setGender(int accountId, byte gender) {
+        accountsMapper.update(AccountsDO.builder().id(accountId).gender((int) gender).build());
     }
 }

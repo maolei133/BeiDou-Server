@@ -21,6 +21,7 @@
 */
 package org.gms.server;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.Inventory;
@@ -30,21 +31,22 @@ import org.gms.client.inventory.Pet;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.dao.entity.ShopitemsDO;
+import org.gms.dao.entity.ShopsDO;
+import org.gms.dao.mapper.ShopitemsMapper;
+import org.gms.dao.mapper.ShopsMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
+ * 游戏商店服务类
  * @author Matze
  */
 public class Shop {
@@ -64,7 +66,7 @@ public class Shop {
         rechargeableItems.add(ItemId.BLAZE_CAPSULE);
         rechargeableItems.add(ItemId.GLAZE_CAPSULE);
         rechargeableItems.add(ItemId.BALANCED_FURY);
-        rechargeableItems.remove(ItemId.DEVIL_RAIN_THROWING_STAR); // doesn't exist
+        rechargeableItems.remove(ItemId.DEVIL_RAIN_THROWING_STAR); // 实际不存在
         for (int bulletId : ItemId.allBulletIds()) {
             rechargeableItems.add(bulletId);
         }
@@ -89,7 +91,7 @@ public class Shop {
         ShopItem item = findBySlot(slot);
         if (item != null) {
             if (item.getItemId() != itemId) {
-                log.warn("Wrong slot number in shop {}", id);
+                log.warn("商店 {} 中的物品栏位号错误", id);
                 return;
             }
         } else {
@@ -105,7 +107,7 @@ public class Shop {
                 int amount = (int) Math.min((float) item.getPrice() * quantity, Integer.MAX_VALUE);
                 if (c.getPlayer().getMeso() >= amount) {
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
-                        if (!ItemConstants.isRechargeable(itemId)) { //Pets can't be bought from shops
+                        if (!ItemConstants.isRechargeable(itemId)) { //宠物无法从商店购买
                             InventoryManipulator.addById(c, itemId, quantity, "", -1);
                             c.getPlayer().gainMeso(-amount, false);
                         } else {
@@ -172,7 +174,7 @@ public class Shop {
     }
 
     private static boolean canSell(Item item, short quantity) {
-        if (item == null) { //Basic check
+        if (item == null) { //基础检查
             return false;
         }
 
@@ -265,53 +267,44 @@ public class Shop {
     }
 
     public static Shop createFromDB(int id, boolean isShopId) {
-        Shop ret = null;
-        int shopId;
-        try (Connection con = DatabaseConnection.getConnection()) {
-            final String query;
-            if (isShopId) {
-                query = "SELECT * FROM shops WHERE shopid = ?";
-            } else {
-                query = "SELECT * FROM shops WHERE npcid = ?";
-            }
+        ShopsMapper shopsMapper = SpringContextUtil.getBean(ShopsMapper.class);
+        ShopitemsMapper shopitemsMapper = SpringContextUtil.getBean(ShopitemsMapper.class);
 
-            try (PreparedStatement ps = con.prepareStatement(query)) {
-                ps.setInt(1, id);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        shopId = rs.getInt("shopid");
-                        ret = new Shop(shopId, rs.getInt("npcid"));
-                    } else {
-                        return null;
-                    }
-                }
-            }
-
-            try (PreparedStatement ps = con.prepareStatement("SELECT itemid, price, pitch FROM shopitems WHERE shopid = ? ORDER BY position DESC")) {
-                ps.setInt(1, shopId);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    List<Integer> recharges = new ArrayList<>(rechargeableItems);
-                    while (rs.next()) {
-                        if (ItemConstants.isRechargeable(rs.getInt("itemid"))) {
-                            ShopItem starItem = new ShopItem((short) 1, rs.getInt("itemid"), rs.getInt("price"), rs.getInt("pitch"));
-                            ret.addItem(starItem);
-                            if (rechargeableItems.contains(starItem.getItemId())) {
-                                recharges.remove(Integer.valueOf(starItem.getItemId()));
-                            }
-                        } else {
-                            ret.addItem(new ShopItem((short) 1000, rs.getInt("itemid"), rs.getInt("price"), rs.getInt("pitch")));
-                        }
-                    }
-                    for (Integer recharge : recharges) {
-                        ret.addItem(new ShopItem((short) 1000, recharge, 0, 0));
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        ShopsDO shopData;
+        if (isShopId) {
+            shopData = shopsMapper.selectOneById(id);
+        } else {
+            QueryWrapper query = QueryWrapper.create().where(ShopsDO::getNpcid).eq(id);
+            shopData = shopsMapper.selectOneByQuery(query);
         }
+
+        if (shopData == null) {
+            return null;
+        }
+
+        int shopId = shopData.getShopid().intValue();
+        Shop ret = new Shop(shopId, shopData.getNpcid());
+
+        QueryWrapper itemsQuery = QueryWrapper.create()
+                .where(ShopitemsDO::getShopid).eq(shopId)
+                .orderBy(ShopitemsDO::getPosition, false);
+        List<ShopitemsDO> itemsData = shopitemsMapper.selectListByQuery(itemsQuery);
+
+        List<Integer> recharges = new ArrayList<>(rechargeableItems);
+        for (ShopitemsDO itemData : itemsData) {
+            if (ItemConstants.isRechargeable(itemData.getItemid())) {
+                ShopItem starItem = new ShopItem((short) 1, itemData.getItemid(), itemData.getPrice(), itemData.getPitch());
+                ret.addItem(starItem);
+                recharges.remove(Integer.valueOf(starItem.getItemId()));
+            } else {
+                ret.addItem(new ShopItem((short) 1000, itemData.getItemid(), itemData.getPrice(), itemData.getPitch()));
+            }
+        }
+
+        for (Integer recharge : recharges) {
+            ret.addItem(new ShopItem((short) 1000, recharge, 0, 0));
+        }
+
         return ret;
     }
 

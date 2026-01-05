@@ -44,6 +44,7 @@ import org.gms.provider.wz.WZFiles;
 import org.gms.service.AccountService;
 import org.gms.service.CashShopService;
 import org.gms.service.CharacterService;
+import org.gms.service.ItemFactoryService;
 import org.gms.util.DatabaseConnection;
 import org.gms.util.Pair;
 
@@ -83,6 +84,7 @@ public class CashShop {
     private final Lock lock = new ReentrantLock();
     private static final AccountService accountService = ServerManager.getApplicationContext().getBean(AccountService.class);
     private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
+    private static final ItemFactoryService itemFactoryService = ServerManager.getApplicationContext().getBean(ItemFactoryService.class);
 
     public CashShop(int accountId, int characterId, int jobType) {
         this.accountId = accountId;
@@ -109,12 +111,8 @@ public class CashShop {
         this.maplePoint = Optional.ofNullable(accountsDO.getMaplePoint()).orElse(0);
         this.nxPrepaid = Optional.ofNullable(accountsDO.getNxPrepaid()).orElse(0);
 
-        try {
-            for (Pair<Item, InventoryType> item : factory.loadItems(accountId, false)) {
-                inventory.add(item.getLeft());
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        for (Pair<Item, InventoryType> item : factory.loadItems(accountId, false)) {
+            inventory.add(item.getLeft());
         }
 
         List<WishlistsDO> wishlistsDOList = characterService.getWishlistsByCharacter(characterId);
@@ -521,14 +519,13 @@ public class CashShop {
         notes--;
     }
 
-    public void save(Connection con) throws SQLException {
-        try (PreparedStatement ps = con.prepareStatement("UPDATE `accounts` SET `nxCredit` = ?, `maplePoint` = ?, `nxPrepaid` = ? WHERE `id` = ?")) {
-            ps.setInt(1, nxCredit);
-            ps.setInt(2, maplePoint);
-            ps.setInt(3, nxPrepaid);
-            ps.setInt(4, accountId);
-            ps.executeUpdate();
-        }
+    public void save() {
+        accountService.update(AccountsDO.builder()
+                .id(accountId)
+                .nxCredit(nxCredit)
+                .maplePoint(maplePoint)
+                .nxPrepaid(nxPrepaid)
+                .build());
 
         List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
 
@@ -537,22 +534,20 @@ public class CashShop {
             itemsWithType.add(new Pair<>(item, item.getInventoryType()));
         }
 
-        factory.saveItems(itemsWithType, accountId, con);
+        itemFactoryService.saveItems(factory.getValue(), factory.isAccount(), itemsWithType, accountId);
 
-        try (PreparedStatement ps = con.prepareStatement("DELETE FROM `wishlists` WHERE `charid` = ?")) {
-            ps.setInt(1, characterId);
-            ps.executeUpdate();
-        }
-
-        try (PreparedStatement ps = con.prepareStatement("INSERT INTO `wishlists` VALUES (DEFAULT, ?, ?)")) {
-            ps.setInt(1, characterId);
-
+        characterService.deleteWishlistsByCharacter(characterId);
+        if (!wishList.isEmpty()) {
+            List<WishlistsDO> wishlistsDOList = new ArrayList<>();
             for (int sn : wishList) {
-                // TODO: batch insert
-                ps.setInt(2, sn);
-                ps.executeUpdate();
+                wishlistsDOList.add(WishlistsDO.builder().charid(characterId).sn(sn).build());
             }
+            characterService.batchInsertWishlists(wishlistsDOList);
         }
+    }
+
+    public void save(Connection con) {
+        save();
     }
 
     public Optional<CashShopSurpriseResult> openCashShopSurprise(long cashId) {

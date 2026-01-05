@@ -26,21 +26,19 @@ package org.gms.client.command.commands.gm4;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.command.Command;
+import org.gms.manager.ServerManager;
 import org.gms.net.server.channel.Channel;
 import org.gms.server.maps.MapleMap;
-import org.gms.util.DatabaseConnection;
+import org.gms.service.PlifeService;
 import org.gms.util.I18nUtil;
 import org.gms.util.Pair;
 
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.LinkedList;
 import java.util.List;
 
 public class PmobRemoveCommand extends Command {
+    private static final PlifeService plifeService = ServerManager.getApplicationContext().getBean(PlifeService.class);
+
     {
         setDescription(I18nUtil.getMessage("PmobRemoveCommand.message1"));
     }
@@ -53,47 +51,8 @@ public class PmobRemoveCommand extends Command {
         int mobId = params.length > 0 ? Integer.parseInt(params[0]) : -1;
 
         Point pos = player.getPosition();
-        int xpos = pos.x;
-        int ypos = pos.y;
 
-        List<Pair<Integer, Pair<Integer, Integer>>> toRemove = new LinkedList<>();
-        try (Connection con = DatabaseConnection.getConnection()) {
-            final PreparedStatement ps;
-            if (mobId > -1) {
-                String select = "SELECT * FROM plife WHERE world = ? AND map = ? AND type LIKE ? AND life = ?";
-                ps = con.prepareStatement(select, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE);
-                ps.setInt(1, player.getWorld());
-                ps.setInt(2, mapId);
-                ps.setString(3, "m");
-                ps.setInt(4, mobId);
-            } else {
-                String select = "SELECT * FROM plife WHERE world = ? AND map = ? AND type LIKE ? AND x >= ? AND x <= ? AND y >= ? AND y <= ?";
-                ps = con.prepareStatement(select, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE);
-                ps.setInt(1, player.getWorld());
-                ps.setInt(2, mapId);
-                ps.setString(3, "m");
-                ps.setInt(4, xpos - 50);
-                ps.setInt(5, xpos + 50);
-                ps.setInt(6, ypos - 50);
-                ps.setInt(7, ypos + 50);
-            }
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (true) {
-                    rs.beforeFirst();
-                    if (!rs.next()) {
-                        break;
-                    }
-
-                    toRemove.add(new Pair<>(rs.getInt("life"), new Pair<>(rs.getInt("x"), rs.getInt("y"))));
-                    rs.deleteRow();
-                }
-            }
-            ps.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-            player.dropMessage(5, I18nUtil.getMessage("PmobRemoveCommand.message2"));
-        }
+        List<Pair<Integer, Pair<Integer, Integer>>> toRemove = plifeService.removePmob(player.getWorld(), mapId, mobId, pos);
 
         if (!toRemove.isEmpty()) {
             for (Channel ch : player.getWorldServer().getChannels()) {

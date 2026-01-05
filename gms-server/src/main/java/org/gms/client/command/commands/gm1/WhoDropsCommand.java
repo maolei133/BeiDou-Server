@@ -27,18 +27,19 @@ import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.command.Command;
 import org.gms.constants.id.NpcId;
+import org.gms.manager.ServerManager;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.life.MonsterInformationProvider;
-import org.gms.util.DatabaseConnection;
+import org.gms.service.DropDataService;
 import org.gms.util.I18nUtil;
 import org.gms.util.Pair;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.Iterator;
+import java.util.List;
 
 public class WhoDropsCommand extends Command {
+    private static final DropDataService dropDataService = ServerManager.getApplicationContext().getBean(DropDataService.class);
+
     {
         setDescription(I18nUtil.getMessage("WhoDropsCommand.message1"));
     }
@@ -61,16 +62,12 @@ public class WhoDropsCommand extends Command {
                     while (listIterator.hasNext() && count <= 3) {
                         Pair<Integer, String> data = listIterator.next();
                         output.append("#b").append(data.getRight()).append("#k ").append(I18nUtil.getMessage("WhoDropsCommand.message3")).append("\r\n");
-                        try (Connection con = DatabaseConnection.getConnection();
-                             PreparedStatement ps = con.prepareStatement("SELECT dropperid FROM drop_data WHERE itemid = ? LIMIT 50")) {
-                            ps.setInt(1, data.getLeft());
-
-                            try (ResultSet rs = ps.executeQuery()) {
-                                while (rs.next()) {
-                                    String resultName = MonsterInformationProvider.getInstance().getMobNameFromId(rs.getInt("dropperid"));
-                                    if (resultName != null) {
-                                        output.append(resultName).append(", ");
-                                    }
+                        try {
+                            List<Integer> dropperIds = dropDataService.getWhoDrops(data.getLeft());
+                            for (Integer dropperId : dropperIds) {
+                                String resultName = MonsterInformationProvider.getInstance().getMobNameFromId(dropperId);
+                                if (resultName != null) {
+                                    output.append(resultName).append(", ");
                                 }
                             }
                         } catch (Exception e) {

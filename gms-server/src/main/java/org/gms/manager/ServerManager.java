@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.gms.ServerApplication;
 import org.gms.constants.net.ServerConstants;
 import org.gms.net.server.Server;
+import org.gms.server.ItemInformationProvider;
 import org.gms.util.I18nUtil;
 import org.springdoc.core.properties.SpringDocConfigProperties;
 import org.springdoc.core.properties.SwaggerUiConfigProperties;
@@ -34,6 +35,7 @@ public class ServerManager implements ApplicationContextAware, ApplicationRunner
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
+        ItemInformationProvider.initItemInformationService();
         Server.getInstance().init();
 
         SpringDocConfigProperties springDocConfigProperties = applicationContext.getBean(SpringDocConfigProperties.class);

@@ -72,20 +72,16 @@ public final class HiredMerchantRequest extends AbstractPacketHandler {
 
         if (GameConstants.isFreeMarketRoom(chr.getMapId())) {
             if (!chr.hasMerchant()) {
-                try {
-                    if (ItemFactory.MERCHANT.loadItems(chr.getId(), false).isEmpty() && chr.getMerchantMeso() == 0) {
-                        c.sendPacket(PacketCreator.hiredMerchantBox());
-                    } else {
-                        chr.sendPacket(PacketCreator.retrieveFirstMessage());
-                    }
-                } catch (SQLException ex) {
-                    ex.printStackTrace();
+                if (ItemFactory.MERCHANT.loadItems(chr.getId(), false).isEmpty() && chr.getMerchantMeso() == 0) {
+                    c.sendPacket(PacketCreator.hiredMerchantBox());
+                } else {
+                    chr.sendPacket(PacketCreator.retrieveFirstMessage());
                 }
             } else {
-                chr.dropMessage(1, "You already have a store open.");
+                chr.dropMessage(1, "您已经有一个商店开张了。");
             }
         } else {
-            chr.dropMessage(1, "You cannot open your hired merchant here.");
+            chr.dropMessage(1, "您不能在这里开设您的雇佣商人。");
         }
     }
 }

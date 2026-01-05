@@ -65,6 +65,7 @@ import org.gms.net.server.task.ServerMessageTask;
 import org.gms.net.server.task.TimedMapObjectTask;
 import org.gms.net.server.task.TimeoutTask;
 import org.gms.net.server.task.WeddingReservationTask;
+import org.gms.service.WorldService;
 import org.gms.util.*;
 import org.gms.util.packets.Fishing;
 import org.slf4j.Logger;
@@ -218,6 +219,8 @@ public class World {
     private ScheduledFuture<?> partySearchSchedule;
     private ScheduledFuture<?> timeoutSchedule;
     private ScheduledFuture<?> hpDecSchedule;
+
+    private static final WorldService worldService = ServerManager.getApplicationContext().getBean(WorldService.class);
 
     public World(int world, int flag, String eventmsg, float expRate, float dropRate, float bossDropRate, float mesoRate,
                  float questRate, float travelRate, float fishingRate) {
@@ -1822,34 +1825,13 @@ public class World {
         setPlayerNpcMapData(mapid, step, podium, true);
     }
 
-    private static void executePlayerNpcMapDataUpdate(boolean isPodium, Map<Integer, ?> pnpcData, int value, int worldId, int mapId) {
-        PlayernpcsFieldMapper playernpcsFieldMapper = ServerManager.getApplicationContext().getBean(PlayernpcsFieldMapper.class);
-        PlayernpcsFieldDO playernpcsFieldDO = new PlayernpcsFieldDO();
-        if (isPodium) {
-            playernpcsFieldDO.setPodium(value);
-        } else {
-            playernpcsFieldDO.setStep(value);
-            playernpcsFieldDO.setWorld(worldId);
-            playernpcsFieldDO.setMap(mapId);
-        }
-        if (pnpcData.containsKey(mapId)) {
-            QueryWrapper queryWrapper = QueryWrapper.create()
-                    .from(PLAYERNPCS_FIELD_D_O)
-                    .where(PLAYERNPCS_FIELD_D_O.WORLD.eq(worldId))
-                    .and(PLAYERNPCS_FIELD_D_O.MAP.eq(mapId));
-            playernpcsFieldMapper.updateByQuery(playernpcsFieldDO, queryWrapper);
-        } else {
-            playernpcsFieldMapper.insert(playernpcsFieldDO);
-        }
-    }
-
     private void setPlayerNpcMapData(int mapId, int step, int podium, boolean silent) {
         if (!silent) {
             if (step != -1) {
-                executePlayerNpcMapDataUpdate(false, pnpcStep, step, id, mapId);
+                worldService.executePlayerNpcMapDataUpdate(false, pnpcStep.containsKey(mapId), step, id, mapId);
             }
             if (podium != -1) {
-                executePlayerNpcMapDataUpdate(true, pnpcPodium, podium, id, mapId);
+                worldService.executePlayerNpcMapDataUpdate(true, pnpcPodium.containsKey(mapId), podium, id, mapId);
             }
         }
 
@@ -1930,7 +1912,7 @@ public class World {
         Pair<Integer, Integer> rc = relationshipCouples.get(relationshipId);
 
         if (rc == null) {
-            Pair<Integer, Pair<Integer, Integer>> couple = getRelationshipCoupleFromDb(relationshipId, true);
+            Pair<Integer, Pair<Integer, Integer>> couple = worldService.getRelationshipCoupleFromDb(relationshipId, true);
             if (couple == null) {
                 return null;
             }
@@ -1946,7 +1928,7 @@ public class World {
         Integer ret = relationships.get(playerId);
 
         if (ret == null) {
-            Pair<Integer, Pair<Integer, Integer>> couple = getRelationshipCoupleFromDb(playerId, false);
+            Pair<Integer, Pair<Integer, Integer>> couple = worldService.getRelationshipCoupleFromDb(playerId, false);
             if (couple == null) {
                 return -1;
             }
@@ -1958,78 +1940,20 @@ public class World {
         return ret;
     }
 
-    private static Pair<Integer, Pair<Integer, Integer>> getRelationshipCoupleFromDb(int id, boolean usingMarriageId) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            Integer mid = null, hid = null, wid = null;
-
-            PreparedStatement ps;
-            if (usingMarriageId) {
-                ps = con.prepareStatement("SELECT * FROM marriages WHERE marriageid = ?");
-                ps.setInt(1, id);
-            } else {
-                ps = con.prepareStatement("SELECT * FROM marriages WHERE husbandid = ? OR wifeid = ?");
-                ps.setInt(1, id);
-                ps.setInt(2, id);
-            }
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    mid = rs.getInt("marriageid");
-                    hid = rs.getInt("husbandid");
-                    wid = rs.getInt("wifeid");
-                }
-            }
-
-            ps.close();
-
-            return (mid == null) ? null : new Pair<>(mid, new Pair<>(hid, wid));
-        } catch (SQLException se) {
-            se.printStackTrace();
-            return null;
-        }
-    }
-
     public int createRelationship(int groomId, int brideId) {
-        int ret = addRelationshipToDb(groomId, brideId);
+        int ret = worldService.addRelationshipToDb(groomId, brideId);
 
         pushRelationshipCouple(new Pair<>(ret, new Pair<>(groomId, brideId)));
         return ret;
     }
 
-    private static int addRelationshipToDb(int groomId, int brideId) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO marriages (husbandid, wifeid) VALUES (?, ?)", Statement.RETURN_GENERATED_KEYS)) {
-            ps.setInt(1, groomId);
-            ps.setInt(2, brideId);
-            ps.executeUpdate();
-
-            try (ResultSet rs = ps.getGeneratedKeys()) {
-                rs.next();
-                return rs.getInt(1);
-            }
-        } catch (SQLException se) {
-            se.printStackTrace();
-            return -1;
-        }
-    }
-
     public void deleteRelationship(int playerId, int partnerId) {
         int relationshipId = relationships.get(playerId);
-        deleteRelationshipFromDb(relationshipId);
+        worldService.deleteRelationshipFromDb(relationshipId);
 
         relationshipCouples.remove(relationshipId);
         relationships.remove(playerId);
         relationships.remove(partnerId);
-    }
-
-    private static void deleteRelationshipFromDb(int playerId) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("DELETE FROM marriages WHERE marriageid = ?")) {
-            ps.setInt(1, playerId);
-            ps.executeUpdate();
-        } catch (SQLException se) {
-            se.printStackTrace();
-        }
     }
 
     public void dropMessage(int type, String message) {

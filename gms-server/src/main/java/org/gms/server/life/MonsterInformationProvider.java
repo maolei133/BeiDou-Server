@@ -20,8 +20,13 @@
  */
 package org.gms.server.life;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.config.GameConfig;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.dao.entity.DropDataDO;
+import org.gms.dao.entity.DropDataGlobalDO;
+import org.gms.dao.mapper.DropDataGlobalMapper;
+import org.gms.dao.mapper.DropDataMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.provider.Data;
@@ -30,25 +35,18 @@ import org.gms.provider.DataProviderFactory;
 import org.gms.provider.DataTool;
 import org.gms.provider.wz.WZFiles;
 import org.gms.server.ItemInformationProvider;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.Pair;
 import org.gms.util.Randomizer;
+import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
+/**
+ * 怪物信息提供者
+ * @author LightPepsi
+ */
 public class MonsterInformationProvider {
     private static final Logger log = LoggerFactory.getLogger(MonsterInformationProvider.class);
-    // Author : LightPepsi
 
     private static final MonsterInformationProvider instance = new MonsterInformationProvider();
 
@@ -60,7 +58,7 @@ public class MonsterInformationProvider {
     private final List<MonsterGlobalDropEntry> globaldrops = new ArrayList<>();
     private final Map<Integer, List<MonsterGlobalDropEntry>> continentdrops = new HashMap<>();
 
-    private final Map<Integer, List<Integer>> dropsChancePool = new HashMap<>();    // thanks to ronan
+    private final Map<Integer, List<Integer>> dropsChancePool = new HashMap<>();
     private final Set<Integer> hasNoMultiEquipDrops = new HashSet<>();
     private final Map<Integer, List<MonsterDropEntry>> extraMultiEquipDrops = new HashMap<>();
 
@@ -80,7 +78,7 @@ public class MonsterInformationProvider {
         int continentid = mapid / 100000000;
 
         List<MonsterGlobalDropEntry> contiItems = continentdrops.get(continentid);
-        if (contiItems == null) {   // continent separated global drops found thanks to marcuswoon
+        if (contiItems == null) {
             contiItems = new ArrayList<>();
 
             for (MonsterGlobalDropEntry e : globaldrops) {
@@ -96,26 +94,27 @@ public class MonsterInformationProvider {
     }
 
     private void retrieveGlobal() {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT * FROM drop_data_global WHERE chance > 0");
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                globaldrops.add(new MonsterGlobalDropEntry(
-                        rs.getInt("itemid"),
-                        rs.getInt("chance"),
-                        rs.getByte("continent"),
-                        rs.getInt("minimum_quantity"),
-                        rs.getInt("maximum_quantity"),
-                        rs.getShort("questid")));
-            }
-        } catch (SQLException e) {
-            log.error("Error retrieving global drops", e);
+        DropDataGlobalMapper mapper = SpringContextUtil.getBean(DropDataGlobalMapper.class);
+        if (mapper == null) {
+            log.error("无法获取 DropDataGlobalMapper 实例");
+            return;
+        }
+
+        QueryWrapper query = QueryWrapper.create().where(DropDataGlobalDO::getChance).gt(0);
+        List<DropDataGlobalDO> results = mapper.selectListByQuery(query);
+
+        for (DropDataGlobalDO result : results) {
+            globaldrops.add(new MonsterGlobalDropEntry(
+                    result.getItemid(),
+                    result.getChance(),
+                    result.getContinent().byteValue(),
+                    result.getMinimumQuantity(),
+                    result.getMaximumQuantity(),
+                    result.getQuestid().shortValue()));
         }
     }
 
     public List<MonsterDropEntry> retrieveEffectiveDrop(final int monsterId) {
-        // this reads the drop entries searching for multi-equip, properly processing them
-
         List<MonsterDropEntry> list = retrieveDrop(monsterId);
         if (hasNoMultiEquipDrops.contains(monsterId) || !GameConfig.getServerBoolean("use_multiple_same_equip_drop")) {
             return list;
@@ -131,7 +130,7 @@ public class MonsterInformationProvider {
 
                     int rnd = Randomizer.rand(mde.Minimum, mde.Maximum);
                     for (int i = 0; i < rnd - 1; i++) {
-                        extra.add(mde);   // this passes copies of the equips' MDE with min/max quantity > 1, but idc on equips they are unused anyways
+                        extra.add(mde);
                     }
                 }
             }
@@ -162,25 +161,24 @@ public class MonsterInformationProvider {
         }
         final List<MonsterDropEntry> ret = new LinkedList<>();
 
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT itemid, chance, minimum_quantity, maximum_quantity, questid FROM drop_data WHERE dropperid = ?")) {
-            ps.setInt(1, monsterId);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    ret.add(new MonsterDropEntry(rs.getInt("itemid"), rs.getInt("chance"), rs.getInt("minimum_quantity"), rs.getInt("maximum_quantity"), rs.getShort("questid")));
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        DropDataMapper mapper = SpringContextUtil.getBean(DropDataMapper.class);
+        if (mapper == null) {
+            log.error("无法获取 DropDataMapper 实例");
             return ret;
+        }
+
+        QueryWrapper query = QueryWrapper.create().where(DropDataDO::getDropperid).eq(monsterId);
+        List<DropDataDO> results = mapper.selectListByQuery(query);
+
+        for (DropDataDO result : results) {
+            ret.add(new MonsterDropEntry(result.getItemid(), result.getChance(), result.getMinimumQuantity(), result.getMaximumQuantity(), result.getQuestid().shortValue()));
         }
 
         drops.put(monsterId, ret);
         return ret;
     }
 
-    public final List<Integer> retrieveDropPool(final int monsterId) {  // ignores Quest and Party Quest items
+    public final List<Integer> retrieveDropPool(final int monsterId) {
         if (dropsChancePool.containsKey(monsterId)) {
             return dropsChancePool.get(monsterId);
         }
@@ -202,7 +200,7 @@ public class MonsterInformationProvider {
         }
 
         if (accProp == 0) {
-            ret.clear();    // don't accept mobs dropping no relevant items
+            ret.clear();
         }
         dropsChancePool.put(monsterId, ret);
         return ret;
@@ -262,10 +260,9 @@ public class MonsterInformationProvider {
                 boss = LifeFactory.getMonster(id).isBoss();
             } catch (NullPointerException npe) {
                 boss = false;
-            } catch (Exception e) {   //nonexistant mob
+            } catch (Exception e) {
                 boss = false;
-
-                log.warn("Non-existent mob id {}", id, e);
+                log.warn("不存在的怪物ID {}", id, e);
             }
 
             mobBossCache.put(id, boss);

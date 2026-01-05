@@ -21,16 +21,14 @@
  */
 package org.gms.client;
 
+import com.mybatisflex.core.update.UpdateChain;
+import org.gms.dao.entity.FamilyCharacterDO;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.Server;
 import org.gms.net.server.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -110,12 +108,12 @@ public class Family {
     public void setMessage(String message, boolean save) {
         this.preceptsMessage = message;
         if (save) {
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("UPDATE family_character SET precepts = ? WHERE cid = ?")) {
-                ps.setString(1, message);
-                ps.setInt(2, getLeader().getChrId());
-                ps.executeUpdate();
-            } catch (SQLException e) {
+            try {
+                UpdateChain.of(FamilyCharacterDO.class)
+                        .set(FamilyCharacterDO::getPrecepts, message)
+                        .where(FamilyCharacterDO::getCid).eq(getLeader().getChrId())
+                        .update();
+            } catch (Exception e) {
                 log.error("Could not save new precepts for family {}", getID(), e);
             }
         }
@@ -196,26 +194,19 @@ public class Family {
     }
 
     public void saveAllMembersRep() { //was used for autosave task, but character autosave should be enough
-        try (Connection con = DatabaseConnection.getConnection()) {
-            con.setAutoCommit(false);
-            boolean success = true;
-            for (FamilyEntry entry : members.values()) {
-                success = entry.saveReputation(con);
-                if (!success) {
-                    break;
-                }
-            }
+        boolean success = true;
+        for (FamilyEntry entry : members.values()) {
+            success = entry.saveReputation();
             if (!success) {
-                con.rollback();
-                log.error("Family rep autosave failed for family {}", getID());
+                break;
             }
-            con.setAutoCommit(true);
-            //reset repChanged after successful save
-            for (FamilyEntry entry : members.values()) {
-                entry.savedSuccessfully();
-            }
-        } catch (SQLException e) {
-            log.error("Could not get connection to DB while saving all members rep", e);
+        }
+        if (!success) {
+            log.error("Family rep autosave failed for family {}", getID());
+        }
+        //reset repChanged after successful save
+        for (FamilyEntry entry : members.values()) {
+            entry.savedSuccessfully();
         }
     }
 }

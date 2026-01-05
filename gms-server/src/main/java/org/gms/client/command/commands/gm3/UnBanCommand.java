@@ -26,13 +26,13 @@ package org.gms.client.command.commands.gm3;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.command.Command;
-import org.gms.util.DatabaseConnection;
+import org.gms.manager.ServerManager;
+import org.gms.service.AccountService;
 import org.gms.util.I18nUtil;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-
 public class UnBanCommand extends Command {
+    private static final AccountService accountService = ServerManager.getApplicationContext().getBean(AccountService.class);
+
     {
         setDescription(I18nUtil.getMessage("UnBanCommand.message1"));
     }
@@ -45,20 +45,9 @@ public class UnBanCommand extends Command {
             return;
         }
 
-        try (Connection con = DatabaseConnection.getConnection()) {
+        try {
             int aid = Character.getAccountIdByName(params[0]);
-
-            try (PreparedStatement p = con.prepareStatement("UPDATE accounts SET banned = -1 WHERE id = " + aid)) {
-                p.executeUpdate();
-            }
-
-            try (PreparedStatement p = con.prepareStatement("DELETE FROM ipbans WHERE aid = " + aid)) {
-                p.executeUpdate();
-            }
-
-            try (PreparedStatement p = con.prepareStatement("DELETE FROM macbans WHERE aid = " + aid)) {
-                p.executeUpdate();
-            }
+            accountService.unbanAccount(aid);
         } catch (Exception e) {
             e.printStackTrace();
             player.message(I18nUtil.getMessage("UnBanCommand.message3", params[0]));

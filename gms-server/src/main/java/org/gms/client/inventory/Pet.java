@@ -23,21 +23,17 @@ package org.gms.client.inventory;
 
 import org.gms.client.cheatsystem.plugin.ItemVacPlugin;
 import org.gms.client.Character;
-import org.gms.util.CashIdGenerator;
 import org.gms.constants.game.ExpTable;
+import org.gms.manager.ServerManager;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.movement.AbsoluteLifeMovement;
 import org.gms.server.movement.LifeMovement;
 import org.gms.server.movement.LifeMovementFragment;
-import org.gms.util.DatabaseConnection;
+import org.gms.service.PetService;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.List;
 
 /**
@@ -54,6 +50,7 @@ public class Pet extends Item {
     private int stance;
     private boolean summoned;
     private int petAttribute = 0;
+    private static PetService petService;
 
     public enum PetAttribute {
         OWNER_SPEED(0x01);
@@ -69,92 +66,37 @@ public class Pet extends Item {
         }
     }
 
-    private Pet(int id, short position, int uniqueid) {
+    public Pet(int id, short position, int uniqueid) {
         super(id, position, (short) 1);
         this.uniqueid = uniqueid;
         this.pos = new Point(0, 0);
     }
 
-    public static Pet loadFromDb(int itemid, short position, int petid) {
-        Pet ret = new Pet(itemid, position, petid);
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT name, level, closeness, fullness, summoned, flag FROM pets WHERE petid = ?")) { // Get the pet details...
-            ps.setInt(1, petid);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                ret.setName(rs.getString("name"));
-                ret.setTameness(Math.min(rs.getInt("closeness"), 30000));
-                ret.setLevel((byte) Math.min(rs.getByte("level"), 30));
-                ret.setFullness(Math.min(rs.getInt("fullness"), 100));
-                ret.setSummoned(rs.getInt("summoned") == 1);
-                ret.setPetAttribute(rs.getInt("flag"));
-            }
-            return ret;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return null;
+    private static PetService getPetService() {
+        if (petService == null) {
+            petService = ServerManager.getApplicationContext().getBean(PetService.class);
         }
+        return petService;
+    }
+
+    public static Pet loadFromDb(int itemid, short position, int petid) {
+        return getPetService().loadFromDb(itemid, position, petid);
     }
 
     public static void deleteFromDb(Character owner, int petid) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("DELETE FROM pets WHERE `petid` = ?")) {
-            // thanks Vcoc for detecting petignores remaining after deletion
-            ps.setInt(1, petid);
-
-            owner.resetExcluded(petid);
-            CashIdGenerator.freeCashId(petid);
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-        }
+        getPetService().deleteFromDb(owner, petid);
     }
 
     public void saveToDb() {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE pets SET name = ?, level = ?, closeness = ?, fullness = ?, summoned = ?, flag = ? WHERE petid = ?")) {
-            ps.setString(1, getName());
-            ps.setInt(2, getLevel());
-            ps.setInt(3, getTameness());
-            ps.setInt(4, getFullness());
-            ps.setInt(5, isSummoned() ? 1 : 0);
-            ps.setInt(6, getPetAttribute());
-            ps.setInt(7, getUniqueId());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        getPetService().saveToDb(this);
     }
 
     public static int createPet(int itemid) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO pets (petid, name, level, closeness, fullness, summoned, flag) VALUES (?, ?, 1, 0, 100, 0, 0)")) {
-            int ret = CashIdGenerator.generateCashId();
-            ps.setInt(1, ret);
-            ps.setString(2, ItemInformationProvider.getInstance().getName(itemid));
-            ps.executeUpdate();
-            return ret;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return -1;
-        }
+        return getPetService().createPet(itemid);
     }
 
     public static int createPet(int itemid, byte level, int tameness, int fullness) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO pets (petid, name, level, closeness, fullness, summoned, flag) VALUES (?, ?, ?, ?, ?, 0, 0)")) {
-            int ret = CashIdGenerator.generateCashId();
-            ps.setInt(1, ret);
-            ps.setString(2, ItemInformationProvider.getInstance().getName(itemid));
-            ps.setByte(3, level);
-            ps.setInt(4, tameness);
-            ps.setInt(5, fullness);
-            ps.executeUpdate();
-            return ret;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return -1;
-        }
+        return getPetService().createPet(itemid, level, tameness, fullness);
     }
 
     public String getName() {
@@ -292,7 +234,7 @@ public class Pet extends Item {
         return this.petAttribute;
     }
 
-    private void setPetAttribute(int flag) {
+    public void setPetAttribute(int flag) {
         this.petAttribute = flag;
     }
 

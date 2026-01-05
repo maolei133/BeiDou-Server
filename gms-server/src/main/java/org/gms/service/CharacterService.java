@@ -6,16 +6,22 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.gms.client.*;
 import org.gms.client.Character;
+import org.gms.client.inventory.Inventory;
+import org.gms.client.inventory.InventoryType;
+import org.gms.client.inventory.Item;
 import org.gms.client.keybind.KeyBinding;
+import org.gms.client.processor.npc.FredrickProcessor;
 import org.gms.config.GameConfig;
+import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.MapId;
 import org.gms.constants.string.ExtendType;
 import org.gms.dao.entity.*;
 import org.gms.dao.mapper.*;
+import org.gms.exception.BizException;
 import org.gms.model.dto.ChrOnlineListReqDTO;
 import org.gms.model.dto.ChrOnlineListRtnDTO;
-import org.gms.exception.BizException;
 import org.gms.model.pojo.SkillEntry;
+import org.gms.net.server.PlayerCoolDownValueHolder;
 import org.gms.net.server.Server;
 import org.gms.net.server.guild.GuildCharacter;
 import org.gms.net.server.world.Messenger;
@@ -23,16 +29,27 @@ import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.World;
 import org.gms.server.Storage;
+import org.gms.server.events.Events;
 import org.gms.server.life.MobSkill;
 import org.gms.server.life.MobSkillFactory;
 import org.gms.server.life.MobSkillType;
-import org.gms.server.maps.*;
-import org.gms.util.*;
+import org.gms.server.maps.SavedLocation;
+import org.gms.server.maps.SavedLocationType;
+import org.gms.util.BasePageUtil;
+import org.gms.util.NumberTool;
+import org.gms.util.Pair;
+import org.gms.util.RequireUtil;
+import org.gms.util.ExtendUtil;
+import org.gms.util.I18nUtil;
+import org.gms.server.maps.MapManager;
+import org.gms.server.maps.MapleMap;
+import org.gms.server.maps.Portal;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.*;
 
 import static com.mybatisflex.core.query.QueryMethods.dateDiff;
@@ -51,6 +68,7 @@ import static org.gms.dao.entity.table.FamilyCharacterDOTableDef.FAMILY_CHARACTE
 import static org.gms.dao.entity.table.FredstorageDOTableDef.FREDSTORAGE_D_O;
 import static org.gms.dao.entity.table.KeymapDOTableDef.KEYMAP_D_O;
 import static org.gms.dao.entity.table.MonsterbookDOTableDef.MONSTERBOOK_D_O;
+import static org.gms.dao.entity.table.PetignoresDOTableDef.PETIGNORES_D_O;
 import static org.gms.dao.entity.table.PlayerdiseasesDOTableDef.PLAYERDISEASES_D_O;
 import static org.gms.dao.entity.table.SavedlocationsDOTableDef.SAVEDLOCATIONS_D_O;
 import static org.gms.dao.entity.table.ServerQueueDOTableDef.SERVER_QUEUE_D_O;
@@ -89,6 +107,9 @@ public class CharacterService {
     private final ServerQueueMapper serverQueueMapper;
     private final NameChangeService nameChangeService;
     private final WorldTransferService worldTransferService;
+    private final PetignoresMapper petignoresMapper;
+    private final QuickslotkeymappedMapper quickslotkeymappedMapper;
+    private final ItemFactoryService itemFactoryService;
 
     public CharactersDO findById(int id) {
         return charactersMapper.selectOneById(id);
@@ -221,7 +242,7 @@ public class CharacterService {
 
     @Transactional(rollbackFor = Exception.class)
     public void deleteGuild(GuildsDO guildsDO) {
-        charactersMapper.updateByQuery(CharactersDO.builder().guildid(0).guildrank(5).build(), QueryWrapper.create().where(CHARACTERS_D_O.GUILDID.eq(guildsDO.getGuildid())));
+        charactersMapper.updateByQuery(CharactersDO.builder().guildid(0).guildrank(5).build(), QueryWrapper.create().where(CHARACTERS_D_O.GUILDID.eq(guildsDO.getGuildid().intValue())));
         guildsMapper.deleteById(guildsDO.getGuildid());
     }
 
@@ -314,7 +335,49 @@ public class CharacterService {
         Server.getInstance().updateCharacterEntry(player);
 
         CharactersDO cdo = Character.toCharactersDO(player);
-        charactersMapper.insertSelective(cdo);
+        charactersMapper.update(cdo);
+
+        // 保存背包物品
+        List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
+        for (InventoryType type : InventoryType.values()) {
+            Inventory iv = player.getInventory(type);
+            if (iv != null) {
+                for (Item item : iv.list()) {
+                    itemsWithType.add(new Pair<>(item, iv.getType()));
+                }
+            }
+        }
+        itemFactoryService.saveItems(1, false, itemsWithType, player.getId());
+
+        // 保存商城数据
+        if (player.getCashShop() != null) {
+            player.getCashShop().save();
+        }
+
+        // 保存技能
+        saveSkills(player.getId(), player.getSkills());
+        // 保存技能宏
+        saveSkillMacros(player.getId(), player.getSkillMacros());
+        // 保存按键设置
+        saveKeymap(player.getId(), player.getKeymap());
+        // 保存地图位置
+        saveSavedLocations(player.getId(), player.getSavedLocations());
+        // 保存传送石位置
+        saveTrockLocations(player.getId(), player.getTrockMaps(), player.getVipTrockMaps());
+        // 保存好友列表
+        saveBuddies(player.getId(), player.getBuddylist());
+        // 保存区域信息
+        saveAreaInfos(player.getId(), player.getAreaInfos());
+        // 保存事件统计
+        saveEventStats(player.getId(), player.getEvents());
+        // 保存冷却时间
+        saveCooldowns(player.getId(), player.getAllCooldowns(), player.getAllDiseases());
+        // 保存宠物忽略物品
+        savePetIgnores(player.getId(), player.getExcluded());
+        // 保存快捷键
+        if (player.getQuickSlotKeyMapped() != null) {
+            saveQuickSlotKeyMap(player.getAccountId(), player.getQuickSlotKeyMapped().GetKeybindings(), player.getQuickSlotLoaded());
+        }
     }
 
     public Character loadCharFromDB(int cid, Client client, boolean channelServer) {
@@ -367,7 +430,7 @@ public class CharacterService {
             Skill skill = SkillFactory.getSkill(skillsDO.getSkillid());
             if (skill != null) {
                 chr.getEditableSkills().put(skill, new SkillEntry(Optional.ofNullable(skillsDO.getSkilllevel()).map(Integer::byteValue).orElse((byte) 0),
-                        skillsDO.getMasterlevel(), skillsDO.getExpiration()));
+                        Optional.ofNullable(skillsDO.getMasterlevel()).map(Integer::byteValue).orElse((byte) 0), skillsDO.getExpiration()));
             }
         });
 
@@ -450,8 +513,13 @@ public class CharacterService {
         return wishlistsMapper.selectListByQuery(QueryWrapper.create().where(WISHLISTS_D_O.CHARID.eq(cid)));
     }
 
-    public List<CharactersDO> getCharacterByAccountId(int accountId) {
+    public List<CharactersDO> getCharactersByAccountId(int accountId) {
         return charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_D_O.ACCOUNTID.eq(accountId)));
+    }
+
+    public CharactersDO getCharacterByAccountId(int accountId) {
+        List<CharactersDO> charactersDOS = charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_D_O.ACCOUNTID.eq(accountId)));
+        return charactersDOS.isEmpty() ? null : charactersDOS.getFirst();
     }
 
     private void checkName(ExtendValueDO data) {
@@ -482,5 +550,434 @@ public class CharacterService {
             }
         }
         throw BizException.illegalArgument(I18nUtil.getExceptionMessage("CharacterService.getCharacter.exception1"));
+    }
+
+    public Integer getAccountIdByName(String name) {
+        CharactersDO charactersDO = findByName(name);
+        return charactersDO == null ? -1 : charactersDO.getAccountid();
+    }
+
+    public Integer getIdByName(String name) {
+        CharactersDO charactersDO = findByName(name);
+        return charactersDO == null ? -1 : charactersDO.getId();
+    }
+
+    public String getNameById(int id) {
+        CharactersDO charactersDO = findById(id);
+        return charactersDO == null ? null : charactersDO.getName();
+    }
+
+    public int getMerchantNetMeso(int cid) {
+        FredstorageDO fredstorageDO = fredstorageMapper.selectOneByQuery(QueryWrapper.create().select(FREDSTORAGE_D_O.TIMESTAMP).where(FREDSTORAGE_D_O.CID.eq(cid)));
+        if (fredstorageDO != null) {
+            return (int) FredrickProcessor.timestampElapsedDays(fredstorageDO.getTimestamp(), System.currentTimeMillis());
+        }
+        return 0;
+    }
+
+    public void addFameLog(int characterId, int characterIdTo) {
+        FamelogDO famelogDO = new FamelogDO();
+        famelogDO.setCharacterid(characterId);
+        famelogDO.setCharacteridTo(characterIdTo);
+        famelogDO.setWhen(new Timestamp(System.currentTimeMillis()));
+        famelogMapper.insert(famelogDO);
+    }
+
+    public void updateGuildStatus(int id, int guildId, int guildRank, int allianceRank) {
+        CharactersDO charactersDO = new CharactersDO();
+        charactersDO.setId(id);
+        charactersDO.setGuildid(guildId);
+        charactersDO.setGuildrank(guildRank);
+        charactersDO.setAllianceRank(allianceRank);
+        charactersMapper.update(charactersDO);
+    }
+
+    @Transactional
+    public void saveCooldowns(int charId, List<PlayerCoolDownValueHolder> cooldowns, Map<Disease, Pair<Long, MobSkill>> diseases) {
+        // delete cooldowns
+        cooldownsMapper.deleteByQuery(QueryWrapper.create().where(COOLDOWNS_D_O.CHARID.eq(charId)));
+        // insert cooldowns
+        if (!cooldowns.isEmpty()) {
+            List<CooldownsDO> list = new ArrayList<>();
+            for (PlayerCoolDownValueHolder cd : cooldowns) {
+                CooldownsDO doo = new CooldownsDO();
+                doo.setCharid(charId);
+                doo.setSkillid(cd.skillId);
+                doo.setStarttime(cd.startTime);
+                doo.setLength(cd.length);
+                list.add(doo);
+            }
+            cooldownsMapper.insertBatch(list);
+        }
+
+        // delete playerdiseases
+        playerdiseasesMapper.deleteByQuery(QueryWrapper.create().where(PLAYERDISEASES_D_O.CHARID.eq(charId)));
+        // insert playerdiseases
+        if (!diseases.isEmpty()) {
+            List<PlayerdiseasesDO> list = new ArrayList<>();
+            for (Map.Entry<Disease, Pair<Long, MobSkill>> entry : diseases.entrySet()) {
+                PlayerdiseasesDO doo = new PlayerdiseasesDO();
+                doo.setCharid(charId);
+                doo.setDisease(entry.getKey().ordinal());
+                MobSkill ms = entry.getValue().getRight();
+                doo.setMobskillid(ms.getId().type().getId());
+                doo.setMobskilllv(ms.getId().level());
+                doo.setLength(entry.getValue().getLeft());
+                list.add(doo);
+            }
+            playerdiseasesMapper.insertBatch(list);
+        }
+    }
+
+    @Transactional
+    public void saveKeymap(int charId, Map<Integer, KeyBinding> keymap) {
+        keymapMapper.deleteByQuery(QueryWrapper.create().where(KEYMAP_D_O.CHARACTERID.eq(charId)));
+        if (!keymap.isEmpty()) {
+            List<KeymapDO> list = new ArrayList<>();
+            for (Map.Entry<Integer, KeyBinding> entry : keymap.entrySet()) {
+                KeymapDO doo = new KeymapDO();
+                doo.setCharacterid(charId);
+                doo.setKey(entry.getKey());
+                doo.setType(entry.getValue().getType());
+                doo.setAction(entry.getValue().getAction());
+                list.add(doo);
+            }
+            keymapMapper.insertBatch(list);
+        }
+    }
+
+    @Transactional
+    public void saveSkillMacros(int charId, SkillMacro[] skillMacros) {
+        skillmacrosMapper.deleteByQuery(QueryWrapper.create().where(SKILLMACROS_D_O.CHARACTERID.eq(charId)));
+        if (skillMacros != null && skillMacros.length > 0) {
+            List<SkillmacrosDO> list = new ArrayList<>();
+            for (int i = 0; i < skillMacros.length; i++) {
+                SkillMacro macro = skillMacros[i];
+                if (macro != null) {
+                    SkillmacrosDO doo = new SkillmacrosDO();
+                    doo.setCharacterid(charId);
+                    doo.setSkill1(macro.getSkill1());
+                    doo.setSkill2(macro.getSkill2());
+                    doo.setSkill3(macro.getSkill3());
+                    doo.setName(macro.getName());
+                    doo.setShout(macro.getShout());
+                    doo.setPosition(i);
+                    list.add(doo);
+                }
+            }
+            if (!list.isEmpty()) {
+                skillmacrosMapper.insertBatch(list);
+            }
+        }
+    }
+
+    @Transactional
+    public void saveSavedLocations(int charId, SavedLocation[] savedLocations) {
+        savedlocationsMapper.deleteByQuery(QueryWrapper.create().where(SAVEDLOCATIONS_D_O.CHARACTERID.eq(charId)));
+        if (savedLocations != null && savedLocations.length > 0) {
+            List<SavedlocationsDO> list = new ArrayList<>();
+            for (SavedLocationType savedLocationType : SavedLocationType.values()) {
+                if (savedLocations[savedLocationType.ordinal()] != null) {
+                    SavedlocationsDO doo = new SavedlocationsDO();
+                    doo.setCharacterid(charId);
+                    doo.setLocationtype(savedLocationType.name());
+                    doo.setMap(savedLocations[savedLocationType.ordinal()].getMapId());
+                    doo.setPortal(savedLocations[savedLocationType.ordinal()].getPortal());
+                    list.add(doo);
+                }
+            }
+            if (!list.isEmpty()) {
+                savedlocationsMapper.insertBatch(list);
+            }
+        }
+    }
+
+    @Transactional
+    public void saveTrockLocations(int charId, List<Integer> trockMaps, List<Integer> vipTrockMaps) {
+        trocklocationsMapper.deleteByQuery(QueryWrapper.create().where(TROCKLOCATIONS_D_O.CHARACTERID.eq(charId)));
+        List<TrocklocationsDO> list = new ArrayList<>();
+
+        if (trockMaps != null) {
+            for (Integer mapId : trockMaps) {
+                if (mapId != MapId.NONE) {
+                    TrocklocationsDO doo = new TrocklocationsDO();
+                    doo.setCharacterid(charId);
+                    doo.setMapid(mapId);
+                    doo.setVip(0);
+                    list.add(doo);
+                }
+            }
+        }
+
+        if (vipTrockMaps != null) {
+            for (Integer mapId : vipTrockMaps) {
+                if (mapId != MapId.NONE) {
+                    TrocklocationsDO doo = new TrocklocationsDO();
+                    doo.setCharacterid(charId);
+                    doo.setMapid(mapId);
+                    doo.setVip(1);
+                    list.add(doo);
+                }
+            }
+        }
+
+        if (!list.isEmpty()) {
+            trocklocationsMapper.insertBatch(list);
+        }
+    }
+
+    @Transactional
+    public void saveBuddies(int charId, BuddyList buddylist) {
+        buddiesMapper.deleteByQuery(QueryWrapper.create().where(BUDDIES_D_O.CHARACTERID.eq(charId)).and(BUDDIES_D_O.PENDING.eq(0)));
+        if (buddylist != null && !buddylist.getBuddies().isEmpty()) {
+            List<BuddiesDO> list = new ArrayList<>();
+            for (BuddylistEntry entry : buddylist.getBuddies()) {
+                if (entry.isVisible()) {
+                    BuddiesDO doo = new BuddiesDO();
+                    doo.setCharacterid(charId);
+                    doo.setBuddyid(entry.getCharacterId());
+                    doo.setPending(0);
+                    doo.setGroup(entry.getGroup());
+                    list.add(doo);
+                }
+            }
+            if (!list.isEmpty()) {
+                buddiesMapper.insertBatch(list);
+            }
+        }
+    }
+
+    @Transactional
+    public void saveAreaInfos(int charId, Map<Short, String> areaInfos) {
+        areaInfoMapper.deleteByQuery(QueryWrapper.create().where(AREA_INFO_D_O.CHARID.eq(charId)));
+        if (areaInfos != null && !areaInfos.isEmpty()) {
+            List<AreaInfoDO> list = new ArrayList<>();
+            for (Map.Entry<Short, String> entry : areaInfos.entrySet()) {
+                AreaInfoDO doo = new AreaInfoDO();
+                doo.setCharid(charId);
+                doo.setArea(entry.getKey().intValue());
+                doo.setInfo(entry.getValue());
+                list.add(doo);
+            }
+            areaInfoMapper.insertBatch(list);
+        }
+    }
+
+    @Transactional
+    public void saveEventStats(int charId, Map<String, Events> events) {
+        eventstatsMapper.deleteByQuery(QueryWrapper.create().where(EVENTSTATS_D_O.CHARACTERID.eq(charId)));
+        if (events != null && !events.isEmpty()) {
+            List<EventstatsDO> list = new ArrayList<>();
+            for (Map.Entry<String, Events> entry : events.entrySet()) {
+                EventstatsDO doo = new EventstatsDO();
+                doo.setCharacterid(charId);
+                doo.setName(entry.getKey());
+                doo.setInfo(entry.getValue().getInfo());
+                list.add(doo);
+            }
+            eventstatsMapper.insertBatch(list);
+        }
+    }
+
+    @Transactional
+    public void saveSkills(int charId, Map<Skill, SkillEntry> skills) {
+        skillsMapper.deleteByQuery(QueryWrapper.create().where(SKILLS_D_O.CHARACTERID.eq(charId)));
+        if (skills != null && !skills.isEmpty()) {
+            List<SkillsDO> list = new ArrayList<>();
+            for (Map.Entry<Skill, SkillEntry> skill : skills.entrySet()) {
+                SkillsDO doo = new SkillsDO();
+                doo.setCharacterid(charId);
+                doo.setSkillid(skill.getKey().getId());
+                doo.setSkilllevel((int) skill.getValue().skillLevel);
+                doo.setMasterlevel((int) skill.getValue().masterLevel);
+                doo.setExpiration(skill.getValue().expiration);
+                list.add(doo);
+            }
+            skillsMapper.insertBatch(list);
+        }
+    }
+
+    @Transactional
+    public void savePetIgnores(int charId, Map<Integer, Set<Integer>> excluded) {
+        // 这里逻辑不太对，因为petid是唯一的，我们应该按petid删除
+        // 然而，原始代码是按petid删除，然后再插入
+        // 问题是petignores表中没有角色id
+        // 所以我们无法按charId删除
+        // 原始代码有缺陷，应该按petid删除
+        // 暂时保持原始逻辑不变
+        // excluded映射是petId -> itemIds集合
+        for (Map.Entry<Integer, Set<Integer>> es : excluded.entrySet()) {
+            petignoresMapper.deleteByQuery(QueryWrapper.create().where(PETIGNORES_D_O.PETID.eq(es.getKey())));
+            if (!es.getValue().isEmpty()) {
+                List<PetignoresDO> list = new ArrayList<>();
+                for (Integer x : es.getValue()) {
+                    PetignoresDO doo = new PetignoresDO();
+                    doo.setPetid(es.getKey());
+                    doo.setItemid(x);
+                    list.add(doo);
+                }
+                petignoresMapper.insertBatch(list);
+            }
+        }
+    }
+
+    @Transactional
+    public void saveQuickSlotKeyMap(int accountId, byte[] quickSlotKeyMapped, byte[] quickSlotLoaded) {
+        boolean bQuickslotEquals = quickSlotKeyMapped == null || (quickSlotLoaded != null && Arrays.equals(quickSlotKeyMapped, quickSlotLoaded));
+        if (!bQuickslotEquals) {
+            long nQuickslotKeymapped = NumberTool.BytesToLong(quickSlotKeyMapped);
+            QuickslotkeymappedDO doo = new QuickslotkeymappedDO();
+            doo.setAccountid(accountId);
+            doo.setKeymap(nQuickslotKeymapped);
+            quickslotkeymappedMapper.insert(doo, true);
+        }
+    }
+
+    @Transactional
+    public int insertNewChar(Character chr, org.gms.client.creator.CharacterFactoryRecipe recipe) {
+        // Character info
+        CharactersDO cdo = new CharactersDO();
+        cdo.setAttrStr(recipe.getStr());
+        cdo.setAttrDex(recipe.getDex());
+        cdo.setAttrInt(recipe.getInt());
+        cdo.setAttrLuk(recipe.getLuk());
+        cdo.setGm(chr.gmLevel());
+        cdo.setSkincolor(chr.getSkinColor().getId());
+        cdo.setGender(chr.getGender());
+        cdo.setJob(chr.getJob().getId());
+        cdo.setHair(chr.getHair());
+        cdo.setFace(chr.getFace());
+        cdo.setMap(recipe.getMap());
+        cdo.setMeso(Math.abs(recipe.getMeso()));
+        cdo.setSpawnpoint(0);
+        cdo.setAccountid(chr.getAccountId());
+        cdo.setName(chr.getName());
+        cdo.setWorld(chr.getWorld());
+        cdo.setHp(recipe.getMaxHp());
+        cdo.setMp(recipe.getMaxMp());
+        cdo.setMaxhp(recipe.getMaxHp());
+        cdo.setMaxmp(recipe.getMaxMp());
+        cdo.setLevel(recipe.getLevel());
+        cdo.setAp(recipe.getRemainingAp());
+        cdo.setExp(0);
+        cdo.setGachaexp(0);
+        cdo.setHpMpUsed(0);
+        cdo.setFame(0);
+        cdo.setFquest(0);
+        cdo.setParty(0);
+        cdo.setBuddyCapacity(25);
+        cdo.setRank(1);
+        cdo.setRankMove(0);
+        cdo.setJobRank(1);
+        cdo.setJobRankMove(0);
+        cdo.setGuildid(0);
+        cdo.setGuildrank(5);
+        cdo.setMessengerid(0);
+        cdo.setMessengerposition(4);
+        cdo.setMountlevel(1);
+        cdo.setMountexp(0);
+        cdo.setMounttiredness(0);
+        cdo.setOmokwins(0);
+        cdo.setOmoklosses(0);
+        cdo.setOmokties(0);
+        cdo.setMatchcardwins(0);
+        cdo.setMatchcardlosses(0);
+        cdo.setMatchcardties(0);
+        cdo.setMerchantmesos(0);
+        cdo.setHasmerchant(false);
+        cdo.setEquipslots(24);
+        cdo.setUseslots(24);
+        cdo.setSetupslots(24);
+        cdo.setEtcslots(24);
+        cdo.setFamilyId(-1);
+        cdo.setMonsterbookcover(0);
+        cdo.setAllianceRank(5);
+        cdo.setVanquisherStage(0);
+        cdo.setAriantPoints(0);
+        cdo.setDojoPoints(0);
+        cdo.setLastDojoStage(0);
+        cdo.setFinishedDojoTutorial(0);
+        cdo.setVanquisherKills(0);
+        cdo.setSummonValue(0L);
+        cdo.setPartnerId(0);
+        cdo.setMarriageItemId(0);
+        cdo.setReborns(0);
+        cdo.setPqpoints(0);
+        cdo.setDataString("");
+        cdo.setLastLogoutTime(new Timestamp(System.currentTimeMillis()));
+        cdo.setLastExpGainTime(new Timestamp(System.currentTimeMillis()));
+        cdo.setPartySearch(true);
+        cdo.setJailexpire(0L);
+        cdo.setCreatedate(new Timestamp(System.currentTimeMillis()));
+
+        StringBuilder sps = new StringBuilder();
+        for (int j : chr.getRemainingSps()) {
+            sps.append(j);
+            sps.append(",");
+        }
+        String sp = sps.toString();
+        cdo.setSp(sp.substring(0, sp.length() - 1));
+
+        charactersMapper.insert(cdo);
+        int newId = cdo.getId();
+        chr.setId(newId);
+
+        // Key config
+        int[] selectedKey;
+        int[] selectedType;
+        int[] selectedAction;
+
+        boolean useCustomKeySet = GameConfig.getServerBoolean("use_custom_keyset");
+        selectedKey = GameConstants.getCustomKey(useCustomKeySet);
+        selectedType = GameConstants.getCustomType(useCustomKeySet);
+        selectedAction = GameConstants.getCustomAction(useCustomKeySet);
+
+        List<KeymapDO> keymapList = new ArrayList<>();
+        for (int i = 0; i < selectedKey.length; i++) {
+            KeymapDO keymapDO = new KeymapDO();
+            keymapDO.setCharacterid(newId);
+            keymapDO.setKey(selectedKey[i]);
+            keymapDO.setType(selectedType[i]);
+            keymapDO.setAction(selectedAction[i]);
+            keymapList.add(keymapDO);
+        }
+        if (!keymapList.isEmpty()) {
+            keymapMapper.insertBatch(keymapList);
+        }
+
+        // Quickslot key config
+        if (chr.getQuickSlotKeyMapped() != null) {
+            saveQuickSlotKeyMap(chr.getAccountId(), chr.getQuickSlotKeyMapped().GetKeybindings(), chr.getQuickSlotLoaded());
+        }
+
+        // Items
+        List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
+        for (InventoryType type : InventoryType.values()) {
+            Inventory iv = chr.getInventory(type);
+            if (iv != null) {
+                for (Item item : iv.list()) {
+                    itemsWithType.add(new Pair<>(item, iv.getType()));
+                }
+            }
+        }
+        // The original code uses a special type value of 0 for new characters.
+        itemFactoryService.saveItems(0, false, itemsWithType, newId);
+
+        // Skills
+        if (!chr.getSkills().isEmpty()) {
+            saveSkills(newId, chr.getSkills());
+        }
+
+        return newId;
+    }
+
+    public void deleteWishlistsByCharacter(Integer cid) {
+        wishlistsMapper.deleteByQuery(QueryWrapper.create().where(WISHLISTS_D_O.CHARID.eq(cid)));
+    }
+
+    public void batchInsertWishlists(List<WishlistsDO> wishlists) {
+        if (!wishlists.isEmpty()) {
+            wishlistsMapper.insertBatch(wishlists);
+        }
     }
 }

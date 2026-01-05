@@ -23,68 +23,56 @@ package org.gms.net.server.handlers.login;
 
 import org.gms.client.Client;
 import org.gms.client.Family;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
+import org.gms.service.CharacterService;
+import org.gms.service.WorldTransferService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 
 public final class DeleteCharHandler extends AbstractPacketHandler {
     private static final Logger log = LoggerFactory.getLogger(DeleteCharHandler.class);
+    private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
+    private static final WorldTransferService worldTransferService = ServerManager.getApplicationContext().getBean(WorldTransferService.class);
 
     @Override
     public void handlePacket(InPacket p, Client c) {
         String pic = p.readString();
         int cid = p.readInt();
         if (c.checkPic(pic)) {
-            //check for family, guild leader, pending marriage, world transfer
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("SELECT `world`, `guildid`, `guildrank`, `familyId` FROM characters WHERE id = ?");
-                 PreparedStatement ps2 = con.prepareStatement("SELECT COUNT(*) as rowcount FROM worldtransfers WHERE `characterid` = ? AND completionTime IS NULL")) {
-                ps.setInt(1, cid);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) {
-                        throw new SQLException("Character record does not exist.");
-                    }
-                    int world = rs.getInt("world");
-                    int guildId = rs.getInt("guildid");
-                    int guildRank = rs.getInt("guildrank");
-                    int familyId = rs.getInt("familyId");
-                    if (guildId != 0 && guildRank <= 1) {
-                        c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x16));
-                        return;
-                    } else if (familyId != -1) {
-                        Family family = Server.getInstance().getWorld(world).getFamily(familyId);
-                        if (family != null && family.getTotalMembers() > 1) {
-                            c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x1D));
-                            return;
-                        }
-                    }
-                }
-
-                ps2.setInt(1, cid);
-                try (ResultSet rs = ps2.executeQuery()) {
-                    rs.next();
-                    if (rs.getInt("rowcount") > 0) {
-                        c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x1A));
-                        return;
-                    }
-                }
-            } catch (SQLException e) {
-                log.error("Failed to delete chrId {}", cid, e);
+            CharactersDO charactersDO = characterService.findById(cid);
+            if (charactersDO == null) {
                 c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x09));
                 return;
             }
+
+            int world = charactersDO.getWorld();
+            int guildId = charactersDO.getGuildid();
+            int guildRank = charactersDO.getGuildrank();
+            int familyId = charactersDO.getFamilyId();
+
+            if (guildId != 0 && guildRank <= 1) {
+                c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x16));
+                return;
+            } else if (familyId != -1) {
+                Family family = Server.getInstance().getWorld(world).getFamily(familyId);
+                if (family != null && family.getTotalMembers() > 1) {
+                    c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x1D));
+                    return;
+                }
+            }
+
+            if (worldTransferService.isCharacterInTransfer(cid)) {
+                c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x1A));
+                return;
+            }
+
             if (c.deleteCharacter(cid, c.getAccID())) {
-                log.info("Account {} deleted chrId {}", c.getAccountName(), cid);
+                log.info("账号 {} 删除了角色 ID {}", c.getAccountName(), cid);
                 c.sendPacket(PacketCreator.deleteCharResponse(cid, 0));
             } else {
                 c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x09));

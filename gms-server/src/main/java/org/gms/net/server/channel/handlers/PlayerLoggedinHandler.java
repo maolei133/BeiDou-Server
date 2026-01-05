@@ -21,6 +21,8 @@
  */
 package org.gms.net.server.channel.handlers;
 
+import com.mybatisflex.core.query.QueryWrapper;
+import com.mybatisflex.core.update.UpdateChain;
 import org.gms.client.BuddyList;
 import org.gms.client.BuddylistEntry;
 import org.gms.client.Character;
@@ -39,6 +41,8 @@ import org.gms.client.inventory.Pet;
 import org.gms.client.keybind.KeyBinding;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
+import org.gms.dao.entity.DueypackagesDO;
+import org.gms.dao.mapper.DueypackagesMapper;
 import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
@@ -57,20 +61,16 @@ import org.gms.net.server.world.PartyOperation;
 import org.gms.net.server.world.World;
 import org.gms.service.HpMpAlertService;
 import org.gms.util.I18nUtil;
+import org.gms.util.SpringContextUtil;
 import org.gms.util.packets.WeddingPackets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.EventInstanceManager;
 import org.gms.server.life.MobSkill;
 import org.gms.service.NoteService;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.*;
 import java.util.Map.Entry;
 
@@ -487,22 +487,22 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
     }
 
     private static void showDueyNotification(Client c, Character player) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT Type FROM dueypackages WHERE ReceiverId = ? AND Checked = 1 ORDER BY Type DESC")) {
-            ps.setInt(1, player.getId());
+        DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        QueryWrapper query = QueryWrapper.create()
+                .select(DueypackagesDO::getType)
+                .where(DueypackagesDO::getReceiverid).eq(player.getId())
+                .and(DueypackagesDO::getChecked).eq(1)
+                .orderBy(DueypackagesDO::getType, false);
 
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    try (PreparedStatement ps2 = con.prepareStatement("UPDATE dueypackages SET Checked = 0 WHERE ReceiverId = ?")) {
-                        ps2.setInt(1, player.getId());
-                        ps2.executeUpdate();
+        DueypackagesDO result = mapper.selectOneByQuery(query);
 
-                        c.sendPacket(PacketCreator.sendDueyParcelNotification(rs.getInt("Type") == 1));
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        if (result != null) {
+            UpdateChain.of(DueypackagesDO.class)
+                    .set(DueypackagesDO::getChecked, 0)
+                    .where(DueypackagesDO::getReceiverid).eq(player.getId())
+                    .update();
+
+            c.sendPacket(PacketCreator.sendDueyParcelNotification(result.getType() == 1));
         }
     }
 

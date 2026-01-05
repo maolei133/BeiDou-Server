@@ -137,12 +137,8 @@ public class Marriage extends EventInstanceManager {
     public static List<Item> loadGiftItemsFromDb(Client c, int cid) {
         List<Item> items = new LinkedList<>();
 
-        try {
-            for (Pair<Item, InventoryType> it : ItemFactory.MARRIAGE_GIFTS.loadItems(cid, false)) {
-                items.add(it.getLeft());
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+        for (Pair<Item, InventoryType> it : ItemFactory.MARRIAGE_GIFTS.loadItems(cid, false)) {
+            items.add(it.getLeft());
         }
 
         return items;

@@ -18,11 +18,14 @@
  */
 package org.gms.server;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Client;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.ItemFactory;
 import org.gms.constants.game.GameConstants;
+import org.gms.dao.entity.StoragesDO;
+import org.gms.dao.mapper.StoragesMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.provider.Data;
@@ -30,13 +33,11 @@ import org.gms.provider.DataProvider;
 import org.gms.provider.DataProviderFactory;
 import org.gms.provider.DataTool;
 import org.gms.provider.wz.WZFiles;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.gms.util.SpringContextUtil;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -48,6 +49,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
+ * 仓库服务类
  * @author Matze
  */
 public class Storage {
@@ -69,40 +71,35 @@ public class Storage {
         this.meso = meso;
     }
 
-    private static Storage create(int id, int world) throws SQLException {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO storages (accountid, world, slots, meso) VALUES (?, ?, 4, 0)")) {
-            ps.setInt(1, id);
-            ps.setInt(2, world);
-            ps.executeUpdate();
-        }
-
-        return loadOrCreateFromDB(id, world);
+    private static Storage create(int accountId, int world) {
+        StoragesMapper mapper = SpringContextUtil.getBean(StoragesMapper.class);
+        StoragesDO newStorage = new StoragesDO();
+        newStorage.setAccountid(accountId);
+        newStorage.setWorld(world);
+        newStorage.setSlots(4);
+        newStorage.setMeso(0);
+        mapper.insert(newStorage);
+        return loadOrCreateFromDB(accountId, world);
     }
 
-    public static Storage loadOrCreateFromDB(int id, int world) {
-        Storage ret;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT storageid, slots, meso FROM storages WHERE accountid = ? AND world = ?")) {
-            ps.setInt(1, id);
-            ps.setInt(2, world);
+    public static Storage loadOrCreateFromDB(int accountId, int world) {
+        StoragesMapper mapper = SpringContextUtil.getBean(StoragesMapper.class);
+        QueryWrapper query = QueryWrapper.create()
+                .where(StoragesDO::getAccountid).eq(accountId)
+                .and(StoragesDO::getWorld).eq(world);
 
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    ret = new Storage(rs.getInt("storageid"), (byte) rs.getInt("slots"), rs.getInt("meso"));
-                    for (Pair<Item, InventoryType> item : ItemFactory.STORAGE.loadItems(ret.id, false)) {
-                        ret.items.add(item.getLeft());
-                    }
-                } else {
-                    ret = create(id, world);
-                }
-            }
+        StoragesDO data = mapper.selectOneByQuery(query);
 
-            return ret;
-        } catch (SQLException ex) { // exceptions leading to deploy null storages found thanks to Jefe
-            log.error("SQL error occurred when trying to load storage for accId {}, world {}", id, GameConstants.WORLD_NAMES[world], ex);
-            throw new RuntimeException(ex);
+        if (data == null) {
+            return create(accountId, world);
         }
+
+        Storage ret = new Storage(data.getStorageid().intValue(), data.getSlots().byteValue(), data.getMeso());
+        for (Pair<Item, InventoryType> item : ItemFactory.STORAGE.loadItems(ret.id, false)) {
+            ret.items.add(item.getLeft());
+        }
+
+        return ret;
     }
 
     public byte getSlots() {
@@ -130,24 +127,19 @@ public class Storage {
     }
 
     public void saveToDB(Connection con) {
-        try {
-            try (PreparedStatement ps = con.prepareStatement("UPDATE storages SET slots = ?, meso = ? WHERE storageid = ?")) {
-                ps.setInt(1, slots);
-                ps.setInt(2, meso);
-                ps.setInt(3, id);
-                ps.executeUpdate();
-            }
-            List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
+        StoragesMapper mapper = SpringContextUtil.getBean(StoragesMapper.class);
+        StoragesDO storageToUpdate = new StoragesDO();
+        storageToUpdate.setStorageid((long) this.id);
+        storageToUpdate.setSlots((int) this.slots);
+        storageToUpdate.setMeso(this.meso);
+        mapper.update(storageToUpdate);
 
-            List<Item> list = getItems();
-            for (Item item : list) {
-                itemsWithType.add(new Pair<>(item, item.getInventoryType()));
-            }
-
-            ItemFactory.STORAGE.saveItems(itemsWithType, id, con);
-        } catch (SQLException ex) {
-            ex.printStackTrace();
+        List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
+        List<Item> list = getItems();
+        for (Item item : list) {
+            itemsWithType.add(new Pair<>(item, item.getInventoryType()));
         }
+        ItemFactory.STORAGE.saveItems(itemsWithType, id, con);
     }
 
     public Item getItem(byte slot) {
@@ -176,7 +168,7 @@ public class Storage {
     public boolean store(Item item) {
         lock.lock();
         try {
-            if (isFull()) { // thanks Optimist for noticing unrestricted amount of insertions here
+            if (isFull()) {
                 return false;
             }
 
@@ -300,7 +292,7 @@ public class Storage {
 
     public void setMeso(int meso) {
         if (meso < 0) {
-            throw new RuntimeException();
+            throw new RuntimeException("仓库金币不能为负数");
         }
         this.meso = meso;
     }
@@ -309,7 +301,7 @@ public class Storage {
         c.sendPacket(PacketCreator.mesoStorage(slots, meso));
     }
 
-    public int getStoreFee() {  // thanks to GabrielSin
+    public int getStoreFee() {
         int npcId = currentNpcid;
         Integer fee = trunkPutCache.get(npcId);
         if (fee == null) {

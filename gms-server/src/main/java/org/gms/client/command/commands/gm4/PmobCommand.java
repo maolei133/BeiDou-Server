@@ -26,19 +26,19 @@ package org.gms.client.command.commands.gm4;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.command.Command;
+import org.gms.manager.ServerManager;
 import org.gms.net.server.channel.Channel;
 import org.gms.server.life.LifeFactory;
 import org.gms.server.life.Monster;
 import org.gms.server.maps.MapleMap;
-import org.gms.util.DatabaseConnection;
+import org.gms.service.PlifeService;
 import org.gms.util.I18nUtil;
 
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 
 public class PmobCommand extends Command {
+    private static final PlifeService plifeService = ServerManager.getApplicationContext().getBean(PlifeService.class);
+
     {
         setDescription(I18nUtil.getMessage("PmobCommand.message1"));
     }
@@ -68,22 +68,8 @@ public class PmobCommand extends Command {
             mob.setRx0(xpos + 50);
             mob.setRx1(xpos - 50);
             mob.setFh(fh);
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("INSERT INTO plife ( life, f, fh, cy, rx0, rx1, type, x, y, world, map, mobtime, hide ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")) {
-                ps.setInt(1, mobId);
-                ps.setInt(2, 0);
-                ps.setInt(3, fh);
-                ps.setInt(4, ypos);
-                ps.setInt(5, xpos + 50);
-                ps.setInt(6, xpos - 50);
-                ps.setString(7, "m");
-                ps.setInt(8, xpos);
-                ps.setInt(9, ypos);
-                ps.setInt(10, player.getWorld());
-                ps.setInt(11, mapId);
-                ps.setInt(12, mobTime);
-                ps.setInt(13, 0);
-                ps.executeUpdate();
+            try {
+                plifeService.addPmob(player.getWorld(), mapId, mobId, mobTime, checkpos, fh);
 
                 for (Channel ch : player.getWorldServer().getChannels()) {
                     MapleMap map = ch.getMapFactory().getMap(mapId);
@@ -92,7 +78,7 @@ public class PmobCommand extends Command {
                 }
 
                 player.yellowMessage(I18nUtil.getMessage("PmobCommand.message3"));
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
                 player.dropMessage(5, I18nUtil.getMessage("PmobCommand.message4"));
             }

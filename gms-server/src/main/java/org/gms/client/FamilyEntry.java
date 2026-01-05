@@ -19,17 +19,22 @@
 */
 package org.gms.client;
 
+import com.mybatisflex.core.query.QueryWrapper;
+import com.mybatisflex.core.update.UpdateChain;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.dao.entity.FamilyCharacterDO;
+import org.gms.dao.entity.FamilyEntitlementDO;
+import org.gms.dao.mapper.FamilyEntitlementMapper;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.Server;
+import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -104,25 +109,27 @@ public class FamilyEntry {
         Server.getInstance().getWorld(oldFamily.getWorld()).removeFamily(oldFamily.getID());
 
         //db
-        try (Connection con = DatabaseConnection.getConnection()) {
-            con.setAutoCommit(false);
-            boolean success = updateDBChangeFamily(con, getChrId(), newFamily.getID(), senior.getChrId());
-            for (FamilyEntry junior : juniors) { // better to duplicate this than the SQL code
-                if (junior != null) {
-                    success = junior.updateNewFamilyDB(con); // recursively updates juniors in db
-                    if (!success) {
-                        break;
+        TransactionTemplate transactionTemplate = SpringContextUtil.getBean(TransactionTemplate.class);
+        transactionTemplate.executeWithoutResult(status -> {
+            try {
+                boolean success = updateDBChangeFamily(getChrId(), newFamily.getID(), senior.getChrId());
+                for (FamilyEntry junior : juniors) { // better to duplicate this than the SQL code
+                    if (junior != null) {
+                        success = junior.updateNewFamilyDB(); // recursively updates juniors in db
+                        if (!success) {
+                            break;
+                        }
                     }
                 }
+                if (!success) {
+                    status.setRollbackOnly();
+                    log.error("Could not absorb {}'s family into {}'s family. (SQL ERROR)", oldFamily.getName(), newFamily.getName());
+                }
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                log.error("Could not get connection to DB when joining families", e);
             }
-            if (!success) {
-                con.rollback();
-                log.error("Could not absorb {}'s family into {}'s family. (SQL ERROR)", oldFamily.getName(), newFamily.getName());
-            }
-            con.setAutoCommit(true);
-        } catch (SQLException e) {
-            log.error("Could not get connection to DB when joining families", e);
-        }
+        });
     }
 
     public synchronized void fork() {
@@ -146,41 +153,41 @@ public class FamilyEntry {
         family.setMessage("", true);
         doFullCount(); //to make sure all counts are correct
         // update db
-        try (Connection con = DatabaseConnection.getConnection()) {
-            con.setAutoCommit(false);
+        TransactionTemplate transactionTemplate = SpringContextUtil.getBean(TransactionTemplate.class);
+        transactionTemplate.executeWithoutResult(status -> {
+            try {
+                boolean success = updateDBChangeFamily(getChrId(), getFamily().getID(), 0);
 
-            boolean success = updateDBChangeFamily(con, getChrId(), getFamily().getID(), 0);
-
-            for (FamilyEntry junior : juniors) { // better to duplicate this than the SQL code
-                if (junior != null) {
-                    success = junior.updateNewFamilyDB(con); // recursively updates juniors in db
-                    if (!success) {
-                        break;
+                for (FamilyEntry junior : juniors) { // better to duplicate this than the SQL code
+                    if (junior != null) {
+                        success = junior.updateNewFamilyDB(); // recursively updates juniors in db
+                        if (!success) {
+                            break;
+                        }
                     }
                 }
+                if (!success) {
+                    status.setRollbackOnly();
+                    log.error("Could not fork family with new leader {}. (Old senior: {}, leader: {})", getName(), oldSenior.getName(), oldFamily.getLeader().getName());
+                }
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                log.error("Could not get connection to DB when forking families", e);
             }
-            if (!success) {
-                con.rollback();
-                log.error("Could not fork family with new leader {}. (Old senior: {}, leader: {})", getName(), oldSenior.getName(), oldFamily.getLeader().getName());
-            }
-            con.setAutoCommit(true);
-
-        } catch (SQLException e) {
-            log.error("Could not get connection to DB when forking families", e);
-        }
+        });
     }
 
-    private synchronized boolean updateNewFamilyDB(Connection con) {
-        if (!updateFamilyEntryDB(con, getChrId(), getFamily().getID())) {
+    private synchronized boolean updateNewFamilyDB() {
+        if (!updateFamilyEntryDB(getChrId(), getFamily().getID())) {
             return false;
         }
-        if (!updateCharacterFamilyDB(con, getChrId(), getFamily().getID(), true)) {
+        if (!updateCharacterFamilyDB(getChrId(), getFamily().getID(), true)) {
             return false;
         }
 
         for (FamilyEntry junior : juniors) {
             if (junior != null) {
-                if (!junior.updateNewFamilyDB(con)) {
+                if (!junior.updateNewFamilyDB()) {
                     return false;
                 }
             }
@@ -188,12 +195,13 @@ public class FamilyEntry {
         return true;
     }
 
-    private static boolean updateFamilyEntryDB(Connection con, int cid, int familyid) {
-        try (PreparedStatement ps = con.prepareStatement("UPDATE family_character SET familyid = ? WHERE cid = ?")) {
-            ps.setInt(1, familyid);
-            ps.setInt(2, cid);
-            ps.executeUpdate();
-        } catch (SQLException e) {
+    private static boolean updateFamilyEntryDB(int cid, int familyid) {
+        try {
+            UpdateChain.of(FamilyCharacterDO.class)
+                    .set(FamilyCharacterDO::getFamilyid, familyid)
+                    .where(FamilyCharacterDO::getCid).eq(cid)
+                    .update();
+        } catch (Exception e) {
             log.error("Could not update family id in 'family_character' for chrId {}. (fork)", cid, e);
             return false;
         }
@@ -372,33 +380,27 @@ public class FamilyEntry {
     }
 
     private static boolean updateDBChangeFamily(int cid, int familyid, int seniorid) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            return updateDBChangeFamily(con, cid, familyid, seniorid);
-        } catch (SQLException e) {
-            log.error("Could not get connection to DB while changing family", e);
-            return false;
-        }
-    }
-
-    private static boolean updateDBChangeFamily(Connection con, int cid, int familyid, int seniorid) {
-        try (PreparedStatement ps = con.prepareStatement("UPDATE family_character SET familyid = ?, seniorid = ?, reptosenior = 0 WHERE cid = ?")) {
-            ps.setInt(1, familyid);
-            ps.setInt(2, seniorid);
-            ps.setInt(3, cid);
-            ps.executeUpdate();
-        } catch (SQLException e) {
+        try {
+            UpdateChain.of(FamilyCharacterDO.class)
+                    .set(FamilyCharacterDO::getFamilyid, familyid)
+                    .set(FamilyCharacterDO::getSeniorid, seniorid)
+                    .set(FamilyCharacterDO::getReptosenior, 0)
+                    .where(FamilyCharacterDO::getCid).eq(cid)
+                    .update();
+        } catch (Exception e) {
             log.error("Could not update seniorId in 'family_character' for chrId {}", cid, e);
             return false;
         }
-        return updateCharacterFamilyDB(con, cid, familyid, false);
+        return updateCharacterFamilyDB(cid, familyid, false);
     }
 
-    private static boolean updateCharacterFamilyDB(Connection con, int charid, int familyid, boolean fork) {
-        try (PreparedStatement ps = con.prepareStatement("UPDATE characters SET familyid = ? WHERE id = ?")) {
-            ps.setInt(1, familyid);
-            ps.setInt(2, charid);
-            ps.executeUpdate();
-        } catch (SQLException e) {
+    private static boolean updateCharacterFamilyDB(int charid, int familyid, boolean fork) {
+        try {
+            UpdateChain.of(CharactersDO.class)
+                    .set(CharactersDO::getFamilyId, familyid)
+                    .where(CharactersDO::getId).eq(charid)
+                    .update();
+        } catch (Exception e) {
             log.error("Could not update familyId in 'characters' for chrId {} when changing family. {}", charid, fork ? "(fork)" : "", e);
             return false;
         }
@@ -540,29 +542,33 @@ public class FamilyEntry {
         if (entitlements[id] >= 1) {
             return false;
         }
-        try (Connection con = DatabaseConnection.getConnection(); PreparedStatement ps = con.prepareStatement("INSERT INTO family_entitlement (entitlementid, charid, timestamp) VALUES (?, ?, ?)")) {
-            ps.setInt(1, id);
-            ps.setInt(2, getChrId());
-            ps.setLong(3, System.currentTimeMillis());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            log.error("Could not insert new row in 'family_entitlement' for chr {}", getName(), e);
+        FamilyEntitlementMapper mapper = SpringContextUtil.getBean(FamilyEntitlementMapper.class);
+        FamilyEntitlementDO ent = new FamilyEntitlementDO();
+        ent.setEntitlementid(id);
+        ent.setCharid(getChrId());
+        ent.setTimestamp(System.currentTimeMillis());
+        if (mapper.insert(ent, true) > 0) {
+            entitlements[id]++;
+            return true;
+        } else {
+            log.error("Could not insert new row in 'family_entitlement' for chr {}", getName());
+            return false;
         }
-        entitlements[id]++;
-        return true;
     }
 
     public boolean refundEntitlement(FamilyEntitlement entitlement) {
         int id = entitlement.ordinal();
-        try (Connection con = DatabaseConnection.getConnection(); PreparedStatement ps = con.prepareStatement("DELETE FROM family_entitlement WHERE entitlementid = ? AND charid = ?")) {
-            ps.setInt(1, id);
-            ps.setInt(2, getChrId());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            log.error("Could not refund family entitlement \"{}\" for chr {}", entitlement.getName(), getName(), e);
+        FamilyEntitlementMapper mapper = SpringContextUtil.getBean(FamilyEntitlementMapper.class);
+        QueryWrapper query = QueryWrapper.create()
+                .where(FamilyEntitlementDO::getEntitlementid).eq(id)
+                .and(FamilyEntitlementDO::getCharid).eq(getChrId());
+        if (mapper.deleteByQuery(query) > 0) {
+            entitlements[id] = 0;
+            return true;
+        } else {
+            log.error("Could not refund family entitlement \"{}\" for chr {}", entitlement.getName(), getName());
+            return false;
         }
-        entitlements[id] = 0;
-        return true;
     }
 
     public boolean isEntitlementUsed(FamilyEntitlement entitlement) {
@@ -587,26 +593,15 @@ public class FamilyEntry {
         if (!repChanged) {
             return true;
         }
-        try (Connection con = DatabaseConnection.getConnection()) {
-            return saveReputation(con);
-        } catch (SQLException e) {
-            log.error("Could not get connection to DB while saving reputation", e);
-            return false;
-        }
-    }
-
-    public boolean saveReputation(Connection con) {
-        if (!repChanged) {
-            return true;
-        }
-        try (PreparedStatement ps = con.prepareStatement("UPDATE family_character SET reputation = ?, todaysrep = ?, totalreputation = ?, reptosenior = ? WHERE cid = ?")) {
-            ps.setInt(1, getReputation());
-            ps.setInt(2, getTodaysRep());
-            ps.setInt(3, getTotalReputation());
-            ps.setInt(4, getRepsToSenior());
-            ps.setInt(5, getChrId());
-            ps.executeUpdate();
-        } catch (SQLException e) {
+        try {
+            UpdateChain.of(FamilyCharacterDO.class)
+                    .set(FamilyCharacterDO::getReputation, getReputation())
+                    .set(FamilyCharacterDO::getTodaysrep, getTodaysRep())
+                    .set(FamilyCharacterDO::getTotalreputation, getTotalReputation())
+                    .set(FamilyCharacterDO::getReptosenior, getRepsToSenior())
+                    .where(FamilyCharacterDO::getCid).eq(getChrId())
+                    .update();
+        } catch (Exception e) {
             log.error("Failed to autosave rep to 'family_character' for chrId {}", getChrId(), e);
             return false;
         }

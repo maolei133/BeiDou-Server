@@ -40,7 +40,9 @@ public class GuildCharacter {
         this.name = chr.getName();
         this.level = chr.getLevel();
         this.id = chr.getId();
-        this.channel = chr.getClient().getChannel();
+        if (chr.getClient() != null) {
+            this.channel = chr.getClient().getChannel();
+        }
         this.world = chr.getWorld();
         this.jobid = chr.getJob().getId();
         this.guildrank = chr.getGuildRank();

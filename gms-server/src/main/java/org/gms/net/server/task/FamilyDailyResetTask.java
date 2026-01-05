@@ -4,6 +4,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Family;
 import org.gms.constants.game.GameConstants;
 import org.gms.dao.entity.FamilyCharacterDO;
+import org.gms.dao.entity.FamilyEntitlementDO;
 import org.gms.dao.mapper.FamilyCharacterMapper;
 import org.gms.dao.mapper.FamilyEntitlementMapper;
 import org.gms.net.server.Server;
@@ -58,14 +59,14 @@ public class FamilyDailyResetTask implements Runnable {
             updateDO.setTodaysrep(0);
             updateDO.setReptosenior(0);
             familyCharacterMapper.updateByQuery(updateDO,
-                    QueryWrapper.create().where("lastresettime <= ?", resetTime.getTimeInMillis()));
+                    QueryWrapper.create().where(FamilyCharacterDO::getLastresettime).le(resetTime.getTimeInMillis()));
         } catch (Exception e) {
             log.error("Could not reset daily rep for families", e);
         }
 
         try {
             familyEntitlementMapper.deleteByQuery(
-                    QueryWrapper.create().where("timestamp <= ?", resetTime.getTimeInMillis()));
+                    QueryWrapper.create().where(FamilyEntitlementDO::getTimestamp).le(resetTime.getTimeInMillis()));
         } catch (Exception e) {
             log.error("Could not do daily reset for family entitlements", e);
         }

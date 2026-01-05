@@ -232,7 +232,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
             nextLevelContext.clear();
             getClient().sendPacket(PacketCreator.getNPCTalkStyle(npc, text, styles));
         } else {    // thanks Conrad for noticing empty styles crashing players
-            sendOk("Sorry, there are no options of cosmetics available for you here at the moment.");
+            sendOk("抱歉，目前这里没有适合您的装饰选项。");
             dispose();
         }
     }
@@ -497,13 +497,8 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
     }
 
     public boolean hasMerchantItems() {
-        try {
-            if (!ItemFactory.MERCHANT.loadItems(getPlayer().getId(), false).isEmpty()) {
-                return true;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
+        if (!ItemFactory.MERCHANT.loadItems(getPlayer().getId(), false).isEmpty()) {
+            return true;
         }
         return getPlayer().getMerchantMeso() != 0;
     }
@@ -1018,7 +1013,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
         Character leader = null;
         MapleMap map = c.getChannelServer().getMapFactory().getMap(980000100 + 100 * field);
         if (map.getAllPlayer().size() != getPlayer().getParty().getMembers().size()) {
-            sendOk("An unexpected error regarding the other party has occurred.");
+            sendOk("对方队伍发生了意外错误。");
             return;
         }
         for (MapObject mmo : map.getAllPlayer()) {
@@ -1057,41 +1052,41 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
 
     public String startAriantBattle(ExpeditionType expedType, int mapid) {
         if (!GameConstants.isAriantColiseumLobby(mapid)) {
-            return "You cannot start an Ariant tournament from outside the Battle Arena Entrance.";
+            return "您不能在竞技场入口外开始阿里安特竞技场。";
         }
 
         Expedition exped = this.getMap().getChannelServer().getExpedition(expedType);
         if (exped == null) {
-            return "Please register on an expedition before attempting to start an Ariant tournament.";
+            return "在尝试开始阿里安特竞技场之前，请先注册远征队。";
         }
 
         List<Character> players = exped.getActiveMembers();
 
         int playersSize = players.size();
         if (!(playersSize >= exped.getMinSize() && playersSize <= exped.getMaxSize())) {
-            return "Make sure there are between #r" + exped.getMinSize() + " ~ " + exped.getMaxSize() + " players#k in this room to start the battle.";
+            return "请确保房间内有 #r" + exped.getMinSize() + " ~ " + exped.getMaxSize() + " 名玩家#k 才能开始战斗。";
         }
 
         MapleMap leaderMap = this.getMap();
         for (Character mc : players) {
             if (mc.getMap() != leaderMap) {
-                return "All competing players should be on this area to start the battle.";
+                return "所有参赛玩家都必须在此区域才能开始战斗。";
             }
 
             if (mc.getParty() != null) {
-                return "All competing players must not be on a party to start the battle.";
+                return "所有参赛玩家必须不在队伍中才能开始战斗。";
             }
 
             int level = mc.getLevel();
             if (!(level >= expedType.getMinLevel() && level <= expedType.getMaxLevel())) {
-                return "There are competing players outside of the acceptable level range in this room. All players must be on #blevel between 20~30#k to start the battle.";
+                return "房间内有不符合等级要求的参赛玩家。所有玩家必须在 #b20~30级之间#k 才能开始战斗。";
             }
         }
 
         if (setupAriantBattle(exped, mapid)) {
             return "";
         } else {
-            return "Other players are already competing on the Ariant tournament in this room. Please wait a while until the arena becomes available again.";
+            return "其他玩家正在此房间进行阿里安特竞技场。请稍等片刻，直到竞技场再次可用。";
         }
     }
 

@@ -131,4 +131,10 @@ public class WorldTransferService {
         if (needFinish) queryWrapper.and(WORLDTRANSFERS_D_O.COMPLETION_TIME.isNull());
         worldtransfersMapper.deleteByQuery(queryWrapper);
     }
+
+    public boolean isCharacterInTransfer(int characterId) {
+        return worldtransfersMapper.selectCountByQuery(QueryWrapper.create()
+                .where(WORLDTRANSFERS_D_O.CHARACTERID.eq(characterId))
+                .and(WORLDTRANSFERS_D_O.COMPLETION_TIME.isNull())) > 0;
+    }
 }

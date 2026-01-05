@@ -23,6 +23,8 @@
 */
 package org.gms.client.processor.npc;
 
+import com.mybatisflex.core.query.QueryWrapper;
+import com.mybatisflex.core.update.UpdateChain;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.autoban.AutobanFactory;
@@ -35,6 +37,10 @@ import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.dao.entity.DueypackagesDO;
+import org.gms.dao.mapper.CharactersMapper;
+import org.gms.dao.mapper.DueypackagesMapper;
 import org.gms.net.server.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,16 +50,15 @@ import org.gms.server.Trade;
 import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.gms.util.SpringContextUtil;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.*;
 
 /**
+ * 快递处理器
  * @author RonanLana - synchronization of Duey modules
  */
 public class DueyProcessor {
@@ -94,153 +99,113 @@ public class DueyProcessor {
     }
 
     private static Pair<Integer, Integer> getAccountCharacterIdFromCNAME(String name) {
-        Pair<Integer, Integer> ids = new Pair<>(-1, -1);
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT id,accountid FROM characters WHERE name = ?")) {
-            ps.setString(1, name);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    ids.left = rs.getInt("accountid");
-                    ids.right = rs.getInt("id");
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        CharactersMapper mapper = SpringContextUtil.getBean(CharactersMapper.class);
+        QueryWrapper query = QueryWrapper.create().select(CharactersDO::getId, CharactersDO::getAccountid).where(CharactersDO::getName).eq(name);
+        CharactersDO result = mapper.selectOneByQuery(query);
+        if (result != null) {
+            return new Pair<>(result.getAccountid(), result.getId());
         }
-
-        return ids;
+        return new Pair<>(-1, -1);
     }
 
     private static void showDueyNotification(Client c, Character player) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT SenderName, Type FROM dueypackages WHERE ReceiverId = ? AND Checked = 1 ORDER BY Type DESC")) {
+        DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        QueryWrapper query = QueryWrapper.create()
+                .select(DueypackagesDO::getSendername, DueypackagesDO::getType)
+                .where(DueypackagesDO::getReceiverid).eq(player.getId())
+                .and(DueypackagesDO::getChecked).eq(1)
+                .orderBy(DueypackagesDO::getType, false);
 
-            ps.setInt(1, player.getId());
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    try (PreparedStatement ps2 = con.prepareStatement("UPDATE dueypackages SET Checked = 0 where ReceiverId = ?")) {
-                        ps2.setInt(1, player.getId());
-                        ps2.executeUpdate();
-
-                        c.sendPacket(PacketCreator.sendDueyParcelReceived(rs.getString("SenderName"), rs.getInt("Type") == 1));
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        DueypackagesDO result = mapper.selectOneByQuery(query);
+        if (result != null) {
+            UpdateChain.of(DueypackagesDO.class)
+                    .set(DueypackagesDO::getChecked, 0)
+                    .where(DueypackagesDO::getReceiverid).eq(player.getId())
+                    .update();
+            c.sendPacket(PacketCreator.sendDueyParcelReceived(result.getSendername(), result.getType() == 1));
         }
     }
 
-    private static void deletePackageFromInventoryDB(Connection con, int packageId) throws SQLException {
-        ItemFactory.DUEY.saveItems(new LinkedList<>(), packageId, con);
+    @Deprecated
+    private static void deletePackageFromInventoryDB(int packageId) {
+        log.warn("注意: deletePackageFromInventoryDB 仍在使用旧的 JDBC 连接方式，需要重构。");
+        try (Connection con = DatabaseConnection.getConnection()) {
+            ItemFactory.DUEY.saveItems(new LinkedList<>(), packageId, con);
+        } catch (SQLException e) {
+            log.error("删除快递物品时发生SQL错误", e);
+        }
     }
 
     private static void removePackageFromDB(int packageId) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("DELETE FROM dueypackages WHERE PackageId = ?")) {
-            ps.setInt(1, packageId);
-            ps.executeUpdate();
-
-            deletePackageFromInventoryDB(con, packageId);
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        mapper.deleteById(packageId);
+        deletePackageFromInventoryDB(packageId);
     }
 
-    private static DueyPackage getPackageFromDB(ResultSet rs) {
-        try {
-            int packageId = rs.getInt("PackageId");
+    private static DueyPackage getPackageFromDB(DueypackagesDO data) {
+        int packageId = data.getPackageid().intValue();
+        List<Pair<Item, InventoryType>> dueyItems = ItemFactory.DUEY.loadItems(packageId, false);
+        DueyPackage dueypack;
 
-            List<Pair<Item, InventoryType>> dueyItems = ItemFactory.DUEY.loadItems(packageId, false);
-            DueyPackage dueypack;
-
-            if (!dueyItems.isEmpty()) {     // in a duey package there's only one item
-                dueypack = new DueyPackage(packageId, dueyItems.get(0).getLeft());
-            } else {
-                dueypack = new DueyPackage(packageId);
-            }
-
-            dueypack.setSender(rs.getString("SenderName"));
-            dueypack.setMesos(rs.getInt("Mesos"));
-            dueypack.setSentTime(rs.getTimestamp("TimeStamp"), rs.getBoolean("Type"));
-            dueypack.setMessage(rs.getString("Message"));
-            dueypack.setReceiverId(rs.getInt("ReceiverId"));
-
-            return dueypack;
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-            return null;
+        if (!dueyItems.isEmpty()) {
+            dueypack = new DueyPackage(packageId, dueyItems.get(0).getLeft());
+        } else {
+            dueypack = new DueyPackage(packageId);
         }
+
+        dueypack.setSender(data.getSendername());
+        dueypack.setMesos(data.getMesos().intValue());
+        dueypack.setSentTime(data.getTimestamp(), data.getType() == 1);
+        dueypack.setMessage(data.getMessage());
+        dueypack.setReceiverId(data.getReceiverid().intValue());
+
+        return dueypack;
     }
 
     private static List<DueyPackage> loadPackages(Character chr) {
         List<DueyPackage> packages = new LinkedList<>();
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT * FROM dueypackages dp WHERE ReceiverId = ?")) {
-            ps.setInt(1, chr.getId());
+        DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        QueryWrapper query = QueryWrapper.create().where(DueypackagesDO::getReceiverid).eq(chr.getId());
+        List<DueypackagesDO> results = mapper.selectListByQuery(query);
 
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    DueyPackage dueypack = getPackageFromDB(rs);
-                    if (dueypack == null) {
-                        continue;
-                    }
-
-                    packages.add(dueypack);
-                }
+        for (DueypackagesDO result : results) {
+            DueyPackage dueypack = getPackageFromDB(result);
+            if (dueypack != null) {
+                packages.add(dueypack);
             }
-
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
-
         return packages;
     }
 
     private static int createPackage(int mesos, String message, String sender, int toCid, boolean quick) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO `dueypackages` (ReceiverId, SenderName, Mesos, TimeStamp, Message, Type, Checked) VALUES (?, ?, ?, ?, ?, ?, 1)", Statement.RETURN_GENERATED_KEYS)) {
-            ps.setInt(1, toCid);
-            ps.setString(2, sender);
-            ps.setInt(3, mesos);
-            ps.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
-            ps.setString(5, message);
-            ps.setInt(6, quick ? 1 : 0);
+        DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        DueypackagesDO newPackage = new DueypackagesDO();
+        newPackage.setReceiverid((long) toCid);
+        newPackage.setSendername(sender);
+        newPackage.setMesos((long) mesos);
+        newPackage.setTimestamp(new Timestamp(System.currentTimeMillis()));
+        newPackage.setMessage(message);
+        newPackage.setType(quick ? 1 : 0);
+        newPackage.setChecked(1);
 
-            int updateRows = ps.executeUpdate();
-            if (updateRows < 1) {
-                log.error("Error trying to create package [mesos: {}, sender: {}, quick: {}, receiver chrId: {}]", mesos, sender, quick, toCid);
-                return -1;
-            }
-
-            final int packageId;
-            try (ResultSet rs = ps.getGeneratedKeys()) {
-                if (rs.next()) {
-                    packageId = rs.getInt(1);
-                } else {
-                    log.error("Failed inserting package [mesos: {}, sender: {}, quick: {}, receiver chrId: {}]", mesos, sender, quick, toCid);
-                    return -1;
-                }
-            }
-
-            return packageId;
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+        if (mapper.insert(newPackage, true) > 0) {
+            return newPackage.getPackageid().intValue();
+        } else {
+            log.error("创建包裹失败 [金币: {}, 发件人: {}, 快速: {}, 收件人角色ID: {}]", mesos, sender, quick, toCid);
+            return -1;
         }
-
-        return -1;
     }
 
+    @Deprecated
     private static boolean insertPackageItem(int packageId, Item item) {
         Pair<Item, InventoryType> dueyItem = new Pair<>(item, InventoryType.getByType(item.getItemType()));
+        log.warn("注意: insertPackageItem 仍在使用旧的 JDBC 连接方式，需要重构。");
         try (Connection con = DatabaseConnection.getConnection()) {
             ItemFactory.DUEY.saveItems(Collections.singletonList(dueyItem), packageId, con);
             return true;
         } catch (SQLException sqle) {
-            sqle.printStackTrace();
+            log.error("插入包裹物品时发生SQL错误", sqle);
         }
-
         return false;
     }
 
@@ -289,39 +254,38 @@ public class DueyProcessor {
         if (c.tryacquireClient()) {
             try {
                 if (c.getPlayer().isGM() && c.getPlayer().gmLevel() < GameConfig.getServerInt("minimum_gm_level_to_use_duey")) {
-                    c.getPlayer().message("You cannot use Duey to send items at your GM level.");
-                    log.info(String.format("GM %s tried to send a package to %s", c.getPlayer().getName(), recipient));
+                    c.getPlayer().message("您当前的GM等级无法使用快递。");
+                    log.info("GM {} 尝试发送一个包裹给 {}", c.getPlayer().getName(), recipient);
                     c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
                     return;
                 }
 
-                // 修复发快递给别人扣钱的问题
                 if (sendMesos < 0) {
-                    AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " tried to packet edit with sendMesos on duey.");
-                    log.warn("Chr {} tried to use duey with mesos {}", c.getPlayer().getName(), sendMesos);
+                    AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " 尝试在快递中修改金币。");
+                    log.warn("角色 {} 尝试使用快递发送负数金币 {}", c.getPlayer().getName(), sendMesos);
                     c.disconnect(true, false);
                     return;
                 }
                 int fee = Trade.getFee(sendMesos);
                 if (sendMessage != null && sendMessage.length() > 100) {
-                    AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " tried to packet edit with Quick Delivery on duey.");
-                    log.warn("Chr {} tried to use duey with too long of a text", c.getPlayer().getName());
+                    AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " 尝试在快递中修改快速配送。");
+                    log.warn("角色 {} 尝试使用过长的文本发送快递", c.getPlayer().getName());
                     c.disconnect(true, false);
                     return;
                 }
                 if (!quick) {
                     fee += 5000;
                 } else if (!c.getPlayer().haveItem(ItemId.QUICK_DELIVERY_TICKET)) {
-                    AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " tried to packet edit with Quick Delivery on duey.");
-                    log.warn("Chr {} tried to use duey with Quick Delivery without a ticket, mesos {} and amount {}", c.getPlayer().getName(), sendMesos, amount);
+                    AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " 尝试在没有快速配送券的情况下使用快速配送。");
+                    log.warn("角色 {} 尝试在没有快速配送券的情况下使用快速配送，金币 {}，数量 {}", c.getPlayer().getName(), sendMesos, amount);
                     c.disconnect(true, false);
                     return;
                 }
 
                 long finalcost = (long) sendMesos + fee;
                 if (finalcost < 0 || finalcost > Integer.MAX_VALUE || (amount < 1 && sendMesos == 0)) {
-                    AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " tried to packet edit with duey.");
-                    log.warn("Chr {} tried to use duey with mesos {} and amount {}", c.getPlayer().getName(), sendMesos, amount);
+                    AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " 尝试修改快递数据包。");
+                    log.warn("角色 {} 尝试使用快递发送金币 {} 和数量 {}", c.getPlayer().getName(), sendMesos, amount);
                     c.disconnect(true, false);
                     return;
                 }
@@ -397,67 +361,56 @@ public class DueyProcessor {
         }
     }
 
-    // 方法锁，修复复制外挂多人取同一个快递，也使得无法多人同时取快递。更优雅的做法是设置一个packageId锁，考虑快递业务用的不多，暂不如此处理
     public static synchronized void dueyClaimPackage(Client c, int packageId) {
-        try {
-            DueyPackage dp = null;
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("SELECT * FROM dueypackages dp WHERE PackageId = ?")) {
-                ps.setInt(1, packageId);
+        DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        DueypackagesDO dpData = mapper.selectOneById(packageId);
 
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        dp = getPackageFromDB(rs);
-                    }
-                }
-            }
-
-            if (dp == null) {
-                c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
-                log.warn("Chr {} tried to receive package from duey with id {}", c.getPlayer().getName(), packageId);
-                return;
-            }
-
-            // 判断是否本人快递，不是本人那就是改包了
-            if (!Objects.equals(dp.getReceiverId(), c.getPlayer().getId())) {
-                AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " tried to packet edit with duey.");
-                c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
-                log.warn("Chr {} tried to receive package from duey with receiverId {}", c.getPlayer().getName(), dp.getReceiverId());
-                return;
-            }
-
-            if (dp.isDeliveringTime()) {
-                c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
-                return;
-            }
-
-            Item dpItem = dp.getItem();
-            if (dpItem != null) {
-                if (!c.getPlayer().canHoldMeso(dp.getMesos())) {
-                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
-                    return;
-                }
-
-                if (!InventoryManipulator.checkSpace(c, dpItem.getItemId(), dpItem.getQuantity(), dpItem.getOwner())) {
-                    int itemid = dpItem.getItemId();
-                    if (ItemInformationProvider.getInstance().isPickupRestricted(itemid) && c.getPlayer().getInventory(ItemConstants.getInventoryType(itemid)).findById(itemid) != null) {
-                        c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_RECEIVER_WITH_UNIQUE.getCode()));
-                    } else {
-                        c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_NO_FREE_SLOTS.getCode()));
-                    }
-
-                    return;
-                } else {
-                    InventoryManipulator.addFromDrop(c, dpItem, false);
-                }
-            }
-
-            c.getPlayer().gainMeso(dp.getMesos(), false);
-
-            dueyRemovePackage(c, packageId, false);
-        } catch (SQLException e) {
-            e.printStackTrace();
+        if (dpData == null) {
+            c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
+            log.warn("角色 {} 尝试接收一个不存在的快递包裹，ID {}", c.getPlayer().getName(), packageId);
+            return;
         }
+
+        DueyPackage dp = getPackageFromDB(dpData);
+        if (dp == null) {
+            c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
+            return;
+        }
+
+        if (!Objects.equals(dp.getReceiverId(), c.getPlayer().getId())) {
+            AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " 尝试修改快递数据包。");
+            c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
+            log.warn("角色 {} 尝试接收一个不属于自己的快递包裹，接收者ID {}", c.getPlayer().getName(), dp.getReceiverId());
+            return;
+        }
+
+        if (dp.isDeliveringTime()) {
+            c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
+            return;
+        }
+
+        Item dpItem = dp.getItem();
+        if (dpItem != null) {
+            if (!c.getPlayer().canHoldMeso(dp.getMesos())) {
+                c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
+                return;
+            }
+
+            if (!InventoryManipulator.checkSpace(c, dpItem.getItemId(), dpItem.getQuantity(), dpItem.getOwner())) {
+                int itemid = dpItem.getItemId();
+                if (ItemInformationProvider.getInstance().isPickupRestricted(itemid) && c.getPlayer().getInventory(ItemConstants.getInventoryType(itemid)).findById(itemid) != null) {
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_RECEIVER_WITH_UNIQUE.getCode()));
+                } else {
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_NO_FREE_SLOTS.getCode()));
+                }
+                return;
+            } else {
+                InventoryManipulator.addFromDrop(c, dpItem, false);
+            }
+        }
+
+        c.getPlayer().gainMeso(dp.getMesos(), false);
+        dueyRemovePackage(c, packageId, false);
     }
 
     public static void dueySendTalk(Client c, boolean quickDelivery) {
@@ -489,32 +442,16 @@ public class DueyProcessor {
     }
 
     public static void runDueyExpireSchedule() {
+        DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
         Calendar c = Calendar.getInstance();
         c.add(Calendar.DATE, -30);
         final Timestamp ts = new Timestamp(c.getTime().getTime());
 
-        try (Connection con = DatabaseConnection.getConnection()) {
-            List<Integer> toRemove = new LinkedList<>();
-            try (PreparedStatement ps = con.prepareStatement("SELECT `PackageId` FROM dueypackages WHERE `TimeStamp` < ?")) {
-                ps.setTimestamp(1, ts);
+        QueryWrapper query = QueryWrapper.create().select(DueypackagesDO::getPackageid).where(DueypackagesDO::getTimestamp).lt(ts);
+        List<DueypackagesDO> toRemove = mapper.selectListByQuery(query);
 
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        toRemove.add(rs.getInt("PackageId"));
-                    }
-                }
-            }
-
-            for (Integer pid : toRemove) {
-                removePackageFromDB(pid);
-            }
-
-            try (PreparedStatement ps = con.prepareStatement("DELETE FROM dueypackages WHERE `TimeStamp` < ?")) {
-                ps.setTimestamp(1, ts);
-                ps.executeUpdate();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        for (DueypackagesDO pkg : toRemove) {
+            removePackageFromDB(pkg.getPackageid().intValue());
         }
     }
 }

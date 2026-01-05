@@ -277,10 +277,6 @@ public class Equip extends Item {
         this.upgradeSlots = upgradeSlots;
     }
 
-    public byte getLevel() {
-        return level;
-    }
-
     public void setLevel(byte level) {
         this.level = level;
     }

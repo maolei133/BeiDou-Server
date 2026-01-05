@@ -29,21 +29,18 @@ import org.gms.client.SkillFactory;
 import org.gms.client.command.CommandsExecutor;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.ItemFactory;
-import org.gms.config.GameConfig;
-import org.gms.dao.entity.CharactersDO;
-import org.gms.dao.entity.PlayernpcsFieldDO;
-import org.gms.model.dto.ServerShutdownDTO;
-import org.gms.property.ServiceProperty;
-import org.gms.server.CashShop;
-import org.gms.util.*;
-import org.gms.model.pojo.NewYearCardRecord;
 import org.gms.client.processor.npc.FredrickProcessor;
+import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.net.OpcodeConstants;
 import org.gms.constants.net.ServerConstants;
+import org.gms.dao.entity.CharactersDO;
 import org.gms.dao.entity.NxcouponsDO;
+import org.gms.dao.entity.PlayernpcsFieldDO;
 import org.gms.manager.ServerManager;
+import org.gms.model.dto.ServerShutdownDTO;
+import org.gms.model.pojo.NewYearCardRecord;
 import org.gms.net.ChannelDependencies;
 import org.gms.net.PacketProcessor;
 import org.gms.net.netty.LoginServer;
@@ -56,6 +53,8 @@ import org.gms.net.server.guild.Guild;
 import org.gms.net.server.guild.GuildCharacter;
 import org.gms.net.server.task.*;
 import org.gms.net.server.world.World;
+import org.gms.property.ServiceProperty;
+import org.gms.server.CashShop;
 import org.gms.server.CashShop.CashItemFactory;
 import org.gms.server.SkillbookInformationProvider;
 import org.gms.server.ThreadManager;
@@ -64,13 +63,10 @@ import org.gms.server.expeditions.ExpeditionBossLog;
 import org.gms.server.life.PlayerNPC;
 import org.gms.server.quest.Quest;
 import org.gms.service.*;
+import org.gms.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -1322,67 +1318,51 @@ public class Server {
 
         List<Character> chars = new LinkedList<>();
         int curWorld = 0;
-        try {
-            List<Pair<Item, Integer>> accEquips = ItemFactory.loadEquippedItems(accId, true, true);
-            Map<Integer, List<Item>> accPlayerEquips = new HashMap<>();
 
-            for (Pair<Item, Integer> ae : accEquips) {
-                List<Item> playerEquips = accPlayerEquips.get(ae.getRight());
-                if (playerEquips == null) {
-                    playerEquips = new LinkedList<>();
-                    accPlayerEquips.put(ae.getRight(), playerEquips);
-                }
+        List<Pair<Item, Integer>> accEquips = ItemFactory.loadEquippedItems(accId, true, true);
+        Map<Integer, List<Item>> accPlayerEquips = new HashMap<>();
 
-                playerEquips.add(ae.getLeft());
+        for (Pair<Item, Integer> ae : accEquips) {
+            List<Item> playerEquips = accPlayerEquips.get(ae.getRight());
+            if (playerEquips == null) {
+                playerEquips = new LinkedList<>();
+                accPlayerEquips.put(ae.getRight(), playerEquips);
             }
 
-
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("SELECT * FROM characters WHERE accountid = ? ORDER BY world, id")) {
-                ps.setInt(1, accId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        characterCount++;
-
-                        int cworld = rs.getByte("world");
-                        if (cworld >= wlen) {
-                            continue;
-                        }
-
-                        if (cworld > curWorld) {
-                            wchars.add(curWorld, chars);
-
-                            curWorld = cworld;
-                            chars = new LinkedList<>();
-                        }
-
-                        Integer cid = rs.getInt("id");
-                        chars.add(Character.loadCharacterEntryFromDB(rs, accPlayerEquips.get(cid)));
-                    }
-                }
-            }
-
-            wchars.add(curWorld, chars);
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+            playerEquips.add(ae.getLeft());
         }
+
+        List<CharactersDO> charactersDOList = characterService.getCharactersByAccountId(accId);
+        for (CharactersDO charactersDO : charactersDOList) {
+            characterCount++;
+
+            int cworld = charactersDO.getWorld();
+            if (cworld >= wlen) {
+                continue;
+            }
+
+            if (cworld > curWorld) {
+                wchars.add(curWorld, chars);
+
+                curWorld = cworld;
+                chars = new LinkedList<>();
+            }
+
+            Integer cid = charactersDO.getId();
+            chars.add(Character.fromCharactersDO(charactersDO, null));
+        }
+
+        wchars.add(curWorld, chars);
 
         return new Pair<>(characterCount, wchars);
     }
 
     public void loadAllAccountsCharactersView() {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT id FROM accounts");
-             ResultSet rs = ps.executeQuery()) {
-
-            while (rs.next()) {
-                int accountId = rs.getInt("id");
-                if (isFirstAccountLogin(accountId)) {
-                    loadAccountCharactersView(accountId, 0, 0);
-                }
+        List<Integer> accountIds = accountService.getAllAccountIds();
+        for (Integer accountId : accountIds) {
+            if (isFirstAccountLogin(accountId)) {
+                loadAccountCharactersView(accountId, 0, 0);
             }
-        } catch (SQLException se) {
-            se.printStackTrace();
         }
     }
 
