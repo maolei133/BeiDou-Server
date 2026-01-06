@@ -31,17 +31,16 @@ import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.client.processor.npc.FredrickProcessor;
 import org.gms.config.GameConfig;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.manager.ServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.Server;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.Trade;
-import org.gms.util.DatabaseConnection;
+import org.gms.service.CharacterService;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -81,6 +80,7 @@ public class HiredMerchant extends AbstractMapObject {
     private final LinkedList<PastVisitor> visitorHistory = new LinkedList<>();
     private final LinkedHashSet<String> blacklist = new LinkedHashSet<>(); // case-sensitive character names
     private final Lock visitorLock = new ReentrantLock(true);
+    private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
 
     private record Visitor(Character chr, Instant enteredAt) {}
 
@@ -246,7 +246,7 @@ public class HiredMerchant extends AbstractMapObject {
                     iitem.setQuantity((short) (shopItem.getItem().getQuantity() * shopItem.getBundles()));
 
                     if (!Inventory.checkSpot(chr, iitem)) {
-                        chr.sendPacket(PacketCreator.serverNotice(1, "Have a slot available on your inventory to claim back the item."));
+                        chr.sendPacket(PacketCreator.serverNotice(1, "请确保背包有足够的空间来取回物品。"));
                         chr.sendPacket(PacketCreator.enableActions());
                         return;
                     }
@@ -321,34 +321,23 @@ public class HiredMerchant extends AbstractMapObject {
                     if (owner != null) {
                         owner.addMerchantMesos(price);
                     } else {
-                        try (Connection con = DatabaseConnection.getConnection()) {
-                            long merchantMesos = 0;
-                            try (PreparedStatement ps = con.prepareStatement("SELECT MerchantMesos FROM characters WHERE id = ?")) {
-                                ps.setInt(1, ownerId);
-                                try (ResultSet rs = ps.executeQuery()) {
-                                    if (rs.next()) {
-                                        merchantMesos = rs.getInt(1);
-                                    }
-                                }
-                            }
+                        CharactersDO character = characterService.findById(ownerId);
+                        if (character != null) {
+                            long merchantMesos = character.getMerchantmesos() != null ? character.getMerchantmesos() : 0;
                             merchantMesos += price;
-
-                            try (PreparedStatement ps = con.prepareStatement("UPDATE characters SET MerchantMesos = ? WHERE id = ?", PreparedStatement.RETURN_GENERATED_KEYS)) {
-                                ps.setInt(1, (int) Math.min(merchantMesos, Integer.MAX_VALUE));
-                                ps.setInt(2, ownerId);
-                                ps.executeUpdate();
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
+                            characterService.update(CharactersDO.builder()
+                                    .id(ownerId)
+                                    .merchantmesos((int) Math.min(merchantMesos, Integer.MAX_VALUE))
+                                    .build());
                         }
                     }
                 } else {
-                    c.getPlayer().dropMessage(1, "Your inventory is full. Please clear a slot before buying this item.");
+                    c.getPlayer().dropMessage(1, "你的背包已满。请在购买此物品前清理一个空位。");
                     c.sendPacket(PacketCreator.enableActions());
                     return;
                 }
             } else {
-                c.getPlayer().dropMessage(1, "You don't have enough mesos to purchase this item.");
+                c.getPlayer().dropMessage(1, "你没有足够的金币购买此物品。");
                 c.sendPacket(PacketCreator.enableActions());
                 return;
             }
@@ -365,7 +354,7 @@ public class HiredMerchant extends AbstractMapObject {
 
         Character player = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
         if (player != null && player.isLoggedInWorld()) {
-            player.dropMessage(6, "[Hired Merchant] Item '" + ItemInformationProvider.getInstance().getName(item.getItemId()) + "'" + qtyStr + " has been sold for " + mesos + " mesos. (" + inStore + " left)");
+            player.dropMessage(6, "[雇佣商人] 物品 '" + ItemInformationProvider.getInstance().getName(item.getItemId()) + "'" + qtyStr + " 已以 " + mesos + " 金币售出。 (剩余 " + inStore + ")");
         }
     }
 
@@ -403,13 +392,10 @@ public class HiredMerchant extends AbstractMapObject {
         if (player != null) {
             player.setHasMerchant(false);
         } else {
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("UPDATE characters SET HasMerchant = 0 WHERE id = ?", PreparedStatement.RETURN_GENERATED_KEYS)) {
-                ps.setInt(1, ownerId);
-                ps.executeUpdate();
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
+            characterService.update(CharactersDO.builder()
+                    .id(ownerId)
+                    .hasmerchant(false)
+                    .build());
         }
 
         map = null;
@@ -459,11 +445,10 @@ public class HiredMerchant extends AbstractMapObject {
             if (player != null) {
                 player.setHasMerchant(false);
             } else {
-                try (Connection con = DatabaseConnection.getConnection();
-                     PreparedStatement ps = con.prepareStatement("UPDATE characters SET HasMerchant = 0 WHERE id = ?", PreparedStatement.RETURN_GENERATED_KEYS)) {
-                    ps.setInt(1, ownerId);
-                    ps.executeUpdate();
-                }
+                characterService.update(CharactersDO.builder()
+                        .id(ownerId)
+                        .hasmerchant(false)
+                        .build());
             }
 
             if (GameConfig.getServerBoolean("use_enforce_merchant_save")) {
@@ -677,9 +662,7 @@ public class HiredMerchant extends AbstractMapObject {
             }
         }
 
-        try (Connection con = DatabaseConnection.getConnection()) {
-            ItemFactory.MERCHANT.saveItems(itemsWithType, bundles, this.ownerId, con);
-        }
+        ItemFactory.MERCHANT.saveItems(itemsWithType, bundles, this.ownerId);
 
         FredrickProcessor.insertFredrickLog(this.ownerId);
     }

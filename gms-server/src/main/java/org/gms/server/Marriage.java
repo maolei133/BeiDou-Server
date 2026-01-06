@@ -28,11 +28,8 @@ import org.gms.client.inventory.ItemFactory;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.scripting.event.EventInstanceManager;
 import org.gms.scripting.event.EventManager;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.Pair;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -74,6 +71,7 @@ public class Marriage extends EventInstanceManager {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private List<Item> getGiftItemsList(boolean groom) {
         return (List<Item>) this.getObjectProperty(groom ? "groomGiftlist" : "brideGiftlist");
     }
@@ -118,11 +116,7 @@ public class Marriage extends EventInstanceManager {
     public static boolean claimGiftItems(Client c, Character chr) {
         List<Item> gifts = loadGiftItemsFromDb(c, chr.getId());
         if (Inventory.checkSpot(chr, gifts)) {
-            try (Connection con = DatabaseConnection.getConnection()) {
-                ItemFactory.MARRIAGE_GIFTS.saveItems(new LinkedList<>(), chr.getId(), con);
-            } catch (SQLException sqle) {
-                sqle.printStackTrace();
-            }
+            ItemFactory.MARRIAGE_GIFTS.saveItems(new LinkedList<>(), chr.getId());
 
             for (Item item : gifts) {
                 InventoryManipulator.addFromDrop(chr.getClient(), item, false);
@@ -154,10 +148,6 @@ public class Marriage extends EventInstanceManager {
             items.add(new Pair<>(it, it.getInventoryType()));
         }
 
-        try (Connection con = DatabaseConnection.getConnection()) {
-            ItemFactory.MARRIAGE_GIFTS.saveItems(items, cid, con);
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        }
+        ItemFactory.MARRIAGE_GIFTS.saveItems(items, cid);
     }
 }

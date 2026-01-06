@@ -19,14 +19,15 @@
 */
 package org.gms.server.expeditions;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.config.GameConfig;
-import org.gms.util.DatabaseConnection;
+import org.gms.dao.entity.BosslogDailyDO;
+import org.gms.dao.entity.BosslogWeeklyDO;
+import org.gms.dao.mapper.BosslogDailyMapper;
+import org.gms.dao.mapper.BosslogWeeklyMapper;
+import org.gms.manager.ServerManager;
 import org.gms.util.Pair;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.LinkedList;
@@ -34,12 +35,16 @@ import java.util.List;
 
 import static java.util.concurrent.TimeUnit.DAYS;
 import static java.util.concurrent.TimeUnit.HOURS;
+import static org.gms.dao.entity.table.BosslogDailyDOTableDef.BOSSLOG_DAILY_D_O;
+import static org.gms.dao.entity.table.BosslogWeeklyDOTableDef.BOSSLOG_WEEKLY_D_O;
 
 /**
  * @author Conrad
  * @author Ronan
  */
 public class ExpeditionBossLog {
+    private static final BosslogDailyMapper bosslogDailyMapper = ServerManager.getApplicationContext().getBean(BosslogDailyMapper.class);
+    private static final BosslogWeeklyMapper bosslogWeeklyMapper = ServerManager.getApplicationContext().getBean(BosslogWeeklyMapper.class);
 
     public enum BossLogEntry {
         ZAKUM(2, 1, false),
@@ -125,53 +130,42 @@ public class ExpeditionBossLog {
 
     private static void resetBossLogTable(boolean week, Calendar c) {
         List<Pair<Timestamp, BossLogEntry>> resetTimestamps = BossLogEntry.getBossLogResetTimestamps(c, week);
-
-        try (Connection con = DatabaseConnection.getConnection()) {
-            for (Pair<Timestamp, BossLogEntry> p : resetTimestamps) {
-                try (PreparedStatement ps = con.prepareStatement("DELETE FROM " + getBossLogTable(week) + " WHERE attempttime <= ? AND bosstype LIKE ?")) {
-                    ps.setTimestamp(1, p.getLeft());
-                    ps.setString(2, p.getRight().name());
-                    ps.executeUpdate();
-                }
+        for (Pair<Timestamp, BossLogEntry> p : resetTimestamps) {
+            if (week) {
+                bosslogWeeklyMapper.deleteByQuery(QueryWrapper.create()
+                        .where(BOSSLOG_WEEKLY_D_O.ATTEMPTTIME.le(p.getLeft()))
+                        .and(BOSSLOG_WEEKLY_D_O.BOSSTYPE.like(p.getRight().name())));
+            } else {
+                bosslogDailyMapper.deleteByQuery(QueryWrapper.create()
+                        .where(BOSSLOG_DAILY_D_O.ATTEMPTTIME.le(p.getLeft()))
+                        .and(BOSSLOG_DAILY_D_O.BOSSTYPE.like(p.getRight().name())));
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
 
-    private static String getBossLogTable(boolean week) {
-        return week ? "bosslog_weekly" : "bosslog_daily";
-    }
-
     private static int countPlayerEntries(int cid, BossLogEntry boss) {
-        int ret_count = 0;
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM " + getBossLogTable(boss.week) + " WHERE characterid = ? AND bosstype LIKE ?")) {
-            ps.setInt(1, cid);
-            ps.setString(2, boss.name());
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    ret_count = rs.getInt(1);
-                } else {
-                    ret_count = -1;
-                }
-            }
-            return ret_count;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return -1;
+        if (boss.week) {
+            return (int) bosslogWeeklyMapper.selectCountByQuery(QueryWrapper.create()
+                    .where(BOSSLOG_WEEKLY_D_O.CHARACTERID.eq(cid))
+                    .and(BOSSLOG_WEEKLY_D_O.BOSSTYPE.like(boss.name())));
+        } else {
+            return (int) bosslogDailyMapper.selectCountByQuery(QueryWrapper.create()
+                    .where(BOSSLOG_DAILY_D_O.CHARACTERID.eq(cid))
+                    .and(BOSSLOG_DAILY_D_O.BOSSTYPE.like(boss.name())));
         }
     }
 
     private static void insertPlayerEntry(int cid, BossLogEntry boss) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO " + getBossLogTable(boss.week) + " (characterid, bosstype) VALUES (?,?)")) {
-            ps.setInt(1, cid);
-            ps.setString(2, boss.name());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
+        if (boss.week) {
+            bosslogWeeklyMapper.insert(BosslogWeeklyDO.builder()
+                    .characterid(cid)
+                    .bosstype(boss.name())
+                    .build());
+        } else {
+            bosslogDailyMapper.insert(BosslogDailyDO.builder()
+                    .characterid(cid)
+                    .bosstype(boss.name())
+                    .build());
         }
     }
 

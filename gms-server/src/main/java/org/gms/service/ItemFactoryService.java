@@ -105,6 +105,14 @@ public class ItemFactoryService {
         return items;
     }
 
+    /**
+     * 保存物品到数据库
+     *
+     * @param typeValue 物品存储位置类型 (1: 背包, 2: 仓库, 3: 商城, 4: 雇佣商人, 5: 结婚礼物, 6: 快递)
+     * @param isAccount 是否关联到账号 (true: 关联账号, false: 关联角色)
+     * @param items     要保存的物品列表，包含物品对象和库存类型
+     * @param id        账号ID或角色ID (取决于 isAccount)
+     */
     @Transactional
     public void saveItems(int typeValue, boolean isAccount, List<Pair<Item, InventoryType>> items, int id) {
         QueryWrapper selectQuery = QueryWrapper.create()
@@ -150,11 +158,11 @@ public class ItemFactoryService {
             itemDO.setInventorytype((int) mit.getType());
             itemDO.setPosition((int) item.getPosition());
             itemDO.setQuantity((int) item.getQuantity());
-            itemDO.setOwner(item.getOwner());
+            itemDO.setOwner(item.getOwner() == null ? "" : item.getOwner());
             itemDO.setPetid(item.getPetId());
             itemDO.setFlag((int) item.getFlag());
             itemDO.setExpiration(item.getExpiration());
-            itemDO.setGiftFrom(item.getGiftFrom());
+            itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
 
             inventoryitemsMapper.insert(itemDO);
             Long genKey = itemDO.getInventoryitemid();
@@ -227,11 +235,11 @@ public class ItemFactoryService {
             itemDO.setInventorytype((int) mit.getType());
             itemDO.setPosition((int) item.getPosition());
             itemDO.setQuantity((int) item.getQuantity());
-            itemDO.setOwner(item.getOwner());
+            itemDO.setOwner(item.getOwner() == null ? "" : item.getOwner());
             itemDO.setPetid(item.getPetId());
             itemDO.setFlag((int) item.getFlag());
             itemDO.setExpiration(item.getExpiration());
-            itemDO.setGiftFrom(item.getGiftFrom());
+            itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
 
             inventoryitemsMapper.insert(itemDO);
             Long genKey = itemDO.getInventoryitemid();

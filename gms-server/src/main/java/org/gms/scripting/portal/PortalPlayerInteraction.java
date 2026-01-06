@@ -22,19 +22,19 @@
 package org.gms.scripting.portal;
 
 import org.gms.client.Client;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.manager.ServerManager;
 import org.gms.scripting.AbstractPlayerInteraction;
 import org.gms.scripting.map.MapScriptManager;
 import org.gms.server.maps.Portal;
-import org.gms.util.DatabaseConnection;
+import org.gms.service.CharacterService;
 import org.gms.util.PacketCreator;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.util.List;
 
 public class PortalPlayerInteraction extends AbstractPlayerInteraction {
     private final Portal portal;
+    private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
 
     public PortalPlayerInteraction(Client c, Portal portal) {
         super(c);
@@ -51,21 +51,12 @@ public class PortalPlayerInteraction extends AbstractPlayerInteraction {
     }
 
     public boolean hasLevel30Character() {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT `level` FROM `characters` WHERE accountid = ?")) {
-            ps.setInt(1, getPlayer().getAccountId());
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    if (rs.getInt("level") >= 30) {
-                        return true;
-                    }
-                }
+        List<CharactersDO> characters = characterService.getCharactersByAccountId(getPlayer().getAccountId());
+        for (CharactersDO character : characters) {
+            if (character.getLevel() >= 30) {
+                return true;
             }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
         }
-
         return getPlayer().getLevel() >= 30;
     }
 

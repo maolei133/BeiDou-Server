@@ -21,6 +21,7 @@
 */
 package org.gms.server.life;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import lombok.Getter;
 import org.gms.client.Character;
 import org.gms.client.Client;
@@ -30,6 +31,8 @@ import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.NpcId;
 import org.gms.dao.entity.PlayernpcsDO;
 import org.gms.dao.entity.PlayernpcsEquipDO;
+import org.gms.dao.mapper.PlayernpcsEquipMapper;
+import org.gms.dao.mapper.PlayernpcsMapper;
 import org.gms.manager.ServerManager;
 import org.gms.net.server.Server;
 import org.gms.net.server.channel.Channel;
@@ -43,18 +46,18 @@ import org.gms.server.maps.AbstractMapObject;
 import org.gms.server.maps.MapObject;
 import org.gms.server.maps.MapObjectType;
 import org.gms.server.maps.MapleMap;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
+import static com.mybatisflex.core.query.QueryMethods.distinct;
+import static org.gms.dao.entity.table.PlayernpcsDOTableDef.PLAYERNPCS_D_O;
+import static org.gms.dao.entity.table.PlayernpcsEquipDOTableDef.PLAYERNPCS_EQUIP_D_O;
 
 /**
  * @author XoticStory
@@ -69,6 +72,8 @@ public class PlayerNPC extends AbstractMapObject {
     private static final List<AtomicInteger> runningWorldRank = new ArrayList<>();
     private static final Map<Pair<Integer, Integer>, AtomicInteger> runningWorldJobRank = new HashMap<>();
     private static final NpcService npcService = ServerManager.getApplicationContext().getBean(NpcService.class);
+    private static final PlayernpcsMapper playernpcsMapper = ServerManager.getApplicationContext().getBean(PlayernpcsMapper.class);
+    private static final PlayernpcsEquipMapper playernpcsEquipMapper = ServerManager.getApplicationContext().getBean(PlayernpcsEquipMapper.class);
 
     @Getter
     private Map<Short, Integer> equips = new HashMap<>();
@@ -213,61 +218,47 @@ public class PlayerNPC extends AbstractMapObject {
         CY = newPos.y;
         FH = map.getFootholds().findBelow(newPos).getId();
 
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE playernpcs SET x = ?, cy = ?, fh = ?, rx0 = ?, rx1 = ? WHERE id = ?")) {
-            ps.setInt(1, newPos.x);
-            ps.setInt(2, CY);
-            ps.setInt(3, FH);
-            ps.setInt(4, RX0);
-            ps.setInt(5, RX1);
-            ps.setInt(6, getObjectId());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        playernpcsMapper.update(PlayernpcsDO.builder()
+                .id(getObjectId())
+                .x(newPos.x)
+                .cy(CY)
+                .fh(FH)
+                .rx0(RX0)
+                .rx1(RX1)
+                .build());
     }
 
     private static void fetchAvailableScriptIdsFromDb(byte branch, List<Integer> list) {
-        try {
-            int branchLen = (branch < 26) ? 100 : 400;
-            int branchSid = NpcId.PLAYER_NPC_BASE + (branch * 100);
-            int nextBranchSid = branchSid + branchLen;
+        int branchLen = (branch < 26) ? 100 : 400;
+        int branchSid = NpcId.PLAYER_NPC_BASE + (branch * 100);
+        int nextBranchSid = branchSid + branchLen;
 
-            List<Integer> availables = new ArrayList<>(20);
-            try (Connection con = DatabaseConnection.getConnection();
-                 PreparedStatement ps = con.prepareStatement("SELECT scriptid FROM playernpcs WHERE scriptid >= ? AND scriptid < ? ORDER BY scriptid")) {
-                ps.setInt(1, branchSid);
-                ps.setInt(2, nextBranchSid);
+        List<Integer> availables = new ArrayList<>(20);
+        List<PlayernpcsDO> usedNpcs = playernpcsMapper.selectListByQuery(QueryWrapper.create()
+                .select(PLAYERNPCS_D_O.SCRIPTID)
+                .where(PLAYERNPCS_D_O.SCRIPTID.ge(branchSid))
+                .and(PLAYERNPCS_D_O.SCRIPTID.lt(nextBranchSid))
+                .orderBy(PLAYERNPCS_D_O.SCRIPTID.asc()));
+        Set<Integer> usedScriptIds = usedNpcs.stream().map(PlayernpcsDO::getScriptid).collect(Collectors.toSet());
 
-                Set<Integer> usedScriptIds = new HashSet<>();
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        usedScriptIds.add(rs.getInt(1));
+        int j = 0;
+        for (int i = branchSid; i < nextBranchSid; i++) {
+            if (!usedScriptIds.contains(i)) {
+                if (PlayerNPCFactory.isExistentScriptid(i)) {  // thanks Ark, Zein, geno, Ariel, JrCl0wn for noticing client crashes due to use of missing scriptids
+                    availables.add(i);
+                    j++;
+
+                    if (j == 20) {
+                        break;
                     }
-                }
-
-                int j = 0;
-                for (int i = branchSid; i < nextBranchSid; i++) {
-                    if (!usedScriptIds.contains(i)) {
-                        if (PlayerNPCFactory.isExistentScriptid(i)) {  // thanks Ark, Zein, geno, Ariel, JrCl0wn for noticing client crashes due to use of missing scriptids
-                            availables.add(i);
-                            j++;
-
-                            if (j == 20) {
-                                break;
-                            }
-                        } else {
-                            break;  // after this point no more scriptids expected...
-                        }
-                    }
+                } else {
+                    break;  // after this point no more scriptids expected...
                 }
             }
+        }
 
-            for (int i = availables.size() - 1; i >= 0; i--) {
-                list.add(availables.get(i));
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+        for (int i = availables.size() - 1; i >= 0; i--) {
+            list.add(availables.get(i));
         }
     }
 
@@ -357,31 +348,15 @@ public class PlayerNPC extends AbstractMapObject {
         List<Integer> mapids = new LinkedList<>();
         mapids.add(chr.getWorld());
 
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT id, map FROM playernpcs WHERE name LIKE ?" + (map != null ? " AND map = ?" : ""))) {
-            ps.setString(1, chr.getName());
-            if (map != null) {
-                ps.setInt(2, map.getId());
-            }
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    updateMapids.add(rs.getInt("map"));
-                    int npcId = rs.getInt("id");
-
-                    try (PreparedStatement ps2 = con.prepareStatement("DELETE FROM playernpcs WHERE id = ?")) {
-                        ps2.setInt(1, npcId);
-                        ps2.executeUpdate();
-                    }
-
-                    try (PreparedStatement ps2 = con.prepareStatement("DELETE FROM playernpcs_equip WHERE npcid = ?")) {
-                        ps2.setInt(1, npcId);
-                        ps2.executeUpdate();
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        List<PlayernpcsDO> npcs = playernpcsMapper.selectListByQuery(QueryWrapper.create()
+                .select(PLAYERNPCS_D_O.ID, PLAYERNPCS_D_O.MAP)
+                .where(PLAYERNPCS_D_O.NAME.like(chr.getName()))
+                .and(map != null ? PLAYERNPCS_D_O.MAP.eq(map.getId()) : null));
+        for (PlayernpcsDO npc : npcs) {
+            updateMapids.add(npc.getMap());
+            int npcId = npc.getId();
+            playernpcsMapper.deleteById(npcId);
+            playernpcsEquipMapper.deleteByQuery(QueryWrapper.create().where(PLAYERNPCS_EQUIP_D_O.NPCID.eq(npcId)));
         }
 
         mapids.addAll(updateMapids);
@@ -475,45 +450,32 @@ public class PlayerNPC extends AbstractMapObject {
     }
 
     public static void removeAllPlayerNPC() {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT DISTINCT world, map FROM playernpcs");
-             ResultSet rs = ps.executeQuery()) {
-            int wsize = Server.getInstance().getWorldsSize();
-            while (rs.next()) {
-                int world = rs.getInt("world"), map = rs.getInt("map");
-                if (world >= wsize) {
-                    continue;
-                }
+        List<PlayernpcsDO> npcs = playernpcsMapper.selectListByQuery(QueryWrapper.create().select(distinct(PLAYERNPCS_D_O.WORLD), PLAYERNPCS_D_O.MAP));
+        int wsize = Server.getInstance().getWorldsSize();
+        for (PlayernpcsDO npc : npcs) {
+            int world = npc.getWorld();
+            int map = npc.getMap();
+            if (world >= wsize) {
+                continue;
+            }
 
-                for (Channel channel : Server.getInstance().getChannelsFromWorld(world)) {
-                    MapleMap m = channel.getMapFactory().getMap(map);
+            for (Channel channel : Server.getInstance().getChannelsFromWorld(world)) {
+                MapleMap m = channel.getMapFactory().getMap(map);
 
-                    for (MapObject pnpcObj : m.getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.PLAYER_NPC))) {
-                        PlayerNPC pn = (PlayerNPC) pnpcObj;
-                        m.removeMapObject(pnpcObj);
-                        m.broadcastMessage(PacketCreator.removeNPCController(pn.getObjectId()));
-                        m.broadcastMessage(PacketCreator.removePlayerNPC(pn.getObjectId()));
-                    }
+                for (MapObject pnpcObj : m.getMapObjectsInRange(new Point(0, 0), Double.POSITIVE_INFINITY, Arrays.asList(MapObjectType.PLAYER_NPC))) {
+                    PlayerNPC pn = (PlayerNPC) pnpcObj;
+                    m.removeMapObject(pnpcObj);
+                    m.broadcastMessage(PacketCreator.removeNPCController(pn.getObjectId()));
+                    m.broadcastMessage(PacketCreator.removePlayerNPC(pn.getObjectId()));
                 }
             }
+        }
 
-            try (PreparedStatement ps2 = con.prepareStatement("DELETE FROM playernpcs")) {
-                ps2.executeUpdate();
-            }
+        playernpcsMapper.deleteByQuery(new QueryWrapper());
+        playernpcsEquipMapper.deleteByQuery(new QueryWrapper());
 
-            try (PreparedStatement ps2 = con.prepareStatement("DELETE FROM playernpcs_equip")) {
-                ps2.executeUpdate();
-            }
-
-            try (PreparedStatement ps2 = con.prepareStatement("DELETE FROM playernpcs_field")) {
-                ps2.executeUpdate();
-            }
-
-            for (World w : Server.getInstance().getWorlds()) {
-                w.resetPlayerNpcMapData();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        for (World w : Server.getInstance().getWorlds()) {
+            w.resetPlayerNpcMapData();
         }
     }
 

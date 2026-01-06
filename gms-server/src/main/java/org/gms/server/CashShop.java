@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.server;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import lombok.Getter;
 import net.jcip.annotations.GuardedBy;
 import org.gms.client.inventory.Equip;
@@ -31,8 +32,10 @@ import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.dao.entity.AccountsDO;
+import org.gms.dao.entity.GiftsDO;
 import org.gms.dao.entity.ModifiedCashItemDO;
 import org.gms.dao.entity.WishlistsDO;
+import org.gms.dao.mapper.GiftsMapper;
 import org.gms.manager.ServerManager;
 import org.gms.model.pojo.CashCategory;
 import org.gms.net.server.Server;
@@ -45,13 +48,8 @@ import org.gms.service.AccountService;
 import org.gms.service.CashShopService;
 import org.gms.service.CharacterService;
 import org.gms.service.ItemFactoryService;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.Pair;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -61,6 +59,8 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
+import static org.gms.dao.entity.table.GiftsDOTableDef.GIFTS_D_O;
 
 /*
  * @author Flav
@@ -85,6 +85,7 @@ public class CashShop {
     private static final AccountService accountService = ServerManager.getApplicationContext().getBean(AccountService.class);
     private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
     private static final ItemFactoryService itemFactoryService = ServerManager.getApplicationContext().getBean(ItemFactoryService.class);
+    private static final GiftsMapper giftsMapper = ServerManager.getApplicationContext().getBean(GiftsMapper.class);
 
     public CashShop(int accountId, int characterId, int jobType) {
         this.accountId = accountId;
@@ -452,60 +453,45 @@ public class CashShop {
     }
 
     public void gift(int recipient, String from, String message, int sn, int ringid) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO `gifts` VALUES (DEFAULT, ?, ?, ?, ?, ?)")) {
-            ps.setInt(1, recipient);
-            ps.setString(2, from);
-            ps.setString(3, message);
-            ps.setInt(4, sn);
-            ps.setInt(5, ringid);
-            ps.executeUpdate();
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        }
+        giftsMapper.insert(GiftsDO.builder()
+                .to(recipient)
+                .from(from)
+                .message(message)
+                .sn(sn)
+                .ringid(ringid)
+                .build());
     }
 
     public List<Pair<Item, String>> loadGifts() {
         List<Pair<Item, String>> gifts = new ArrayList<>();
+        List<GiftsDO> giftList = giftsMapper.selectListByQuery(QueryWrapper.create().where(GIFTS_D_O.TO.eq(characterId)));
 
-        try (Connection con = DatabaseConnection.getConnection()) {
+        for (GiftsDO gift : giftList) {
+            notes++;
+            ModifiedCashItemDO cItem = CashItemFactory.getItem(gift.getSn());
+            Item item = cItem.toItem();
+            Equip equip = null;
+            item.setGiftFrom(gift.getFrom());
+            if (item.getInventoryType().equals(InventoryType.EQUIP)) {
+                equip = (Equip) item;
+                equip.setRingId(gift.getRingid());
+                gifts.add(new Pair<>(equip, gift.getMessage()));
+            } else {
+                gifts.add(new Pair<>(item, gift.getMessage()));
+            }
 
-            try (PreparedStatement ps = con.prepareStatement("SELECT * FROM `gifts` WHERE `to` = ?")) {
-                ps.setInt(1, characterId);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        notes++;
-                        ModifiedCashItemDO cItem = CashItemFactory.getItem(rs.getInt("sn"));
-                        Item item = cItem.toItem();
-                        Equip equip = null;
-                        item.setGiftFrom(rs.getString("from"));
-                        if (item.getInventoryType().equals(InventoryType.EQUIP)) {
-                            equip = (Equip) item;
-                            equip.setRingId(rs.getInt("ringid"));
-                            gifts.add(new Pair<>(equip, rs.getString("message")));
-                        } else {
-                            gifts.add(new Pair<>(item, rs.getString("message")));
-                        }
-
-                        if (CashItemFactory.isPackage(cItem.getItemId())) { //Packages never contains a ring
-                            for (Item packageItem : CashItemFactory.getPackage(cItem.getItemId())) {
-                                packageItem.setGiftFrom(rs.getString("from"));
-                                addToInventory(packageItem);
-                            }
-                        } else {
-                            addToInventory(equip == null ? item : equip);
-                        }
-                    }
+            if (CashItemFactory.isPackage(cItem.getItemId())) { //Packages never contains a ring
+                for (Item packageItem : CashItemFactory.getPackage(cItem.getItemId())) {
+                    packageItem.setGiftFrom(gift.getFrom());
+                    addToInventory(packageItem);
                 }
+            } else {
+                addToInventory(equip == null ? item : equip);
             }
+        }
 
-            try (PreparedStatement ps = con.prepareStatement("DELETE FROM `gifts` WHERE `to` = ?")) {
-                ps.setInt(1, characterId);
-                ps.executeUpdate();
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+        if (!giftList.isEmpty()) {
+            giftsMapper.deleteByQuery(QueryWrapper.create().where(GIFTS_D_O.TO.eq(characterId)));
         }
 
         return gifts;
@@ -544,10 +530,6 @@ public class CashShop {
             }
             characterService.batchInsertWishlists(wishlistsDOList);
         }
-    }
-
-    public void save(Connection con) {
-        save();
     }
 
     public Optional<CashShopSurpriseResult> openCashShopSurprise(long cashId) {

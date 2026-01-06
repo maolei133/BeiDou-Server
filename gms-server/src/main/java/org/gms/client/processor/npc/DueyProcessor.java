@@ -47,13 +47,10 @@ import org.slf4j.LoggerFactory;
 import org.gms.server.DueyPackage;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.Trade;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.*;
 
@@ -126,14 +123,8 @@ public class DueyProcessor {
         }
     }
 
-    @Deprecated
     private static void deletePackageFromInventoryDB(int packageId) {
-        log.warn("注意: deletePackageFromInventoryDB 仍在使用旧的 JDBC 连接方式，需要重构。");
-        try (Connection con = DatabaseConnection.getConnection()) {
-            ItemFactory.DUEY.saveItems(new LinkedList<>(), packageId, con);
-        } catch (SQLException e) {
-            log.error("删除快递物品时发生SQL错误", e);
-        }
+        ItemFactory.DUEY.saveItems(new LinkedList<>(), packageId);
     }
 
     private static void removePackageFromDB(int packageId) {
@@ -196,17 +187,10 @@ public class DueyProcessor {
         }
     }
 
-    @Deprecated
     private static boolean insertPackageItem(int packageId, Item item) {
         Pair<Item, InventoryType> dueyItem = new Pair<>(item, InventoryType.getByType(item.getItemType()));
-        log.warn("注意: insertPackageItem 仍在使用旧的 JDBC 连接方式，需要重构。");
-        try (Connection con = DatabaseConnection.getConnection()) {
-            ItemFactory.DUEY.saveItems(Collections.singletonList(dueyItem), packageId, con);
-            return true;
-        } catch (SQLException sqle) {
-            log.error("插入包裹物品时发生SQL错误", sqle);
-        }
-        return false;
+        ItemFactory.DUEY.saveItems(Collections.singletonList(dueyItem), packageId);
+        return true;
     }
 
     private static int addPackageItemFromInventory(int packageId, Client c, byte invTypeId, short itemPos, short amount) {

@@ -90,7 +90,7 @@ public abstract class CharacterFactory {
         }
 
         if (!MakeCharInfoValidator.isNewCharacterValid(newCharacter)) {
-            log.warn("Owner from account {} tried to packet edit in character creation", c.getAccountName());
+            log.warn("账户 {} 的所有者在角色创建时尝试进行数据包编辑", c.getAccountName());
             return -2;
         }
 
@@ -100,7 +100,7 @@ public abstract class CharacterFactory {
         c.sendPacket(PacketCreator.addNewCharEntry(newCharacter));
 
         Server.getInstance().createCharacterEntry(newCharacter);
-        Server.getInstance().broadcastGMMessage(c.getWorld(), PacketCreator.sendYellowTip("[New Char]: " + c.getAccountName() + I18nUtil.getMessage("CharacterFactory.message1") + name));
+        Server.getInstance().broadcastGMMessage(c.getWorld(), PacketCreator.sendYellowTip("[新角色]: " + c.getAccountName() + I18nUtil.getMessage("CharacterFactory.message1") + name));
         log.info("账号 {} 创建了角色 {}", c.getAccountName(), name);
 
         return 0;

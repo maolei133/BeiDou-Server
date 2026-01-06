@@ -21,7 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.net.server.world;
 
-import com.mybatisflex.core.query.QueryWrapper;
 import lombok.Getter;
 import lombok.Setter;
 import org.gms.client.BuddyList;
@@ -32,8 +31,7 @@ import org.gms.client.Character;
 import org.gms.client.Family;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
-import org.gms.dao.entity.PlayernpcsFieldDO;
-import org.gms.dao.mapper.PlayernpcsFieldMapper;
+import org.gms.dao.entity.CharactersDO;
 import org.gms.manager.ServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.PlayerStorage;
@@ -65,11 +63,6 @@ import org.gms.net.server.task.ServerMessageTask;
 import org.gms.net.server.task.TimedMapObjectTask;
 import org.gms.net.server.task.TimeoutTask;
 import org.gms.net.server.task.WeddingReservationTask;
-import org.gms.service.WorldService;
-import org.gms.util.*;
-import org.gms.util.packets.Fishing;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.EventInstanceManager;
 import org.gms.server.Storage;
 import org.gms.server.TimerManager;
@@ -80,12 +73,16 @@ import org.gms.server.maps.MiniDungeon;
 import org.gms.server.maps.MiniDungeonInfo;
 import org.gms.server.maps.PlayerShop;
 import org.gms.server.maps.PlayerShopItem;
+import org.gms.service.CharacterService;
+import org.gms.service.WorldService;
+import org.gms.util.I18nUtil;
+import org.gms.util.NumberTool;
+import org.gms.util.*;
+import org.gms.util.Pair;
+import org.gms.util.packets.Fishing;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -111,10 +108,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static java.util.concurrent.TimeUnit.DAYS;
-import static java.util.concurrent.TimeUnit.HOURS;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.gms.dao.entity.table.PlayernpcsFieldDOTableDef.PLAYERNPCS_FIELD_D_O;
 
 /**
  * @author kevintjuh93
@@ -221,6 +216,7 @@ public class World {
     private ScheduledFuture<?> hpDecSchedule;
 
     private static final WorldService worldService = ServerManager.getApplicationContext().getBean(WorldService.class);
+    private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
 
     public World(int world, int flag, String eventmsg, float expRate, float dropRate, float bossDropRate, float mesoRate,
                  float questRate, float travelRate, float fishingRate) {
@@ -234,7 +230,7 @@ public class World {
         this.questRate = questRate;
         this.travelRate = travelRate;
         this.fishingRate = fishingRate;
-        runningPartyId.set(1000000001); // partyid must not clash with charid to solve update item looting issues, found thanks to Vcoc
+        runningPartyId.set(1000000001); // 组队ID不能与角色ID冲突，以解决更新物品拾取问题，感谢Vcoc发现
         runningMessengerId.set(1);
 
         ReadWriteLock channelLock = new ReentrantReadWriteLock(true);
@@ -696,15 +692,11 @@ public class World {
     }
 
     public void setOfflineGuildStatus(int guildid, int guildrank, int cid) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE characters SET guildid = ?, guildrank = ? WHERE id = ?")) {
-            ps.setInt(1, guildid);
-            ps.setInt(2, guildrank);
-            ps.setInt(3, cid);
-            ps.executeUpdate();
-        } catch (SQLException se) {
-            se.printStackTrace();
-        }
+        characterService.update(CharactersDO.builder()
+                .id(cid)
+                .guildid(guildid)
+                .guildrank(guildrank)
+                .build());
     }
 
     public void setGuildAndRank(int cid, int guildid, int rank) {
@@ -990,7 +982,7 @@ public class World {
     public void updateParty(int partyid, PartyOperation operation, PartyCharacter target) {
         Party party = getParty(partyid);
         if (party == null) {
-            throw new IllegalArgumentException("no party with the specified partyid exists");
+            throw new IllegalArgumentException("不存在具有指定partyid的队伍");
         }
         switch (operation) {
             case JOIN:
@@ -1030,7 +1022,7 @@ public class World {
                 }
                 break;
             default:
-                log.warn("Unhandled updateParty operation: {}", operation.name());
+                log.warn("未处理的updateParty操作: {}", operation.name());
         }
         updateParty(party, operation, target);
     }
@@ -1110,7 +1102,7 @@ public class World {
     public void leaveMessenger(int messengerid, MessengerCharacter target) {
         Messenger messenger = getMessenger(messengerid);
         if (messenger == null) {
-            throw new IllegalArgumentException("No messenger with the specified messengerid exists");
+            throw new IllegalArgumentException("不存在具有指定信使ID的信使");
         }
         int position = messenger.getPositionByName(target.getName());
         messenger.removeMember(target);
@@ -1129,12 +1121,12 @@ public class World {
                             targetChr.sendPacket(PacketCreator.messengerInvite(sender, messengerid));
                             from.sendPacket(PacketCreator.messengerNote(target, 4, 1));
                         } else {
-                            from.sendPacket(PacketCreator.messengerChat(sender + " : " + target + " is already managing a Maple Messenger invitation"));
+                            from.sendPacket(PacketCreator.messengerChat(sender + " : " + target + " 已经在处理一个Maple Messenger邀请"));
                         }
                     }
                 } else {
                     Character from = getChannel(fromchannel).getPlayerStorage().getCharacterByName(sender);
-                    from.sendPacket(PacketCreator.messengerChat(sender + " : " + target + " is already using Maple Messenger"));
+                    from.sendPacket(PacketCreator.messengerChat(sender + " : " + target + " 已经在使用Maple Messenger"));
                 }
             }
         }
@@ -1218,7 +1210,7 @@ public class World {
     public void silentLeaveMessenger(int messengerid, MessengerCharacter target) {
         Messenger messenger = getMessenger(messengerid);
         if (messenger == null) {
-            throw new IllegalArgumentException("No messenger with the specified messengerid exists");
+            throw new IllegalArgumentException("不存在具有指定信使ID的信使");
         }
         messenger.addMember(target, target.getPosition());
     }
@@ -1226,7 +1218,7 @@ public class World {
     public void joinMessenger(int messengerid, MessengerCharacter target, String from, int fromchannel) {
         Messenger messenger = getMessenger(messengerid);
         if (messenger == null) {
-            throw new IllegalArgumentException("No messenger with the specified messengerid exists");
+            throw new IllegalArgumentException("不存在具有指定信使ID的信使");
         }
         messenger.addMember(target, target.getPosition());
         addMessengerPlayer(messenger, from, fromchannel, target.getPosition());
@@ -1235,7 +1227,7 @@ public class World {
     public void silentJoinMessenger(int messengerid, MessengerCharacter target, int position) {
         Messenger messenger = getMessenger(messengerid);
         if (messenger == null) {
-            throw new IllegalArgumentException("No messenger with the specified messengerid exists");
+            throw new IllegalArgumentException("不存在具有指定信使ID的信使");
         }
         messenger.addMember(target, position);
     }

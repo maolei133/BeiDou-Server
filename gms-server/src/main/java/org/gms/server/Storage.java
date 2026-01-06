@@ -23,7 +23,6 @@ import org.gms.client.Client;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.ItemFactory;
-import org.gms.constants.game.GameConstants;
 import org.gms.dao.entity.StoragesDO;
 import org.gms.dao.mapper.StoragesMapper;
 import org.slf4j.Logger;
@@ -37,8 +36,6 @@ import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 import org.gms.util.SpringContextUtil;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -126,7 +123,7 @@ public class Storage {
         }
     }
 
-    public void saveToDB(Connection con) {
+    public void saveToDB() {
         StoragesMapper mapper = SpringContextUtil.getBean(StoragesMapper.class);
         StoragesDO storageToUpdate = new StoragesDO();
         storageToUpdate.setStorageid((long) this.id);
@@ -139,7 +136,7 @@ public class Storage {
         for (Item item : list) {
             itemsWithType.add(new Pair<>(item, item.getInventoryType()));
         }
-        ItemFactory.STORAGE.saveItems(itemsWithType, id, con);
+        ItemFactory.STORAGE.saveItems(itemsWithType, id);
     }
 
     public Item getItem(byte slot) {

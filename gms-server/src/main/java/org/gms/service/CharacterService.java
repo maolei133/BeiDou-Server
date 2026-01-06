@@ -9,6 +9,7 @@ import org.gms.client.Character;
 import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
+import org.gms.client.inventory.ItemFactory;
 import org.gms.client.keybind.KeyBinding;
 import org.gms.client.processor.npc.FredrickProcessor;
 import org.gms.config.GameConfig;
@@ -347,7 +348,7 @@ public class CharacterService {
                 }
             }
         }
-        itemFactoryService.saveItems(1, false, itemsWithType, player.getId());
+        ItemFactory.INVENTORY.saveItems(itemsWithType, player.getId());
 
         // 保存商城数据
         if (player.getCashShop() != null) {
@@ -659,7 +660,7 @@ public class CharacterService {
                     doo.setSkill1(macro.getSkill1());
                     doo.setSkill2(macro.getSkill2());
                     doo.setSkill3(macro.getSkill3());
-                    doo.setName(macro.getName());
+                    doo.setName(macro.getName() == null ? "" : macro.getName());
                     doo.setShout(macro.getShout());
                     doo.setPosition(i);
                     list.add(doo);
@@ -737,7 +738,7 @@ public class CharacterService {
                     doo.setCharacterid(charId);
                     doo.setBuddyid(entry.getCharacterId());
                     doo.setPending(0);
-                    doo.setGroup(entry.getGroup());
+                    doo.setGroup(entry.getGroup() == null ? "" : entry.getGroup());
                     list.add(doo);
                 }
             }
@@ -960,8 +961,7 @@ public class CharacterService {
                 }
             }
         }
-        // The original code uses a special type value of 0 for new characters.
-        itemFactoryService.saveItems(0, false, itemsWithType, newId);
+        ItemFactory.INVENTORY.saveItems(itemsWithType, newId);
 
         // Skills
         if (!chr.getSkills().isEmpty()) {

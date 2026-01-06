@@ -27,10 +27,7 @@ import org.gms.net.server.Server;
 import org.gms.net.server.coordinator.login.LoginStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.util.DatabaseConnection;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -75,14 +72,14 @@ public class SessionCoordinator {
     }
 
     private static boolean attemptAccountAccess(int accountId, Hwid hwid, boolean routineCheck) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            List<HwidRelevance> hwidRelevances = SessionDAO.getHwidRelevance(con, accountId);
+        try {
+            List<HwidRelevance> hwidRelevances = SessionDAO.getHwidRelevance(accountId);
             for (HwidRelevance hwidRelevance : hwidRelevances) {
                 if (hwidRelevance.hwid().endsWith(hwid.hwid())) {
                     if (!routineCheck) {
                         // better update HWID relevance as soon as the login is authenticated
                         Instant expiry = HwidAssociationExpiry.getHwidAccountExpiry(hwidRelevance.relevance());
-                        SessionDAO.updateAccountAccess(con, hwid, accountId, expiry, hwidRelevance.getIncrementedRelevance());
+                        SessionDAO.updateAccountAccess(hwid, accountId, expiry, hwidRelevance.getIncrementedRelevance());
                     }
 
                     return true;
@@ -92,8 +89,8 @@ public class SessionCoordinator {
             if (hwidRelevances.size() < GameConfig.getServerInt("max_allowed_account_hwid")) {
                 return true;
             }
-        } catch (SQLException e) {
-            log.warn("Failed to update account access. Account id: {}, nibbleHwid: {}", accountId, hwid, e);
+        } catch (Exception e) {
+            log.warn("更新账户访问权限失败。账户ID: {}, 硬件ID: {}", accountId, hwid, e);
         }
 
         return false;
@@ -260,8 +257,8 @@ public class SessionCoordinator {
     }
 
     private static void associateHwidAccountIfAbsent(Hwid hwid, int accountId) {
-        try (Connection con = DatabaseConnection.getConnection()) {
-            List<Hwid> hwids = SessionDAO.getHwidsForAccount(con, accountId);
+        try {
+            List<Hwid> hwids = SessionDAO.getHwidsForAccount(accountId);
 
             boolean containsRemoteHwid = hwids.stream().anyMatch(accountHwid -> accountHwid.equals(hwid));
             if (containsRemoteHwid) {
@@ -270,10 +267,10 @@ public class SessionCoordinator {
 
             if (hwids.size() < GameConfig.getServerInt("max_allowed_account_hwid")) {
                 Instant expiry = HwidAssociationExpiry.getHwidAccountExpiry(0);
-                SessionDAO.registerAccountAccess(con, accountId, hwid, expiry);
+                SessionDAO.registerAccountAccess(accountId, hwid, expiry);
             }
-        } catch (SQLException ex) {
-            log.warn("Failed to associate hwid {} with account id {}", hwid, accountId, ex);
+        } catch (Exception ex) {
+            log.warn("关联硬件ID {} 与账户ID {} 失败", hwid, accountId, ex);
         }
     }
 
@@ -353,14 +350,14 @@ public class SessionCoordinator {
                     .map(Object::toString)
                     .collect(Collectors.joining(", "));
 
-            log.debug("Current online clients: {}", commaSeparatedClients);
+            log.debug("当前在线客户端: {}", commaSeparatedClients);
         }
 
         if (!onlineRemoteHwids.isEmpty()) {
             List<Hwid> hwids = new ArrayList<>(onlineRemoteHwids);
             hwids.sort(Comparator.comparing(Hwid::hwid));
 
-            log.debug("Current online HWIDs: {}", hwids.stream()
+            log.debug("当前在线硬件ID: {}", hwids.stream()
                     .map(Hwid::hwid)
                     .collect(Collectors.joining(" ")));
         }
@@ -369,21 +366,21 @@ public class SessionCoordinator {
             List<Entry<String, Client>> elist = new ArrayList<>(loginRemoteHosts.entrySet());
             elist.sort(Entry.comparingByKey());
 
-            log.debug("Current login sessions: {}", loginRemoteHosts.entrySet().stream()
+            log.debug("当前登录会话: {}", loginRemoteHosts.entrySet().stream()
                     .sorted(Entry.comparingByKey())
-                    .map(entry -> "(" + entry.getKey() + ", client: " + entry.getValue())
+                    .map(entry -> "(" + entry.getKey() + ", 客户端: " + entry.getValue())
                     .collect(Collectors.joining(", ")));
         }
     }
 
     public void printSessionTrace(Client c) {
-        String str = "Opened server sessions:\r\n\r\n";
+        String str = "已打开的服务器会话:\r\n\r\n";
 
         if (!onlineClients.isEmpty()) {
             List<Entry<Integer, Client>> elist = new ArrayList<>(onlineClients.entrySet());
             elist.sort(Entry.comparingByKey());
 
-            str += ("Current online clients:\r\n");
+            str += ("当前在线客户端:\r\n");
             for (Entry<Integer, Client> e : elist) {
                 str += ("  " + e.getKey() + "\r\n");
             }
@@ -393,7 +390,7 @@ public class SessionCoordinator {
             List<Hwid> hwids = new ArrayList<>(onlineRemoteHwids);
             hwids.sort(Comparator.comparing(Hwid::hwid));
 
-            str += ("Current online HWIDs:\r\n");
+            str += ("当前在线硬件ID:\r\n");
             for (Hwid s : hwids) {
                 str += ("  " + s + "\r\n");
             }
@@ -404,7 +401,7 @@ public class SessionCoordinator {
 
             elist.sort((e1, e2) -> e1.getKey().compareTo(e2.getKey()));
 
-            str += ("Current login sessions:\r\n");
+            str += ("当前登录会话:\r\n");
             for (Entry<String, Client> e : elist) {
                 str += ("  " + e.getKey() + ", IP: " + e.getValue().getRemoteAddress() + "\r\n");
             }

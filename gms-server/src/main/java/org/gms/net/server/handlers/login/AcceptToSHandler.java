@@ -17,6 +17,7 @@ public final class AcceptToSHandler extends AbstractPacketHandler {
 
     @Override
     public final void handlePacket(InPacket p, Client c) {
+//        p.skip(1);
         if (p.available() == 0 || p.readByte() != 1 || c.acceptToS()) {
             c.disconnect(false, false);//Client dc's but just because I am cool I do this (:
             return;

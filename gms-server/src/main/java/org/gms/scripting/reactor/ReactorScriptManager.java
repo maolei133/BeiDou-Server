@@ -21,24 +21,26 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.scripting.reactor;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Client;
+import org.gms.dao.entity.ReactordropsDO;
+import org.gms.dao.mapper.ReactordropsMapper;
+import org.gms.manager.ServerManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.scripting.AbstractScriptManager;
 import org.gms.server.maps.Reactor;
 import org.gms.server.maps.ReactorDropEntry;
-import org.gms.util.DatabaseConnection;
 
 import javax.script.Invocable;
 import javax.script.ScriptEngine;
 import javax.script.ScriptException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static org.gms.dao.entity.table.ReactordropsDOTableDef.REACTORDROPS_D_O;
 
 /**
  * @author Lerk
@@ -46,6 +48,7 @@ import java.util.Map;
 public class ReactorScriptManager extends AbstractScriptManager {
     private static final Logger log = LoggerFactory.getLogger(ReactorScriptManager.class);
     private static final ReactorScriptManager instance = new ReactorScriptManager();
+    private static final ReactordropsMapper reactordropsMapper = ServerManager.getApplicationContext().getBean(ReactordropsMapper.class);
 
     private final Map<Integer, List<ReactorDropEntry>> drops = new HashMap<>();
 
@@ -84,19 +87,12 @@ public class ReactorScriptManager extends AbstractScriptManager {
     public List<ReactorDropEntry> getDrops(int reactorId) {
         List<ReactorDropEntry> ret = drops.get(reactorId);
         if (ret == null) {
-            ret = new LinkedList<>();
-            try (Connection con = DatabaseConnection.getConnection()) {
-                try (PreparedStatement ps = con.prepareStatement("SELECT itemid, chance, questid FROM reactordrops WHERE reactorid = ? AND chance >= 0")) {
-                    ps.setInt(1, reactorId);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            ret.add(new ReactorDropEntry(rs.getInt("itemid"), rs.getInt("chance"), rs.getInt("questid")));
-                        }
-                    }
-                }
-            } catch (Throwable e) {
-                log.error("Error getting drops for reactor: {}", reactorId);
-            }
+            List<ReactordropsDO> dropList = reactordropsMapper.selectListByQuery(QueryWrapper.create()
+                    .where(REACTORDROPS_D_O.REACTORID.eq(reactorId))
+                    .and(REACTORDROPS_D_O.CHANCE.ge(0)));
+            ret = dropList.stream()
+                    .map(drop -> new ReactorDropEntry(drop.getItemid(), drop.getChance(), drop.getQuestid()))
+                    .collect(Collectors.toList());
             drops.put(reactorId, ret);
         }
         return ret;

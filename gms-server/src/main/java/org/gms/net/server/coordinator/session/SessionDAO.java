@@ -5,8 +5,6 @@ import org.gms.service.SessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 
@@ -18,21 +16,19 @@ public class SessionDAO {
         sessionService.deleteExpiredHwidAccounts();
     }
 
-    public static List<Hwid> getHwidsForAccount(Connection con, int accountId) throws SQLException {
+    public static List<Hwid> getHwidsForAccount(int accountId) {
         return sessionService.getHwidsForAccount(accountId);
     }
 
-    public static void registerAccountAccess(Connection con, int accountId, Hwid hwid, Instant expiry)
-            throws SQLException {
+    public static void registerAccountAccess(int accountId, Hwid hwid, Instant expiry) {
         sessionService.registerAccountAccess(accountId, hwid, expiry);
     }
 
-    public static List<HwidRelevance> getHwidRelevance(Connection con, int accountId) throws SQLException {
+    public static List<HwidRelevance> getHwidRelevance(int accountId) {
         return sessionService.getHwidRelevance(accountId);
     }
 
-    public static void updateAccountAccess(Connection con, Hwid hwid, int accountId, Instant expiry, int loginRelevance)
-            throws SQLException {
+    public static void updateAccountAccess(Hwid hwid, int accountId, Instant expiry, int loginRelevance) {
         sessionService.updateAccountAccess(hwid, accountId, expiry, loginRelevance);
     }
 }

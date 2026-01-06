@@ -285,7 +285,7 @@ public class Character extends AbstractCharacterObject {
     private String chalktext;
     private String commandtext;
     @Setter
-    private String dataString;
+    private String dataString = "";
     @Getter
     @Setter
     private String search = null;

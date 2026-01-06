@@ -22,11 +22,8 @@ package org.gms.client.inventory;
 
 import org.gms.manager.ServerManager;
 import org.gms.service.ItemFactoryService;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.Pair;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -86,11 +83,11 @@ public enum ItemFactory {
         }
     }
 
-    public void saveItems(List<Pair<Item, InventoryType>> items, int id, Connection con) {
-        saveItems(items, null, id, con);
+    public void saveItems(List<Pair<Item, InventoryType>> items, int id) {
+        saveItems(items, null, id);
     }
 
-    public void saveItems(List<Pair<Item, InventoryType>> items, List<Short> bundlesList, int id, Connection con) {
+    public void saveItems(List<Pair<Item, InventoryType>> items, List<Short> bundlesList, int id) {
         Lock lock = locks[id % lockCount];
         lock.lock();
         try {

@@ -659,7 +659,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             }
             // 记录玩家战斗日志
             if (isCheat) PlayerLoggerFacade.logPlayerEventAuto(chr, DynamicCategoryManager.Category.MINOR_PLAYER_COMBAT, finalDebugMessage.toString(), "INFO");
-            System.out.println(finalDebugMessage.toString());
+//            System.out.println(finalDebugMessage.toString());
         }
 
         if (ret.skill == NightWalker.POISON_BOMB) { // 奇袭者 - 毒炸弹

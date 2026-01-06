@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.TypeReference;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
+import com.mybatisflex.core.row.Db;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.gms.config.GameConfig;
@@ -16,7 +17,6 @@ import org.gms.model.dto.ConfigTypeDTO;
 import org.gms.model.dto.GameConfigReqDTO;
 import org.gms.net.server.Server;
 import org.gms.property.ServiceProperty;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.I18nUtil;
 import org.gms.util.RequireUtil;
 import org.springframework.core.io.ByteArrayResource;
@@ -33,8 +33,7 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
+import java.sql.Date;
 import java.text.DecimalFormat;
 import java.util.*;
 import java.util.stream.Collector;
@@ -108,7 +107,7 @@ public class ConfigService {
                 .build());
         condition.setId(null);
         condition.setConfigDesc(condition.getConfigCode());
-        condition.setUpdateTime(new Date());
+        condition.setUpdateTime(new Date(System.currentTimeMillis()));
         gameConfigMapper.insertSelective(condition);
         GameConfig.add(condition);
     }
@@ -127,7 +126,7 @@ public class ConfigService {
         gameConfigMapper.update(GameConfigDO.builder()
                 .id(condition.getId())
                 .configValue(condition.getConfigValue())
-                .updateTime(new Date())
+                .updateTime(new Date(System.currentTimeMillis()))
                 .build());
         gameConfigDO.setConfigValue(condition.getConfigValue());
         GameConfig.update(gameConfigDO);
@@ -207,10 +206,7 @@ public class ConfigService {
             }
             String[] updateArr = updateSql.toString().split("\n");
             for (String str : updateArr) {
-                try (Connection connection = DatabaseConnection.getConnection();
-                     PreparedStatement statement = connection.prepareStatement(str)) {
-                    statement.executeUpdate();
-                }
+                Db.updateBySql(str);
             }
 
         } catch (Exception e) {

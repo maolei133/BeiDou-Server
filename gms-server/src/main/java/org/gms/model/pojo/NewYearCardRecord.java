@@ -156,30 +156,30 @@ public class NewYearCardRecord {
                 chr.addNewYearRecord(newYearCardRecord);
             });
         } catch (Exception e) {
-            log.error("loadPlayerNewYearCards error", e);
+            log.error("加载玩家新年贺卡时出错", e);
         }
     }
 
     public static void printNewYearRecords(Character chr) {
-        chr.dropMessage(5, "New Years: " + chr.getNewYearRecords().size());
+        chr.dropMessage(5, "新年贺卡: " + chr.getNewYearRecords().size());
 
         for (NewYearCardRecord nyc : chr.getNewYearRecords()) {
             chr.dropMessage(5, "-------------------------------");
 
-            chr.dropMessage(5, "Id: " + nyc.id);
+            chr.dropMessage(5, "ID: " + nyc.id);
 
-            chr.dropMessage(5, "Sender id: " + nyc.senderId);
-            chr.dropMessage(5, "Sender name: " + nyc.senderName);
-            chr.dropMessage(5, "Sender discard: " + nyc.senderDiscardCard);
+            chr.dropMessage(5, "发送者ID: " + nyc.senderId);
+            chr.dropMessage(5, "发送者名称: " + nyc.senderName);
+            chr.dropMessage(5, "发送者已丢弃: " + nyc.senderDiscardCard);
 
-            chr.dropMessage(5, "Receiver id: " + nyc.receiverId);
-            chr.dropMessage(5, "Receiver name: " + nyc.receiverName);
-            chr.dropMessage(5, "Receiver discard: " + nyc.receiverDiscardCard);
-            chr.dropMessage(5, "Received: " + nyc.receiverReceivedCard);
+            chr.dropMessage(5, "接收者ID: " + nyc.receiverId);
+            chr.dropMessage(5, "接收者名称: " + nyc.receiverName);
+            chr.dropMessage(5, "接收者已丢弃: " + nyc.receiverDiscardCard);
+            chr.dropMessage(5, "已接收: " + nyc.receiverReceivedCard);
 
-            chr.dropMessage(5, "Message: " + nyc.message);
-            chr.dropMessage(5, "Date sent: " + nyc.dateSent);
-            chr.dropMessage(5, "Date recv: " + nyc.dateReceived);
+            chr.dropMessage(5, "消息: " + nyc.message);
+            chr.dropMessage(5, "发送日期: " + nyc.dateSent);
+            chr.dropMessage(5, "接收日期: " + nyc.dateReceived);
         }
     }
 
@@ -255,7 +255,7 @@ public class NewYearCardRecord {
                         other.removeNewYearRecord(nyc);
                         other.getMap().broadcastMessage(PacketCreator.onNewYearCardRes(other, nyc, 0xE, 0));
 
-                        other.dropMessage(6, "[New Year] " + chr.getName() + " threw away the New Year card.");
+                        other.dropMessage(6, "[新年贺卡] " + chr.getName() + " 扔掉了新年贺卡。");
                     }
                 }
             } else {
@@ -273,7 +273,7 @@ public class NewYearCardRecord {
                         other.removeNewYearRecord(nyc);
                         other.getMap().broadcastMessage(PacketCreator.onNewYearCardRes(other, nyc, 0xE, 0));
 
-                        other.dropMessage(6, "[New Year] " + chr.getName() + " threw away the New Year card.");
+                        other.dropMessage(6, "[新年贺卡] " + chr.getName() + " 扔掉了新年贺卡。");
                     }
                 }
             }

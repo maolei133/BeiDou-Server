@@ -21,8 +21,12 @@
  */
 package org.gms.server.maps;
 
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.MapId;
+import org.gms.dao.entity.PlifeDO;
+import org.gms.dao.mapper.PlifeMapper;
+import org.gms.manager.ServerManager;
 import org.gms.provider.*;
 import org.gms.provider.wz.WZFiles;
 import org.gms.scripting.event.EventInstanceManager;
@@ -31,24 +35,21 @@ import org.gms.server.life.LifeFactory;
 import org.gms.server.life.Monster;
 import org.gms.server.life.PlayerNPC;
 import org.gms.server.partyquest.GuardianSpawnPoint;
-import org.gms.util.DatabaseConnection;
 import org.gms.util.NumberTool;
 import org.gms.util.StringUtil;
 
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.gms.dao.entity.table.PlifeDOTableDef.PLIFE_D_O;
 
 public class MapFactory {
     private static final Data nameData = DataProviderFactory.getDataProvider(WZFiles.STRING).getData("Map.img");
     private static final DataProvider mapSource = DataProviderFactory.getDataProvider(WZFiles.MAP);
+    private static final PlifeMapper plifeMapper = ServerManager.getApplicationContext().getBean(PlifeMapper.class);
 
     private static void loadLifeFromWz(MapleMap map, Data mapData) {
         for (Data life : mapData.getChildByPath("life")) {
@@ -79,31 +80,13 @@ public class MapFactory {
     }
 
     private static void loadLifeFromDb(MapleMap map) {
-        try (Connection con = DatabaseConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("SELECT * FROM plife WHERE map = ? and world = ?")) {
-            ps.setInt(1, map.getId());
-            ps.setInt(2, map.getWorld());
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    int id = rs.getInt("life");
-                    String type = rs.getString("type");
-                    int cy = rs.getInt("cy");
-                    int f = rs.getInt("f");
-                    int fh = rs.getInt("fh");
-                    int rx0 = rs.getInt("rx0");
-                    int rx1 = rs.getInt("rx1");
-                    int x = rs.getInt("x");
-                    int y = rs.getInt("y");
-                    int hide = rs.getInt("hide");
-                    int mobTime = rs.getInt("mobtime");
-                    int team = rs.getInt("team");
-
-                    loadLifeRaw(map, id, type, cy, f, fh, rx0, rx1, x, y, hide, mobTime, team);
-                }
-            }
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
+        List<PlifeDO> plifeList = plifeMapper.selectListByQuery(QueryWrapper.create()
+                .where(PLIFE_D_O.MAP.eq(map.getId()))
+                .and(PLIFE_D_O.WORLD.eq(map.getWorld())));
+        for (PlifeDO plife : plifeList) {
+            loadLifeRaw(map, plife.getLife(), plife.getType(), plife.getCy(), plife.getF(), plife.getFh(),
+                    plife.getRx0(), plife.getRx1(), plife.getX(), plife.getY(), plife.getHide(),
+                    plife.getMobtime(), plife.getTeam());
         }
     }
 
