@@ -24,6 +24,8 @@ import org.gms.model.dto.ChrOnlineListRtnDTO;
 import org.gms.model.pojo.SkillEntry;
 import org.gms.net.server.PlayerCoolDownValueHolder;
 import org.gms.net.server.Server;
+import org.gms.net.server.channel.Channel;
+import org.gms.net.server.guild.Guild;
 import org.gms.net.server.guild.GuildCharacter;
 import org.gms.net.server.world.Messenger;
 import org.gms.net.server.world.Party;
@@ -51,7 +53,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.mybatisflex.core.query.QueryMethods.dateDiff;
 import static com.mybatisflex.core.query.QueryMethods.now;
@@ -121,30 +125,132 @@ public class CharacterService {
     }
 
     public Page<ChrOnlineListRtnDTO> getChrOnlineList(ChrOnlineListReqDTO request) {
-        Collection<Character> chrList = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getAllCharacters();
-        return BasePageUtil.create(chrList, request)
-                .filter(chr -> (Objects.isNull(request.getId()) || Objects.equals(chr.getId(), request.getId()))
-                        && (RequireUtil.isEmpty(request.getName()) || chr.getName().contains(request.getName()))
-                        && (Objects.isNull(request.getMap()) || Objects.equals(chr.getMap().getId(), request.getMap())))
-                .page(chr -> ChrOnlineListRtnDTO.builder()
-                        .accountId(chr.getAccountId())
-                        .id(chr.getId())
-                        .name(chr.getName())
-                        .map(chr.getMap().getId())
-                        .mapName(chr.getMap().getMapName())
-                        .job(chr.getJob().getId())
-                        .jobName(chr.getJob().getName())
-                        .level(chr.getLevel())
-                        .gm(chr.gmLevel())
-                        .maxHp(chr.getMaxHp())
-                        .maxMp(chr.getMaxMp())
-                        .guildId(chr.getGuildId())
-                        .guildName(chr.getGuild() != null ? chr.getGuild().getName() : null)
-                        .gender(chr.getGender())
-                        .partyId(chr.getPartyId())
-                        .channel(chr.getClient().getChannel())
-                        .fame(chr.getFame())
-                        .build());
+        // 默认状态为在线
+        Integer status = request.getStatus() == null ? 1 : request.getStatus();
+
+        // 状态为1（在线）
+        if (status == 1) {
+            Collection<Character> chrList = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getAllCharacters();
+            return BasePageUtil.create(chrList, request)
+                    .filter(chr -> (Objects.isNull(request.getId()) || Objects.equals(chr.getId(), request.getId()))
+                            && (RequireUtil.isEmpty(request.getName()) || chr.getName().contains(request.getName()))
+                            && (Objects.isNull(request.getMap()) || Objects.equals(chr.getMap().getId(), request.getMap())))
+                    .page(chr -> ChrOnlineListRtnDTO.builder()
+                            .world(chr.getWorld())
+                            .accountId(chr.getAccountId())
+                            .accountName(chr.getClient().getAccountName()) // 新增
+                            .id(chr.getId())
+                            .name(chr.getName())
+                            .map(chr.getMap().getId())
+                            .mapName(chr.getMap().getMapName())
+                            .job(chr.getJob().getId())
+                            .jobName(chr.getJob().getName())
+                            .level(chr.getLevel())
+                            .gm(chr.gmLevel())
+                            .maxHp(chr.getMaxHp())
+                            .maxMp(chr.getMaxMp())
+                            .guildId(chr.getGuildId())
+                            .guildName(chr.getGuild() != null ? chr.getGuild().getName() : null)
+                            .gender(chr.getGender())
+                            .partyId(chr.getPartyId())
+                            .channel(chr.getClient().getChannel())
+                            .fame(chr.getFame())
+                            .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(chr.getLoginTime()))) // 新增
+                            .lastLogoutTime(null) // 在线玩家登出时间为null
+                            .build());
+        }
+
+        // 状态为0（全部）或2（离线）
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .select(CHARACTERS_D_O.ALL_COLUMNS, ACCOUNTS_D_O.NAME.as("accountName"))
+                .from(CHARACTERS_D_O)
+                .leftJoin(ACCOUNTS_D_O).on(CHARACTERS_D_O.ACCOUNTID.eq(ACCOUNTS_D_O.ID))
+                .where(CHARACTERS_D_O.WORLD.eq(request.getWorld()))
+                .and(CHARACTERS_D_O.ID.eq(request.getId(), Objects::nonNull))
+                .and(CHARACTERS_D_O.NAME.like(request.getName(), RequireUtil::isNotEmpty))
+                .and(CHARACTERS_D_O.MAP.eq(request.getMap(), Objects::nonNull));
+
+        if (status == 2) { // 离线
+            Collection<Character> onlineChars = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getAllCharacters();
+            if (!onlineChars.isEmpty()) {
+                List<Integer> onlineCharIds = onlineChars.stream().map(Character::getId).collect(Collectors.toList());
+                queryWrapper.and(CHARACTERS_D_O.ID.notIn(onlineCharIds));
+            }
+        }
+
+        Page<CharactersDO> charPage = charactersMapper.paginateAs(new Page<>(request.getPageNo(), request.getPageSize()), queryWrapper, CharactersDO.class);
+
+        return charPage.map(charactersDO -> {
+            String mapName = "未知地图";
+            List<Channel> channels = Server.getInstance().getChannelsFromWorld(request.getWorld());
+            if (!channels.isEmpty()) {
+                try {
+                    MapleMap map = channels.get(0).getMapFactory().getMap(charactersDO.getMap());
+                    if (map != null) {
+                        mapName = map.getMapName();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+
+            Guild guild = Server.getInstance().getGuild(charactersDO.getGuildid());
+            String guildName = (guild != null) ? guild.getName() : null;
+            Job job = Job.getById(charactersDO.getJob());
+            String jobName = (job != null) ? job.getName() : "未知职业";
+            
+            // 检查角色是否在线，如果在线，则使用内存中的实时数据
+            Character onlineChr = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getCharacterById(charactersDO.getId());
+            if (onlineChr != null) {
+                return ChrOnlineListRtnDTO.builder()
+                        .world(onlineChr.getWorld())
+                        .accountId(onlineChr.getAccountId())
+                        .accountName(onlineChr.getClient().getAccountName())
+                        .id(onlineChr.getId())
+                        .name(onlineChr.getName())
+                        .map(onlineChr.getMap().getId())
+                        .mapName(onlineChr.getMap().getMapName())
+                        .job(onlineChr.getJob().getId())
+                        .jobName(onlineChr.getJob().getName())
+                        .level(onlineChr.getLevel())
+                        .gm(onlineChr.gmLevel())
+                        .maxHp(onlineChr.getMaxHp())
+                        .maxMp(onlineChr.getMaxMp())
+                        .guildId(onlineChr.getGuildId())
+                        .guildName(onlineChr.getGuild() != null ? onlineChr.getGuild().getName() : null)
+                        .gender(onlineChr.getGender())
+                        .partyId(onlineChr.getPartyId())
+                        .channel(onlineChr.getClient().getChannel())
+                        .fame(onlineChr.getFame())
+                        .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(onlineChr.getLoginTime())))
+                        .lastLogoutTime(null)
+                        .build();
+            }
+
+            // 离线玩家的数据
+            return ChrOnlineListRtnDTO.builder()
+                    .world(charactersDO.getWorld())
+                    .accountId(charactersDO.getAccountid())
+                    .accountName(charactersDO.getAccountName())
+                    .id(charactersDO.getId())
+                    .name(charactersDO.getName())
+                    .map(charactersDO.getMap())
+                    .mapName(mapName)
+                    .job(charactersDO.getJob())
+                    .jobName(jobName)
+                    .level(charactersDO.getLevel())
+                    .gm(charactersDO.getGm())
+                    .maxHp(charactersDO.getMaxhp())
+                    .maxMp(charactersDO.getMaxmp())
+                    .guildId(charactersDO.getGuildid())
+                    .guildName(guildName)
+                    .gender(charactersDO.getGender())
+                    .partyId(charactersDO.getParty())
+                    .channel(-1) // 离线
+                    .fame(charactersDO.getFame())
+                    .loginTime(charactersDO.getCreatedate() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getCreatedate()) : null) // 离线显示创建时间
+                    .lastLogoutTime(charactersDO.getLastLogoutTime() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getLastLogoutTime()) : null)
+                    .build();
+        });
     }
 
     public void updateRate(ExtendValueDO data) {

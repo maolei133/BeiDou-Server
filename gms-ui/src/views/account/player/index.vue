@@ -20,6 +20,24 @@
               <a-input-number v-model="filterForm.map" />
             </a-form-item>
           </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('account.player.status')">
+              <a-select
+                v-model="filterForm.status"
+                :placeholder="$t('account.player.status.placeholder')"
+              >
+                <a-option :value="0">{{
+                  $t('account.player.status.all')
+                }}</a-option>
+                <a-option :value="1">{{
+                  $t('account.player.status.online')
+                }}</a-option>
+                <a-option :value="2">{{
+                  $t('account.player.status.offline')
+                }}</a-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
         </a-row>
       </a-form>
       <a-space>
@@ -47,15 +65,19 @@
               </template>
               {{ $t('button.refresh') }}
             </a-button>
-            <a-button type="primary" @click="handleAllPlayerWarp">
-              {{ $t('account.player.button.globalWarp') }}
-            </a-button>
-            <a-button type="primary" @click="globalGiveClick">
-              <template #icon>
-                <icon-plus />
+            <a-dropdown @select="handleGlobalAction">
+              <a-button type="primary">
+                {{ $t('account.player.button.globalAction') }} <icon-down />
+              </a-button>
+              <template #content>
+                <a-doption value="warp">{{
+                  $t('account.player.button.globalWarp')
+                }}</a-doption>
+                <a-doption value="give">{{
+                  $t('account.player.button.globalGive')
+                }}</a-doption>
               </template>
-              {{ $t('account.player.button.globalGive') }}
-            </a-button>
+            </a-dropdown>
           </a-space>
         </a-col>
       </a-row>
@@ -79,10 +101,17 @@
           />
           <a-table-column
             :title="$t('account.player.accountId')"
-            data-index="accountId"
-            :width="80"
+            :width="150"
             align="center"
-          />
+          >
+            <template #cell="{ record }">
+              <router-link
+                :to="{ name: 'AccountList', query: { id: record.accountId } }"
+              >
+                [ {{ record.accountId }} ] {{ record.accountName }}
+              </router-link>
+            </template>
+          </a-table-column>
           <a-table-column
             :title="$t('account.player.id')"
             data-index="id"
@@ -177,6 +206,30 @@
             </template>
           </a-table-column>
           <a-table-column
+            v-if="filterForm.status === 1 || filterForm.status === 0"
+            :title="$t('account.player.loginTime')"
+            data-index="loginTime"
+            :width="180"
+            align="center"
+          />
+          <a-table-column
+            v-if="filterForm.status === 1"
+            :title="$t('account.player.onlineTime')"
+            :width="120"
+            align="center"
+          >
+            <template #cell="{ record }">
+              {{ calculateOnlineTime(record.loginTime) }}
+            </template>
+          </a-table-column>
+          <a-table-column
+            v-if="filterForm.status === 2"
+            :title="$t('account.player.lastLogoutTime')"
+            data-index="lastLogoutTime"
+            :width="180"
+            align="center"
+          />
+          <a-table-column
             :title="$t('account.player.gm.level')"
             data-index="gm"
             :width="70"
@@ -215,7 +268,11 @@
                 layout="inline-horizontal"
               >
                 <a-descriptions-item :label="$t('account.player.accountId')">
-                  {{ item.accountId }}
+                  <router-link
+                    :to="{ name: 'AccountList', query: { id: item.accountId } }"
+                  >
+                    [ {{ item.accountId }} ] {{ item.accountName }}
+                  </router-link>
                 </a-descriptions-item>
                 <a-descriptions-item :label="$t('account.player.id')">
                   {{ item.id }}
@@ -243,6 +300,24 @@
                   :label="$t('account.player.guild')"
                 >
                   {{ item.guildName }} ({{ item.guildId }})
+                </a-descriptions-item>
+                <a-descriptions-item
+                  v-if="item.loginTime"
+                  :label="$t('account.player.loginTime')"
+                >
+                  {{ item.loginTime }}
+                </a-descriptions-item>
+                <a-descriptions-item
+                  v-if="item.loginTime && filterForm.status === 1"
+                  :label="$t('account.player.onlineTime')"
+                >
+                  {{ calculateOnlineTime(item.loginTime) }}
+                </a-descriptions-item>
+                <a-descriptions-item
+                  v-if="item.lastLogoutTime"
+                  :label="$t('account.player.lastLogoutTime')"
+                >
+                  {{ item.lastLogoutTime }}
                 </a-descriptions-item>
               </a-descriptions>
             </a-card>
@@ -309,10 +384,12 @@
     id?: number;
     name?: string;
     map?: number;
+    status: number;
   }>({
     id: undefined,
     name: undefined,
     map: undefined,
+    status: 1,
   });
   const giveFormVisible = ref(false);
   const giveFormTitle = ref('');
@@ -344,7 +421,8 @@
         size.value,
         filterForm.value.id,
         filterForm.value.name,
-        filterForm.value.map
+        filterForm.value.map,
+        filterForm.value.status
       );
       tableData.value = data.records;
       total.value = data.totalRow;
@@ -374,6 +452,7 @@
     filterForm.value.id = undefined;
     filterForm.value.name = undefined;
     filterForm.value.map = undefined;
+    filterForm.value.status = 1;
     page.value = 1;
     loadData();
   };
@@ -411,6 +490,28 @@
   const handleAllPlayerWarp = () => {
     warpTarget.value = null;
     warpFormVisible.value = true;
+  };
+
+  const handleGlobalAction = (
+    value: string | number | Record<string, any> | undefined
+  ) => {
+    if (value === 'warp') {
+      handleAllPlayerWarp();
+    } else if (value === 'give') {
+      globalGiveClick();
+    }
+  };
+
+  const calculateOnlineTime = (loginTime?: string) => {
+    if (!loginTime) return '-';
+    const start = new Date(loginTime).getTime();
+    const now = new Date().getTime();
+    const diff = now - start;
+
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+    return `${hours}h ${minutes}m`;
   };
 
   const handleWarp = (record: OnlinePlayer) => {

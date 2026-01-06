@@ -202,4 +202,7 @@ public class CharactersDO implements Serializable {
 
     private Long jailexpire;
 
+    @Column(ignore = true)
+    private String accountName;
+
 }

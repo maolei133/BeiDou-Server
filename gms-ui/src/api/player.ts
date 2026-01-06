@@ -31,6 +31,7 @@ export interface GiveForm {
 export interface OnlinePlayer {
   world: number;
   accountId: number;
+  accountName?: string;
   id: number;
   name: string;
   map: number;
@@ -47,6 +48,8 @@ export interface OnlinePlayer {
   partyId: number;
   channel: number;
   fame: number;
+  loginTime?: string;
+  lastLogoutTime?: string;
 }
 
 export function getPlayerList(
@@ -54,7 +57,8 @@ export function getPlayerList(
   pageSize: number,
   id?: number,
   name?: string,
-  map?: number
+  map?: number,
+  status?: number
 ) {
   return axios.post<PageState<OnlinePlayer>>('/character/v1/online/list', {
     pageNo,
@@ -62,6 +66,7 @@ export function getPlayerList(
     id,
     name,
     map,
+    status,
   });
 }
 

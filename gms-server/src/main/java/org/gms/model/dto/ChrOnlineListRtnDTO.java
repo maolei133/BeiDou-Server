@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class ChrOnlineListRtnDTO {
     private int world;
     private int accountId;
+    private String accountName;
     private int id;
     private String name;
     private int map;
@@ -28,4 +29,6 @@ public class ChrOnlineListRtnDTO {
     private int partyId;
     private int channel;
     private int fame;
+    private String loginTime;
+    private String lastLogoutTime;
 }
