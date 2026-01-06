@@ -138,6 +138,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     private final Lock announcerLock = new ReentrantLock(true);
     // thanks Masterrulax & try2hack for pointing out a bottleneck issue with shared locks, shavit for noticing an opportunity for improvement
     private Calendar tempBanCalendar;
+    private String banReason = "";
     private int votePoints;
     private int voteTime = -1;
     private int visibleWorlds;
@@ -576,6 +577,23 @@ public class Client extends ChannelInboundHandlerAdapter {
             lang = Optional.ofNullable(rs.getLanguage()).orElse(0);
             String passhash = rs.getPassword();
             boolean tos = Optional.ofNullable(rs.getTos()).orElse(false);
+            
+            // 缓存封禁信息和IP列表，减少后续查询
+            this.banReason = rs.getBanreason();
+            Timestamp tempban = rs.getTempban();
+            if (tempban != null && !tempban.toLocalDateTime().equals(DefaultDates.getTempban())) {
+                this.tempBanCalendar = Calendar.getInstance();
+                this.tempBanCalendar.setTimeInMillis(tempban.getTime());
+            } else {
+                this.tempBanCalendar = null;
+            }
+            
+            if (rs.getIp() != null && !rs.getIp().trim().isEmpty()) {
+                this.ips.addAll(Arrays.stream(rs.getIp().split(","))
+                        .map(String::trim)
+                        .filter(ip -> !ip.isEmpty())
+                        .collect(Collectors.toList()));
+            }
 
             if (banned) {
                 return 3;
@@ -621,32 +639,31 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     /**
-     * 从数据库中获取账号封禁原因
-     * 查询accounts表中banreason字段的值，如不存在或为默认值则返回空字符串
+     * 获取账号封禁原因
+     * 优先使用缓存的banReason，避免重复查库
      *
-     * @return 账号封禁原因字符串，查询失败或为空时返回空字符串
+     * @return 账号封禁原因字符串，为空时返回空字符串
+     */
+    public String getBanReason() {
+        return banReason != null ? banReason : "";
+    }
+    
+    /**
+     * 兼容旧方法名，建议使用 getBanReason()
      */
     public String getBanreasonFromDB() {
-        AccountsDO account = accountService.findById(getAccID());
-        return account != null ? account.getBanreason() : "";
-    }
-
-    public Calendar getTempBanCalendarFromDB() {
-        final Calendar lTempban = Calendar.getInstance();
-        AccountsDO account = accountService.findById(getAccID());
-        if (account != null) {
-            Timestamp tempban = account.getTempban();
-            if (tempban != null && !tempban.toLocalDateTime().equals(DefaultDates.getTempban())) {
-                lTempban.setTimeInMillis(tempban.getTime());
-                tempBanCalendar = lTempban;
-                return lTempban;
-            }
-        }
-        return null;
+        return getBanReason();
     }
 
     public Calendar getTempBanCalendar() {
         return tempBanCalendar;
+    }
+    
+    /**
+     * 兼容旧方法名，建议使用 getTempBanCalendar()
+     */
+    public Calendar getTempBanCalendarFromDB() {
+        return getTempBanCalendar();
     }
 
     public boolean hasBeenBanned() {
@@ -710,20 +727,20 @@ public class Client extends ChannelInboundHandlerAdapter {
         }
 
         // 获取现有IP并使用Set去重
-        Set<String> allIps = new LinkedHashSet<>(getIpsFromDB(accId));
-        int originalSize = allIps.size();
+        // 优先使用内存中的ips，避免查库
+        int originalSize = ips.size();
 
         // 添加新IP
-        allIps.addAll(newIps);
+        ips.addAll(newIps);
 
         // 如果没有新增IP，直接返回
-        if (allIps.size() == originalSize) {
+        if (ips.size() == originalSize) {
             return;
         }
 
         // 使用StringJoiner更高效地构建字符串
         StringJoiner sj = new StringJoiner(", ");
-        allIps.forEach(sj::add);
+        ips.forEach(sj::add);
 
         updateIpsToDatabase(accId, sj.toString());
     }
@@ -1120,6 +1137,11 @@ public class Client extends ChannelInboundHandlerAdapter {
      * @return IP地址列表，如果记录不存在返回空列表
      */
     public List<String> getIpsFromDB(int accId) {
+        // 优先返回内存中的IP列表
+        if (!ips.isEmpty()) {
+            return new ArrayList<>(ips);
+        }
+
         AccountsDO account = accountService.findById(accId);
         if (account != null && account.getIp() != null && !account.getIp().trim().isEmpty()) {
             return Arrays.stream(account.getIp().split(","))

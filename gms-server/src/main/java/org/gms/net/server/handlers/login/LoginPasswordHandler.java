@@ -142,8 +142,8 @@ public final class LoginPasswordHandler implements PacketHandler {
             return;
         }
 
-        Calendar tempban = c.getTempBanCalendarFromDB();
-        String banreason = c.getBanreasonFromDB();
+        Calendar tempban = c.getTempBanCalendar();
+        String banreason = c.getBanReason();
         if (tempban != null) {
             if (tempban.getTimeInMillis() > Calendar.getInstance().getTimeInMillis()) {
                 String tmpbanstr = sdf.format(tempban.getTime());
@@ -153,25 +153,29 @@ public final class LoginPasswordHandler implements PacketHandler {
                 return;
             }
         }
-        int loginCountMax = GameConfig.getServerInt("login_client_limit");
-        if (loginCountMax > 0) {
-            int loginCount = Math.max(c.getActiveRecordCount(c.getRemoteAddress()),c.getActiveRecordCount(hwid.hwid()));
-            if (loginCount >= loginCountMax || loginCount >= loginCountMax) {
-                c.sendPacket(PacketCreator.serverNotice(1,"您的设备当前已登录账号数已超过服务端允许，无法继续登录账号。"));
-                c.sendPacket(PacketCreator.getLoginFailed(1));          //通知客户端恢复操作
-                log.warn("客户端 {} 尝试登录账号 {} ，已登录数量 {} ，最大允许登录数量 {} ，已限制登录。",c.getRemoteAddress(),login,loginCount,loginCountMax);
-                return;
-            }
-        }
 
-        loginCountMax = GameConfig.getServerInt("login_client_limit_today");
-        if (loginCountMax > 0) {
-            int loginCount = Math.max(c.getTodayLoginCount(c.getRemoteAddress()),c.getTodayLoginCount(hwid.hwid()));
-            if (loginCount >= loginCountMax || loginCount >= loginCountMax) {
-                c.sendPacket(PacketCreator.serverNotice(1,"您的设备今天累计登录账号数已超过服务端允许，无法继续登录账号。"));
-                c.sendPacket(PacketCreator.getLoginFailed(1));          //通知客户端恢复操作
-                log.warn("客户端 {} 尝试登录账号 {} ，已累计登录数量 {} ，最大允许登录数量 {} ，已限制登录。",c.getRemoteAddress(),login,loginCount,loginCountMax);
-                return;
+        // 优化：仅在登录成功（密码正确）时检查在线数量限制，避免无效登录触发耗时查询
+        if (loginok == 0) {
+            int loginCountMax = GameConfig.getServerInt("login_client_limit");
+            if (loginCountMax > 0) {
+                int loginCount = Math.max(c.getActiveRecordCount(c.getRemoteAddress()), c.getActiveRecordCount(hwid.hwid()));
+                if (loginCount >= loginCountMax) {
+                    c.sendPacket(PacketCreator.serverNotice(1, "您的设备当前已登录账号数已超过服务端允许，无法继续登录账号。"));
+                    c.sendPacket(PacketCreator.getLoginFailed(1));          //通知客户端恢复操作
+                    log.warn("客户端 {} 尝试登录账号 {} ，已登录数量 {} ，最大允许登录数量 {} ，已限制登录。", c.getRemoteAddress(), login, loginCount, loginCountMax);
+                    return;
+                }
+            }
+
+            loginCountMax = GameConfig.getServerInt("login_client_limit_today");
+            if (loginCountMax > 0) {
+                int loginCount = Math.max(c.getTodayLoginCount(c.getRemoteAddress()), c.getTodayLoginCount(hwid.hwid()));
+                if (loginCount >= loginCountMax) {
+                    c.sendPacket(PacketCreator.serverNotice(1, "您的设备今天累计登录账号数已超过服务端允许，无法继续登录账号。"));
+                    c.sendPacket(PacketCreator.getLoginFailed(1));          //通知客户端恢复操作
+                    log.warn("客户端 {} 尝试登录账号 {} ，已累计登录数量 {} ，最大允许登录数量 {} ，已限制登录。", c.getRemoteAddress(), login, loginCount, loginCountMax);
+                    return;
+                }
             }
         }
 
