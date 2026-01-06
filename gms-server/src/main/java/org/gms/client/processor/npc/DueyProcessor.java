@@ -237,6 +237,11 @@ public class DueyProcessor {
     public static void dueySendItem(Client c, byte invTypeId, short itemPos, short amount, int sendMesos, String sendMessage, String recipient, boolean quick) {
         if (c.tryacquireClient()) {
             try {
+                if (!GameConfig.getServerBoolean("use_duey")) {
+                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOSERVER_CLOSE_DUEY.getCode()));
+                    c.getPlayer().dropMessage(1,"快递服务已经倒闭了，无法继续使用。");
+                    return;
+                }
                 if (c.getPlayer().isGM() && c.getPlayer().gmLevel() < GameConfig.getServerInt("minimum_gm_level_to_use_duey")) {
                     c.getPlayer().message("您当前的GM等级无法使用快递。");
                     log.info("GM {} 尝试发送一个包裹给 {}", c.getPlayer().getName(), recipient);

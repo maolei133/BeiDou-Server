@@ -32,11 +32,6 @@ public final class DueyHandler extends AbstractPacketHandler {
 
     @Override
     public final void handlePacket(InPacket p, Client c) {
-        if (!GameConfig.getServerBoolean("use_duey")) {
-            c.sendPacket(PacketCreator.enableActions());
-            return;
-        }
-
         byte operation = p.readByte();
         if (operation == DueyProcessor.Actions.TOSERVER_RECV_ITEM.getCode()) { // on click 'O' Button, thanks inhyuk
             DueyProcessor.dueySendTalk(c, false);
