@@ -26,6 +26,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleStateEvent;
 import lombok.Getter;
+import lombok.Setter;
 import org.gms.client.inventory.InventoryType;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
@@ -149,6 +150,10 @@ public class Client extends ChannelInboundHandlerAdapter {
     @Getter
     private static SystemRescue sysRescue;
     private static final AccountService accountService = ServerManager.getApplicationContext().getBean(AccountService.class);
+
+    @Getter
+    @Setter
+    private String tempPassword = null;
 
     public enum Type {
         LOGIN,

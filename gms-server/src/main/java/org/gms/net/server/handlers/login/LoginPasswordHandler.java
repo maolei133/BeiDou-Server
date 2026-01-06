@@ -23,7 +23,6 @@ package org.gms.net.server.handlers.login;
 
 import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.client.Client;
-import org.gms.client.DefaultDates;
 import org.gms.config.GameConfig;
 import org.gms.dao.entity.AccountsDO;
 import org.gms.dao.mapper.AccountsMapper;
@@ -38,9 +37,6 @@ import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.NoSuchAlgorithmException;
-import java.sql.Date;
-import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 
@@ -74,46 +70,11 @@ public final class LoginPasswordHandler implements PacketHandler {
         int loginok = c.login(login, pwd, hwid);
 
         if (GameConfig.getServerBoolean("automatic_register") && loginok == 5) {
-            AccountsMapper mapper = SpringContextUtil.getBean(AccountsMapper.class);
-            if (mapper != null) {
-                try {
-                    AccountsDO newAccount = new AccountsDO();
-                    newAccount.setName(login);
-                    newAccount.setPassword(GameConfig.getServerBoolean("bcrypt_migration") ? BCrypt.hashpw(pwd, BCrypt.gensalt(12)) : BCrypt.hashpwSHA512(pwd));
-                    newAccount.setBirthday(Date.valueOf(DefaultDates.getBirthday()));
-                    newAccount.setTempban(Timestamp.valueOf(DefaultDates.getTempban()));
-                    newAccount.setPin(""); // 或者一个默认的PIN，如 "1234"
-                    newAccount.setPic(""); // 或者一个默认的PIC，如 "123456"
-                    newAccount.setLoggedin(0); // 0 代表未登录
-                    newAccount.setLastlogin(null); // 首次创建，没有上次登录时间
-                    newAccount.setCreatedat(new Timestamp(System.currentTimeMillis()));
-                    newAccount.setBanned(false); // 代表未封禁
-                    newAccount.setCharacterslots(3); // 默认角色槽数量
-                    newAccount.setMacs(""); // 默认空字符串
-                    newAccount.setSitelogged(""); // 默认空字符串
-                    newAccount.setNick(""); // 默认空字符串
-                    newAccount.setEmail(""); // 默认空字符串
-                    newAccount.setIp(""); // 默认空字符串
-                    newAccount.setGender(10); // 默认值
-                    newAccount.setGreason(0); // 默认值
-                    newAccount.setTos(false); // 默认值
-                    newAccount.setRewardpoints(0); // 默认值
-                    newAccount.setVotepoints(0); // 默认值
-                    newAccount.setHwid(""); // 默认值
-                    newAccount.setLanguage(3); // 默认值
-
-                    mapper.insert(newAccount);
-                    c.setAccID(newAccount.getId());
-                } catch (Exception e) {
-                    c.setAccID(-1);
-                    log.error("自动注册账号 {} 失败: {}", login, e);
-                    c.sendPacket(PacketCreator.serverNotice(1, "自动注册失败，请稍后再试或联系管理员。"));
-                    c.sendPacket(PacketCreator.getLoginFailed(1));
-                    return;
-                } finally {
-                    loginok = c.login(login, pwd, hwid);
-                }
-            }
+            c.setAccountName(login);
+            c.setTempPassword(pwd);
+            c.setHwid(hwid);
+            c.sendPacket(PacketCreator.getLoginFailed(23)); // 触发协议确认窗口
+            return;
         }
 
         if (GameConfig.getServerBoolean("bcrypt_migration") && (loginok <= -10)) { // -10 表示迁移到 bcrypt, -23 表示 TOS 未接受
