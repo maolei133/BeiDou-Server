@@ -13,6 +13,7 @@ public class ChrDetailRtnDTO {
     private Integer id;
     private String name;
     private Integer level;
+    private Integer exp;
     private Integer job;
     private String jobName;
     private Integer str;
@@ -26,8 +27,15 @@ public class ChrDetailRtnDTO {
     private Integer ap;
     private String sp;
     private Integer fame;
+    private Integer meso;
+    private Integer gm;
     private Integer face;
     private Integer hair;
     private Integer skinColor;
     private Integer gender;
+
+    // Account currencies
+    private Integer nxCredit;
+    private Integer maplePoint;
+    private Integer nxPrepaid;
 }

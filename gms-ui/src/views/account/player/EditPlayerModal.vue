@@ -25,6 +25,11 @@
               </a-form-item>
             </a-col>
             <a-col :span="12">
+              <a-form-item field="exp" :label="$t('account.player.exp')">
+                <a-input-number v-model="form.exp" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
               <a-form-item field="job" :label="$t('account.player.job')">
                 <a-input-number v-model="form.job" />
               </a-form-item>
@@ -54,6 +59,11 @@
                     $t('account.list.column.gender.female')
                   }}</a-option>
                 </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item field="gm" :label="$t('account.player.gm')">
+                <a-input-number v-model="form.gm" />
               </a-form-item>
             </a-col>
           </a-row>
@@ -137,6 +147,45 @@
           </a-row>
         </a-form>
       </a-tab-pane>
+      <a-tab-pane key="4" :title="$t('account.player.edit.tab.currency')">
+        <a-form
+          :model="form"
+          :label-col-props="{ span: 6 }"
+          :wrapper-col-props="{ span: 18 }"
+        >
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item field="meso" :label="$t('account.player.meso')">
+                <a-input-number v-model="form.meso" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="nxCredit"
+                :label="$t('account.player.nxCredit')"
+              >
+                <a-input-number v-model="form.nxCredit" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="maplePoint"
+                :label="$t('account.player.maplePoint')"
+              >
+                <a-input-number v-model="form.maplePoint" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="nxPrepaid"
+                :label="$t('account.player.nxPrepaid')"
+              >
+                <a-input-number v-model="form.nxPrepaid" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form>
+      </a-tab-pane>
     </a-tabs>
   </a-modal>
 </template>
@@ -182,6 +231,7 @@
             id: detail.id,
             name: detail.name,
             level: detail.level,
+            exp: detail.exp,
             job: detail.job,
             str: detail.str,
             dex: detail.dex,
@@ -194,10 +244,15 @@
             ap: detail.ap,
             sp: detail.sp,
             fame: detail.fame,
+            meso: detail.meso,
+            gm: detail.gm,
             face: detail.face,
             hair: detail.hair,
             skinColor: detail.skinColor,
             gender: detail.gender,
+            nxCredit: detail.nxCredit,
+            maplePoint: detail.maplePoint,
+            nxPrepaid: detail.nxPrepaid,
           };
         } catch (error) {
           Message.error('获取角色详情失败');

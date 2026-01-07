@@ -33,6 +33,7 @@ import org.gms.net.server.world.Messenger;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.World;
+import org.gms.server.CashShop;
 import org.gms.server.Storage;
 import org.gms.server.events.Events;
 import org.gms.server.life.MobSkill;
@@ -117,6 +118,7 @@ public class CharacterService {
     private final PetignoresMapper petignoresMapper;
     private final QuickslotkeymappedMapper quickslotkeymappedMapper;
     private final ItemFactoryService itemFactoryService;
+    private final AccountService accountService;
 
     public CharactersDO findById(int id) {
         return charactersMapper.selectOneById(id);
@@ -273,6 +275,7 @@ public class CharacterService {
         charactersDO.setId(request.getId());
         if (request.getName() != null) charactersDO.setName(request.getName());
         if (request.getLevel() != null) charactersDO.setLevel(request.getLevel());
+        if (request.getExp() != null) charactersDO.setExp(request.getExp());
         if (request.getJob() != null) charactersDO.setJob(request.getJob());
         if (request.getStr() != null) charactersDO.setAttrStr(request.getStr());
         if (request.getDex() != null) charactersDO.setAttrDex(request.getDex());
@@ -285,12 +288,25 @@ public class CharacterService {
         if (request.getAp() != null) charactersDO.setAp(request.getAp());
         if (request.getSp() != null) charactersDO.setSp(request.getSp());
         if (request.getFame() != null) charactersDO.setFame(request.getFame());
+        if (request.getMeso() != null) charactersDO.setMeso(request.getMeso());
+        if (request.getGm() != null) charactersDO.setGm(request.getGm());
         if (request.getFace() != null) charactersDO.setFace(request.getFace());
         if (request.getHair() != null) charactersDO.setHair(request.getHair());
         if (request.getSkinColor() != null) charactersDO.setSkincolor(request.getSkinColor());
         if (request.getGender() != null) charactersDO.setGender(request.getGender());
 
         charactersMapper.update(charactersDO);
+
+        // 更新账号货币
+        CharactersDO chr = charactersMapper.selectOneById(request.getId());
+        if (chr != null) {
+            AccountsDO accountsDO = new AccountsDO();
+            accountsDO.setId(chr.getAccountid());
+            if (request.getNxCredit() != null) accountsDO.setNxCredit(request.getNxCredit());
+            if (request.getMaplePoint() != null) accountsDO.setMaplePoint(request.getMaplePoint());
+            if (request.getNxPrepaid() != null) accountsDO.setNxPrepaid(request.getNxPrepaid());
+            accountService.update(accountsDO);
+        }
     }
 
     public ChrDetailRtnDTO getCharacterDetail(Integer id) {
@@ -304,6 +320,7 @@ public class CharacterService {
                         .id(onlineChr.getId())
                         .name(onlineChr.getName())
                         .level(onlineChr.getLevel())
+                        .exp(onlineChr.getExp())
                         .job(onlineChr.getJob().getId())
                         .jobName(onlineChr.getJob().getName())
                         .str(onlineChr.getStr())
@@ -317,10 +334,15 @@ public class CharacterService {
                         .ap(onlineChr.getRemainingAp())
                         .sp(Arrays.stream(onlineChr.getRemainingSps()).mapToObj(String::valueOf).collect(Collectors.joining(",")))
                         .fame(onlineChr.getFame())
+                        .meso(onlineChr.getMeso())
+                        .gm(onlineChr.gmLevel())
                         .face(onlineChr.getFace())
                         .hair(onlineChr.getHair())
                         .skinColor(onlineChr.getSkinColor().getId())
                         .gender(onlineChr.getGender())
+                        .nxCredit(onlineChr.getCashShop().getCash(CashShop.NX_CREDIT))
+                        .maplePoint(onlineChr.getCashShop().getCash(CashShop.MAPLE_POINT))
+                        .nxPrepaid(onlineChr.getCashShop().getCash(CashShop.NX_PREPAID))
                         .build();
             }
         }
@@ -332,10 +354,13 @@ public class CharacterService {
         Job job = Job.getById(charactersDO.getJob());
         String jobName = (job != null) ? job.getName() : "未知职业";
 
+        AccountsDO accountsDO = accountService.findById(charactersDO.getAccountid());
+
         return ChrDetailRtnDTO.builder()
                 .id(charactersDO.getId())
                 .name(charactersDO.getName())
                 .level(charactersDO.getLevel())
+                .exp(charactersDO.getExp())
                 .job(charactersDO.getJob())
                 .jobName(jobName)
                 .str(charactersDO.getAttrStr())
@@ -349,10 +374,15 @@ public class CharacterService {
                 .ap(charactersDO.getAp())
                 .sp(charactersDO.getSp())
                 .fame(charactersDO.getFame())
+                .meso(charactersDO.getMeso())
+                .gm(charactersDO.getGm())
                 .face(charactersDO.getFace())
                 .hair(charactersDO.getHair())
                 .skinColor(charactersDO.getSkincolor())
                 .gender(charactersDO.getGender())
+                .nxCredit(accountsDO != null ? accountsDO.getNxCredit() : 0)
+                .maplePoint(accountsDO != null ? accountsDO.getMaplePoint() : 0)
+                .nxPrepaid(accountsDO != null ? accountsDO.getNxPrepaid() : 0)
                 .build();
     }
 

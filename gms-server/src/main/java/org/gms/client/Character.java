@@ -9720,7 +9720,41 @@ public class Character extends AbstractCharacterObject {
                 setGender(request.getGender());
                 lookChanged = true;
             }
+            if (request.getExp() != null && request.getExp() != getExp()) {
+                setExp(request.getExp());
+                stats.add(new Pair<>(Stat.EXP, getExp()));
+            }
+            if (request.getMeso() != null && request.getMeso() != getMeso()) {
+                setMeso(request.getMeso());
+                stats.add(new Pair<>(Stat.MESO, getMeso()));
+            }
+            if (request.getGm() != null && request.getGm() != gmLevel()) {
+                setGMLevel(request.getGm());
+                // GM等级变更可能需要更复杂的处理，但目前仅设置等级
+            }
 
+            // 处理货币变更
+            CashShop cs = getCashShop();
+            boolean cashChanged = false;
+            if (request.getNxCredit() != null && !request.getNxCredit().equals(cs.getCash(CashShop.NX_CREDIT))) {
+                cs.setNxCredit(request.getNxCredit());
+                cashChanged = true;
+            }
+            if (request.getMaplePoint() != null && !request.getMaplePoint().equals(cs.getCash(CashShop.MAPLE_POINT))) {
+                cs.setMaplePoint(request.getMaplePoint());
+                cashChanged = true;
+            }
+            if (request.getNxPrepaid() != null && !request.getNxPrepaid().equals(cs.getCash(CashShop.NX_PREPAID))) {
+                cs.setNxPrepaid(request.getNxPrepaid());
+                cashChanged = true;
+            }
+
+            if (cashChanged) {
+                // 更新货币后，需要通知客户端。通常这会在进入商城时自动同步，
+                // 但为了在游戏中实时看到（如果UI支持），可能需要一个特定的封包。
+                // 此处我们先更新内存中的值，并保存。
+                cs.save();
+            }
             // 只有当属性确实发生变化时才重新计算和发送包
             if (!stats.isEmpty() || lookChanged) {
                 recalcLocalStats();
