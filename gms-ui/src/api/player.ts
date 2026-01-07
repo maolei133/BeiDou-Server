@@ -50,6 +50,40 @@ export interface OnlinePlayer {
   fame: number;
   loginTime?: string;
   lastLogoutTime?: string;
+  // Add missing fields for edit
+  str?: number;
+  dex?: number;
+  int?: number;
+  luk?: number;
+  hp?: number;
+  mp?: number;
+  ap?: number;
+  sp?: string;
+  face?: number;
+  hair?: number;
+  skinColor?: number;
+}
+
+export interface UpdatePlayerForm {
+  id: number;
+  name?: string;
+  level?: number;
+  job?: number;
+  str?: number;
+  dex?: number;
+  intAttr?: number;
+  luk?: number;
+  hp?: number;
+  maxHp?: number;
+  mp?: number;
+  maxMp?: number;
+  ap?: number;
+  sp?: string;
+  fame?: number;
+  face?: number;
+  hair?: number;
+  skinColor?: number;
+  gender?: number;
 }
 
 export function getPlayerList(
@@ -76,4 +110,12 @@ export function givePlayerSrc(data: GiveForm) {
 
 export function getEquInitialInfo(id: number) {
   return axios.post(`/common/v1/getEquipmentInfoByItemId`, { id });
+}
+
+export function updatePlayer(data: UpdatePlayerForm) {
+  return axios.post(`/character/v1/update`, data);
+}
+
+export function getPlayerDetail(id: number) {
+  return axios.post<OnlinePlayer>(`/character/v1/detail`, { id });
 }

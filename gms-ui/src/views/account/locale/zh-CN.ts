@@ -162,4 +162,15 @@ export default {
   'account.player.warp.msg.exist': '该地图已在常用列表中',
   'account.player.warp.msg.success': '添加成功',
   'account.player.warp.msg.select': '请选择一个地图',
+
+  'account.player.edit.title': '编辑角色',
+  'account.player.edit.tab.basic': '基础信息',
+  'account.player.edit.tab.stats': '属性',
+  'account.player.edit.tab.look': '外观',
+  'account.player.ap': 'AP',
+  'account.player.sp': 'SP',
+  'account.player.face': '脸型',
+  'account.player.hair': '发型',
+  'account.player.skin': '肤色',
+  'account.player.button.edit': '编辑',
 };

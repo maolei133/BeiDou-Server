@@ -237,9 +237,14 @@
           />
           <a-table-column :title="$t('account.list.column.operate')">
             <template #cell="{ record }">
-              <a-button type="text" size="mini" @click="giveClick(record)">
-                {{ $t('account.player.button.give') }}
-              </a-button>
+              <a-space>
+                <a-button type="text" size="mini" @click="editClick(record)">
+                  {{ $t('account.player.button.edit') }}
+                </a-button>
+                <a-button type="text" size="mini" @click="giveClick(record)">
+                  {{ $t('account.player.button.give') }}
+                </a-button>
+              </a-space>
             </template>
           </a-table-column>
         </template>
@@ -259,6 +264,7 @@
                   >
                     传送
                   </a-button>
+                  <a-button size="mini" @click="editClick(item)">编辑</a-button>
                   <a-button size="mini" @click="giveClick(item)">发放</a-button>
                 </a-space>
               </template>
@@ -356,6 +362,11 @@
       :loading="loading"
       @submit="submitWarp"
     />
+    <edit-player-modal
+      v-model:visible="editFormVisible"
+      :player="editTarget"
+      @success="loadData"
+    />
   </div>
 </template>
 
@@ -371,6 +382,7 @@
     OnlinePlayer,
   } from '@/api/player';
   import WarpModal from './WarpModal.vue';
+  import EditPlayerModal from './EditPlayerModal.vue';
 
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(false);
@@ -395,6 +407,8 @@
   const giveFormTitle = ref('');
   const warpFormVisible = ref(false);
   const warpTarget = ref<OnlinePlayer | null>(null);
+  const editFormVisible = ref(false);
+  const editTarget = ref<OnlinePlayer | null>(null);
 
   const formData = ref<GiveForm>({
     type: 0,
@@ -475,6 +489,11 @@
       type: 0,
     };
     giveFormVisible.value = true;
+  };
+
+  const editClick = (record: OnlinePlayer) => {
+    editTarget.value = record;
+    editFormVisible.value = true;
   };
 
   const submitClick = async () => {

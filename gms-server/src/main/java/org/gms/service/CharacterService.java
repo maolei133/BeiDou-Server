@@ -19,8 +19,10 @@ import org.gms.constants.string.ExtendType;
 import org.gms.dao.entity.*;
 import org.gms.dao.mapper.*;
 import org.gms.exception.BizException;
+import org.gms.model.dto.ChrDetailRtnDTO;
 import org.gms.model.dto.ChrOnlineListReqDTO;
 import org.gms.model.dto.ChrOnlineListRtnDTO;
+import org.gms.model.dto.UpdateCharacterReqDTO;
 import org.gms.model.pojo.SkillEntry;
 import org.gms.net.server.PlayerCoolDownValueHolder;
 import org.gms.net.server.Server;
@@ -192,7 +194,7 @@ public class CharacterService {
                 } catch (Exception ignored) {
                 }
             }
-
+            
             Guild guild = Server.getInstance().getGuild(charactersDO.getGuildid());
             String guildName = (guild != null) ? guild.getName() : null;
             Job job = Job.getById(charactersDO.getJob());
@@ -251,6 +253,107 @@ public class CharacterService {
                     .lastLogoutTime(charactersDO.getLastLogoutTime() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getLastLogoutTime()) : null)
                     .build();
         });
+    }
+
+    public void updateCharacter(UpdateCharacterReqDTO request) {
+        RequireUtil.requireNotNull(request.getId(), "Character ID cannot be null");
+
+        // 1. 尝试获取在线玩家
+        for (World world : Server.getInstance().getWorlds()) {
+            Character onlineChr = world.getPlayerStorage().getCharacterById(request.getId());
+            if (onlineChr != null) {
+                // 在线玩家：调用 Character 类中的方法进行更新
+                onlineChr.updateCharacterDetails(request);
+                return;
+            }
+        }
+
+        // 2. 离线玩家：直接更新数据库
+        CharactersDO charactersDO = new CharactersDO();
+        charactersDO.setId(request.getId());
+        if (request.getName() != null) charactersDO.setName(request.getName());
+        if (request.getLevel() != null) charactersDO.setLevel(request.getLevel());
+        if (request.getJob() != null) charactersDO.setJob(request.getJob());
+        if (request.getStr() != null) charactersDO.setAttrStr(request.getStr());
+        if (request.getDex() != null) charactersDO.setAttrDex(request.getDex());
+        if (request.getIntAttr() != null) charactersDO.setAttrInt(request.getIntAttr());
+        if (request.getLuk() != null) charactersDO.setAttrLuk(request.getLuk());
+        if (request.getHp() != null) charactersDO.setHp(request.getHp());
+        if (request.getMaxHp() != null) charactersDO.setMaxhp(request.getMaxHp());
+        if (request.getMp() != null) charactersDO.setMp(request.getMp());
+        if (request.getMaxMp() != null) charactersDO.setMaxmp(request.getMaxMp());
+        if (request.getAp() != null) charactersDO.setAp(request.getAp());
+        if (request.getSp() != null) charactersDO.setSp(request.getSp());
+        if (request.getFame() != null) charactersDO.setFame(request.getFame());
+        if (request.getFace() != null) charactersDO.setFace(request.getFace());
+        if (request.getHair() != null) charactersDO.setHair(request.getHair());
+        if (request.getSkinColor() != null) charactersDO.setSkincolor(request.getSkinColor());
+        if (request.getGender() != null) charactersDO.setGender(request.getGender());
+
+        charactersMapper.update(charactersDO);
+    }
+
+    public ChrDetailRtnDTO getCharacterDetail(Integer id) {
+        RequireUtil.requireNotNull(id, "Character ID cannot be null");
+
+        // 优先从在线玩家中查找
+        for (World world : Server.getInstance().getWorlds()) {
+            Character onlineChr = world.getPlayerStorage().getCharacterById(id);
+            if (onlineChr != null) {
+                return ChrDetailRtnDTO.builder()
+                        .id(onlineChr.getId())
+                        .name(onlineChr.getName())
+                        .level(onlineChr.getLevel())
+                        .job(onlineChr.getJob().getId())
+                        .jobName(onlineChr.getJob().getName())
+                        .str(onlineChr.getStr())
+                        .dex(onlineChr.getDex())
+                        .intAttr(onlineChr.getInt())
+                        .luk(onlineChr.getLuk())
+                        .hp(onlineChr.getHp())
+                        .maxHp(onlineChr.getMaxHp())
+                        .mp(onlineChr.getMp())
+                        .maxMp(onlineChr.getMaxMp())
+                        .ap(onlineChr.getRemainingAp())
+                        .sp(Arrays.stream(onlineChr.getRemainingSps()).mapToObj(String::valueOf).collect(Collectors.joining(",")))
+                        .fame(onlineChr.getFame())
+                        .face(onlineChr.getFace())
+                        .hair(onlineChr.getHair())
+                        .skinColor(onlineChr.getSkinColor().getId())
+                        .gender(onlineChr.getGender())
+                        .build();
+            }
+        }
+
+        // 如果不在线，从数据库查找
+        CharactersDO charactersDO = charactersMapper.selectOneById(id);
+        RequireUtil.requireNotNull(charactersDO, "Character not found");
+
+        Job job = Job.getById(charactersDO.getJob());
+        String jobName = (job != null) ? job.getName() : "未知职业";
+
+        return ChrDetailRtnDTO.builder()
+                .id(charactersDO.getId())
+                .name(charactersDO.getName())
+                .level(charactersDO.getLevel())
+                .job(charactersDO.getJob())
+                .jobName(jobName)
+                .str(charactersDO.getAttrStr())
+                .dex(charactersDO.getAttrDex())
+                .intAttr(charactersDO.getAttrInt())
+                .luk(charactersDO.getAttrLuk())
+                .hp(charactersDO.getHp())
+                .maxHp(charactersDO.getMaxhp())
+                .mp(charactersDO.getMp())
+                .maxMp(charactersDO.getMaxmp())
+                .ap(charactersDO.getAp())
+                .sp(charactersDO.getSp())
+                .fame(charactersDO.getFame())
+                .face(charactersDO.getFace())
+                .hair(charactersDO.getHair())
+                .skinColor(charactersDO.getSkincolor())
+                .gender(charactersDO.getGender())
+                .build();
     }
 
     public void updateRate(ExtendValueDO data) {

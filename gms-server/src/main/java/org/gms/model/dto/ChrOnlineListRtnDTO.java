@@ -31,4 +31,15 @@ public class ChrOnlineListRtnDTO {
     private int fame;
     private String loginTime;
     private String lastLogoutTime;
+    private int str;
+    private int dex;
+    private int intAttr;
+    private int luk;
+    private int hp;
+    private int mp;
+    private int ap;
+    private String sp;
+    private int face;
+    private int hair;
+    private int skinColor;
 }

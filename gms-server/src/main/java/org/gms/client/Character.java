@@ -52,6 +52,7 @@ import org.gms.exception.NotEnabledException;
 import org.gms.manager.ServerManager;
 import org.gms.model.dto.InventorySearchReqDTO;
 import org.gms.model.dto.InventorySearchRtnDTO;
+import org.gms.model.dto.UpdateCharacterReqDTO;
 import org.gms.model.pojo.NewYearCardRecord;
 import org.gms.model.pojo.SkillEntry;
 import org.gms.net.packet.Packet;
@@ -9612,5 +9613,134 @@ public class Character extends AbstractCharacterObject {
      */
     public void saveOrUpdateCharacterExtendValue(int characterId, String extendType, String extendName, String extendValue) {
         saveOrUpdateExtendValue(String.valueOf(characterId), extendType, extendName, extendValue);
+    }
+    public void updateCharacterDetails(UpdateCharacterReqDTO request) {
+        effLock.lock();
+        statWlock.lock();
+        try {
+            List<Pair<Stat, Integer>> stats = new ArrayList<>();
+            boolean lookChanged = false;
+
+            if (request.getName() != null && !request.getName().equals(getName())) {
+                setName(request.getName());
+                // 名字变更通常需要重登或特殊处理，这里仅更新内存
+            }
+            if (request.getLevel() != null && request.getLevel() != getLevel()) {
+                setLevel(request.getLevel());
+                stats.add(new Pair<>(Stat.LEVEL, request.getLevel()));
+            }
+            if (request.getJob() != null && request.getJob() != getJob().getId()) {
+                setJob(Job.getById(request.getJob()));
+                stats.add(new Pair<>(Stat.JOB, request.getJob()));
+            }
+            if (request.getStr() != null && request.getStr() != getStr()) {
+                setStr(request.getStr());
+                stats.add(new Pair<>(Stat.STR, request.getStr()));
+            }
+            if (request.getDex() != null && request.getDex() != getDex()) {
+                setDex(request.getDex());
+                stats.add(new Pair<>(Stat.DEX, request.getDex()));
+            }
+            if (request.getIntAttr() != null && request.getIntAttr() != getInt()) {
+                setInt(request.getIntAttr());
+                stats.add(new Pair<>(Stat.INT, request.getIntAttr()));
+            }
+            if (request.getLuk() != null && request.getLuk() != getLuk()) {
+                setLuk(request.getLuk());
+                stats.add(new Pair<>(Stat.LUK, request.getLuk()));
+            }
+            if (request.getHp() != null && request.getHp() != getHp()) {
+                setHp(request.getHp());
+                stats.add(new Pair<>(Stat.HP, request.getHp()));
+            }
+            if (request.getMaxHp() != null && request.getMaxHp() != getMaxHp()) {
+                setMaxHp(request.getMaxHp());
+                stats.add(new Pair<>(Stat.MAXHP, request.getMaxHp()));
+            }
+            if (request.getMp() != null && request.getMp() != getMp()) {
+                setMp(request.getMp());
+                stats.add(new Pair<>(Stat.MP, request.getMp()));
+            }
+            if (request.getMaxMp() != null && request.getMaxMp() != getMaxMp()) {
+                setMaxMp(request.getMaxMp());
+                stats.add(new Pair<>(Stat.MAXMP, request.getMaxMp()));
+            }
+            if (request.getAp() != null && request.getAp() != getRemainingAp()) {
+                setRemainingAp(request.getAp());
+                stats.add(new Pair<>(Stat.AVAILABLEAP, request.getAp()));
+            }
+            if (request.getSp() != null) {
+                String[] sps = request.getSp().split(",");
+                int[] spInts = new int[sps.length];
+                boolean spChanged = false;
+                int[] currentSps = getRemainingSps();
+
+                if (spInts.length == currentSps.length) {
+                    for (int i = 0; i < sps.length; i++) {
+                        spInts[i] = Integer.parseInt(sps[i]);
+                        if (spInts[i] != currentSps[i]) {
+                            spChanged = true;
+                        }
+                    }
+                } else {
+                    // 长度不同，肯定变了（虽然理论上长度应该一致）
+                    for (int i = 0; i < sps.length; i++) {
+                        spInts[i] = Integer.parseInt(sps[i]);
+                    }
+                    spChanged = true;
+                }
+
+                if (spChanged) {
+                    setRemainingSp(spInts);
+                    // 发送当前职业技能书的SP更新
+                    stats.add(new Pair<>(Stat.AVAILABLESP, getRemainingSp(getJob().getId())));
+                }
+            }
+            if (request.getFame() != null && request.getFame() != getFame()) {
+                setFame(request.getFame());
+                stats.add(new Pair<>(Stat.FAME, request.getFame()));
+            }
+
+            if (request.getFace() != null && request.getFace() != getFace()) {
+                setFace(request.getFace());
+                stats.add(new Pair<>(Stat.FACE, request.getFace()));
+                lookChanged = true;
+            }
+            if (request.getHair() != null && request.getHair() != getHair()) {
+                setHair(request.getHair());
+                stats.add(new Pair<>(Stat.HAIR, request.getHair()));
+                lookChanged = true;
+            }
+            if (request.getSkinColor() != null && request.getSkinColor() != getSkinColor().getId()) {
+                setSkinColor(SkinColor.getById(request.getSkinColor()));
+                stats.add(new Pair<>(Stat.SKIN, request.getSkinColor()));
+                lookChanged = true;
+            }
+            if (request.getGender() != null && request.getGender() != getGender()) {
+                setGender(request.getGender());
+                lookChanged = true;
+            }
+
+            // 只有当属性确实发生变化时才重新计算和发送包
+            if (!stats.isEmpty() || lookChanged) {
+                recalcLocalStats();
+                // updateLocalStats(); // 移除这个调用，避免重复发送不完整的包
+
+                if (!stats.isEmpty()) {
+                    sendPacket(PacketCreator.updatePlayerStats(stats, true, this));
+                }
+
+                if (lookChanged) {
+                    equipChanged();
+                }
+
+//                saveCharToDB(); // 只有变化了才保存
+            }
+
+//            enableActions(); // 总是启用操作，防止客户端卡死
+        } finally {
+            statWlock.unlock();
+            effLock.unlock();
+        }
     }
 }
