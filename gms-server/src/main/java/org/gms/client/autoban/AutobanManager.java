@@ -765,7 +765,7 @@ public class AutobanManager {
                 int tmpdamge = (int) Math.min(damage - maxWithCrit, Integer.MAX_VALUE);
                 applyLoseHpMp(tmpdamge, tmpdamge, "检测到使用倍攻，");
             }
-            damage = (long) (maxWithCrit * 0.5); //负数伤害 或者 伤害过高，基本可以确定是开了倍攻，直接置零完事。
+            damage = 0; //负数伤害 或者 伤害过高，基本可以确定是开了倍攻，直接置零完事。
         }
 
         // 如果伤害超过我们计算值的1.5倍，则发出警告。
