@@ -412,8 +412,7 @@
                 formData.type === 1 ||
                 formData.type === 2 ||
                 formData.type === 3 ||
-                formData.type === 4 ||
-                formData.type === 5
+                formData.type === 4
               "
               field="quantity"
               :label="$t('account.player.form.quantity')"
@@ -475,6 +474,18 @@
                   />
                 </div>
               </div>
+            </a-col>
+
+            <a-col v-if="formData.type === 5" :span="24">
+              <a-form-item
+                field="quantity"
+                :label="$t('account.player.form.quantity')"
+              >
+                <a-input-number
+                  v-model="formData.quantity"
+                  style="width: 100%"
+                />
+              </a-form-item>
             </a-col>
 
             <a-col :span="24">
@@ -784,6 +795,7 @@
     desc: '',
   });
   const itemIconUrl = ref('');
+  const lastFetchedId = ref<number | undefined>(undefined);
 
   const isFlaggedAsLock = computed(() => {
     return (
@@ -855,6 +867,10 @@
       playerId: 0,
       expireType: 0,
     };
+    itemInfo.name = '';
+    itemInfo.desc = '';
+    itemIconUrl.value = '';
+    lastFetchedId.value = undefined;
     giveFormVisible.value = true;
   };
 
@@ -867,6 +883,10 @@
       type: 5,
       expireType: 0,
     };
+    itemInfo.name = '';
+    itemInfo.desc = '';
+    itemIconUrl.value = '';
+    lastFetchedId.value = undefined;
     giveFormVisible.value = true;
   };
 
@@ -970,6 +990,7 @@
     itemInfo.name = '';
     itemInfo.desc = '';
     itemIconUrl.value = '';
+    lastFetchedId.value = undefined;
     // 重置装备属性
     if (formData.value.type !== 6) {
       formData.value.str = undefined;
@@ -994,7 +1015,18 @@
   };
 
   const handleIdBlur = async () => {
-    if (!formData.value.id) return;
+    if (!formData.value.id) {
+      itemInfo.name = '';
+      itemInfo.desc = '';
+      itemIconUrl.value = '';
+      lastFetchedId.value = undefined;
+      return;
+    }
+
+    if (formData.value.id === lastFetchedId.value) {
+      return;
+    }
+    lastFetchedId.value = formData.value.id;
 
     setLoading(true);
     try {

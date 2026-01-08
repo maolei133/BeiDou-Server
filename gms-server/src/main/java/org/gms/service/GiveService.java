@@ -187,7 +187,7 @@ public class GiveService {
 
     private void giveItemAllOnlineChr(GiveResourceReqDTO submitData) {
         int itemId = submitData.getId();
-        short quantity = Short.parseShort(submitData.getQuantity().toString());
+        short quantity = Short.parseShort(submitData.getQuantity() != null ? submitData.getQuantity().toString() : "1");
         String owner = submitData.getOwner();
         short flag = submitData.getFlag() != null ? submitData.getFlag() : 0;
         long expiration = submitData.getExpire() != null ? submitData.getExpire() : -1;
