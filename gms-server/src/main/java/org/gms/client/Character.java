@@ -9467,6 +9467,74 @@ public class Character extends AbstractCharacterObject {
         return InventoryManipulator.addFromDrop(getClient(), baseEquip, false);
     }
 
+    /**
+     * 发装备，支持自定义强化次数、道具等级和Flag
+     *
+     * @param itemId      装备id
+     * @param attStr      力量
+     * @param attDex      敏捷
+     * @param attInt      智力
+     * @param attLuk      运气
+     * @param attHp       血量
+     * @param attMp       蓝量
+     * @param pAtk        物理攻击
+     * @param mAtk        魔法攻击
+     * @param pDef        物理防御
+     * @param mDef        魔法防御
+     * @param acc         命中
+     * @param avoid       回避
+     * @param hands       攻击速度
+     * @param speed       移动速度
+     * @param jump        跳跃
+     * @param upgradeSlot 可升级次数
+     * @param level       已升级次数
+     * @param itemLevel   道具等级
+     * @param expireTime  失效时间
+     * @param flag        物品标记
+     */
+    public boolean gainEquip(int itemId, Short attStr, Short attDex, Short attInt, Short attLuk, Short attHp, Short attMp,
+                             Short pAtk, Short mAtk, Short pDef, Short mDef, Short acc, Short avoid, Short hands, Short speed,
+                             Short jump, Byte upgradeSlot, Byte level, Byte itemLevel, Long expireTime,String owner, Short flag) {
+        Equip baseEquip = (Equip) ItemInformationProvider.getInstance().getEquipById(itemId);
+        if (!ItemConstants.getInventoryType(itemId).equals(InventoryType.EQUIP) || baseEquip == null) {
+            message(I18nUtil.getMessage("AbstractPlayerInteraction.gainEquip.message1"));
+            return false;
+        }
+        baseEquip.setQuantity((short) 1);
+        if (!InventoryManipulator.checkSpace(getClient(), itemId, 1, baseEquip.getOwner())) {
+            message(I18nUtil.getMessage("AbstractPlayerInteraction.gainEquip.message2", InventoryType.EQUIP.getName()));
+            return false;
+        }
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attStr, Equip::setStr);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attDex, Equip::setDex);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attInt, Equip::setInt);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attLuk, Equip::setLuk);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attHp, Equip::setHp);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attMp, Equip::setMp);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, pAtk, Equip::setWatk);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, mAtk, Equip::setMatk);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, pDef, Equip::setWdef);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, mDef, Equip::setMdef);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, acc, Equip::setAcc);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, avoid, Equip::setAvoid);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, hands, Equip::setHands);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, speed, Equip::setSpeed);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, jump, Equip::setJump);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, upgradeSlot, Equip::setUpgradeSlots);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, level, Equip::setLevel);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, itemLevel, Equip::setItemLevel);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, owner, Equip::setOwner);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, flag, Equip::setFlag);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, expireTime, (eq, ep) -> {
+            if (ep > 0) {
+                eq.setExpiration(TimeUnit.MINUTES.toMillis(ep) + System.currentTimeMillis());
+            } else {
+                eq.setExpiration(-1);
+            }
+        });
+        return InventoryManipulator.addFromDrop(getClient(), baseEquip, false);
+    }
+
     public void setFamilyBuff(boolean type, float exp, float drop) {
         this.familyBuff = type;
         this.familyExp = exp;

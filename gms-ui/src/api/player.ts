@@ -25,7 +25,13 @@ export interface GiveForm {
   speed?: number;
   jump?: number;
   upgradeSlot?: number;
+  level?: number;
+  itemLevel?: number;
   expire?: number;
+  expireDate?: string;
+  expireType?: number;
+  owner?: string;
+  flag?: number;
 }
 
 export interface OnlinePlayer {
@@ -110,6 +116,10 @@ export function givePlayerSrc(data: GiveForm) {
 
 export function getEquInitialInfo(id: number) {
   return axios.post(`/common/v1/getEquipmentInfoByItemId`, { id });
+}
+
+export function getItemInitialInfo(id: number) {
+  return axios.post(`/common/v1/getItemInfoByItemId`, { id });
 }
 
 export function updatePlayer(data: UpdatePlayerForm) {

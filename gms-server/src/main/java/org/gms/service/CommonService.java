@@ -11,6 +11,7 @@ import org.gms.model.pojo.InformationResult;
 import org.gms.net.server.Server;
 import org.gms.server.CommonInformation;
 import org.gms.util.I18nUtil;
+import org.gms.util.Pair;
 import org.gms.util.RequireUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -38,7 +39,10 @@ public class CommonService {
             throw new BizException(I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_NULL"));
         }
         Equip equip = itemService.getEquipmentInfoByItemId(submitData.getId());
+        Pair<String, String> nameDesc = itemService.getNameDesc(submitData.getId());
         EquipmentInfoRtnDTO rtn = new EquipmentInfoRtnDTO();
+        rtn.setName(nameDesc.getLeft());
+        rtn.setDesc(nameDesc.getRight());
         rtn.setStr(equip.getStr());
         rtn.setDex(equip.getDex());
         rtn.set_int(equip.getInt());
@@ -56,6 +60,23 @@ public class CommonService {
         rtn.setJump(equip.getJump());
         rtn.setUpgradeSlot(equip.getUpgradeSlots());
         rtn.setExpire(equip.getExpiration());
+        return rtn;
+    }
+
+    /**
+     * 根据物品ID获取道具信息
+     *
+     * @param submitData 主要是物品的ID
+     * @return ItemInfoRtnDTO
+     */
+    public ItemInfoRtnDTO getItemInfoByItemId(ItemInfoReqDTO submitData) {
+        if (submitData.getId() == null) {
+            throw new BizException(I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_NULL"));
+        }
+        Pair<String, String> nameDesc = itemService.getItemInfoByItemId(submitData.getId());
+        ItemInfoRtnDTO rtn = new ItemInfoRtnDTO();
+        rtn.setName(nameDesc.getLeft());
+        rtn.setDesc(nameDesc.getRight());
         return rtn;
     }
 

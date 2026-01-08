@@ -34,6 +34,13 @@ public class CommonController {
     }
 
     @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "查询道具基础属性信息")
+    @PostMapping("/" + ApiConstant.LATEST + "/getItemInfoByItemId")
+    public ResultBody<Object> getItemInfoByItemId(@RequestBody SubmitBody<ItemInfoReqDTO> submitBody) {
+        return ResultBody.success(commonService.getItemInfoByItemId(submitBody.getData()));
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
     @Operation(summary = "查询所有世界中当前在线玩家数量")
     @PostMapping("/" + ApiConstant.LATEST + "/getAllWorldsOnlinePlayersCount")
     public ResultBody<Integer> getAllWorldsOnlinePlayersCount(@RequestBody SubmitBody<ServerInfoReqDto> submitBody) {

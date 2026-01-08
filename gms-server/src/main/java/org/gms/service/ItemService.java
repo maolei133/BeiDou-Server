@@ -8,6 +8,7 @@ import org.gms.constants.inventory.ItemConstants;
 import org.gms.exception.BizException;
 import org.gms.server.ItemInformationProvider;
 import org.gms.util.I18nUtil;
+import org.gms.util.Pair;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -25,5 +26,22 @@ public class ItemService {
             throw new BizException(I18nUtil.getExceptionMessage("ONLY_SUPPORT_GIVE_EQUIP"));
         }
         return equip;
+    }
+
+    public Pair<String, String> getNameDesc(Integer itemId) {
+        ItemInformationProvider ii = ItemInformationProvider.getInstance();
+        Pair<String, String> nameDesc = ii.getNameDesc(itemId);
+        if (nameDesc == null) {
+            throw new BizException(I18nUtil.getExceptionMessage("ITEM_NOT_FOUND"));
+        }
+        return nameDesc;
+    }
+
+    public Pair<String, String> getItemInfoByItemId(Integer itemId) {
+        Pair<String, String> nameDesc = getNameDesc(itemId);
+        if (ItemConstants.getInventoryType(itemId).equals(InventoryType.EQUIP)) {
+            throw new BizException(I18nUtil.getExceptionMessage("ONLY_SUPPORT_GIVE_ITEM"));
+        }
+        return nameDesc;
     }
 }
