@@ -151,17 +151,50 @@
           <a-row :gutter="16">
             <a-col :span="12">
               <a-form-item field="face" :label="$t('account.player.face')">
-                <a-input-number v-model="form.face" />
+                <div class="selector-trigger" @click="openFaceSelector">
+                  <div v-if="form.face" class="selected-content">
+                    <img
+                      :src="getIconUrl('item', form.face)"
+                      class="option-icon"
+                      alt=""
+                    />
+                    <span>{{ getFaceName(form.face) }} ({{ form.face }})</span>
+                  </div>
+                  <span v-else class="placeholder">{{
+                    $t('account.player.warp.select')
+                  }}</span>
+                </div>
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="hair" :label="$t('account.player.hair')">
-                <a-input-number v-model="form.hair" />
+                <div class="selector-trigger" @click="openHairSelector">
+                  <div v-if="form.hair" class="selected-content">
+                    <img
+                      :src="getIconUrl('item', form.hair)"
+                      class="option-icon"
+                      alt=""
+                    />
+                    <span>{{ getHairName(form.hair) }} ({{ form.hair }})</span>
+                  </div>
+                  <span v-else class="placeholder">{{
+                    $t('account.player.warp.select')
+                  }}</span>
+                </div>
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="skinColor" :label="$t('account.player.skin')">
-                <a-input-number v-model="form.skinColor" />
+                <a-select v-model="form.skinColor" :loading="loadingSkins">
+                  <a-option
+                    v-for="skin in skinList"
+                    :key="skin.id"
+                    :value="skin.id"
+                    :label="`${$t('account.player.skin.' + skin.id)} (${
+                      skin.id
+                    })`"
+                  />
+                </a-select>
               </a-form-item>
             </a-col>
           </a-row>
@@ -322,6 +355,22 @@
         </a-form>
       </a-tab-pane>
     </a-tabs>
+
+    <ImageSelector
+      v-model:visible="faceSelectorVisible"
+      type="face"
+      :title="$t('account.player.face')"
+      :default-id="form.face"
+      @select="handleFaceSelect"
+    />
+
+    <ImageSelector
+      v-model:visible="hairSelectorVisible"
+      type="hair"
+      :title="$t('account.player.hair')"
+      :default-id="form.hair"
+      @select="handleHairSelect"
+    />
   </a-modal>
 </template>
 
@@ -333,9 +382,16 @@
     updatePlayer,
     getPlayerDetail,
   } from '@/api/player';
-  import { getJobs, InformationResult } from '@/api/information';
+  import {
+    getJobs,
+    getSkinColors,
+    informationSearch,
+    InformationResult,
+  } from '@/api/information';
   import { Message } from '@arco-design/web-vue';
   import { useI18n } from 'vue-i18n';
+  import { getIconUrl } from '@/utils/mapleStoryAPI';
+  import ImageSelector from '@/components/ImageSelector/index.vue';
 
   const props = defineProps({
     visible: {
@@ -357,6 +413,15 @@
 
   const jobList = ref<InformationResult[]>([]);
   const loadingJobs = ref(false);
+  const skinList = ref<InformationResult[]>([]);
+  const loadingSkins = ref(false);
+
+  // 缓存已加载的名称，用于回显
+  const faceNameMap = ref<Record<number, string>>({});
+  const hairNameMap = ref<Record<number, string>>({});
+
+  const faceSelectorVisible = ref(false);
+  const hairSelectorVisible = ref(false);
 
   const fetchJobs = async () => {
     loadingJobs.value = true;
@@ -370,8 +435,73 @@
     }
   };
 
+  const fetchSkins = async () => {
+    loadingSkins.value = true;
+    try {
+      const { data } = await getSkinColors();
+      skinList.value = data;
+    } catch (error) {
+      Message.error('获取肤色列表失败');
+    } finally {
+      loadingSkins.value = false;
+    }
+  };
+
+  // 预加载名称
+  const loadItemName = async (type: 'face' | 'hair', id: number) => {
+    if (!id) return;
+    try {
+      const { data } = await informationSearch({
+        types: [type],
+        filter: String(id),
+        filterType: 1, // ID匹配
+        fullMatch: true,
+      });
+      if (data && data.length > 0) {
+        if (type === 'face') {
+          faceNameMap.value[id] = data[0].name;
+        } else {
+          hairNameMap.value[id] = data[0].name;
+        }
+      }
+    } catch (error) {
+      // ignore
+    }
+  };
+
+  const getFaceName = (id: number) => {
+    return faceNameMap.value[id] || '';
+  };
+
+  const getHairName = (id: number) => {
+    return hairNameMap.value[id] || '';
+  };
+
+  const openFaceSelector = () => {
+    faceSelectorVisible.value = true;
+  };
+
+  const openHairSelector = () => {
+    hairSelectorVisible.value = true;
+  };
+
+  const handleFaceSelect = (id: number, item: InformationResult) => {
+    form.value.face = id;
+    if (item) {
+      faceNameMap.value[id] = item.name;
+    }
+  };
+
+  const handleHairSelect = (id: number, item: InformationResult) => {
+    form.value.hair = id;
+    if (item) {
+      hairNameMap.value[id] = item.name;
+    }
+  };
+
   onMounted(() => {
     fetchJobs();
+    fetchSkins();
   });
 
   const filterJobOption = (inputValue: string, option: any) => {
@@ -428,6 +558,14 @@
             mountExp: detail.mountExp,
             mountTiredness: detail.mountTiredness,
           };
+
+          // 初始化加载当前脸型和发型信息，以便显示
+          if (detail.face) {
+            loadItemName('face', detail.face);
+          }
+          if (detail.hair) {
+            loadItemName('hair', detail.hair);
+          }
         } catch (error) {
           Message.error('获取角色详情失败');
         }
@@ -451,3 +589,46 @@
     }
   };
 </script>
+
+<style scoped lang="less">
+  .selector-trigger {
+    width: 100%;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--color-border-2);
+    border-radius: var(--border-radius-small);
+    background-color: var(--color-bg-2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: all 0.1s cubic-bezier(0, 0, 1, 1);
+
+    &:hover {
+      border-color: rgb(var(--primary-6));
+      background-color: var(--color-fill-2);
+    }
+
+    .placeholder {
+      color: var(--color-text-3);
+    }
+
+    .selected-content {
+      display: flex;
+      align-items: center;
+      width: 100%;
+
+      .option-icon {
+        width: 24px;
+        height: 24px;
+        margin-right: 8px;
+        object-fit: contain;
+      }
+
+      span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+  }
+</style>

@@ -26,4 +26,18 @@ public class InformationSearch {
      */
     private int filterType;
     private boolean fullMatch;
+
+    /**
+     * 分页参数
+     */
+    private Integer page;
+    private Integer pageSize;
+
+    /**
+     * 筛选参数
+     * gender: 0-男 1-女 2-通用
+     * color: 0-7 (对应发型/脸型颜色)
+     */
+    private Integer gender;
+    private Integer color;
 }

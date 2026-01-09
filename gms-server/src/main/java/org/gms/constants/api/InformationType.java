@@ -14,6 +14,8 @@ public enum InformationType {
     NPC("npc"),
     PET("pet"),
     SKILL("skill"),
+    HAIR("hair"),
+    FACE("face"),
     ;
 
     private final String type;

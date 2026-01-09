@@ -5,6 +5,10 @@ export interface InformationSearch {
   filter: string;
   filterType?: number;
   fullMatch?: boolean;
+  page?: number;
+  pageSize?: number;
+  gender?: number;
+  color?: number | null;
 }
 
 export interface InformationResult {
@@ -14,8 +18,43 @@ export interface InformationResult {
   desc: string;
 }
 
+export interface PageResult<T> {
+  records: T[];
+  totalRow: number;
+  totalPage: number;
+  pageNumber: number;
+  pageSize: number;
+}
+
+export interface GetStylesParams {
+  type: 'hair' | 'face';
+  keyword?: string;
+  page?: number;
+  pageSize?: number;
+  gender?: number;
+  color?: number | null;
+}
+
 export function informationSearch(condition: InformationSearch) {
-  return axios.post('/common/v1/informationSearch', condition);
+  return axios.post<PageResult<InformationResult>>(
+    '/common/v1/informationSearch',
+    condition
+  );
+}
+
+export function getStyles(params: GetStylesParams) {
+  // 如果关键字为空，使用 % 通配符绕过后端非空校验
+  const filter =
+    params.keyword && params.keyword.trim() !== '' ? params.keyword : '%';
+
+  return informationSearch({
+    types: [params.type],
+    filter,
+    page: params.page,
+    pageSize: params.pageSize,
+    gender: params.gender,
+    color: params.color,
+  });
 }
 
 export function getAllMaps() {
@@ -34,4 +73,8 @@ export function getMapsByStreetName(streetName: string) {
 
 export function getJobs() {
   return axios.get<InformationResult[]>('/common/v1/getJobs');
+}
+
+export function getSkinColors() {
+  return axios.get<InformationResult[]>('/common/v1/getSkinColors');
 }

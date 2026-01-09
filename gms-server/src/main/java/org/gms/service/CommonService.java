@@ -1,8 +1,10 @@
 package org.gms.service;
 
 
+import com.mybatisflex.core.paginate.Page;
 import lombok.extern.slf4j.Slf4j;
 import org.gms.client.Job;
+import org.gms.client.SkinColor;
 import org.gms.client.inventory.Equip;
 import org.gms.constants.api.InformationType;
 import org.gms.exception.BizException;
@@ -110,8 +112,8 @@ public class CommonService {
 
     }
 
-    public List<InformationResult> getInformation(InformationSearch condition) {
-        RequireUtil.requireNotEmpty(condition.getFilter(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "filter"));
+    public Page<InformationResult> getInformation(InformationSearch condition) {
+        // RequireUtil.requireNotEmpty(condition.getFilter(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "filter"));
         if (RequireUtil.isEmpty(condition.getTypes())) {
             condition.setTypes(Stream.of(InformationType.values()).map(InformationType::getType).collect(Collectors.toList()));
         }
@@ -137,6 +139,17 @@ public class CommonService {
                         .name(job.getName())
                         .desc(String.valueOf(job.getId()))
                         .type("JOB")
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    public List<InformationResult> getSkinColors() {
+        return Arrays.stream(SkinColor.values())
+                .map(skin -> InformationResult.builder()
+                        .id(skin.getId())
+                        .name(skin.name())
+                        .desc(String.valueOf(skin.getId()))
+                        .type("SKIN")
                         .build())
                 .collect(Collectors.toList());
     }

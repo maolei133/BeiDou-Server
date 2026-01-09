@@ -1,6 +1,7 @@
 package org.gms.controller;
 
 
+import com.mybatisflex.core.paginate.Page;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
@@ -50,7 +51,7 @@ public class CommonController {
     @Tag(name = "/common/" + ApiConstant.LATEST)
     @Operation(summary = "资料查询，根据id或者name查询对应信息")
     @PostMapping("/" + ApiConstant.LATEST + "/informationSearch")
-    public ResultBody<List<InformationResult>> informationSearch(@RequestBody SubmitBody<InformationSearch> submitBody) {
+    public ResultBody<Page<InformationResult>> informationSearch(@RequestBody SubmitBody<InformationSearch> submitBody) {
         return ResultBody.success(commonService.getInformation(submitBody.getData()));
     }
 
@@ -80,5 +81,12 @@ public class CommonController {
     @GetMapping("/" + ApiConstant.LATEST + "/getJobs")
     public ResultBody<List<InformationResult>> getJobs() {
         return ResultBody.success(commonService.getJobs());
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取所有肤色信息")
+    @GetMapping("/" + ApiConstant.LATEST + "/getSkinColors")
+    public ResultBody<List<InformationResult>> getSkinColors() {
+        return ResultBody.success(commonService.getSkinColors());
     }
 }

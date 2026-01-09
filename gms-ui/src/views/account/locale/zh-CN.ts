@@ -210,4 +210,18 @@ export default {
   'account.player.mountLevel': '坐骑等级',
   'account.player.mountExp': '坐骑经验',
   'account.player.mountTiredness': '坐骑疲劳',
+
+  'account.player.skin.0': '正常',
+  'account.player.skin.1': '深色',
+  'account.player.skin.2': '黑色',
+  'account.player.skin.3': '苍白',
+  'account.player.skin.4': '蓝色',
+  'account.player.skin.5': '绿色',
+  'account.player.skin.9': '白色',
+  'account.player.skin.10': '粉色',
+
+  'account.player.selector.color': '颜色',
+  'account.player.selector.color.all': '全部',
+  'account.player.selector.empty': '暂无数据',
+  'account.player.selector.select': '请先选择一项',
 };

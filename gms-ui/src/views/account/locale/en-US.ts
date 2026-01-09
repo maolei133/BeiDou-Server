@@ -213,4 +213,18 @@ export default {
   'account.player.mountLevel': 'Mount Level',
   'account.player.mountExp': 'Mount Exp',
   'account.player.mountTiredness': 'Mount Tiredness',
+
+  'account.player.skin.0': 'Normal',
+  'account.player.skin.1': 'Dark',
+  'account.player.skin.2': 'Black',
+  'account.player.skin.3': 'Pale',
+  'account.player.skin.4': 'Blue',
+  'account.player.skin.5': 'Green',
+  'account.player.skin.9': 'White',
+  'account.player.skin.10': 'Pink',
+
+  'account.player.selector.color': 'Color',
+  'account.player.selector.color.all': 'All',
+  'account.player.selector.empty': 'No Data',
+  'account.player.selector.select': 'Please select one',
 };
