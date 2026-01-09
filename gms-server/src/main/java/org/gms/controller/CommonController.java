@@ -74,4 +74,11 @@ public class CommonController {
     public ResultBody<List<InformationResult>> getMapsByStreetName(@RequestParam String streetName) {
         return ResultBody.success(commonService.getMapsByStreetName(streetName));
     }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取所有职业信息")
+    @GetMapping("/" + ApiConstant.LATEST + "/getJobs")
+    public ResultBody<List<InformationResult>> getJobs() {
+        return ResultBody.success(commonService.getJobs());
+    }
 }

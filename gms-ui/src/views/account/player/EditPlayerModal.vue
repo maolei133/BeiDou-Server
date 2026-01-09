@@ -31,7 +31,19 @@
             </a-col>
             <a-col :span="12">
               <a-form-item field="job" :label="$t('account.player.job')">
-                <a-input-number v-model="form.job" />
+                <a-select
+                  v-model="form.job"
+                  :loading="loadingJobs"
+                  allow-search
+                  :filter-option="filterJobOption"
+                >
+                  <a-option
+                    v-for="job in jobList"
+                    :key="job.id"
+                    :value="job.id"
+                    :label="`${job.name} (${job.id})`"
+                  />
+                </a-select>
               </a-form-item>
             </a-col>
             <a-col :span="12">
@@ -314,13 +326,14 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, watch, PropType } from 'vue';
+  import { ref, watch, PropType, onMounted } from 'vue';
   import {
     OnlinePlayer,
     UpdatePlayerForm,
     updatePlayer,
     getPlayerDetail,
   } from '@/api/player';
+  import { getJobs, InformationResult } from '@/api/information';
   import { Message } from '@arco-design/web-vue';
   import { useI18n } from 'vue-i18n';
 
@@ -341,6 +354,32 @@
   const form = ref<UpdatePlayerForm>({
     id: 0,
   });
+
+  const jobList = ref<InformationResult[]>([]);
+  const loadingJobs = ref(false);
+
+  const fetchJobs = async () => {
+    loadingJobs.value = true;
+    try {
+      const { data } = await getJobs();
+      jobList.value = data;
+    } catch (error) {
+      Message.error('获取职业列表失败');
+    } finally {
+      loadingJobs.value = false;
+    }
+  };
+
+  onMounted(() => {
+    fetchJobs();
+  });
+
+  const filterJobOption = (inputValue: string, option: any) => {
+    return (
+      option.label.toLowerCase().includes(inputValue.toLowerCase()) ||
+      String(option.value).includes(inputValue)
+    );
+  };
 
   watch(
     () => props.player,

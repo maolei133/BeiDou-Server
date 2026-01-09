@@ -31,3 +31,7 @@ export function getMapsByStreetName(streetName: string) {
     params: { streetName },
   });
 }
+
+export function getJobs() {
+  return axios.get<InformationResult[]>('/common/v1/getJobs');
+}

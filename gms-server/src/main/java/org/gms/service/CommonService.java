@@ -2,6 +2,7 @@ package org.gms.service;
 
 
 import lombok.extern.slf4j.Slf4j;
+import org.gms.client.Job;
 import org.gms.client.inventory.Equip;
 import org.gms.constants.api.InformationType;
 import org.gms.exception.BizException;
@@ -17,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -126,6 +128,17 @@ public class CommonService {
 
     public List<InformationResult> getMapsByStreetName(String streetName) {
         return CommonInformation.getInstance().getMapsByStreetName(streetName);
+    }
+
+    public List<InformationResult> getJobs() {
+        return Arrays.stream(Job.values())
+                .map(job -> InformationResult.builder()
+                        .id(job.getId())
+                        .name(job.getName())
+                        .desc(String.valueOf(job.getId()))
+                        .type("JOB")
+                        .build())
+                .collect(Collectors.toList());
     }
 
 }
