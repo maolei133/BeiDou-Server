@@ -22,7 +22,8 @@
         </div>
         <a-list
           v-if="searchResults.length > 0"
-          style="margin-top: 10px; height: 300px; overflow-y: auto"
+          style="margin-top: 10px; max-height: 300px; overflow-y: auto"
+          :scrollbar="true"
         >
           <a-list-item
             v-for="item in searchResults"
@@ -111,7 +112,7 @@
             当前选中：{{ selectedMapInfo.name }} [{{ selectedMapInfo.id }}]
           </a-alert>
         </div>
-        <a-list>
+        <a-list style="max-height: 300px; overflow-y: auto" :scrollbar="true">
           <a-list-item
             v-for="map in favoriteMaps"
             :key="map.id"
@@ -151,7 +152,7 @@
             当前选中：{{ selectedMapInfo.name }} [{{ selectedMapInfo.id }}]
           </a-alert>
         </div>
-        <a-list>
+        <a-list style="max-height: 300px; overflow-y: auto" :scrollbar="true">
           <a-list-item
             v-for="map in historyMaps"
             :key="map.id"
@@ -364,5 +365,32 @@
 <style scoped>
   .selected-item {
     background-color: var(--color-primary-light-1);
+  }
+
+  /* 统一列表滚动条样式 */
+  :deep(.arco-list) {
+    /* 确保列表容器可以滚动 */
+    overflow-y: auto;
+  }
+
+  /* 默认隐藏滚动条 */
+  :deep(.arco-list)::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+    display: none;
+  }
+
+  /* 鼠标悬停时显示滚动条 */
+  :deep(.arco-list):hover::-webkit-scrollbar {
+    display: block;
+  }
+
+  :deep(.arco-list)::-webkit-scrollbar-thumb {
+    border-radius: 3px;
+    background-color: var(--color-text-4);
+  }
+
+  :deep(.arco-list)::-webkit-scrollbar-track {
+    background-color: transparent;
   }
 </style>

@@ -313,7 +313,19 @@
           <a-row :gutter="16">
             <a-col :span="isMobile ? 24 : 12">
               <a-form-item field="map" :label="$t('account.player.map')">
-                <a-input-number v-model="form.map" />
+                <div class="selector-trigger" @click="openMapSelector">
+                  <div v-if="form.map" class="selected-content">
+                    <div class="item-info">
+                      <div class="item-name" :title="getMapName(form.map)">
+                        {{ getMapName(form.map) }}
+                      </div>
+                      <div class="item-id">{{ form.map }}</div>
+                    </div>
+                  </div>
+                  <span v-else class="placeholder">{{
+                    $t('account.player.warp.select')
+                  }}</span>
+                </div>
               </a-form-item>
             </a-col>
             <a-col :span="isMobile ? 24 : 12">
@@ -378,6 +390,12 @@
       :default-id="form.hair"
       @select="handleHairSelect"
     />
+
+    <WarpModal
+      v-model:visible="mapSelectorVisible"
+      :loading="false"
+      @submit="handleMapSelect"
+    />
   </a-modal>
 </template>
 
@@ -399,6 +417,7 @@
   import { useI18n } from 'vue-i18n';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import ImageSelector from '@/components/ImageSelector/index.vue';
+  import WarpModal from './WarpModal.vue';
 
   const props = defineProps({
     visible: {
@@ -426,9 +445,11 @@
   // 缓存已加载的名称，用于回显
   const faceNameMap = ref<Record<number, string>>({});
   const hairNameMap = ref<Record<number, string>>({});
+  const mapNameMap = ref<Record<number, string>>({});
 
   const faceSelectorVisible = ref(false);
   const hairSelectorVisible = ref(false);
+  const mapSelectorVisible = ref(false);
 
   const isMobile = ref(false);
 
@@ -461,7 +482,7 @@
   };
 
   // 预加载名称
-  const loadItemName = async (type: 'face' | 'hair', id: number) => {
+  const loadItemName = async (type: 'face' | 'hair' | 'map', id: number) => {
     if (!id) return;
     try {
       const { data } = await informationSearch({
@@ -476,8 +497,10 @@
       if (records && records.length > 0) {
         if (type === 'face') {
           faceNameMap.value[id] = records[0].name;
-        } else {
+        } else if (type === 'hair') {
           hairNameMap.value[id] = records[0].name;
+        } else if (type === 'map') {
+          mapNameMap.value[id] = records[0].name;
         }
       }
     } catch (error) {
@@ -493,12 +516,20 @@
     return hairNameMap.value[id] || '';
   };
 
+  const getMapName = (id: number) => {
+    return mapNameMap.value[id] || '';
+  };
+
   const openFaceSelector = () => {
     faceSelectorVisible.value = true;
   };
 
   const openHairSelector = () => {
     hairSelectorVisible.value = true;
+  };
+
+  const openMapSelector = () => {
+    mapSelectorVisible.value = true;
   };
 
   const handleFaceSelect = (id: number, item: InformationResult) => {
@@ -513,6 +544,13 @@
     if (item) {
       hairNameMap.value[id] = item.name;
     }
+  };
+
+  const handleMapSelect = (id: number) => {
+    form.value.map = id;
+    mapSelectorVisible.value = false;
+    // 选中后尝试加载名称以便回显
+    loadItemName('map', id);
   };
 
   onMounted(() => {
@@ -587,6 +625,9 @@
           }
           if (detail.hair) {
             loadItemName('hair', detail.hair);
+          }
+          if (detail.map) {
+            loadItemName('map', detail.map);
           }
         } catch (error) {
           Message.error('获取角色详情失败');
