@@ -153,12 +153,15 @@
               <a-form-item field="face" :label="$t('account.player.face')">
                 <div class="selector-trigger" @click="openFaceSelector">
                   <div v-if="form.face" class="selected-content">
-                    <img
-                      :src="getIconUrl('item', form.face)"
-                      class="option-icon"
-                      alt=""
-                    />
-                    <span>{{ getFaceName(form.face) }} ({{ form.face }})</span>
+                    <div class="item-image">
+                      <img :src="getIconUrl('item', form.face)" alt="" />
+                    </div>
+                    <div class="item-info">
+                      <div class="item-name" :title="getFaceName(form.face)">
+                        {{ getFaceName(form.face) }}
+                      </div>
+                      <div class="item-id">{{ form.face }}</div>
+                    </div>
                   </div>
                   <span v-else class="placeholder">{{
                     $t('account.player.warp.select')
@@ -170,12 +173,15 @@
               <a-form-item field="hair" :label="$t('account.player.hair')">
                 <div class="selector-trigger" @click="openHairSelector">
                   <div v-if="form.hair" class="selected-content">
-                    <img
-                      :src="getIconUrl('item', form.hair)"
-                      class="option-icon"
-                      alt=""
-                    />
-                    <span>{{ getHairName(form.hair) }} ({{ form.hair }})</span>
+                    <div class="item-image">
+                      <img :src="getIconUrl('item', form.hair)" alt="" />
+                    </div>
+                    <div class="item-info">
+                      <div class="item-name" :title="getHairName(form.hair)">
+                        {{ getHairName(form.hair) }}
+                      </div>
+                      <div class="item-id">{{ form.hair }}</div>
+                    </div>
                   </div>
                   <span v-else class="placeholder">{{
                     $t('account.player.warp.select')
@@ -457,11 +463,14 @@
         filterType: 1, // ID匹配
         fullMatch: true,
       });
-      if (data && data.length > 0) {
+      // 兼容分页返回结构
+      // @ts-ignore
+      const records = data.records || data;
+      if (records && records.length > 0) {
         if (type === 'face') {
-          faceNameMap.value[id] = data[0].name;
+          faceNameMap.value[id] = records[0].name;
         } else {
-          hairNameMap.value[id] = data[0].name;
+          hairNameMap.value[id] = records[0].name;
         }
       }
     } catch (error) {
@@ -593,8 +602,8 @@
 <style scoped lang="less">
   .selector-trigger {
     width: 100%;
-    height: 32px;
-    padding: 0 12px;
+    height: 64px; /* 增加高度以容纳图片和两行文字 */
+    padding: 8px 12px;
     border: 1px solid var(--color-border-2);
     border-radius: var(--border-radius-small);
     background-color: var(--color-bg-2);
@@ -617,17 +626,42 @@
       align-items: center;
       width: 100%;
 
-      .option-icon {
-        width: 24px;
-        height: 24px;
-        margin-right: 8px;
-        object-fit: contain;
+      .item-image {
+        width: 48px;
+        height: 48px;
+        margin-right: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+
+        img {
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+        }
       }
 
-      span {
+      .item-info {
+        flex: 1;
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+
+        .item-name {
+          font-size: 14px;
+          font-weight: 500;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          margin-bottom: 2px;
+        }
+
+        .item-id {
+          font-size: 12px;
+          color: var(--color-text-3);
+        }
       }
     }
   }

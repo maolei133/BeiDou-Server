@@ -92,6 +92,7 @@
           :current="page"
           :page-size="pageSize"
           show-total
+          show-jumper
           @change="handlePageChange"
         />
       </div>
@@ -181,6 +182,52 @@
         } else {
           // @ts-ignore
           total.value = (page.value - 1) * pageSize.value + res.data.length;
+        }
+      }
+
+      // 如果有默认ID且当前列表不包含该ID，尝试单独加载该ID的数据并插入到列表头部
+      if (
+        props.defaultId &&
+        list.value.length > 0 &&
+        !list.value.find((item) => item.id === props.defaultId)
+      ) {
+        // 只有在第一页且没有搜索关键字时才尝试插入，或者根据需求调整策略
+        // 这里简单处理：如果不在当前页，尝试搜索该ID
+        // 但为了不破坏当前浏览上下文，更好的做法可能是提示用户或者自动跳转（比较复杂）
+        // 另一种方案：如果 defaultId 存在，且不在当前列表中，我们单独请求这个 ID 的详情
+        // 然后把它临时加到列表最前面，或者高亮显示
+        try {
+          const detailRes = await getStyles({
+            type: props.type as 'hair' | 'face',
+            keyword: String(props.defaultId),
+            page: 1,
+            pageSize: 1,
+            gender: 2, // 不限性别
+            color: null, // 不限颜色
+          });
+
+          let targetItem = null;
+          if (
+            detailRes.data &&
+            detailRes.data.records &&
+            detailRes.data.records.length > 0
+          ) {
+            [targetItem] = detailRes.data.records;
+          } else if (
+            Array.isArray(detailRes.data) &&
+            detailRes.data.length > 0
+          ) {
+            // @ts-ignore
+            [targetItem] = detailRes.data;
+          }
+
+          if (targetItem && targetItem.id === props.defaultId) {
+            // 将目标项插入到列表最前面，确保用户能看到
+            list.value.unshift(targetItem);
+            // 如果插入后超过了 pageSize，可以移除最后一个，或者保持原样
+          }
+        } catch (e) {
+          // ignore
         }
       }
     } catch (error) {
