@@ -3,6 +3,7 @@
     :visible="visible"
     :title="title"
     width="800px"
+    :fullscreen="isMobile"
     :ok-text="$t('account.player.warp.select')"
     @cancel="handleCancel"
     @ok="handleOk"
@@ -11,7 +12,7 @@
       <!-- 筛选区域 -->
       <div class="filter-area">
         <a-space direction="vertical" fill>
-          <a-space>
+          <a-space :direction="isMobile ? 'vertical' : 'horizontal'" fill>
             <a-radio-group
               v-model="filter.gender"
               type="button"
@@ -30,7 +31,7 @@
             <a-input-search
               v-model="filter.keyword"
               :placeholder="$t('account.player.warp.placeholder')"
-              style="width: 200px"
+              :style="{ width: isMobile ? '100%' : '200px' }"
               @search="handleSearch"
               @press-enter="handleSearch"
             />
@@ -92,7 +93,8 @@
           :current="page"
           :page-size="pageSize"
           show-total
-          show-jumper
+          :show-jumper="!isMobile"
+          :simple="isMobile"
           @change="handlePageChange"
         />
       </div>
@@ -101,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, watch, onMounted } from 'vue';
+  import { ref, reactive, watch, onMounted, onUnmounted } from 'vue';
   import { getStyles, InformationResult } from '@/api/information';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import { Message } from '@arco-design/web-vue';
@@ -149,6 +151,12 @@
   const pageSize = ref(100);
   const selectedId = ref<number | null>(null);
   const selectedItemData = ref<InformationResult | null>(null);
+
+  const isMobile = ref(false);
+
+  const checkScreen = () => {
+    isMobile.value = window.innerWidth < 768;
+  };
 
   const filter = reactive({
     gender: 2, // 0: Male, 1: Female, 2: All
@@ -294,6 +302,12 @@
 
   onMounted(() => {
     // fetchData(); // 初始不加载，打开弹窗时加载
+    checkScreen();
+    window.addEventListener('resize', checkScreen);
+  });
+
+  onUnmounted(() => {
+    window.removeEventListener('resize', checkScreen);
   });
 </script>
 
@@ -314,6 +328,7 @@
     display: flex;
     align-items: center;
     margin-top: 8px;
+    flex-wrap: wrap;
 
     .label {
       margin-right: 8px;
@@ -322,6 +337,7 @@
     .color-options {
       display: flex;
       gap: 8px;
+      flex-wrap: wrap;
     }
 
     .color-item {
