@@ -154,6 +154,9 @@
 
   const isMobile = ref(false);
 
+  // 标记是否已经定位过初始ID
+  const hasLocatedDefaultId = ref(false);
+
   const checkScreen = () => {
     isMobile.value = window.innerWidth < 768;
   };
@@ -194,16 +197,13 @@
       }
 
       // 如果有默认ID且当前列表不包含该ID，尝试单独加载该ID的数据并插入到列表头部
+      // 仅在首次加载且未定位过时执行
       if (
         props.defaultId &&
+        !hasLocatedDefaultId.value &&
         list.value.length > 0 &&
         !list.value.find((item) => item.id === props.defaultId)
       ) {
-        // 只有在第一页且没有搜索关键字时才尝试插入，或者根据需求调整策略
-        // 这里简单处理：如果不在当前页，尝试搜索该ID
-        // 但为了不破坏当前浏览上下文，更好的做法可能是提示用户或者自动跳转（比较复杂）
-        // 另一种方案：如果 defaultId 存在，且不在当前列表中，我们单独请求这个 ID 的详情
-        // 然后把它临时加到列表最前面，或者高亮显示
         try {
           const detailRes = await getStyles({
             type: props.type as 'hair' | 'face',
@@ -232,11 +232,18 @@
           if (targetItem && targetItem.id === props.defaultId) {
             // 将目标项插入到列表最前面，确保用户能看到
             list.value.unshift(targetItem);
-            // 如果插入后超过了 pageSize，可以移除最后一个，或者保持原样
+            hasLocatedDefaultId.value = true; // 标记已定位
           }
         } catch (e) {
           // ignore
         }
+      } else if (
+        props.defaultId &&
+        !hasLocatedDefaultId.value &&
+        list.value.find((item) => item.id === props.defaultId)
+      ) {
+        // 如果默认ID已经在列表中，也标记为已定位，避免后续翻页重复触发逻辑（虽然上面的条件已经排除了这种情况，但为了逻辑完整性）
+        hasLocatedDefaultId.value = true;
       }
     } catch (error) {
       // Message.error('加载数据失败');
@@ -289,6 +296,7 @@
       if (val) {
         if (props.defaultId) {
           selectedId.value = props.defaultId;
+          hasLocatedDefaultId.value = false; // 重置定位标记，以便下次打开时重新定位
         }
         // 重置筛选并加载
         // filter.gender = 2;
