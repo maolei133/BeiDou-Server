@@ -9800,7 +9800,46 @@ public class Character extends AbstractCharacterObject {
                 setGMLevel(request.getGm());
                 // GM等级变更可能需要更复杂的处理，但目前仅设置等级
             }
-
+            if (request.getEquipSlots() != null) {
+                gainSlots(InventoryType.EQUIP.getType(), request.getEquipSlots() - getSlots(InventoryType.EQUIP.getType()), true);
+            }
+            if (request.getUseSlots() != null) {
+                gainSlots(InventoryType.USE.getType(), request.getUseSlots() - getSlots(InventoryType.USE.getType()), true);
+            }
+            if (request.getSetupSlots() != null) {
+                gainSlots(InventoryType.SETUP.getType(), request.getSetupSlots() - getSlots(InventoryType.SETUP.getType()), true);
+            }
+            if (request.getEtcSlots() != null) {
+                gainSlots(InventoryType.ETC.getType(), request.getEtcSlots() - getSlots(InventoryType.ETC.getType()), true);
+            }
+            if (request.getBuddyCapacity() != null && request.getBuddyCapacity() != getBuddylist().getCapacity()) {
+                setBuddyCapacity(request.getBuddyCapacity());
+            }
+            if (request.getMerchantMesos() != null && request.getMerchantMesos() != getMerchantMeso()) {
+                setMerchantMeso(request.getMerchantMesos());
+            }
+            if (request.getGachaExp() != null && request.getGachaExp() != getGachaExp()) {
+                setGachaExp(request.getGachaExp());
+                stats.add(new Pair<>(Stat.GACHAEXP, getGachaExp()));
+            }
+            if (!getCashShop().isOpened()) {
+                if (request.getMap() != null && request.getMap() != getMapId()) {
+                    setInitialSpawnPoint(request.getSpawnPoint());
+                    changeMap(request.getMap(), request.getSpawnPoint());
+                }
+                if (request.getSpawnPoint() != null && request.getSpawnPoint() != getInitialSpawnPoint()) {
+                    setInitialSpawnPoint(request.getSpawnPoint());
+                    changeMap(request.getMap(), request.getSpawnPoint());
+                }
+            }
+            if (request.getMountLevel() != null || request.getMountExp() != null || request.getMountTiredness() != null) {
+                if (getMapleMount() != null) {
+                    if (request.getMountLevel() != null) getMapleMount().setLevel(request.getMountLevel());
+                    if (request.getMountExp() != null) getMapleMount().setExp(request.getMountExp());
+                    if (request.getMountTiredness() != null) getMapleMount().setTiredness(request.getMountTiredness());
+                    getMap().broadcastMessage(PacketCreator.updateMount(getId(), getMapleMount(), false));
+                }
+            }
             // 处理货币变更
             CashShop cs = getCashShop();
             boolean cashChanged = false;

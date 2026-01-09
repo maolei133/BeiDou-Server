@@ -66,6 +66,14 @@
                 <a-input-number v-model="form.gm" />
               </a-form-item>
             </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="buddyCapacity"
+                :label="$t('account.player.buddyCapacity')"
+              >
+                <a-input-number v-model="form.buddyCapacity" />
+              </a-form-item>
+            </a-col>
           </a-row>
         </a-form>
       </a-tab-pane>
@@ -161,6 +169,22 @@
             </a-col>
             <a-col :span="12">
               <a-form-item
+                field="merchantMesos"
+                :label="$t('account.player.merchantMesos')"
+              >
+                <a-input-number v-model="form.merchantMesos" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="gachaExp"
+                :label="$t('account.player.gachaExp')"
+              >
+                <a-input-number v-model="form.gachaExp" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
                 field="nxCredit"
                 :label="$t('account.player.nxCredit')"
               >
@@ -181,6 +205,105 @@
                 :label="$t('account.player.nxPrepaid')"
               >
                 <a-input-number v-model="form.nxPrepaid" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form>
+      </a-tab-pane>
+      <a-tab-pane key="5" :title="$t('account.player.edit.tab.inventory')">
+        <a-form
+          :model="form"
+          :label-col-props="{ span: 6 }"
+          :wrapper-col-props="{ span: 18 }"
+        >
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item
+                field="equipSlots"
+                :label="$t('account.player.equipSlots')"
+              >
+                <a-input-number v-model="form.equipSlots" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="useSlots"
+                :label="$t('account.player.useSlots')"
+              >
+                <a-input-number v-model="form.useSlots" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="setupSlots"
+                :label="$t('account.player.setupSlots')"
+              >
+                <a-input-number v-model="form.setupSlots" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="etcSlots"
+                :label="$t('account.player.etcSlots')"
+              >
+                <a-input-number v-model="form.etcSlots" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form>
+      </a-tab-pane>
+      <a-tab-pane key="6" :title="$t('account.player.edit.tab.location')">
+        <a-form
+          :model="form"
+          :label-col-props="{ span: 6 }"
+          :wrapper-col-props="{ span: 18 }"
+        >
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item field="map" :label="$t('account.player.map')">
+                <a-input-number v-model="form.map" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="spawnPoint"
+                :label="$t('account.player.spawnPoint')"
+              >
+                <a-input-number v-model="form.spawnPoint" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form>
+      </a-tab-pane>
+      <a-tab-pane key="7" :title="$t('account.player.edit.tab.mount')">
+        <a-form
+          :model="form"
+          :label-col-props="{ span: 6 }"
+          :wrapper-col-props="{ span: 18 }"
+        >
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item
+                field="mountLevel"
+                :label="$t('account.player.mountLevel')"
+              >
+                <a-input-number v-model="form.mountLevel" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="mountExp"
+                :label="$t('account.player.mountExp')"
+              >
+                <a-input-number v-model="form.mountExp" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="mountTiredness"
+                :label="$t('account.player.mountTiredness')"
+              >
+                <a-input-number v-model="form.mountTiredness" />
               </a-form-item>
             </a-col>
           </a-row>
@@ -253,6 +376,18 @@
             nxCredit: detail.nxCredit,
             maplePoint: detail.maplePoint,
             nxPrepaid: detail.nxPrepaid,
+            equipSlots: detail.equipSlots,
+            useSlots: detail.useSlots,
+            setupSlots: detail.setupSlots,
+            etcSlots: detail.etcSlots,
+            buddyCapacity: detail.buddyCapacity,
+            merchantMesos: detail.merchantMesos,
+            gachaExp: detail.gachaExp,
+            map: detail.map,
+            spawnPoint: detail.spawnPoint,
+            mountLevel: detail.mountLevel,
+            mountExp: detail.mountExp,
+            mountTiredness: detail.mountTiredness,
           };
         } catch (error) {
           Message.error('获取角色详情失败');

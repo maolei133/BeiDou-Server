@@ -31,4 +31,26 @@ public class UpdateCharacterReqDTO {
     private Integer nxCredit;
     private Integer maplePoint;
     private Integer nxPrepaid;
+
+    // Inventory Slots
+    private Integer equipSlots;
+    private Integer useSlots;
+    private Integer setupSlots;
+    private Integer etcSlots;
+
+    // Social
+    private Integer buddyCapacity;
+
+    // Assets
+    private Integer merchantMesos;
+    private Integer gachaExp;
+
+    // Location
+    private Integer map;
+    private Integer spawnPoint;
+
+    // Mount
+    private Integer mountLevel;
+    private Integer mountExp;
+    private Integer mountTiredness;
 }

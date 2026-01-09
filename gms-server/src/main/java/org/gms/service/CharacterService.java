@@ -295,6 +295,20 @@ public class CharacterService {
         if (request.getSkinColor() != null) charactersDO.setSkincolor(request.getSkinColor());
         if (request.getGender() != null) charactersDO.setGender(request.getGender());
 
+        // 新增字段更新
+        if (request.getEquipSlots() != null) charactersDO.setEquipslots(request.getEquipSlots());
+        if (request.getUseSlots() != null) charactersDO.setUseslots(request.getUseSlots());
+        if (request.getSetupSlots() != null) charactersDO.setSetupslots(request.getSetupSlots());
+        if (request.getEtcSlots() != null) charactersDO.setEtcslots(request.getEtcSlots());
+        if (request.getBuddyCapacity() != null) charactersDO.setBuddyCapacity(request.getBuddyCapacity());
+        if (request.getMerchantMesos() != null) charactersDO.setMerchantmesos(request.getMerchantMesos());
+        if (request.getGachaExp() != null) charactersDO.setGachaexp(request.getGachaExp());
+        if (request.getMap() != null) charactersDO.setMap(request.getMap());
+        if (request.getSpawnPoint() != null) charactersDO.setSpawnpoint(request.getSpawnPoint());
+        if (request.getMountLevel() != null) charactersDO.setMountlevel(request.getMountLevel());
+        if (request.getMountExp() != null) charactersDO.setMountexp(request.getMountExp());
+        if (request.getMountTiredness() != null) charactersDO.setMounttiredness(request.getMountTiredness());
+
         charactersMapper.update(charactersDO);
 
         // 更新账号货币
@@ -343,6 +357,18 @@ public class CharacterService {
                         .nxCredit(onlineChr.getCashShop().getCash(CashShop.NX_CREDIT))
                         .maplePoint(onlineChr.getCashShop().getCash(CashShop.MAPLE_POINT))
                         .nxPrepaid(onlineChr.getCashShop().getCash(CashShop.NX_PREPAID))
+                        .equipSlots((int) onlineChr.getSlots(InventoryType.EQUIP.getType()))
+                        .useSlots((int) onlineChr.getSlots(InventoryType.USE.getType()))
+                        .setupSlots((int) onlineChr.getSlots(InventoryType.SETUP.getType()))
+                        .etcSlots((int) onlineChr.getSlots(InventoryType.ETC.getType()))
+                        .buddyCapacity(onlineChr.getBuddylist().getCapacity())
+                        .merchantMesos(onlineChr.getMerchantMeso())
+                        .gachaExp(onlineChr.getGachaExp())
+                        .map(onlineChr.getMapId())
+                        .spawnPoint(onlineChr.getInitialSpawnPoint())
+                        .mountLevel(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getLevel() : 1)
+                        .mountExp(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getExp() : 0)
+                        .mountTiredness(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getTiredness() : 0)
                         .build();
             }
         }
@@ -383,6 +409,18 @@ public class CharacterService {
                 .nxCredit(accountsDO != null ? accountsDO.getNxCredit() : 0)
                 .maplePoint(accountsDO != null ? accountsDO.getMaplePoint() : 0)
                 .nxPrepaid(accountsDO != null ? accountsDO.getNxPrepaid() : 0)
+                .equipSlots(charactersDO.getEquipslots())
+                .useSlots(charactersDO.getUseslots())
+                .setupSlots(charactersDO.getSetupslots())
+                .etcSlots(charactersDO.getEtcslots())
+                .buddyCapacity(charactersDO.getBuddyCapacity())
+                .merchantMesos(charactersDO.getMerchantmesos())
+                .gachaExp(charactersDO.getGachaexp())
+                .map(charactersDO.getMap())
+                .spawnPoint(charactersDO.getSpawnpoint())
+                .mountLevel(charactersDO.getMountlevel())
+                .mountExp(charactersDO.getMountexp())
+                .mountTiredness(charactersDO.getMounttiredness())
                 .build();
     }
 

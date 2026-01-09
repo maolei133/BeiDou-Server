@@ -68,6 +68,18 @@ export interface OnlinePlayer {
   face?: number;
   hair?: number;
   skinColor?: number;
+  // New fields
+  equipSlots?: number;
+  useSlots?: number;
+  setupSlots?: number;
+  etcSlots?: number;
+  buddyCapacity?: number;
+  merchantMesos?: number;
+  gachaExp?: number;
+  spawnPoint?: number;
+  mountLevel?: number;
+  mountExp?: number;
+  mountTiredness?: number;
 }
 
 export interface UpdatePlayerForm {
@@ -90,6 +102,19 @@ export interface UpdatePlayerForm {
   hair?: number;
   skinColor?: number;
   gender?: number;
+  // New fields
+  equipSlots?: number;
+  useSlots?: number;
+  setupSlots?: number;
+  etcSlots?: number;
+  buddyCapacity?: number;
+  merchantMesos?: number;
+  gachaExp?: number;
+  map?: number;
+  spawnPoint?: number;
+  mountLevel?: number;
+  mountExp?: number;
+  mountTiredness?: number;
 }
 
 export function getPlayerList(
