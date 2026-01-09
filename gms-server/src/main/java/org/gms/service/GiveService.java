@@ -8,8 +8,10 @@ import org.gms.client.inventory.*;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.string.ExtendType;
+import org.gms.dao.entity.CharactersDO;
 import org.gms.dao.entity.ExtendValueDO;
 
+import org.gms.dao.mapper.CharactersMapper;
 import org.gms.model.dto.GiveResourceReqDTO;
 import org.gms.exception.BizException;
 
@@ -38,6 +40,8 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 public class GiveService {
     @Autowired
     CharacterService characterService;
+    @Autowired
+    CharactersMapper charactersMapper;
 
     public void give(GiveResourceReqDTO submitData) {
         if (submitData.getPlayerId() == 0) {
@@ -83,55 +87,72 @@ public class GiveService {
         if (wId == null || wId < 0 || cId == null || cId < 1) {
             throw new BizException(I18nUtil.getExceptionMessage("CHR_OR_WORLD_ID_ERROR"));
         }
-        Character chr = Server.getInstance()
-                .getWorlds().get(wId)
-                .getPlayerStorage().getCharacterById(cId);
-        if (chr == null) throw new BizException(I18nUtil.getExceptionMessage("CHR_OFFLINE"));
+        
+        // 尝试获取在线玩家
+        Character chr = null;
+        try {
+            chr = Server.getInstance()
+                    .getWorlds().get(wId)
+                    .getPlayerStorage().getCharacterById(cId);
+        } catch (Exception e) {
+            // ignore
+        }
 
-        switch (submitData.getType()) {
-            case 0: // nxCredit 点券
-            case 1: // nxPrepaid 信用点
-            case 2: // maplePoint 抵用券
-                int cashType = switch (submitData.getType()) {
-                    case 1 -> CashShop.NX_PREPAID;
-                    case 2 -> CashShop.MAPLE_POINT;
-                    default -> CashShop.NX_CREDIT;
-                };
-                giveNxChr(chr, submitData.getQuantity(), cashType);
-                break;
-            case 3: // mesos
-                giveMesosChr(chr, submitData.getQuantity());
-                break;
-            case 4: // exp
-                giveExpChr(chr, submitData.getQuantity());
-                break;
-            case 5: // item
-                giveItemChr(chr, submitData);
-                break;
-            case 6: // equip
-                giveEquipChr(chr, submitData);
-                break;
-            case 7: // expRate
-            case 8: // mesosRate
-            case 9: // dropRate
-            case 10: // bossRate
-                String rateType = switch (submitData.getType()) {
-                    case 7 -> "expRate";
-                    case 8 -> "mesoRate";
-                    case 9 -> "dropRate";
-                    default -> "None";
-                };
-                giveRateChr(chr, rateType, submitData.getRate());
-                break;
-            case 11:
-                giveGMChr(chr, submitData.getQuantity());
-                break;
-            case 12:
-                giveFameChr(chr, submitData.getQuantity());
-                break;
-            case 13:
-                changeMap(chr, submitData.getQuantity(), true);
-                break;
+        // 如果在线，使用在线逻辑
+        if (chr != null) {
+            switch (submitData.getType()) {
+                case 0: // nxCredit 点券
+                case 1: // nxPrepaid 信用点
+                case 2: // maplePoint 抵用券
+                    int cashType = switch (submitData.getType()) {
+                        case 1 -> CashShop.NX_PREPAID;
+                        case 2 -> CashShop.MAPLE_POINT;
+                        default -> CashShop.NX_CREDIT;
+                    };
+                    giveNxChr(chr, submitData.getQuantity(), cashType);
+                    break;
+                case 3: // mesos
+                    giveMesosChr(chr, submitData.getQuantity());
+                    break;
+                case 4: // exp
+                    giveExpChr(chr, submitData.getQuantity());
+                    break;
+                case 5: // item
+                    giveItemChr(chr, submitData);
+                    break;
+                case 6: // equip
+                    giveEquipChr(chr, submitData);
+                    break;
+                case 7: // expRate
+                case 8: // mesosRate
+                case 9: // dropRate
+                case 10: // bossRate
+                    String rateType = switch (submitData.getType()) {
+                        case 7 -> "expRate";
+                        case 8 -> "mesoRate";
+                        case 9 -> "dropRate";
+                        default -> "None";
+                    };
+                    giveRateChr(chr, rateType, submitData.getRate());
+                    break;
+                case 11:
+                    giveGMChr(chr, submitData.getQuantity());
+                    break;
+                case 12:
+                    giveFameChr(chr, submitData.getQuantity());
+                    break;
+                case 13:
+                    changeMap(chr, submitData.getQuantity(), true);
+                    break;
+            }
+        } else {
+            // 如果离线，处理离线逻辑
+            // 目前仅支持离线修改地图，其他操作暂不支持或需要额外实现
+            if (submitData.getType() == 13) {
+                changeMapOffline(cId, submitData.getQuantity());
+            } else {
+                throw new BizException(I18nUtil.getExceptionMessage("CHR_OFFLINE"));
+            }
         }
     }
 
@@ -427,6 +448,20 @@ public class GiveService {
         if (showLog) {
             log.info(I18nUtil.getLogMessage("Give.Map.Chr.info1", chr.getId(), chr.getName(), mapName + " [" + mapId + "]"));
         }
+    }
+
+    private void changeMapOffline(Integer charId, Integer mapId) {
+        CharactersDO charactersDO = new CharactersDO();
+        charactersDO.setId(charId);
+        charactersDO.setMap(mapId);
+        charactersDO.setSpawnpoint(0); // 重置出生点，防止卡死
+        charactersMapper.update(charactersDO);
+        
+        // 获取角色名用于日志
+        CharactersDO chr = charactersMapper.selectOneById(charId);
+        String name = (chr != null) ? chr.getName() : "未知";
+        
+        log.info(I18nUtil.getLogMessage("Give.Map.Chr.info1", charId, name, "离线变更地图 [" + mapId + "]"));
     }
 
     private void changeMapAllOnlineChr(Integer mapId) {

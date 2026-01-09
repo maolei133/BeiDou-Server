@@ -261,13 +261,22 @@ public class CharacterService {
         RequireUtil.requireNotNull(request.getId(), "Character ID cannot be null");
 
         // 1. 尝试获取在线玩家
-        for (World world : Server.getInstance().getWorlds()) {
-            Character onlineChr = world.getPlayerStorage().getCharacterById(request.getId());
-            if (onlineChr != null) {
-                // 在线玩家：调用 Character 类中的方法进行更新
-                onlineChr.updateCharacterDetails(request);
-                return;
+        Character onlineChr = null;
+        try {
+            for (World world : Server.getInstance().getWorlds()) {
+                onlineChr = world.getPlayerStorage().getCharacterById(request.getId());
+                if (onlineChr != null) {
+                    break;
+                }
             }
+        } catch (Exception e) {
+            // ignore
+        }
+
+        if (onlineChr != null) {
+            // 在线玩家：调用 Character 类中的方法进行更新
+            onlineChr.updateCharacterDetails(request);
+            return;
         }
 
         // 2. 离线玩家：直接更新数据库
@@ -327,50 +336,54 @@ public class CharacterService {
         RequireUtil.requireNotNull(id, "Character ID cannot be null");
 
         // 优先从在线玩家中查找
-        for (World world : Server.getInstance().getWorlds()) {
-            Character onlineChr = world.getPlayerStorage().getCharacterById(id);
-            if (onlineChr != null) {
-                return ChrDetailRtnDTO.builder()
-                        .id(onlineChr.getId())
-                        .name(onlineChr.getName())
-                        .level(onlineChr.getLevel())
-                        .exp(onlineChr.getExp())
-                        .job(onlineChr.getJob().getId())
-                        .jobName(onlineChr.getJob().getName())
-                        .str(onlineChr.getStr())
-                        .dex(onlineChr.getDex())
-                        .intAttr(onlineChr.getInt())
-                        .luk(onlineChr.getLuk())
-                        .hp(onlineChr.getHp())
-                        .maxHp(onlineChr.getMaxHp())
-                        .mp(onlineChr.getMp())
-                        .maxMp(onlineChr.getMaxMp())
-                        .ap(onlineChr.getRemainingAp())
-                        .sp(Arrays.stream(onlineChr.getRemainingSps()).mapToObj(String::valueOf).collect(Collectors.joining(",")))
-                        .fame(onlineChr.getFame())
-                        .meso(onlineChr.getMeso())
-                        .gm(onlineChr.gmLevel())
-                        .face(onlineChr.getFace())
-                        .hair(onlineChr.getHair())
-                        .skinColor(onlineChr.getSkinColor().getId())
-                        .gender(onlineChr.getGender())
-                        .nxCredit(onlineChr.getCashShop().getCash(CashShop.NX_CREDIT))
-                        .maplePoint(onlineChr.getCashShop().getCash(CashShop.MAPLE_POINT))
-                        .nxPrepaid(onlineChr.getCashShop().getCash(CashShop.NX_PREPAID))
-                        .equipSlots((int) onlineChr.getSlots(InventoryType.EQUIP.getType()))
-                        .useSlots((int) onlineChr.getSlots(InventoryType.USE.getType()))
-                        .setupSlots((int) onlineChr.getSlots(InventoryType.SETUP.getType()))
-                        .etcSlots((int) onlineChr.getSlots(InventoryType.ETC.getType()))
-                        .buddyCapacity(onlineChr.getBuddylist().getCapacity())
-                        .merchantMesos(onlineChr.getMerchantMeso())
-                        .gachaExp(onlineChr.getGachaExp())
-                        .map(onlineChr.getMapId())
-                        .spawnPoint(onlineChr.getInitialSpawnPoint())
-                        .mountLevel(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getLevel() : 1)
-                        .mountExp(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getExp() : 0)
-                        .mountTiredness(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getTiredness() : 0)
-                        .build();
+        try {
+            for (World world : Server.getInstance().getWorlds()) {
+                Character onlineChr = world.getPlayerStorage().getCharacterById(id);
+                if (onlineChr != null) {
+                    return ChrDetailRtnDTO.builder()
+                            .id(onlineChr.getId())
+                            .name(onlineChr.getName())
+                            .level(onlineChr.getLevel())
+                            .exp(onlineChr.getExp())
+                            .job(onlineChr.getJob().getId())
+                            .jobName(onlineChr.getJob().getName())
+                            .str(onlineChr.getStr())
+                            .dex(onlineChr.getDex())
+                            .intAttr(onlineChr.getInt())
+                            .luk(onlineChr.getLuk())
+                            .hp(onlineChr.getHp())
+                            .maxHp(onlineChr.getMaxHp())
+                            .mp(onlineChr.getMp())
+                            .maxMp(onlineChr.getMaxMp())
+                            .ap(onlineChr.getRemainingAp())
+                            .sp(Arrays.stream(onlineChr.getRemainingSps()).mapToObj(String::valueOf).collect(Collectors.joining(",")))
+                            .fame(onlineChr.getFame())
+                            .meso(onlineChr.getMeso())
+                            .gm(onlineChr.gmLevel())
+                            .face(onlineChr.getFace())
+                            .hair(onlineChr.getHair())
+                            .skinColor(onlineChr.getSkinColor().getId())
+                            .gender(onlineChr.getGender())
+                            .nxCredit(onlineChr.getCashShop().getCash(CashShop.NX_CREDIT))
+                            .maplePoint(onlineChr.getCashShop().getCash(CashShop.MAPLE_POINT))
+                            .nxPrepaid(onlineChr.getCashShop().getCash(CashShop.NX_PREPAID))
+                            .equipSlots((int) onlineChr.getSlots(InventoryType.EQUIP.getType()))
+                            .useSlots((int) onlineChr.getSlots(InventoryType.USE.getType()))
+                            .setupSlots((int) onlineChr.getSlots(InventoryType.SETUP.getType()))
+                            .etcSlots((int) onlineChr.getSlots(InventoryType.ETC.getType()))
+                            .buddyCapacity(onlineChr.getBuddylist().getCapacity())
+                            .merchantMesos(onlineChr.getMerchantMeso())
+                            .gachaExp(onlineChr.getGachaExp())
+                            .map(onlineChr.getMapId())
+                            .spawnPoint(onlineChr.getInitialSpawnPoint())
+                            .mountLevel(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getLevel() : 1)
+                            .mountExp(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getExp() : 0)
+                            .mountTiredness(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getTiredness() : 0)
+                            .build();
+                }
             }
+        } catch (Exception e) {
+            // ignore
         }
 
         // 如果不在线，从数据库查找

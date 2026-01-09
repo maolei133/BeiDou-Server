@@ -379,6 +379,8 @@
   .list-area {
     flex: 1;
     overflow-y: auto;
+    /* 增加内边距，防止滚动条遮挡内容 */
+    padding-right: 4px;
 
     .empty-state {
       display: flex;
@@ -446,6 +448,26 @@
         }
       }
     }
+  }
+
+  /* 自定义滚动条样式 */
+  .list-area::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+    display: none;
+  }
+
+  .list-area:hover::-webkit-scrollbar {
+    display: block;
+  }
+
+  .list-area::-webkit-scrollbar-thumb {
+    border-radius: 3px;
+    background-color: var(--color-text-4);
+  }
+
+  .list-area::-webkit-scrollbar-track {
+    background-color: transparent;
   }
 
   .pagination-area {
