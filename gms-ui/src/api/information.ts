@@ -78,3 +78,7 @@ export function getJobs() {
 export function getSkinColors() {
   return axios.get<InformationResult[]>('/common/v1/getSkinColors');
 }
+
+export function getGuilds() {
+  return axios.get<InformationResult[]>('/common/v1/getGuilds');
+}

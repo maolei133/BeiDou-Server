@@ -74,6 +74,7 @@ import static org.gms.dao.entity.table.ExtendValueDOTableDef.EXTEND_VALUE_D_O;
 import static org.gms.dao.entity.table.FamelogDOTableDef.FAMELOG_D_O;
 import static org.gms.dao.entity.table.FamilyCharacterDOTableDef.FAMILY_CHARACTER_D_O;
 import static org.gms.dao.entity.table.FredstorageDOTableDef.FREDSTORAGE_D_O;
+import static org.gms.dao.entity.table.GuildsDOTableDef.GUILDS_D_O;
 import static org.gms.dao.entity.table.KeymapDOTableDef.KEYMAP_D_O;
 import static org.gms.dao.entity.table.MonsterbookDOTableDef.MONSTERBOOK_D_O;
 import static org.gms.dao.entity.table.PetignoresDOTableDef.PETIGNORES_D_O;
@@ -176,9 +177,10 @@ public class CharacterService {
 
         // 状态为0（全部）或2（离线）
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .select(CHARACTERS_D_O.ALL_COLUMNS, ACCOUNTS_D_O.NAME.as("accountName"))
+                .select(CHARACTERS_D_O.ALL_COLUMNS, ACCOUNTS_D_O.NAME.as("accountName"), GUILDS_D_O.NAME.as("guildName"))
                 .from(CHARACTERS_D_O)
                 .leftJoin(ACCOUNTS_D_O).on(CHARACTERS_D_O.ACCOUNTID.eq(ACCOUNTS_D_O.ID))
+                .leftJoin(GUILDS_D_O).on(CHARACTERS_D_O.GUILDID.eq(GUILDS_D_O.GUILDID))
                 .where(CHARACTERS_D_O.WORLD.eq(request.getWorld()))
                 .and(CHARACTERS_D_O.ID.eq(request.getId(), Objects::nonNull))
                 .and(CHARACTERS_D_O.NAME.like(request.getName(), RequireUtil::isNotEmpty))
@@ -214,8 +216,25 @@ public class CharacterService {
                 }
             }
             
-            Guild guild = Server.getInstance().getGuild(charactersDO.getGuildid());
-            String guildName = (guild != null) ? guild.getName() : null;
+            // 优先使用关联查询出的 guildName，如果为空则尝试从内存获取
+            String guildName = null;
+            if (charactersDO.getExtra() != null) {
+                guildName = (String) charactersDO.getExtra().get("guildName");
+            }
+            
+            if (guildName == null && charactersDO.getGuildid() != null && charactersDO.getGuildid() > 0) {
+                Guild guild = Server.getInstance().getGuild(charactersDO.getGuildid());
+                if (guild != null) {
+                    guildName = guild.getName();
+                } else {
+                    // 兜底：查数据库
+                    GuildsDO g = guildsMapper.selectOneById(charactersDO.getGuildid());
+                    if (g != null) {
+                        guildName = g.getName();
+                    }
+                }
+            }
+
             Job job = Job.getById(charactersDO.getJob());
             String jobName = (job != null) ? job.getName() : "未知职业";
             

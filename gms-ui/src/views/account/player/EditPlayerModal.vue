@@ -536,6 +536,8 @@
     form.value.face = id;
     if (item) {
       faceNameMap.value[id] = item.name;
+    } else {
+      loadItemName('face', id);
     }
   };
 
@@ -543,6 +545,8 @@
     form.value.hair = id;
     if (item) {
       hairNameMap.value[id] = item.name;
+    } else {
+      loadItemName('hair', id);
     }
   };
 

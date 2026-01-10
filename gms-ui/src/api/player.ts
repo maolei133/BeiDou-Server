@@ -117,22 +117,29 @@ export interface UpdatePlayerForm {
   mountTiredness?: number;
 }
 
-export function getPlayerList(
-  pageNo: number,
-  pageSize: number,
-  id?: number,
-  name?: string,
-  map?: number,
-  status?: number
-) {
-  return axios.post<PageState<OnlinePlayer>>('/character/v1/online/list', {
-    pageNo,
-    pageSize,
-    id,
-    name,
-    map,
-    status,
-  });
+export interface PlayerListParams {
+  pageNo: number;
+  pageSize: number;
+  id?: number;
+  name?: string;
+  map?: number;
+  status?: number;
+  accountId?: number;
+  channel?: number;
+  job?: number;
+  partyId?: number;
+  guildId?: number;
+  minLevel?: number;
+  maxLevel?: number;
+  minOnlineTime?: number;
+  maxOnlineTime?: number;
+}
+
+export function getPlayerList(params: PlayerListParams) {
+  return axios.post<PageState<OnlinePlayer>>(
+    '/character/v1/online/list',
+    params
+  );
 }
 
 export function givePlayerSrc(data: GiveForm) {

@@ -122,7 +122,7 @@
               <div
                 class="variant-option"
                 :class="{ active: selectedId === variant.id }"
-                @click="confirmVariant(variant)"
+                @click="confirmVariant(variant, index)"
               >
                 <div class="variant-image">
                   <img :src="getIconUrl('item', variant.id)" alt="" />
@@ -560,10 +560,18 @@
     return style;
   });
 
-  const confirmVariant = (item: InformationResult) => {
+  const confirmVariant = (item: InformationResult, index: number) => {
     selectedId.value = item.id;
-    selectedItemData.value = item;
+    // 更新选中项的名称，包含颜色信息
+    const colorName = t(`account.player.selector.color.${index % 9}`);
+    selectedItemData.value = {
+      ...item,
+      name: `${item.name} (${colorName})`,
+    };
     showMobileVariant.value = false; // 关闭移动端弹窗
+    hoveredItemId.value = null; // 关闭 PC 端悬浮窗
+    hoveredItemData.value = null;
+
     // 也可以选择直接关闭主弹窗并确认
     emit('select', selectedId.value, selectedItemData.value);
     emit('update:visible', false);
@@ -698,6 +706,7 @@
           text-overflow: ellipsis;
           white-space: nowrap;
           margin-bottom: 4px;
+          color: var(--color-text-1);
         }
 
         .item-id {
@@ -754,6 +763,7 @@
     .popup-title {
       font-weight: 500;
       font-size: 14px;
+      color: var(--color-text-1);
     }
 
     .close-btn {
@@ -821,6 +831,7 @@
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          color: var(--color-text-1);
         }
 
         .variant-id {

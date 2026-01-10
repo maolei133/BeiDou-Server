@@ -2,11 +2,14 @@ package org.gms.service;
 
 
 import com.mybatisflex.core.paginate.Page;
+import com.mybatisflex.core.query.QueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.gms.client.Job;
 import org.gms.client.SkinColor;
 import org.gms.client.inventory.Equip;
 import org.gms.constants.api.InformationType;
+import org.gms.dao.entity.GuildsDO;
+import org.gms.dao.mapper.GuildsMapper;
 import org.gms.exception.BizException;
 import org.gms.model.dto.*;
 import org.gms.model.pojo.InformationSearch;
@@ -31,6 +34,8 @@ public class CommonService {
 
     @Autowired
     private ItemService itemService;
+    @Autowired
+    private GuildsMapper guildsMapper;
 
     /**
      * 根据物品ID获取装备信息
@@ -150,6 +155,18 @@ public class CommonService {
                         .name(skin.name())
                         .desc(String.valueOf(skin.getId()))
                         .type("SKIN")
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    public List<InformationResult> getGuilds() {
+        List<GuildsDO> guilds = guildsMapper.selectListByQuery(QueryWrapper.create());
+        return guilds.stream()
+                .map(guild -> InformationResult.builder()
+                        .id(guild.getGuildid().intValue())
+                        .name(guild.getName())
+                        .desc(String.valueOf(guild.getGuildid()))
+                        .type("GUILD")
                         .build())
                 .collect(Collectors.toList());
     }

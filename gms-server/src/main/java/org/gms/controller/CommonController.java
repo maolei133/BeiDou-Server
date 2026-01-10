@@ -89,4 +89,11 @@ public class CommonController {
     public ResultBody<List<InformationResult>> getSkinColors() {
         return ResultBody.success(commonService.getSkinColors());
     }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取所有家族信息")
+    @GetMapping("/" + ApiConstant.LATEST + "/getGuilds")
+    public ResultBody<List<InformationResult>> getGuilds() {
+        return ResultBody.success(commonService.getGuilds());
+    }
 }

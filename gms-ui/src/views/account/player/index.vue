@@ -5,26 +5,65 @@
       <!-- 搜索表单 -->
       <a-form :model="filterForm" class="a-from-keyword">
         <a-row :gutter="16">
-          <a-col :span="6">
-            <a-form-item :label="$t('account.player.id')">
-              <a-input-number v-model="filterForm.id" />
+          <a-col :span="isMobile ? 24 : 6">
+            <a-form-item :label="$t('account.player.character')">
+              <a-select
+                v-model="filterForm.name"
+                allow-search
+                :placeholder="$t('account.player.character.placeholder')"
+                allow-create
+                allow-clear
+              >
+                <a-option v-for="name in uniqueNames" :key="name" :value="name">
+                  {{ name }}
+                </a-option>
+              </a-select>
             </a-form-item>
           </a-col>
-          <a-col :span="6">
-            <a-form-item :label="$t('account.player.name')">
-              <a-input v-model="filterForm.name" />
+          <a-col :span="isMobile ? 24 : 6">
+            <a-form-item :label="$t('account.player.accountId')">
+              <a-select
+                v-model="filterForm.accountId"
+                allow-search
+                :placeholder="$t('account.player.accountId.placeholder')"
+                allow-create
+                allow-clear
+              >
+                <a-option
+                  v-for="acc in uniqueAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                >
+                  [ {{ acc.id }} ] {{ acc.name }}
+                </a-option>
+              </a-select>
             </a-form-item>
           </a-col>
-          <a-col :span="6">
+          <a-col :span="isMobile ? 24 : 6">
             <a-form-item :label="$t('account.player.mapId')">
-              <a-input-number v-model="filterForm.map" />
+              <a-select
+                v-model="filterForm.map"
+                allow-search
+                :placeholder="$t('account.player.mapId.placeholder')"
+                allow-create
+                allow-clear
+              >
+                <a-option
+                  v-for="map in uniqueMaps"
+                  :key="map.id"
+                  :value="map.id"
+                >
+                  {{ map.name }} ({{ map.id }})
+                </a-option>
+              </a-select>
             </a-form-item>
           </a-col>
-          <a-col :span="6">
+          <a-col :span="isMobile ? 24 : 6">
             <a-form-item :label="$t('account.player.status')">
               <a-select
                 v-model="filterForm.status"
                 :placeholder="$t('account.player.status.placeholder')"
+                allow-clear
               >
                 <a-option :value="0">{{
                   $t('account.player.status.all')
@@ -38,6 +77,118 @@
               </a-select>
             </a-form-item>
           </a-col>
+          <template v-if="!isMobile || showMoreFilters">
+            <a-col :span="isMobile ? 24 : 6">
+              <a-form-item :label="$t('account.player.channel')">
+                <a-select
+                  v-model="filterForm.channel"
+                  allow-search
+                  :placeholder="$t('account.player.channel.placeholder')"
+                  allow-clear
+                >
+                  <a-option v-for="ch in 20" :key="ch" :value="ch">
+                    {{ ch }}
+                  </a-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="isMobile ? 24 : 6">
+              <a-form-item :label="$t('account.player.job')">
+                <a-select
+                  v-model="filterForm.job"
+                  allow-search
+                  :placeholder="$t('account.player.job.placeholder')"
+                  :loading="jobLoading"
+                  allow-clear
+                >
+                  <a-option
+                    v-for="job in jobList"
+                    :key="job.id"
+                    :value="job.id"
+                  >
+                    {{ job.name }} ({{ job.id }})
+                  </a-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="isMobile ? 24 : 6">
+              <a-form-item :label="$t('account.player.partyId')">
+                <a-select
+                  v-model="filterForm.partyId"
+                  allow-search
+                  :placeholder="$t('account.player.partyId.placeholder')"
+                  allow-create
+                  allow-clear
+                >
+                  <a-option
+                    v-for="pid in uniquePartyIds"
+                    :key="pid"
+                    :value="pid"
+                  >
+                    {{ pid }}
+                  </a-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="isMobile ? 24 : 6">
+              <a-form-item :label="$t('account.player.guild')">
+                <a-select
+                  v-model="filterForm.guildId"
+                  allow-search
+                  :placeholder="$t('account.player.guild.placeholder')"
+                  allow-create
+                  :loading="guildLoading"
+                  allow-clear
+                >
+                  <a-option
+                    v-for="guild in guildList"
+                    :key="guild.id"
+                    :value="guild.id"
+                  >
+                    [ {{ guild.id }} ] {{ guild.name }}
+                  </a-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="isMobile ? 24 : 6">
+              <a-form-item :label="$t('account.player.level')">
+                <a-input-group>
+                  <a-input-number
+                    v-model="filterForm.minLevel"
+                    :placeholder="$t('account.player.level.min')"
+                    :min="1"
+                    allow-clear
+                  />
+                  <span style="padding: 0 8px">-</span>
+                  <a-input-number
+                    v-model="filterForm.maxLevel"
+                    :placeholder="$t('account.player.level.max')"
+                    :min="1"
+                    allow-clear
+                  />
+                </a-input-group>
+              </a-form-item>
+            </a-col>
+            <a-col :span="isMobile ? 24 : 6">
+              <a-form-item :label="$t('account.player.onlineTime')">
+                <a-input-group>
+                  <a-input-number
+                    v-model="filterForm.minOnlineTime"
+                    :placeholder="$t('account.player.onlineTime.min')"
+                    :min="0"
+                    allow-clear
+                  />
+                  <span style="padding: 0 8px">-</span>
+                  <a-input-number
+                    v-model="filterForm.maxOnlineTime"
+                    :placeholder="$t('account.player.onlineTime.max')"
+                    :min="0"
+                    allow-clear
+                  />
+                </a-input-group>
+              </a-form-item>
+            </a-col>
+          </template>
         </a-row>
       </a-form>
       <a-space>
@@ -52,6 +203,17 @@
             <icon-refresh />
           </template>
           {{ $t('button.reset') }}
+        </a-button>
+        <a-button v-if="isMobile" @click="toggleMoreFilters">
+          <template #icon>
+            <icon-down v-if="!showMoreFilters" />
+            <icon-up v-else />
+          </template>
+          {{
+            showMoreFilters
+              ? $t('account.player.filter.collapse')
+              : $t('account.player.filter.expand')
+          }}
         </a-button>
       </a-space>
       <a-divider />
@@ -91,6 +253,7 @@
         column-resizable
         :pagination="false"
         :bordered="{ cell: true }"
+        :scroll="{ x: 2200, y: '55vh' }"
       >
         <template #columns>
           <a-table-column
@@ -201,7 +364,7 @@
           >
             <template #cell="{ record }">
               <span v-if="record.guildId > 0">
-                {{ record.guildName }} ({{ record.guildId }})
+                [ {{ record.guildId }} ] {{ record.guildName }}
               </span>
             </template>
           </a-table-column>
@@ -235,7 +398,11 @@
             :width="70"
             align="center"
           />
-          <a-table-column :title="$t('account.list.column.operate')">
+          <a-table-column
+            :title="$t('account.list.column.operate')"
+            :width="150"
+            align="center"
+          >
             <template #cell="{ record }">
               <a-space>
                 <a-button type="text" size="mini" @click="editClick(record)">
@@ -305,7 +472,7 @@
                   v-if="item.guildId > 0"
                   :label="$t('account.player.guild')"
                 >
-                  {{ item.guildName }} ({{ item.guildId }})
+                  [ {{ item.guildId }} ] {{ item.guildName }}
                 </a-descriptions-item>
                 <a-descriptions-item
                   v-if="item.loginTime"
@@ -755,6 +922,7 @@
     getEquInitialInfo,
     getItemInitialInfo,
   } from '@/api/player';
+  import { getJobs, getGuilds, InformationResult } from '@/api/information';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import WarpModal from './WarpModal.vue';
   import EditPlayerModal from './EditPlayerModal.vue';
@@ -766,17 +934,36 @@
   const page = ref(1);
   const size = ref(14);
   const isMobile = ref(false);
+  const showMoreFilters = ref(false);
 
   const filterForm = ref<{
     id?: number;
     name?: string;
     map?: number;
     status: number;
+    accountId?: number;
+    channel?: number;
+    job?: number;
+    partyId?: number;
+    guildId?: number;
+    minLevel?: number;
+    maxLevel?: number;
+    minOnlineTime?: number;
+    maxOnlineTime?: number;
   }>({
     id: undefined,
     name: undefined,
     map: undefined,
     status: 1,
+    accountId: undefined,
+    channel: undefined,
+    job: undefined,
+    partyId: undefined,
+    guildId: undefined,
+    minLevel: undefined,
+    maxLevel: undefined,
+    minOnlineTime: undefined,
+    maxOnlineTime: undefined,
   });
   const giveFormVisible = ref(false);
   const giveFormTitle = ref('');
@@ -797,19 +984,93 @@
   const itemIconUrl = ref('');
   const lastFetchedId = ref<number | undefined>(undefined);
 
+  const jobList = ref<InformationResult[]>([]);
+  const jobLoading = ref(false);
+  const guildList = ref<InformationResult[]>([]);
+  const guildLoading = ref(false);
+
   const isFlaggedAsLock = computed(() => {
     return (
       Array.isArray(formData.value.flag) && formData.value.flag.includes(0x01)
     );
   });
 
+  // Computed properties for unique dropdown options
+  const uniqueNames = computed(() => {
+    const names = new Set<string>();
+    tableData.value.forEach((player) => {
+      if (player.name) names.add(`[ ${player.id} ] ${player.name}`);
+    });
+    return Array.from(names);
+  });
+
+  const uniqueAccounts = computed(() => {
+    const accounts = new Map<number, string>();
+    tableData.value.forEach((player) => {
+      if (player.accountId) {
+        accounts.set(player.accountId, player.accountName || '');
+      }
+    });
+    return Array.from(accounts).map(([id, name]) => ({ id, name }));
+  });
+
+  const uniqueMaps = computed(() => {
+    const maps = new Map<number, string>();
+    tableData.value.forEach((player) => {
+      if (player.map) {
+        maps.set(player.map, player.mapName || '');
+      }
+    });
+    return Array.from(maps).map(([id, name]) => ({ id, name }));
+  });
+
+  const uniquePartyIds = computed(() => {
+    const partyIds = new Set<number>();
+    tableData.value.forEach((player) => {
+      if (player.partyId && player.partyId > 0) partyIds.add(player.partyId);
+    });
+    return Array.from(partyIds);
+  });
+
+  const uniqueGuilds = computed(() => {
+    const guilds = new Map<number, string>();
+    tableData.value.forEach((player) => {
+      if (player.guildId && player.guildId > 0) {
+        guilds.set(player.guildId, player.guildName || '');
+      }
+    });
+    return Array.from(guilds).map(([id, name]) => ({ id, name }));
+  });
+
   const checkScreen = () => {
     isMobile.value = window.innerWidth < 768;
+  };
+
+  const fetchJobs = async () => {
+    jobLoading.value = true;
+    try {
+      const { data } = await getJobs();
+      jobList.value = data;
+    } finally {
+      jobLoading.value = false;
+    }
+  };
+
+  const fetchGuilds = async () => {
+    guildLoading.value = true;
+    try {
+      const { data } = await getGuilds();
+      guildList.value = data;
+    } finally {
+      guildLoading.value = false;
+    }
   };
 
   onMounted(() => {
     checkScreen();
     window.addEventListener('resize', checkScreen);
+    fetchJobs();
+    fetchGuilds();
   });
 
   onUnmounted(() => {
@@ -819,14 +1080,64 @@
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data } = await getPlayerList(
-        page.value,
-        size.value,
-        filterForm.value.id,
-        filterForm.value.name,
-        filterForm.value.map,
-        filterForm.value.status
-      );
+      // 处理角色名筛选，如果包含 [ ID ] 格式，提取 ID 或名称
+      let searchName = filterForm.value.name;
+      let searchId = filterForm.value.id;
+
+      if (searchName && searchName.includes('[') && searchName.includes(']')) {
+        // 尝试提取 ID
+        const match = searchName.match(/\[\s*(\d+)\s*\]/);
+        if (match) {
+          searchId = parseInt(match[1], 10);
+          searchName = undefined; // 如果按ID搜，就不传name了，或者后端支持同时传
+        } else {
+          // 如果提取失败，可能只是名字里有方括号，去掉格式部分
+          searchName = searchName.replace(/\[\s*\d+\s*\]\s*/, '');
+        }
+      }
+
+      // 处理家族筛选，如果包含 [ ID ] 格式，提取 ID
+      let searchGuildId = filterForm.value.guildId;
+      // 这里我们假设用户输入的是字符串，但 filterForm.guildId 是 number 类型
+      // 如果用户通过 allow-create 输入了非数字字符串，v-model 可能会绑定为字符串
+      // 我们需要在这里进行处理
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawGuildInput = filterForm.value.guildId as any;
+      if (typeof rawGuildInput === 'string') {
+        if (rawGuildInput.includes('[') && rawGuildInput.includes(']')) {
+          const match = rawGuildInput.match(/\[\s*(\d+)\s*\]/);
+          if (match) {
+            searchGuildId = parseInt(match[1], 10);
+          } else {
+            // 如果无法提取ID，且输入不是纯数字，则无法搜索（因为后端只支持ID）
+            // 除非后端支持按名称搜索，目前暂不支持
+            // 尝试解析纯数字
+            const parsed = parseInt(rawGuildInput, 10);
+            if (!Number.isNaN(parsed)) {
+              searchGuildId = parsed;
+            } else {
+              searchGuildId = undefined;
+            }
+          }
+        } else {
+          // 尝试解析纯数字
+          const parsed = parseInt(rawGuildInput, 10);
+          if (!Number.isNaN(parsed)) {
+            searchGuildId = parsed;
+          } else {
+            searchGuildId = undefined;
+          }
+        }
+      }
+
+      const { data } = await getPlayerList({
+        pageNo: page.value,
+        pageSize: size.value,
+        ...filterForm.value,
+        id: searchId,
+        name: searchName,
+        guildId: searchGuildId,
+      });
       tableData.value = data.records;
       total.value = data.totalRow;
     } finally {
@@ -852,12 +1163,27 @@
   };
 
   const resetClick = () => {
-    filterForm.value.id = undefined;
-    filterForm.value.name = undefined;
-    filterForm.value.map = undefined;
-    filterForm.value.status = 1;
+    filterForm.value = {
+      id: undefined,
+      name: undefined,
+      map: undefined,
+      status: 1,
+      accountId: undefined,
+      channel: undefined,
+      job: undefined,
+      partyId: undefined,
+      guildId: undefined,
+      minLevel: undefined,
+      maxLevel: undefined,
+      minOnlineTime: undefined,
+      maxOnlineTime: undefined,
+    };
     page.value = 1;
     loadData();
+  };
+
+  const toggleMoreFilters = () => {
+    showMoreFilters.value = !showMoreFilters.value;
   };
 
   const globalGiveClick = () => {
