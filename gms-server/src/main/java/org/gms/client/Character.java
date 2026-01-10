@@ -9494,7 +9494,7 @@ public class Character extends AbstractCharacterObject {
      */
     public boolean gainEquip(int itemId, Short attStr, Short attDex, Short attInt, Short attLuk, Short attHp, Short attMp,
                              Short pAtk, Short mAtk, Short pDef, Short mDef, Short acc, Short avoid, Short hands, Short speed,
-                             Short jump, Byte upgradeSlot, Byte level, Byte itemLevel, Long expireTime,String owner, Short flag) {
+                             Short jump, Byte upgradeSlot, Short level, Short itemLevel, Long expireTime,String owner, Short flag) {
         Equip baseEquip = (Equip) ItemInformationProvider.getInstance().getEquipById(itemId);
         if (!ItemConstants.getInventoryType(itemId).equals(InventoryType.EQUIP) || baseEquip == null) {
             message(I18nUtil.getMessage("AbstractPlayerInteraction.gainEquip.message1"));

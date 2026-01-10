@@ -72,7 +72,7 @@ public final class ScrollHandler extends AbstractPacketHandler {
                     toScroll = (Equip) chr.getInventory(InventoryType.EQUIP).getItem(equipSlot);
                 }
 
-                byte oldLevel = toScroll.getLevel(); // 记录装备的原始等级
+                short oldLevel = toScroll.getLevel(); // 记录装备的原始等级
                 byte oldSlots = toScroll.getUpgradeSlots(); // 记录装备的原始升级插槽数量
                 Inventory useInventory = chr.getInventory(InventoryType.USE); // 获取玩家的使用栏库存
                 Item scroll = useInventory.getItem(scrollSlot); // 获取使用的卷轴

@@ -89,7 +89,7 @@ public class InventorySearchRtnDTO {
         if (isEquipment()) {
             Equip equip = new Equip(getItemId(), getPosition());
             equip.setUpgradeSlots(Optional.ofNullable(getInventoryEquipment().getUpgradeSlots()).orElse((byte) 0));
-            equip.setLevel(Optional.ofNullable(getInventoryEquipment().getLevel()).orElse((byte) 0));
+            equip.setLevel(Optional.ofNullable(getInventoryEquipment().getLevel()).orElse((short) 0));
             equip.setStr(Optional.ofNullable(getInventoryEquipment().getAttStr()).orElse((short) 0));
             equip.setDex(Optional.ofNullable(getInventoryEquipment().getAttDex()).orElse((short) 0));
             equip.setInt(Optional.ofNullable(getInventoryEquipment().getAttInt()).orElse((short) 0));
@@ -106,7 +106,7 @@ public class InventorySearchRtnDTO {
             equip.setSpeed(Optional.ofNullable(getInventoryEquipment().getSpeed()).orElse((short) 0));
             equip.setJump(Optional.ofNullable(getInventoryEquipment().getJump()).orElse((short) 0));
             equip.setVicious(Optional.ofNullable(getInventoryEquipment().getVicious()).orElse((short) 0));
-            equip.setItemLevel(Optional.ofNullable(getInventoryEquipment().getItemLevel()).orElse((byte) 0));
+            equip.setItemLevel(Optional.ofNullable(getInventoryEquipment().getItemLevel()).orElse((short) 0));
             equip.setItemExp(Optional.ofNullable(getInventoryEquipment().getItemExp()).orElse(0));
             equip.setRingId(Optional.ofNullable(getInventoryEquipment().getRingId()).orElse(0));
             item = equip;

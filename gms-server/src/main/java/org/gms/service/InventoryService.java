@@ -181,7 +181,7 @@ public class InventoryService {
                     .id(inventoryEquipmentId)
                     .inventoryItemId(obj.getLong("inventoryitemid"))
                     .upgradeSlots(obj.getByte("upgradeslots"))
-                    .level(obj.getByte("level"))
+                    .level(obj.getShort("level"))
                     .attStr(obj.getShort("str"))
                     .attDex(obj.getShort("dex"))
                     .attInt(obj.getShort("int"))
@@ -199,7 +199,7 @@ public class InventoryService {
                     .jump(obj.getShort("jump"))
                     .locked(obj.getInt("locked"))
                     .vicious(obj.getShort("vicious"))
-                    .itemLevel(obj.getByte("itemlevel"))
+                    .itemLevel(obj.getShort("itemlevel"))
                     .itemExp(obj.getInt("itemexp"))
                     .ringId(obj.getInt("ringid"))
                     .build());
@@ -323,7 +323,7 @@ public class InventoryService {
             InventoryEquipRtnDTO equipment = data.getInventoryEquipment();
             inventoryequipmentMapper.updateByQuery(InventoryequipmentDO.builder()
                             .upgradeslots(Optional.ofNullable(equipment.getUpgradeSlots()).map(Byte::intValue).orElse(null))
-                            .level(Optional.ofNullable(equipment.getLevel()).map(Byte::intValue).orElse(null))
+                            .level(Optional.ofNullable(equipment.getLevel()).map(Short::intValue).orElse(null))
                             .str(Optional.ofNullable(equipment.getAttStr()).map(Short::intValue).orElse(null))
                             .dex(Optional.ofNullable(equipment.getAttDex()).map(Short::intValue).orElse(null))
                             .inte(Optional.ofNullable(equipment.getAttInt()).map(Short::intValue).orElse(null))

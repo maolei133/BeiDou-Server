@@ -72,7 +72,7 @@ public class Equip extends Item {
 
     private byte upgradeSlots;
     @Getter
-    private byte level, itemLevel;
+    private short level, itemLevel;
     private short flag;
     private short str, dex, _int, luk, hp, mp, watk, matk, wdef, mdef, acc, avoid, hands, speed, jump, vicious;
     private float itemExp;
@@ -277,7 +277,7 @@ public class Equip extends Item {
         this.upgradeSlots = upgradeSlots;
     }
 
-    public void setLevel(byte level) {
+    public void setLevel(short level) {
         this.level = level;
     }
 
@@ -690,7 +690,7 @@ public class Equip extends Item {
             return;
         }
 
-        int equipMaxLevel = Math.min(30, Math.max(ii.getEquipLevel(this.getItemId(), true), GameConfig.getServerInt("use_equipment_level_up")));// 计算装备的最大等级
+        int equipMaxLevel = Math.min(255, Math.max(ii.getEquipLevel(this.getItemId(), true), GameConfig.getServerInt("use_equipment_level_up")));// 计算装备的最大等级
         if (itemLevel >= equipMaxLevel) {
             return;
         }
@@ -756,7 +756,7 @@ public class Equip extends Item {
         this.itemExp = exp;
     }
 
-    public void setItemLevel(byte level) {
+    public void setItemLevel(short level) {
         this.itemLevel = level;
     }
 

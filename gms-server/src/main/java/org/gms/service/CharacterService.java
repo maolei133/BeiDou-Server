@@ -138,7 +138,17 @@ public class CharacterService {
             return BasePageUtil.create(chrList, request)
                     .filter(chr -> (Objects.isNull(request.getId()) || Objects.equals(chr.getId(), request.getId()))
                             && (RequireUtil.isEmpty(request.getName()) || chr.getName().contains(request.getName()))
-                            && (Objects.isNull(request.getMap()) || Objects.equals(chr.getMap().getId(), request.getMap())))
+                            && (Objects.isNull(request.getMap()) || Objects.equals(chr.getMap().getId(), request.getMap()))
+                            && (Objects.isNull(request.getAccountId()) || Objects.equals(chr.getAccountId(), request.getAccountId()))
+                            && (Objects.isNull(request.getChannel()) || Objects.equals(chr.getClient().getChannel(), request.getChannel()))
+                            && (Objects.isNull(request.getJob()) || Objects.equals(chr.getJob().getId(), request.getJob()))
+                            && (Objects.isNull(request.getPartyId()) || Objects.equals(chr.getPartyId(), request.getPartyId()))
+                            && (Objects.isNull(request.getGuildId()) || Objects.equals(chr.getGuildId(), request.getGuildId()))
+                            && (Objects.isNull(request.getMinLevel()) || chr.getLevel() >= request.getMinLevel())
+                            && (Objects.isNull(request.getMaxLevel()) || chr.getLevel() <= request.getMaxLevel())
+                            && (Objects.isNull(request.getMinOnlineTime()) || (System.currentTimeMillis() - chr.getLoginTime()) / 60000 >= request.getMinOnlineTime())
+                            && (Objects.isNull(request.getMaxOnlineTime()) || (System.currentTimeMillis() - chr.getLoginTime()) / 60000 <= request.getMaxOnlineTime())
+                    )
                     .page(chr -> ChrOnlineListRtnDTO.builder()
                             .world(chr.getWorld())
                             .accountId(chr.getAccountId())
@@ -172,7 +182,13 @@ public class CharacterService {
                 .where(CHARACTERS_D_O.WORLD.eq(request.getWorld()))
                 .and(CHARACTERS_D_O.ID.eq(request.getId(), Objects::nonNull))
                 .and(CHARACTERS_D_O.NAME.like(request.getName(), RequireUtil::isNotEmpty))
-                .and(CHARACTERS_D_O.MAP.eq(request.getMap(), Objects::nonNull));
+                .and(CHARACTERS_D_O.MAP.eq(request.getMap(), Objects::nonNull))
+                .and(CHARACTERS_D_O.ACCOUNTID.eq(request.getAccountId(), Objects::nonNull))
+                .and(CHARACTERS_D_O.JOB.eq(request.getJob(), Objects::nonNull))
+                .and(CHARACTERS_D_O.PARTY.eq(request.getPartyId(), Objects::nonNull))
+                .and(CHARACTERS_D_O.GUILDID.eq(request.getGuildId(), Objects::nonNull))
+                .and(CHARACTERS_D_O.LEVEL.ge(request.getMinLevel(), Objects::nonNull))
+                .and(CHARACTERS_D_O.LEVEL.le(request.getMaxLevel(), Objects::nonNull));
 
         if (status == 2) { // 离线
             Collection<Character> onlineChars = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getAllCharacters();
@@ -184,7 +200,8 @@ public class CharacterService {
 
         Page<CharactersDO> charPage = charactersMapper.paginateAs(new Page<>(request.getPageNo(), request.getPageSize()), queryWrapper, CharactersDO.class);
 
-        return charPage.map(charactersDO -> {
+        // 修复：Page 对象没有 stream() 方法，需要先获取 records 列表
+        List<ChrOnlineListRtnDTO> dtoList = charPage.getRecords().stream().map(charactersDO -> {
             String mapName = "未知地图";
             List<Channel> channels = Server.getInstance().getChannelsFromWorld(request.getWorld());
             if (!channels.isEmpty()) {
@@ -205,6 +222,11 @@ public class CharacterService {
             // 检查角色是否在线，如果在线，则使用内存中的实时数据
             Character onlineChr = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getCharacterById(charactersDO.getId());
             if (onlineChr != null) {
+                // 再次过滤内存数据，因为数据库查询可能包含在线玩家，但内存数据更准确
+                if (request.getChannel() != null && onlineChr.getClient().getChannel() != request.getChannel()) return null;
+                if (request.getMinOnlineTime() != null && (System.currentTimeMillis() - onlineChr.getLoginTime()) / 60000 < request.getMinOnlineTime()) return null;
+                if (request.getMaxOnlineTime() != null && (System.currentTimeMillis() - onlineChr.getLoginTime()) / 60000 > request.getMaxOnlineTime()) return null;
+
                 return ChrOnlineListRtnDTO.builder()
                         .world(onlineChr.getWorld())
                         .accountId(onlineChr.getAccountId())
@@ -231,6 +253,10 @@ public class CharacterService {
             }
 
             // 离线玩家的数据
+            // 离线玩家不应该有在线时长筛选
+            if (request.getMinOnlineTime() != null || request.getMaxOnlineTime() != null) return null;
+            if (request.getChannel() != null) return null; // 离线玩家没有频道
+
             return ChrOnlineListRtnDTO.builder()
                     .world(charactersDO.getWorld())
                     .accountId(charactersDO.getAccountid())
@@ -254,7 +280,16 @@ public class CharacterService {
                     .loginTime(charactersDO.getCreatedate() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getCreatedate()) : null) // 离线显示创建时间
                     .lastLogoutTime(charactersDO.getLastLogoutTime() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getLastLogoutTime()) : null)
                     .build();
-        });
+        }).filter(Objects::nonNull).collect(Collectors.toList()); // 过滤掉返回null的记录
+
+        // 重新封装为 Page 对象
+        Page<ChrOnlineListRtnDTO> resultPage = new Page<>();
+        resultPage.setPageNumber(charPage.getPageNumber());
+        resultPage.setPageSize(charPage.getPageSize());
+        resultPage.setTotalRow(charPage.getTotalRow());
+        resultPage.setRecords(dtoList);
+        
+        return resultPage;
     }
 
     public void updateCharacter(UpdateCharacterReqDTO request) {
