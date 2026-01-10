@@ -708,7 +708,7 @@ public class Equip extends Item {
 
         // 调试信息：显示经验值获取详情
         if (GameConfig.getServerBoolean("use_debug_show_eqp_exp")) {
-            log.info("{} -> EXP Gain: {}, Mastery: {}, Base gain: {}, exp: {} / {}, Kills TNL: {}", ii.getName(getItemId()),
+            log.info("[{}] -> 经验值获取: {}, 熟练度倍率: {}, 基础获取: {}, 经验: {} / {}, 升级还需击杀: {}", ii.getName(getItemId()),
                     gain, masteryModifier, baseExpGain, itemExp, expNeeded, expNeeded / (baseExpGain / c.getPlayer().getExpRate()));
         }
 
