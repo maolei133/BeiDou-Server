@@ -238,6 +238,9 @@
                 <a-doption value="give">{{
                   $t('account.player.button.globalGive')
                 }}</a-doption>
+                <a-doption value="disconnect">{{
+                  $t('account.player.button.globalDisconnect')
+                }}</a-doption>
               </template>
             </a-dropdown>
           </a-space>
@@ -404,14 +407,25 @@
             align="center"
           >
             <template #cell="{ record }">
-              <a-space>
-                <a-button type="text" size="mini" @click="editClick(record)">
-                  {{ $t('account.player.button.edit') }}
+              <a-dropdown @select="(val) => handleSingleAction(val, record)">
+                <a-button type="text" size="mini">
+                  {{ $t('account.list.column.operate') }} <icon-down />
                 </a-button>
-                <a-button type="text" size="mini" @click="giveClick(record)">
-                  {{ $t('account.player.button.give') }}
-                </a-button>
-              </a-space>
+                <template #content>
+                  <a-doption value="edit">{{
+                    $t('account.player.button.edit')
+                  }}</a-doption>
+                  <a-doption value="give">{{
+                    $t('account.player.button.give')
+                  }}</a-doption>
+                  <a-doption value="disconnect">{{
+                    $t('account.player.button.disconnect')
+                  }}</a-doption>
+                  <a-doption value="ban">{{
+                    $t('account.player.button.ban')
+                  }}</a-doption>
+                </template>
+              </a-dropdown>
             </template>
           </a-table-column>
         </template>
@@ -431,8 +445,15 @@
                   >
                     传送
                   </a-button>
-                  <a-button size="mini" @click="editClick(item)">编辑</a-button>
-                  <a-button size="mini" @click="giveClick(item)">发放</a-button>
+                  <a-dropdown @select="(val) => handleSingleAction(val, item)">
+                    <a-button size="mini">操作 <icon-down /></a-button>
+                    <template #content>
+                      <a-doption value="edit">编辑</a-doption>
+                      <a-doption value="give">发放</a-doption>
+                      <a-doption value="disconnect">断开</a-doption>
+                      <a-doption value="ban">封禁</a-doption>
+                    </template>
+                  </a-dropdown>
                 </a-space>
               </template>
               <a-descriptions
@@ -906,12 +927,19 @@
       :player="editTarget"
       @success="loadData"
     />
+    <ban-player-modal
+      v-model:visible="banFormVisible"
+      :player="banTarget"
+      :all="banAll"
+      :loading="loading"
+      @success="loadData"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
   import { ref, onMounted, onUnmounted, watch, computed, reactive } from 'vue';
-  import { Message } from '@arco-design/web-vue';
+  import { Message, Modal } from '@arco-design/web-vue';
   import { useI18n } from 'vue-i18n';
   import useLoading from '@/hooks/loading';
   import {
@@ -921,11 +949,13 @@
     OnlinePlayer,
     getEquInitialInfo,
     getItemInitialInfo,
+    disconnectPlayer,
   } from '@/api/player';
   import { getJobs, getGuilds, InformationResult } from '@/api/information';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import WarpModal from './WarpModal.vue';
   import EditPlayerModal from './EditPlayerModal.vue';
+  import BanPlayerModal from './BanPlayerModal.vue';
 
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(false);
@@ -971,6 +1001,9 @@
   const warpTarget = ref<OnlinePlayer | null>(null);
   const editFormVisible = ref(false);
   const editTarget = ref<OnlinePlayer | null>(null);
+  const banFormVisible = ref(false);
+  const banTarget = ref<OnlinePlayer | null>(null);
+  const banAll = ref(false);
 
   const formData = ref<GiveForm>({
     type: 5,
@@ -1252,6 +1285,46 @@
     warpFormVisible.value = true;
   };
 
+  const handleDisconnect = (record: OnlinePlayer) => {
+    Modal.confirm({
+      title: t('account.player.button.disconnect'),
+      content: `确定要断开玩家 ${record.name} 的连接吗？`,
+      onOk: async () => {
+        setLoading(true);
+        try {
+          await disconnectPlayer({ ids: [record.id], all: false });
+          Message.success(t('message.success'));
+          loadData();
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleGlobalDisconnect = () => {
+    Modal.confirm({
+      title: t('account.player.button.globalDisconnect'),
+      content: '确定要断开所有在线玩家的连接吗？',
+      onOk: async () => {
+        setLoading(true);
+        try {
+          await disconnectPlayer({ ids: [], all: true });
+          Message.success(t('message.success'));
+          loadData();
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleBan = (record: OnlinePlayer) => {
+    banTarget.value = record;
+    banAll.value = false;
+    banFormVisible.value = true;
+  };
+
   const handleGlobalAction = (
     value: string | number | Record<string, any> | undefined
   ) => {
@@ -1259,6 +1332,23 @@
       handleAllPlayerWarp();
     } else if (value === 'give') {
       globalGiveClick();
+    } else if (value === 'disconnect') {
+      handleGlobalDisconnect();
+    }
+  };
+
+  const handleSingleAction = (
+    value: string | number | Record<string, any> | undefined,
+    record: OnlinePlayer
+  ) => {
+    if (value === 'edit') {
+      editClick(record);
+    } else if (value === 'give') {
+      giveClick(record);
+    } else if (value === 'disconnect') {
+      handleDisconnect(record);
+    } else if (value === 'ban') {
+      handleBan(record);
     }
   };
 

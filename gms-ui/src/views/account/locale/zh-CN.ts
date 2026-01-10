@@ -117,8 +117,11 @@ export default {
   'account.player.button.globalAction': '全服操作',
   'account.player.button.globalGive': '全服发放资源',
   'account.player.button.globalWarp': '全服传送地图',
+  'account.player.button.globalDisconnect': '全服断开连接',
   'account.player.button.give': '发放资源',
   'account.player.button.warp': '[传送]',
+  'account.player.button.disconnect': '断开连接',
+  'account.player.button.ban': '封禁',
   'account.player.nxCredit': '点券',
   'account.player.nxPrepaid': '信用点券',
   'account.player.maplePoint': '抵用券',
@@ -259,4 +262,9 @@ export default {
   'account.player.selector.color.8': '白色',
   'account.player.selector.variants': '颜色预览',
   'common.error.load': '加载数据失败',
+
+  'account.player.ban.reason': '封禁原因',
+  'account.player.ban.duration': '封禁时长',
+  'account.player.ban.options': '封禁选项',
+  'account.player.ban.notify': '通知',
 };

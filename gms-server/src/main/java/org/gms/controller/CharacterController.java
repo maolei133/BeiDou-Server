@@ -6,13 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import org.gms.constants.api.ApiConstant;
 import org.gms.dao.entity.ExtendValueDO;
-import org.gms.model.dto.ChrDetailRtnDTO;
-import org.gms.model.dto.ChrIdDTO;
-import org.gms.model.dto.ChrOnlineListReqDTO;
-import org.gms.model.dto.ChrOnlineListRtnDTO;
-import org.gms.model.dto.ResultBody;
-import org.gms.model.dto.SubmitBody;
-import org.gms.model.dto.UpdateCharacterReqDTO;
+import org.gms.model.dto.*;
 import org.gms.service.CharacterService;
 import org.springframework.web.bind.annotation.*;
 
@@ -67,5 +61,28 @@ public class CharacterController {
     @PostMapping("/" + ApiConstant.LATEST + "/detail")
     public ResultBody<ChrDetailRtnDTO> detail(@RequestBody SubmitBody<ChrIdDTO> submitBody) {
         return ResultBody.success(characterService.getCharacterDetail(submitBody.getData().getId()));
+    }
+
+    @Tag(name = "/character/" + ApiConstant.LATEST)
+    @Operation(summary = "断开玩家连接")
+    @PostMapping("/" + ApiConstant.LATEST + "/disconnect")
+    public ResultBody<Object> disconnect(@RequestBody SubmitBody<DisconnectReqDTO> submitBody) {
+        characterService.disconnect(submitBody.getData());
+        return ResultBody.success();
+    }
+
+    @Tag(name = "/character/" + ApiConstant.LATEST)
+    @Operation(summary = "封禁玩家")
+    @PostMapping("/" + ApiConstant.LATEST + "/ban")
+    public ResultBody<Object> ban(@RequestBody SubmitBody<BanPlayerReqDTO> submitBody) {
+        characterService.ban(submitBody.getData());
+        return ResultBody.success();
+    }
+
+    @Tag(name = "/character/" + ApiConstant.LATEST)
+    @Operation(summary = "获取玩家封禁信息(IP/MAC/HWID)")
+    @PostMapping("/" + ApiConstant.LATEST + "/banInfo")
+    public ResultBody<BanInfoRtnDTO> getBanInfo(@RequestBody SubmitBody<ChrIdDTO> submitBody) {
+        return ResultBody.success(characterService.getBanInfo(submitBody.getData().getId()));
     }
 }

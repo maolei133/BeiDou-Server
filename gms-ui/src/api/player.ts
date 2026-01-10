@@ -135,6 +135,31 @@ export interface PlayerListParams {
   maxOnlineTime?: number;
 }
 
+export interface DisconnectReq {
+  ids: number[];
+  all: boolean;
+}
+
+export interface BanPlayerReq {
+  ids: number[];
+  all: boolean;
+  reason: string;
+  duration?: number;
+  banIp: boolean;
+  banMac: boolean;
+  banHwid: boolean;
+  notify: boolean;
+  notifyContent?: string;
+  ips?: string[];
+  macs?: string[];
+}
+
+export interface BanInfoRtn {
+  ips: string[];
+  macs: string[];
+  hwid: string;
+}
+
 export function getPlayerList(params: PlayerListParams) {
   return axios.post<PageState<OnlinePlayer>>(
     '/character/v1/online/list',
@@ -160,4 +185,16 @@ export function updatePlayer(data: UpdatePlayerForm) {
 
 export function getPlayerDetail(id: number) {
   return axios.post<OnlinePlayer>(`/character/v1/detail`, { id });
+}
+
+export function disconnectPlayer(data: DisconnectReq) {
+  return axios.post(`/character/v1/disconnect`, data);
+}
+
+export function banPlayer(data: BanPlayerReq) {
+  return axios.post(`/character/v1/ban`, data);
+}
+
+export function getBanInfo(id: number) {
+  return axios.post<BanInfoRtn>(`/character/v1/banInfo`, { id });
 }

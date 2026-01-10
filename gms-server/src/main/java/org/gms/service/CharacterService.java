@@ -19,11 +19,9 @@ import org.gms.constants.string.ExtendType;
 import org.gms.dao.entity.*;
 import org.gms.dao.mapper.*;
 import org.gms.exception.BizException;
-import org.gms.model.dto.ChrDetailRtnDTO;
-import org.gms.model.dto.ChrOnlineListReqDTO;
-import org.gms.model.dto.ChrOnlineListRtnDTO;
-import org.gms.model.dto.UpdateCharacterReqDTO;
+import org.gms.model.dto.*;
 import org.gms.model.pojo.SkillEntry;
+import org.gms.util.PacketCreator;
 import org.gms.net.server.PlayerCoolDownValueHolder;
 import org.gms.net.server.Server;
 import org.gms.net.server.channel.Channel;
@@ -62,6 +60,7 @@ import java.util.stream.Collectors;
 
 import static com.mybatisflex.core.query.QueryMethods.dateDiff;
 import static com.mybatisflex.core.query.QueryMethods.now;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.gms.dao.entity.table.AccountsDOTableDef.ACCOUNTS_D_O;
 import static org.gms.dao.entity.table.AreaInfoDOTableDef.AREA_INFO_D_O;
 import static org.gms.dao.entity.table.BbsRepliesDOTableDef.BBS_REPLIES_D_O;
@@ -1323,5 +1322,194 @@ public class CharacterService {
         if (!wishlists.isEmpty()) {
             wishlistsMapper.insertBatch(wishlists);
         }
+    }
+
+    public void disconnect(DisconnectReqDTO request) {
+        List<Integer> ids = request.getIds();
+        if (request.isAll()) {
+            // 全服断开
+            for (World world : Server.getInstance().getWorlds()) {
+                for (Character chr : world.getPlayerStorage().getAllCharacters()) {
+                    if (chr != null && chr.getClient() != null) {
+                        chr.getClient().disconnect(false, false);
+                    }
+                }
+            }
+        } else if (ids != null && !ids.isEmpty()) {
+            // 批量断开
+            for (Integer id : ids) {
+                for (World world : Server.getInstance().getWorlds()) {
+                    Character chr = world.getPlayerStorage().getCharacterById(id);
+                    if (chr != null && chr.getClient() != null) {
+                        chr.getClient().disconnect(false, false);
+                        break; // 找到后跳出内层循环
+                    }
+                }
+            }
+        }
+    }
+
+    public void ban(BanPlayerReqDTO request) {
+        List<Integer> ids = request.getIds();
+        String reason = request.getReason();
+        Integer duration = request.getDuration();
+        boolean banIp = request.isBanIp();
+        boolean banMac = request.isBanMac();
+        boolean banHwid = request.isBanHwid();
+        boolean notify = request.isNotify();
+        String notifyContent = request.getNotifyContent();
+
+        // 计算封禁截止时间
+        Timestamp tempBan = null;
+        if (duration != null && duration > 0) {
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.MINUTE, duration);
+            tempBan = new Timestamp(cal.getTimeInMillis());
+        } else {
+            // 永久封禁，使用默认的永久封禁时间（例如2099年）
+            Calendar cal = Calendar.getInstance();
+            cal.set(2099, Calendar.DECEMBER, 31, 0, 0, 0);
+            tempBan = new Timestamp(cal.getTimeInMillis());
+        }
+
+        List<Integer> targetIds = new ArrayList<>();
+        if (request.isAll()) {
+            // 全服封禁
+            for (World world : Server.getInstance().getWorlds()) {
+                for (Character chr : world.getPlayerStorage().getAllCharacters()) {
+                    targetIds.add(chr.getId());
+                }
+            }
+        } else if (ids != null) {
+            targetIds.addAll(ids);
+        }
+
+        for (Integer charId : targetIds) {
+            // 1. 获取角色信息（在线或离线）
+            Character onlineChr = null;
+            CharactersDO offlineChr = null;
+            
+            for (World world : Server.getInstance().getWorlds()) {
+                onlineChr = world.getPlayerStorage().getCharacterById(charId);
+                if (onlineChr != null) break;
+            }
+
+            if (onlineChr == null) {
+                offlineChr = charactersMapper.selectOneById(charId);
+            }
+
+            int accountId = (onlineChr != null) ? onlineChr.getAccountId() : (offlineChr != null ? offlineChr.getAccountid() : -1);
+            if (accountId == -1) continue;
+
+            // 2. 封禁账号
+            AccountsDO accountUpdate = AccountsDO.builder()
+                    .id(accountId)
+                    .banned(true)
+                    .banreason(reason)
+                    .tempban(tempBan)
+                    .build();
+            accountService.update(accountUpdate);
+
+            // 3. 处理在线玩家的额外操作
+            if (onlineChr != null) {
+                onlineChr.setBanned(true);
+                Client c = onlineChr.getClient();
+                
+                if (banIp) {
+                    accountService.banIp(c.getRemoteAddress(), accountId);
+                }
+                if (banMac) {
+                    accountService.banMacs(c.getMacs(), accountId);
+                }
+                if (banHwid) {
+                    if (c.getHwid() != null) {
+                        accountService.banHwid(c.getHwid().hwid());
+                    }
+                }
+                
+                c.disconnect(false, false);
+            } else {
+                // 离线玩家无法获取IP/MAC/HWID，只能封禁账号
+                // 如果需要支持离线封禁IP/MAC，需要从数据库读取历史记录（如果有的话）
+                // 目前仅支持在线封禁连带IP/MAC
+                if (banIp || banMac || banHwid) {
+                    AccountsDO account = accountService.findById(accountId);
+                    if (account != null) {
+                        if (banIp && account.getIp() != null && !account.getIp().isEmpty()) {
+                            String[] ips = account.getIp().split(",");
+                            for (String ip : ips) {
+                                if (!ip.trim().isEmpty()) {
+                                    accountService.banIp(ip.trim(), accountId);
+                                }
+                            }
+                        }
+                        if (banMac && account.getMacs() != null && !account.getMacs().isEmpty()) {
+                            String[] macs = account.getMacs().split(",");
+                            Set<String> macSet = new HashSet<>();
+                            for (String mac : macs) {
+                                if (!mac.trim().isEmpty()) {
+                                    macSet.add(mac.trim());
+                                }
+                            }
+                            if (!macSet.isEmpty()) {
+                                accountService.banMacs(macSet, accountId);
+                            }
+                        }
+                        if (banHwid && account.getHwid() != null && !account.getHwid().isEmpty()) {
+                            accountService.banHwid(account.getHwid());
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. 全服通知
+        if (notify && notifyContent != null && !notifyContent.isEmpty()) {
+            for (World world : Server.getInstance().getWorlds()) {
+                Server.getInstance().broadcastGMMessage(world.getId(), PacketCreator.serverNotice(6, notifyContent));
+            }
+        }
+    }
+
+    public BanInfoRtnDTO getBanInfo(Integer charId) {
+        Character onlineChr = null;
+        CharactersDO offlineChr = null;
+
+        for (World world : Server.getInstance().getWorlds()) {
+            onlineChr = world.getPlayerStorage().getCharacterById(charId);
+            if (onlineChr != null) break;
+        }
+
+        if (onlineChr == null) {
+            offlineChr = charactersMapper.selectOneById(charId);
+        }
+
+        int accountId = (onlineChr != null) ? onlineChr.getAccountId() : (offlineChr != null ? offlineChr.getAccountid() : -1);
+        if (accountId == -1) return BanInfoRtnDTO.builder().build();
+
+        AccountsDO account = accountService.findById(accountId);
+        if (account == null) return BanInfoRtnDTO.builder().build();
+
+        List<String> ips = new ArrayList<>();
+        if (account.getIp() != null && !account.getIp().isEmpty()) {
+            ips = Arrays.stream(account.getIp().split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toList());
+        }
+
+        List<String> macs = new ArrayList<>();
+        if (account.getMacs() != null && !account.getMacs().isEmpty()) {
+            macs = Arrays.stream(account.getMacs().split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toList());
+        }
+
+        return BanInfoRtnDTO.builder()
+                .ips(ips)
+                .macs(macs)
+                .hwid(account.getHwid())
+                .build();
     }
 }
