@@ -28,14 +28,19 @@
                 {{ $t('account.list.column.gender.female') }}
               </a-radio>
             </a-radio-group>
-            <a-input-search
-              v-model="filter.keyword"
-              :placeholder="$t('account.player.warp.placeholder')"
-              :style="{ width: isMobile ? '100%' : '200px' }"
-              @search="handleSearch"
-              @press-enter="handleSearch"
-            />
-            <a-button @click="resetFilter">
+            <div class="search-group">
+              <a-input-search
+                v-model="filter.keyword"
+                :placeholder="$t('account.player.warp.placeholder')"
+                :style="{ width: isMobile ? '100%' : '200px' }"
+                @search="handleSearch"
+                @press-enter="handleSearch"
+              />
+              <a-button v-if="isMobile" @click="resetFilter">
+                {{ $t('account.player.selector.reset') }}
+              </a-button>
+            </div>
+            <a-button v-if="!isMobile" @click="resetFilter">
               {{ $t('account.player.selector.reset') }}
             </a-button>
           </a-space>
@@ -90,10 +95,19 @@
           @mouseleave="handlePopupMouseLeave"
           @click.stop
         >
-          <!-- 移动端关闭按钮和标题 -->
-          <div v-if="isMobile" class="mobile-popup-header">
-            <span class="mobile-popup-title">{{ selectedItemData?.name }}</span>
-            <div class="mobile-close-btn" @click="showMobileVariant = false">
+          <!-- 弹窗头部 -->
+          <div class="popup-header">
+            <span class="popup-title">
+              {{
+                isMobile ? selectedItemData?.name : hoveredItemData?.name || ''
+              }}
+            </span>
+            <div
+              class="close-btn"
+              @click="
+                isMobile ? (showMobileVariant = false) : (hoveredItemId = null)
+              "
+            >
               <icon-close />
             </div>
           </div>
@@ -114,12 +128,14 @@
                   <img :src="getIconUrl('item', variant.id)" alt="" />
                 </div>
                 <div class="variant-info">
-                  <div class="variant-name">{{ variant.name }}</div>
+                  <div class="variant-name">
+                    {{ $t(`account.player.selector.color.${index % 9}`) }}
+                  </div>
                   <div class="variant-id">
                     {{ variant.id }}
                     <span
                       class="color-dot"
-                      :style="{ backgroundColor: colors[index % 8] }"
+                      :style="{ backgroundColor: colors[index % 9] }"
                     ></span>
                   </div>
                 </div>
@@ -176,7 +192,7 @@
   const emit = defineEmits(['update:visible', 'select']);
   const { t } = useI18n();
 
-  // 颜色定义 (对应 0-7)
+  // 颜色定义 (对应 0-8)
   const colors = [
     '#000000', // 0: Black
     '#FF0000', // 1: Red
@@ -186,10 +202,12 @@
     '#0000FF', // 5: Blue
     '#800080', // 6: Purple
     '#A52A2A', // 7: Brown
+    '#FFFFFF', // 8: White
   ];
 
   const loading = ref(false);
-  const list = ref<InformationResult[]>([]);
+  const list = ref<InformationResult[]>([]); // 当前页显示的数据
+  const filteredData = ref<InformationResult[]>([]); // 经过筛选后的所有数据
   const total = ref(0);
   const page = ref(1);
   const pageSize = ref(100);
@@ -221,100 +239,149 @@
     keyword: '',
   });
 
+  // 获取基础ID (用于定位和分组)
+  const getBaseId = (id: number) => {
+    if (props.type === 'face') {
+      // 脸型：20000, 20100... 基础款为百位为0
+      return Math.floor(id / 1000) * 1000 + (id % 100);
+    }
+    // 发型：30000, 30001... 基础款为个位为0
+    return Math.floor(id / 10) * 10;
+  };
+
+  const updatePageList = () => {
+    const start = (page.value - 1) * pageSize.value;
+    const end = start + pageSize.value;
+    list.value = filteredData.value.slice(start, end);
+  };
+
+  const locateDefaultId = () => {
+    if (!props.defaultId) return;
+
+    // 计算默认ID对应的基础ID (或者当前颜色下的ID)
+    // 注意：如果当前筛选的颜色与默认ID的颜色不匹配，可能无法定位
+    // 这里我们尝试找到最接近的匹配项
+
+    // 简单起见，我们尝试在 filteredData 中查找 defaultId
+    // 如果找不到，尝试查找 defaultId 的 BaseId (Color 0)
+
+    let index = filteredData.value.findIndex(
+      (item) => item.id === props.defaultId
+    );
+
+    if (index === -1) {
+      // 如果找不到精确匹配，尝试找同款 (BaseId)
+      const baseId = getBaseId(props.defaultId);
+      // 注意：filteredData 中的 item 已经是经过颜色过滤的
+      // 如果当前显示的是 Color 0，那么 item.id 就是 BaseId
+      // 如果当前显示的是 Color 1，那么 item.id 是 VariantId
+
+      // 我们比较 BaseId 是否相同
+      index = filteredData.value.findIndex(
+        (item) => getBaseId(item.id) === baseId
+      );
+    }
+
+    if (index !== -1) {
+      // 计算该项所在的页码
+      page.value = Math.floor(index / pageSize.value) + 1;
+      updatePageList();
+
+      // 选中该项
+      selectedId.value = props.defaultId; // 保持选中原始ID
+      // 找到对应的数据对象
+      selectedItemData.value = filteredData.value[index];
+
+      hasLocatedDefaultId.value = true;
+    }
+  };
+
   const fetchData = async () => {
     loading.value = true;
     try {
+      // 优化：一次性加载所有匹配的数据，在前端进行去重和分页
+      // 这样可以解决“合并同类ID”导致的分页不准确问题
       const res = await getStyles({
         type: props.type as 'hair' | 'face',
         keyword: filter.keyword,
-        page: page.value,
-        pageSize: pageSize.value,
+        page: 1,
+        pageSize: 10000, // 假设足够大以获取所有数据
         gender: filter.gender,
         color: filter.color,
       });
 
-      // 后端已支持分页返回
+      let rawList: InformationResult[] = [];
       if (res.data && res.data.records) {
-        list.value = res.data.records;
-        total.value = res.data.totalRow;
+        rawList = res.data.records;
       } else if (Array.isArray(res.data)) {
-        // 兼容旧接口返回格式（如果是数组）
         // @ts-ignore
-        list.value = res.data;
-        // @ts-ignore
-        if (res.data.length === pageSize.value) {
-          total.value = page.value * pageSize.value + 1;
-        } else {
-          // @ts-ignore
-          total.value = (page.value - 1) * pageSize.value + res.data.length;
-        }
+        rawList = res.data;
       }
 
-      // 过滤列表，只保留同类脸型/发型的第一个
-      if (list.value.length > 0) {
-        if (props.type === 'face') {
-          // 脸型：保留 200xx, 210xx... 过滤掉 201xx, 202xx...
-          // 假设颜色在百位，即 (id / 100) % 10 == 0
-          list.value = list.value.filter(
-            (item) => Math.floor(item.id / 100) % 10 === 0
-          );
-        } else {
-          // 发型：保留 30000, 30010... 过滤掉 30001, 30002...
-          list.value = list.value.filter((item) => item.id % 10 === 0);
+      // 前端去重/分组逻辑
+      const groups = new Map<number, InformationResult[]>();
+
+      // 使用 for...of 循环替代 for...in 或 forEach
+      for (let i = 0; i < rawList.length; i += 1) {
+        const item = rawList[i];
+        const baseId = getBaseId(item.id);
+        if (!groups.has(baseId)) {
+          groups.set(baseId, []);
         }
+        groups.get(baseId)!.push(item);
       }
 
-      // 如果有默认ID且当前列表不包含该ID，尝试单独加载该ID的数据并插入到列表头部
-      // 仅在首次加载且未定位过时执行
-      if (
-        props.defaultId &&
-        !hasLocatedDefaultId.value &&
-        list.value.length > 0 &&
-        !list.value.find((item) => item.id === props.defaultId)
-      ) {
-        try {
-          const detailRes = await getStyles({
-            type: props.type as 'hair' | 'face',
-            keyword: String(props.defaultId),
-            page: 1,
-            pageSize: 1,
-            gender: 2, // 不限性别
-            color: null, // 不限颜色
+      const processed: InformationResult[] = [];
+
+      // 遍历分组，选择代表性的一项
+      // 使用 Array.from 转换 Map.entries()
+      const groupEntries = Array.from(groups.entries());
+      for (let i = 0; i < groupEntries.length; i += 1) {
+        const [, items] = groupEntries[i];
+        if (filter.color !== null) {
+          // 如果选择了特定颜色，只显示该颜色的项
+          const match = items.find((item) => {
+            if (props.type === 'face')
+              return Math.floor(item.id / 100) % 10 === filter.color;
+            return item.id % 10 === filter.color;
           });
-
-          let targetItem = null;
-          if (
-            detailRes.data &&
-            detailRes.data.records &&
-            detailRes.data.records.length > 0
-          ) {
-            [targetItem] = detailRes.data.records;
-          } else if (
-            Array.isArray(detailRes.data) &&
-            detailRes.data.length > 0
-          ) {
-            // @ts-ignore
-            [targetItem] = detailRes.data;
+          if (match) {
+            processed.push(match);
           }
-
-          if (targetItem && targetItem.id === props.defaultId) {
-            // 将目标项插入到列表最前面，确保用户能看到
-            list.value.unshift(targetItem);
-            hasLocatedDefaultId.value = true; // 标记已定位
+        } else {
+          // 如果未选择颜色（全部），优先显示基础色（0），如果没有则显示第一个
+          const match = items.find((item) => {
+            if (props.type === 'face')
+              return Math.floor(item.id / 100) % 10 === 0;
+            return item.id % 10 === 0;
+          });
+          if (match) {
+            processed.push(match);
+          } else if (items.length > 0) {
+            processed.push(items[0]);
           }
-        } catch (e) {
-          // ignore
         }
-      } else if (
-        props.defaultId &&
-        !hasLocatedDefaultId.value &&
-        list.value.find((item) => item.id === props.defaultId)
-      ) {
-        // 如果默认ID已经在列表中，也标记为已定位，避免后续翻页重复触发逻辑（虽然上面的条件已经排除了这种情况，但为了逻辑完整性）
-        hasLocatedDefaultId.value = true;
+      }
+
+      // 保持排序 (按ID)
+      processed.sort((a, b) => a.id - b.id);
+
+      filteredData.value = processed;
+      total.value = processed.length;
+
+      // 如果页码超出了范围，重置为1
+      if ((page.value - 1) * pageSize.value >= total.value) {
+        page.value = 1;
+      }
+
+      updatePageList();
+
+      // 定位默认ID
+      if (props.defaultId && !hasLocatedDefaultId.value) {
+        locateDefaultId();
       }
     } catch (error) {
-      // Message.error('加载数据失败');
+      Message.error(t('common.error.load'));
     } finally {
       loading.value = false;
     }
@@ -330,11 +397,6 @@
     fetchData();
   };
 
-  // const selectColor = (index: number | null) => {
-  //   filter.color = index;
-  //   handleFilterChange();
-  // };
-
   const resetFilter = () => {
     filter.gender = 2;
     filter.color = null;
@@ -345,7 +407,7 @@
 
   const handlePageChange = (current: number) => {
     page.value = current;
-    fetchData();
+    updatePageList(); // 前端分页，不需要重新请求
   };
 
   // 生成变体ID列表
@@ -529,11 +591,6 @@
           selectedId.value = props.defaultId;
           hasLocatedDefaultId.value = false; // 重置定位标记，以便下次打开时重新定位
         }
-        // 重置筛选并加载
-        // filter.gender = 2;
-        // filter.color = null;
-        // filter.keyword = '';
-        // page.value = 1;
         fetchData();
       }
     }
@@ -558,6 +615,7 @@
     /* 移动端高度自适应，但不超过屏幕 */
     @media (max-width: 768px) {
       height: calc(100vh - 100px);
+      max-height: 100%; /* 确保不超过父容器 */
     }
   }
 
@@ -568,48 +626,10 @@
     flex-shrink: 0; /* 防止被压缩 */
   }
 
-  .color-filter {
+  .search-group {
     display: flex;
-    align-items: center;
-    margin-top: 8px;
-    flex-wrap: wrap;
-
-    .label {
-      margin-right: 8px;
-    }
-
-    .color-options {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .color-item {
-      width: 24px;
-      height: 24px;
-      border-radius: 4px;
-      cursor: pointer;
-      border: 2px solid transparent;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-
-      &:first-child {
-        width: auto;
-        padding: 0 8px;
-        border: 1px solid var(--color-border);
-      }
-
-      &.active {
-        border-color: rgb(var(--primary-6));
-        box-shadow: 0 0 0 2px rgba(var(--primary-6), 0.2);
-      }
-
-      &:hover {
-        opacity: 0.8;
-      }
-    }
+    gap: 8px;
+    width: 100%;
   }
 
   .list-area {
@@ -717,11 +737,12 @@
       left: 50% !important;
       transform: translate(-50%, -50%);
       width: 280px;
+      max-height: 60vh; /* 限制最大高度 */
       background-color: var(--color-bg-2);
       padding: 16px;
     }
 
-    .mobile-popup-header {
+    .popup-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -730,12 +751,12 @@
       border-bottom: 1px solid var(--color-border);
     }
 
-    .mobile-popup-title {
+    .popup-title {
       font-weight: 500;
       font-size: 14px;
     }
 
-    .mobile-close-btn {
+    .close-btn {
       cursor: pointer;
       padding: 4px;
       display: flex;
@@ -822,22 +843,20 @@
   }
 
   /* 自定义滚动条样式 */
-  .list-area::-webkit-scrollbar {
+  .list-area::-webkit-scrollbar,
+  .variant-popup::-webkit-scrollbar {
     width: 6px;
     height: 6px;
-    display: none;
   }
 
-  .list-area:hover::-webkit-scrollbar {
-    display: block;
-  }
-
-  .list-area::-webkit-scrollbar-thumb {
+  .list-area::-webkit-scrollbar-thumb,
+  .variant-popup::-webkit-scrollbar-thumb {
     border-radius: 3px;
     background-color: var(--color-text-4);
   }
 
-  .list-area::-webkit-scrollbar-track {
+  .list-area::-webkit-scrollbar-track,
+  .variant-popup::-webkit-scrollbar-track {
     background-color: transparent;
   }
 

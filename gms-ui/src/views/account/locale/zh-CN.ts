@@ -232,7 +232,7 @@ export default {
   'account.player.selector.color.all': '全部',
   'account.player.selector.empty': '暂无数据',
   'account.player.selector.select': '请先选择一项',
-  'account.player.selector.reset': '重置筛选',
+  'account.player.selector.reset': '重置',
   'account.player.selector.color.0': '黑色',
   'account.player.selector.color.1': '红色',
   'account.player.selector.color.2': '橙色',
@@ -241,5 +241,7 @@ export default {
   'account.player.selector.color.5': '蓝色',
   'account.player.selector.color.6': '紫色',
   'account.player.selector.color.7': '褐色',
+  'account.player.selector.color.8': '白色',
   'account.player.selector.variants': '颜色预览',
+  'common.error.load': '加载数据失败',
 };

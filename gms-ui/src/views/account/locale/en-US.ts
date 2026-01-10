@@ -235,7 +235,7 @@ export default {
   'account.player.selector.color.all': 'All',
   'account.player.selector.empty': 'No Data',
   'account.player.selector.select': 'Please select one',
-  'account.player.selector.reset': 'Reset Filter',
+  'account.player.selector.reset': 'Reset',
   'account.player.selector.color.0': 'Black',
   'account.player.selector.color.1': 'Red',
   'account.player.selector.color.2': 'Orange',
@@ -244,5 +244,7 @@ export default {
   'account.player.selector.color.5': 'Blue',
   'account.player.selector.color.6': 'Purple',
   'account.player.selector.color.7': 'Brown',
+  'account.player.selector.color.8': 'White',
   'account.player.selector.variants': 'Color Variants',
+  'common.error.load': 'Failed to load data',
 };
