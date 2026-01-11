@@ -208,6 +208,12 @@ public class CharactersDO implements Serializable {
     private String accountName;
 
     @Column(ignore = true)
+    private Integer banned;
+
+    @Column(ignore = true)
+    private Timestamp tempban;
+
+    @Column(ignore = true)
     private Map<String, Object> extra = new HashMap<>();
 
     public Map<String, Object> getExtra() {

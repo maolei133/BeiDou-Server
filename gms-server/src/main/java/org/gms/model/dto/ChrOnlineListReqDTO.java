@@ -21,4 +21,5 @@ public class ChrOnlineListReqDTO extends BasePageDTO {
     private Integer maxLevel;
     private Integer minOnlineTime; // minutes
     private Integer maxOnlineTime; // minutes
+    private Integer banStatus; // 0:全部, 1:未封禁, 2:永久封禁, 3:临时封禁
 }

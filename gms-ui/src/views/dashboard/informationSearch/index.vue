@@ -151,7 +151,25 @@
     setLoading(true);
     try {
       const { data } = await informationSearch(condition.value);
-      informationList.value = data;
+      // 修复：后端返回的数据结构为 { records: [], ... }
+      // 如果 data 是数组，直接赋值
+      if (Array.isArray(data)) {
+        informationList.value = data;
+      } else if (data && Array.isArray((data as any).records)) {
+        // 如果 data 是对象且包含 records 属性，则取 records
+        informationList.value = (data as any).records;
+      } else if (data && Array.isArray((data as any).data)) {
+        // 兼容旧逻辑，如果 data 是对象且包含 data 属性
+        informationList.value = (data as any).data;
+      } else {
+        // 兜底，如果结构不符合预期，清空列表或保持原样
+        informationList.value = [];
+        console.warn('Unexpected API response structure:', data);
+      }
+    } catch (err) {
+      // 错误处理
+      console.error('Search failed:', err);
+      informationList.value = [];
     } finally {
       setLoading(false);
     }
@@ -160,6 +178,7 @@
   const resetSearch = () => {
     condition.value.types = [];
     condition.value.filter = '';
+    informationList.value = []; // 重置时也清空列表
   };
 
   const getTag = (type: string) => {

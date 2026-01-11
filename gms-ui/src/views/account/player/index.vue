@@ -79,6 +79,31 @@
           </a-col>
           <template v-if="!isMobile || showMoreFilters">
             <a-col :span="isMobile ? 24 : 6">
+              <a-form-item :label="$t('account.player.banStatus')">
+                <a-select
+                  v-model="filterForm.banStatus"
+                  :placeholder="$t('account.player.banStatus.placeholder')"
+                  allow-clear
+                >
+                  <a-option :value="0">{{
+                    $t('account.player.banStatus.all')
+                  }}</a-option>
+                  <a-option :value="1">{{
+                    $t('account.player.banStatus.normal')
+                  }}</a-option>
+                  <a-option :value="4">{{
+                    $t('account.player.banStatus.banned')
+                  }}</a-option>
+                  <a-option :value="2">{{
+                    $t('account.player.banStatus.permanent')
+                  }}</a-option>
+                  <a-option :value="3">{{
+                    $t('account.player.banStatus.temporary')
+                  }}</a-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="isMobile ? 24 : 6">
               <a-form-item :label="$t('account.player.channel')">
                 <a-select
                   v-model="filterForm.channel"
@@ -289,7 +314,21 @@
             data-index="name"
             :width="150"
             align="center"
-          />
+          >
+            <template #cell="{ record }">
+              <span v-if="record.banStatus === 1">
+                <a-tooltip :content="$t('account.player.banStatus.permanent')">
+                  <icon-stop style="color: red; margin-right: 4px" />
+                </a-tooltip>
+              </span>
+              <span v-else-if="record.banStatus === 2">
+                <a-tooltip :content="$t('account.player.banStatus.temporary')">
+                  <icon-clock-circle style="color: orange; margin-right: 4px" />
+                </a-tooltip>
+              </span>
+              {{ record.name }}
+            </template>
+          </a-table-column>
           <a-table-column
             :title="$t('account.player.gender')"
             :width="70"
@@ -997,6 +1036,7 @@
     maxLevel?: number;
     minOnlineTime?: number;
     maxOnlineTime?: number;
+    banStatus?: number;
   }>({
     id: undefined,
     name: undefined,
@@ -1011,6 +1051,7 @@
     maxLevel: undefined,
     minOnlineTime: undefined,
     maxOnlineTime: undefined,
+    banStatus: 0,
   });
   const giveFormVisible = ref(false);
   const giveFormTitle = ref('');
@@ -1228,6 +1269,7 @@
       maxLevel: undefined,
       minOnlineTime: undefined,
       maxOnlineTime: undefined,
+      banStatus: 0,
     };
     page.value = 1;
     loadData();

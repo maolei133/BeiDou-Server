@@ -43,4 +43,5 @@ public class ChrOnlineListRtnDTO {
     private int hair;
     private int skinColor;
     private boolean banned;
+    private int banStatus; // 0: 未封禁, 1: 永久封禁, 2: 临时封禁
 }

@@ -17,6 +17,7 @@ export interface PlayerListParams {
   maxLevel?: number;
   minOnlineTime?: number;
   maxOnlineTime?: number;
+  banStatus?: number;
 }
 
 export interface OnlinePlayer {

@@ -85,6 +85,10 @@ import static org.gms.dao.entity.table.SkillsDOTableDef.SKILLS_D_O;
 import static org.gms.dao.entity.table.TrocklocationsDOTableDef.TROCKLOCATIONS_D_O;
 import static org.gms.dao.entity.table.WishlistsDOTableDef.WISHLISTS_D_O;
 
+/**
+ * 角色服务类
+ * 提供角色的增删改查、状态管理、数据持久化等功能
+ */
 @Service
 @AllArgsConstructor
 @Slf4j
@@ -120,14 +124,28 @@ public class CharacterService {
     private final ItemFactoryService itemFactoryService;
     private final AccountService accountService;
 
+    /**
+     * 根据ID查找角色实体
+     * @param id 角色ID
+     * @return 角色实体对象
+     */
     public CharactersDO findById(int id) {
         return charactersMapper.selectOneById(id);
     }
 
+    /**
+     * 更新角色信息
+     * @param condition 更新条件和内容
+     */
     public void update(CharactersDO condition) {
         charactersMapper.update(condition);
     }
 
+    /**
+     * 获取角色在线列表（支持分页和筛选）
+     * @param request 查询请求参数
+     * @return 分页的角色列表DTO
+     */
     public Page<ChrOnlineListRtnDTO> getChrOnlineList(ChrOnlineListReqDTO request) {
         // 默认状态为在线
         Integer status = request.getStatus() == null ? 1 : request.getStatus();
@@ -136,7 +154,9 @@ public class CharacterService {
         if (status == 1) {
             Collection<Character> chrList = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getAllCharacters();
             return BasePageUtil.create(chrList, request)
-                    .filter(chr -> (Objects.isNull(request.getId()) || Objects.equals(chr.getId(), request.getId()))
+                    .filter(chr -> {
+                        // 基础条件过滤
+                        boolean basicMatch = (Objects.isNull(request.getId()) || Objects.equals(chr.getId(), request.getId()))
                             && (RequireUtil.isEmpty(request.getName()) || chr.getName().contains(request.getName()))
                             && (Objects.isNull(request.getMap()) || Objects.equals(chr.getMap().getId(), request.getMap()))
                             && (Objects.isNull(request.getAccountId()) || Objects.equals(chr.getAccountId(), request.getAccountId()))
@@ -147,12 +167,36 @@ public class CharacterService {
                             && (Objects.isNull(request.getMinLevel()) || chr.getLevel() >= request.getMinLevel())
                             && (Objects.isNull(request.getMaxLevel()) || chr.getLevel() <= request.getMaxLevel())
                             && (Objects.isNull(request.getMinOnlineTime()) || (System.currentTimeMillis() - chr.getLoginTime()) / 60000 >= request.getMinOnlineTime())
-                            && (Objects.isNull(request.getMaxOnlineTime()) || (System.currentTimeMillis() - chr.getLoginTime()) / 60000 <= request.getMaxOnlineTime())
-                    )
-                    .page(chr -> ChrOnlineListRtnDTO.builder()
+                            && (Objects.isNull(request.getMaxOnlineTime()) || (System.currentTimeMillis() - chr.getLoginTime()) / 60000 <= request.getMaxOnlineTime());
+                        
+                        if (!basicMatch) return false;
+
+                        // 封禁状态过滤
+                        if (request.getBanStatus() != null && request.getBanStatus() != 0) {
+                            boolean isPermBan = chr.isBanned();
+                            boolean isTempBan = !isPermBan && chr.getClient().getTempBanCalendar() != null && chr.getClient().getTempBanCalendar().getTimeInMillis() > System.currentTimeMillis();
+                            
+                            if (request.getBanStatus() == 1) return !isPermBan && !isTempBan; // 正常
+                            if (request.getBanStatus() == 2) return isPermBan; // 永久
+                            if (request.getBanStatus() == 3) return isTempBan; // 临时
+                            if (request.getBanStatus() == 4) return isPermBan || isTempBan; // 所有封禁
+                        }
+                        return true;
+                    })
+                    .page(chr -> {
+                        boolean isBanned = chr.isBanned();
+                        int banStatus = 0;
+                        if (isBanned) {
+                            banStatus = 1; // 永久封禁
+                        } else if (chr.getClient().getTempBanCalendar() != null && chr.getClient().getTempBanCalendar().getTimeInMillis() > System.currentTimeMillis()) {
+                            isBanned = true;
+                            banStatus = 2; // 临时封禁
+                        }
+                        
+                        return ChrOnlineListRtnDTO.builder()
                             .world(chr.getWorld())
                             .accountId(chr.getAccountId())
-                            .accountName(chr.getClient().getAccountName()) // 新增
+                            .accountName(chr.getClient().getAccountName())
                             .id(chr.getId())
                             .name(chr.getName())
                             .map(chr.getMap().getId())
@@ -169,10 +213,12 @@ public class CharacterService {
                             .partyId(chr.getPartyId())
                             .channel(chr.getClient().getChannel())
                             .fame(chr.getFame())
-                            .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(chr.getLoginTime()))) // 新增
+                            .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(chr.getLoginTime())))
                             .lastLogoutTime(null) // 在线玩家登出时间为null
-                            .banned(chr.isBanned())
-                            .build());
+                            .banned(isBanned)
+                            .banStatus(banStatus)
+                            .build();
+                    });
         }
 
         // 状态为0（全部）或2（离线）
@@ -196,6 +242,22 @@ public class CharacterService {
                 .and(CHARACTERS_D_O.LEVEL.ge(request.getMinLevel(), Objects::nonNull))
                 .and(CHARACTERS_D_O.LEVEL.le(request.getMaxLevel(), Objects::nonNull));
 
+        if (request.getBanStatus() != null && request.getBanStatus() != 0) {
+            if (request.getBanStatus() == 1) { // 未封禁
+                queryWrapper.and(ACCOUNTS_D_O.BANNED.eq(0).or(ACCOUNTS_D_O.BANNED.isNull()))
+                        .and(ACCOUNTS_D_O.TEMPBAN.lt(new Timestamp(System.currentTimeMillis())).or(ACCOUNTS_D_O.TEMPBAN.isNull()));
+            } else if (request.getBanStatus() == 2) { // 永久封禁
+                queryWrapper.and(ACCOUNTS_D_O.BANNED.eq(1));
+            } else if (request.getBanStatus() == 3) { // 临时封禁
+                queryWrapper.and(ACCOUNTS_D_O.TEMPBAN.gt(new Timestamp(System.currentTimeMillis())));
+            } else if (request.getBanStatus() == 4) { // 已封禁 (永久或临时)
+                queryWrapper.and(
+                    ACCOUNTS_D_O.BANNED.eq(1)
+                    .or(ACCOUNTS_D_O.TEMPBAN.gt(new Timestamp(System.currentTimeMillis())))
+                );
+            }
+        }
+
         if (status == 2) { // 离线
             Collection<Character> onlineChars = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getAllCharacters();
             if (!onlineChars.isEmpty()) {
@@ -206,7 +268,6 @@ public class CharacterService {
 
         Page<CharactersDO> charPage = charactersMapper.paginateAs(new Page<>(request.getPageNo(), request.getPageSize()), queryWrapper, CharactersDO.class);
 
-        // 修复：Page 对象没有 stream() 方法，需要先获取 records 列表
         List<ChrOnlineListRtnDTO> dtoList = charPage.getRecords().stream().map(charactersDO -> {
             String mapName = "未知地图";
             List<Channel> channels = Server.getInstance().getChannelsFromWorld(request.getWorld());
@@ -250,6 +311,16 @@ public class CharacterService {
                 if (request.getMinOnlineTime() != null && (System.currentTimeMillis() - onlineChr.getLoginTime()) / 60000 < request.getMinOnlineTime()) return null;
                 if (request.getMaxOnlineTime() != null && (System.currentTimeMillis() - onlineChr.getLoginTime()) / 60000 > request.getMaxOnlineTime()) return null;
 
+                // 检查在线玩家的封禁状态
+                boolean isBanned = onlineChr.isBanned();
+                int banStatus = 0;
+                if (isBanned) {
+                    banStatus = 1; // 永久封禁
+                } else if (onlineChr.getClient().getTempBanCalendar() != null && onlineChr.getClient().getTempBanCalendar().getTimeInMillis() > System.currentTimeMillis()) {
+                    isBanned = true;
+                    banStatus = 2; // 临时封禁
+                }
+
                 return ChrOnlineListRtnDTO.builder()
                         .world(onlineChr.getWorld())
                         .accountId(onlineChr.getAccountId())
@@ -272,7 +343,8 @@ public class CharacterService {
                         .fame(onlineChr.getFame())
                         .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(onlineChr.getLoginTime())))
                         .lastLogoutTime(null)
-                        .banned(onlineChr.isBanned())
+                        .banned(isBanned)
+                        .banStatus(banStatus)
                         .build();
             }
 
@@ -282,20 +354,40 @@ public class CharacterService {
             if (request.getChannel() != null) return null; // 离线玩家没有频道
 
             boolean banned = false;
-            if (charactersDO.getExtra() != null) {
+            int banStatus = 0;
+            
+            // 优先使用 CharactersDO 中映射的字段
+            if (charactersDO.getBanned() != null && charactersDO.getBanned() > 0) {
+                banned = true;
+                banStatus = 1; // 永久封禁
+            }
+            
+            if (charactersDO.getTempban() != null && charactersDO.getTempban().after(new Timestamp(System.currentTimeMillis()))) {
+                banned = true;
+                banStatus = 2; // 临时封禁
+            }
+            
+            // 如果 CharactersDO 中没有映射，尝试从 extra 中获取 (兼容旧逻辑)
+            if (!banned && charactersDO.getExtra() != null) {
                 Object bannedObj = charactersDO.getExtra().get("banned");
                 if (bannedObj instanceof Boolean) {
-                    banned = (Boolean) bannedObj;
+                    if ((Boolean) bannedObj) {
+                        banned = true;
+                        banStatus = 1;
+                    }
                 } else if (bannedObj instanceof Number) {
-                    banned = ((Number) bannedObj).intValue() > 0;
+                    if (((Number) bannedObj).intValue() > 0) {
+                        banned = true;
+                        banStatus = 1;
+                    }
                 }
                 
-                // Check tempban
                 Object tempbanObj = charactersDO.getExtra().get("tempban");
                 if (tempbanObj instanceof Timestamp) {
                     Timestamp tempban = (Timestamp) tempbanObj;
                     if (tempban.after(new Timestamp(System.currentTimeMillis()))) {
                         banned = true;
+                        banStatus = 2;
                     }
                 }
             }
@@ -323,6 +415,7 @@ public class CharacterService {
                     .loginTime(charactersDO.getCreatedate() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getCreatedate()) : null) // 离线显示创建时间
                     .lastLogoutTime(charactersDO.getLastLogoutTime() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getLastLogoutTime()) : null)
                     .banned(banned)
+                    .banStatus(banStatus)
                     .build();
         }).filter(Objects::nonNull).collect(Collectors.toList()); // 过滤掉返回null的记录
 
@@ -336,6 +429,10 @@ public class CharacterService {
         return resultPage;
     }
 
+    /**
+     * 更新角色详细信息
+     * @param request 更新请求
+     */
     public void updateCharacter(UpdateCharacterReqDTO request) {
         RequireUtil.requireNotNull(request.getId(), "Character ID cannot be null");
 
@@ -411,6 +508,11 @@ public class CharacterService {
         }
     }
 
+    /**
+     * 获取角色详情
+     * @param id 角色ID
+     * @return 角色详情DTO
+     */
     public ChrDetailRtnDTO getCharacterDetail(Integer id) {
         RequireUtil.requireNotNull(id, "Character ID cannot be null");
 
@@ -516,6 +618,10 @@ public class CharacterService {
                 .build();
     }
 
+    /**
+     * 更新角色扩展倍率
+     * @param data 扩展数据
+     */
     public void updateRate(ExtendValueDO data) {
         checkName(data);
         data.setExtendType(ExtendType.CHARACTER_EXTEND.getType());
@@ -534,6 +640,10 @@ public class CharacterService {
         character.setCouponRates();
     }
 
+    /**
+     * 重置单个倍率
+     * @param data 扩展数据
+     */
     public void resetRate(ExtendValueDO data) {
         checkName(data);
         extendValueMapper.deleteByQuery(QueryWrapper.create()
@@ -546,6 +656,10 @@ public class CharacterService {
         character.setCouponRates();
     }
 
+    /**
+     * 重置所有倍率（经验、掉落、金币）
+     * @param data 扩展数据
+     */
     public void resetRates(ExtendValueDO data) {
         check(data);
         extendValueMapper.deleteByQuery(QueryWrapper.create()
@@ -558,10 +672,18 @@ public class CharacterService {
         character.setCouponRates();
     }
 
+    /**
+     * 重置所有角色的雇佣商人状态
+     */
     public void resetMerchant() {
         charactersMapper.updateAllHasMerchant(0);
     }
 
+    /**
+     * 获取各世界排名前50的玩家
+     * @param worldSize 世界数量
+     * @return 排名列表
+     */
     public List<List<CharactersDO>> getWorldsRankPlayers(int worldSize) {
         boolean wholeServerRanking = GameConfig.getServerBoolean("use_whole_server_ranking");
         List<List<CharactersDO>> worldsRankingList = new ArrayList<>();
@@ -588,6 +710,11 @@ public class CharacterService {
         return worldsRankingList;
     }
 
+    /**
+     * 获取指定世界排名前50的玩家
+     * @param worldId 世界ID
+     * @return 排名列表
+     */
     public List<CharactersDO> getWorldRankPlayers(int worldId) {
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .select(CHARACTERS_D_O.NAME, CHARACTERS_D_O.LEVEL, CHARACTERS_D_O.WORLD)
@@ -601,21 +728,39 @@ public class CharacterService {
         return charactersMapper.selectListByQuery(queryWrapper);
     }
 
+    /**
+     * 根据名称查找角色
+     * @param name 角色名
+     * @return 角色实体
+     */
     public CharactersDO findByName(String name) {
         List<CharactersDO> charactersDOS = charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(name)));
         return charactersDOS.isEmpty() ? null : charactersDOS.getFirst();
     }
 
+    /**
+     * 移除技能
+     * @param skillsDO 技能实体
+     */
     public void removeSkill(SkillsDO skillsDO) {
         skillsMapper.deleteByQuery(QueryWrapper.create(skillsDO));
     }
 
+    /**
+     * 删除家族
+     * @param guildsDO 家族实体
+     */
     @Transactional(rollbackFor = Exception.class)
     public void deleteGuild(GuildsDO guildsDO) {
         charactersMapper.updateByQuery(CharactersDO.builder().guildid(0).guildrank(5).build(), QueryWrapper.create().where(CHARACTERS_D_O.GUILDID.eq(guildsDO.getGuildid().intValue())));
         guildsMapper.deleteById(guildsDO.getGuildid());
     }
 
+    /**
+     * 从数据库彻底删除角色
+     * @param player 角色对象
+     * @param senderAccId 发起请求的账号ID（用于安全校验）
+     */
     @Transactional(rollbackFor = Exception.class)
     public void deleteCharFromDB(Character player, int senderAccId) {
         int cid = player.getId();
@@ -696,6 +841,11 @@ public class CharacterService {
         worldTransferService.cancelPendingWorldTransfer(player, false);
     }
 
+    /**
+     * 保存角色数据到数据库
+     * @param player 角色对象
+     * @param notAutosave 是否非自动保存（用于日志区分）
+     */
     @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_UNCOMMITTED)
     public void saveCharToDB(Character player, boolean notAutosave) {
         if (!player.isLoggedIn()) {
@@ -750,6 +900,13 @@ public class CharacterService {
         }
     }
 
+    /**
+     * 从数据库加载角色数据
+     * @param cid 角色ID
+     * @param client 客户端对象
+     * @param channelServer 是否为频道服务器加载
+     * @return 角色对象
+     */
     public Character loadCharFromDB(int cid, Client client, boolean channelServer) {
         CharactersDO charactersDO = findById(cid);
         RequireUtil.requireNotNull(charactersDO, I18nUtil.getExceptionMessage("UNKNOWN_CHARACTER"));
@@ -1203,6 +1360,12 @@ public class CharacterService {
         }
     }
 
+    /**
+     * 插入新角色
+     * @param chr 角色对象
+     * @param recipe 创建配方
+     * @return 新角色ID
+     */
     @Transactional
     public int insertNewChar(Character chr, org.gms.client.creator.CharacterFactoryRecipe recipe) {
         // Character info
@@ -1350,6 +1513,10 @@ public class CharacterService {
         }
     }
 
+    /**
+     * 断开玩家连接
+     * @param request 断开请求
+     */
     public void disconnect(DisconnectReqDTO request) {
         List<Integer> ids = request.getIds();
         if (request.isAll()) {
@@ -1375,6 +1542,10 @@ public class CharacterService {
         }
     }
 
+    /**
+     * 封禁玩家
+     * @param request 封禁请求
+     */
     public void ban(BanPlayerReqDTO request) {
         List<Integer> ids = request.getIds();
         String reason = request.getReason();
@@ -1419,19 +1590,13 @@ public class CharacterService {
 
         for (Integer charId : targetIds) {
             // 1. 获取角色信息（在线或离线）
-            Character onlineChr = null;
-            CharactersDO offlineChr = null;
-            
-            for (World world : Server.getInstance().getWorlds()) {
-                onlineChr = world.getPlayerStorage().getCharacterById(charId);
-                if (onlineChr != null) break;
-            }
+            Pair<Character, CharactersDO> pair = getOnlineOrOfflineCharacter(charId);
+            Character onlineChr = pair.getLeft();
+            CharactersDO offlineChr = pair.getRight();
 
-            if (onlineChr == null) {
-                offlineChr = charactersMapper.selectOneById(charId);
-            }
+            if (onlineChr == null && offlineChr == null) continue;
 
-            int accountId = (onlineChr != null) ? onlineChr.getAccountId() : (offlineChr != null ? offlineChr.getAccountid() : -1);
+            int accountId = (onlineChr != null) ? onlineChr.getAccountId() : offlineChr.getAccountid();
             if (accountId == -1) continue;
 
             // 2. 封禁账号
@@ -1510,20 +1675,19 @@ public class CharacterService {
         }
     }
 
+    /**
+     * 获取封禁信息
+     * @param charId 角色ID
+     * @return 封禁信息DTO
+     */
     public BanInfoRtnDTO getBanInfo(Integer charId) {
-        Character onlineChr = null;
-        CharactersDO offlineChr = null;
+        Pair<Character, CharactersDO> pair = getOnlineOrOfflineCharacter(charId);
+        Character onlineChr = pair.getLeft();
+        CharactersDO offlineChr = pair.getRight();
 
-        for (World world : Server.getInstance().getWorlds()) {
-            onlineChr = world.getPlayerStorage().getCharacterById(charId);
-            if (onlineChr != null) break;
-        }
+        if (onlineChr == null && offlineChr == null) return BanInfoRtnDTO.builder().build();
 
-        if (onlineChr == null) {
-            offlineChr = charactersMapper.selectOneById(charId);
-        }
-
-        int accountId = (onlineChr != null) ? onlineChr.getAccountId() : (offlineChr != null ? offlineChr.getAccountid() : -1);
+        int accountId = (onlineChr != null) ? onlineChr.getAccountId() : offlineChr.getAccountid();
         if (accountId == -1) return BanInfoRtnDTO.builder().build();
 
         AccountsDO account = accountService.findById(accountId);
@@ -1552,20 +1716,18 @@ public class CharacterService {
                 .build();
     }
     
+    /**
+     * 解封玩家
+     * @param charId 角色ID
+     */
     public void unban(Integer charId) {
-        Character onlineChr = null;
-        CharactersDO offlineChr = null;
+        Pair<Character, CharactersDO> pair = getOnlineOrOfflineCharacter(charId);
+        Character onlineChr = pair.getLeft();
+        CharactersDO offlineChr = pair.getRight();
 
-        for (World world : Server.getInstance().getWorlds()) {
-            onlineChr = world.getPlayerStorage().getCharacterById(charId);
-            if (onlineChr != null) break;
-        }
+        if (onlineChr == null && offlineChr == null) return;
 
-        if (onlineChr == null) {
-            offlineChr = charactersMapper.selectOneById(charId);
-        }
-
-        int accountId = (onlineChr != null) ? onlineChr.getAccountId() : (offlineChr != null ? offlineChr.getAccountid() : -1);
+        int accountId = (onlineChr != null) ? onlineChr.getAccountId() : offlineChr.getAccountid();
         if (accountId == -1) return;
         
         accountService.unbanAccount(accountId);
@@ -1573,5 +1735,24 @@ public class CharacterService {
         if (onlineChr != null) {
             onlineChr.setBanned(false);
         }
+    }
+
+    /**
+     * 根据ID查找角色（优先查找在线，其次查找数据库）
+     *
+     * @param charId 角色ID
+     * @return Pair: Left为在线角色对象，Right为数据库实体对象。两者互斥或Right为Left的数据库映射（视具体实现而定，这里设计为互斥，若在线则Right为null，若离线则Left为null）
+     */
+    private Pair<Character, CharactersDO> getOnlineOrOfflineCharacter(int charId) {
+        // 1. 尝试获取在线玩家
+        for (World world : Server.getInstance().getWorlds()) {
+            Character onlineChr = world.getPlayerStorage().getCharacterById(charId);
+            if (onlineChr != null) {
+                return new Pair<>(onlineChr, null);
+            }
+        }
+        // 2. 获取离线玩家
+        CharactersDO offlineChr = charactersMapper.selectOneById(charId);
+        return new Pair<>(null, offlineChr);
     }
 }
