@@ -54,6 +54,9 @@ export interface OnlinePlayer {
   hair: number;
   skinColor: number;
   banned: boolean;
+  banStatus: number;
+  banReason?: string;
+  tempBanTime?: string;
 }
 
 export interface GiveForm {

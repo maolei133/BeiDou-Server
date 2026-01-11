@@ -281,7 +281,7 @@
         column-resizable
         :pagination="false"
         :bordered="{ cell: true }"
-        :scroll="{ x: 2200, y: '55vh' }"
+        :scroll="{ x: 'max-content', y: 'calc(90vh - 480px)' }"
       >
         <template #columns>
           <a-table-column
@@ -296,11 +296,16 @@
             align="center"
           >
             <template #cell="{ record }">
-              <router-link
-                :to="{ name: 'AccountList', query: { id: record.accountId } }"
-              >
-                [ {{ record.accountId }} ] {{ record.accountName }}
-              </router-link>
+              <div class="cell-flex">
+                <span class="cell-id">{{ record.accountId }}</span>
+                <a-divider direction="vertical" class="cell-divider" />
+                <router-link
+                  :to="{ name: 'AccountList', query: { id: record.accountId } }"
+                  class="cell-text"
+                >
+                  {{ record.accountName }}
+                </router-link>
+              </div>
             </template>
           </a-table-column>
           <a-table-column
@@ -316,17 +321,52 @@
             align="center"
           >
             <template #cell="{ record }">
-              <span v-if="record.banStatus === 1">
-                <a-tooltip :content="$t('account.player.banStatus.permanent')">
-                  <icon-stop style="color: red; margin-right: 4px" />
-                </a-tooltip>
-              </span>
-              <span v-else-if="record.banStatus === 2">
-                <a-tooltip :content="$t('account.player.banStatus.temporary')">
-                  <icon-clock-circle style="color: orange; margin-right: 4px" />
-                </a-tooltip>
-              </span>
-              {{ record.name }}
+              <div class="cell-flex">
+                <template v-if="hasBannedPlayerInPage">
+                  <div class="cell-icon">
+                    <span v-if="record.banStatus === 1">
+                      <a-tooltip>
+                        <template #content>
+                          <div>
+                            {{ $t('account.player.banStatus.permanent') }}
+                          </div>
+                          <div
+                            v-if="record.banReason"
+                            style="white-space: pre-wrap"
+                          >
+                            {{ $t('account.player.ban.reason') }}:
+                            {{ record.banReason }}
+                          </div>
+                        </template>
+                        <icon-stop style="color: red" />
+                      </a-tooltip>
+                    </span>
+                    <span v-else-if="record.banStatus === 2">
+                      <a-tooltip>
+                        <template #content>
+                          <div>
+                            {{ $t('account.player.banStatus.temporary') }}
+                          </div>
+                          <div v-if="record.tempBanTime">
+                            {{ $t('account.player.tempBanTime') }}:
+                            {{ record.tempBanTime }}
+                          </div>
+                          <div
+                            v-if="record.banReason"
+                            style="white-space: pre-wrap"
+                          >
+                            {{ $t('account.player.ban.reason') }}:
+                            {{ record.banReason }}
+                          </div>
+                        </template>
+                        <icon-clock-circle style="color: orange" />
+                      </a-tooltip>
+                    </span>
+                  </div>
+                  <a-divider direction="vertical" class="cell-divider" />
+                </template>
+                <span class="cell-text">{{ record.name }}</span>
+              </div>
             </template>
           </a-table-column>
           <a-table-column
@@ -346,23 +386,20 @@
           </a-table-column>
           <a-table-column
             :title="$t('account.player.map')"
-            :min-width="250"
             align="center"
+            :width="250"
             ellipsis
             tooltip
           >
             <template #cell="{ record }">
               <span style="white-space: nowrap">
                 {{ record.mapName }} ({{ record.map }})
-                <a-button type="text" @click="handleWarp(record)">
-                  {{ $t('account.player.button.warp') }}
-                </a-button>
               </span>
             </template>
           </a-table-column>
           <a-table-column
             :title="$t('account.player.job')"
-            :width="180"
+            :width="150"
             align="center"
           >
             <template #cell="{ record }">
@@ -396,12 +433,12 @@
           <a-table-column
             :title="$t('account.player.partyId')"
             data-index="partyId"
-            :width="90"
+            :width="120"
             align="center"
           />
           <a-table-column
             :title="$t('account.player.guild')"
-            :width="180"
+            :width="150"
             align="center"
           >
             <template #cell="{ record }">
@@ -442,17 +479,21 @@
           />
           <a-table-column
             :title="$t('account.list.column.operate')"
-            :width="150"
             align="center"
+            fixed="right"
+            :width="100"
           >
             <template #cell="{ record }">
               <a-dropdown @select="(val) => handleSingleAction(val, record)">
-                <a-button type="text" size="mini">
+                <a-button type="primary" size="mini">
                   {{ $t('account.list.column.operate') }} <icon-down />
                 </a-button>
                 <template #content>
                   <a-doption value="edit">{{
                     $t('account.player.button.edit')
+                  }}</a-doption>
+                  <a-doption value="warp">{{
+                    $t('account.player.button.warp')
                   }}</a-doption>
                   <a-doption value="give">{{
                     $t('account.player.button.give')
@@ -1134,6 +1175,12 @@
     return Array.from(guilds).map(([id, name]) => ({ id, name }));
   });
 
+  const hasBannedPlayerInPage = computed(() => {
+    return tableData.value.some(
+      (player) => player.banStatus === 1 || player.banStatus === 2
+    );
+  });
+
   const checkScreen = () => {
     isMobile.value = window.innerWidth < 768;
   };
@@ -1416,23 +1463,6 @@
     }
   };
 
-  const handleSingleAction = (
-    value: string | number | Record<string, any> | undefined,
-    record: OnlinePlayer
-  ) => {
-    if (value === 'edit') {
-      editClick(record);
-    } else if (value === 'give') {
-      giveClick(record);
-    } else if (value === 'disconnect') {
-      handleDisconnect(record);
-    } else if (value === 'ban') {
-      handleBan(record);
-    } else if (value === 'unban') {
-      handleUnban(record);
-    }
-  };
-
   const calculateOnlineTime = (loginTime?: string) => {
     if (!loginTime) return '-';
     const start = new Date(loginTime).getTime();
@@ -1470,6 +1500,25 @@
       loadData();
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSingleAction = (
+    value: string | number | Record<string, any> | undefined,
+    record: OnlinePlayer
+  ) => {
+    if (value === 'edit') {
+      editClick(record);
+    } else if (value === 'warp') {
+      handleWarp(record);
+    } else if (value === 'give') {
+      giveClick(record);
+    } else if (value === 'disconnect') {
+      handleDisconnect(record);
+    } else if (value === 'ban') {
+      handleBan(record);
+    } else if (value === 'unban') {
+      handleUnban(record);
     }
   };
 
@@ -1625,5 +1674,32 @@
   }
   .item-details {
     flex: 1;
+  }
+  .cell-flex {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .cell-id {
+    margin-right: 0;
+  }
+  .cell-divider {
+    margin: 0 4px;
+    height: 1.2em;
+    border-color: var(--color-neutral-3);
+  }
+  .cell-text {
+    flex: 1;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cell-icon {
+    width: 20px;
+    margin-right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 </style>

@@ -318,4 +318,5 @@ export default {
   'account.player.job.error': 'Failed to fetch job list',
   'account.player.skin.error': 'Failed to fetch skin list',
   'account.player.detail.error': 'Failed to fetch character detail',
+  'account.player.tempBanTime': 'Unblocking time',
 };

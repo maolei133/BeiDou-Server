@@ -186,11 +186,17 @@ public class CharacterService {
                     .page(chr -> {
                         boolean isBanned = chr.isBanned();
                         int banStatus = 0;
+                        String banReason = null;
+                        String tempBanTime = null;
+                        
                         if (isBanned) {
                             banStatus = 1; // 永久封禁
+                            banReason = chr.getClient().getBanReason();
                         } else if (chr.getClient().getTempBanCalendar() != null && chr.getClient().getTempBanCalendar().getTimeInMillis() > System.currentTimeMillis()) {
                             isBanned = true;
                             banStatus = 2; // 临时封禁
+                            banReason = chr.getClient().getBanReason();
+                            tempBanTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(chr.getClient().getTempBanCalendar().getTime());
                         }
                         
                         return ChrOnlineListRtnDTO.builder()
@@ -217,6 +223,8 @@ public class CharacterService {
                             .lastLogoutTime(null) // 在线玩家登出时间为null
                             .banned(isBanned)
                             .banStatus(banStatus)
+                            .banReason(banReason)
+                            .tempBanTime(tempBanTime)
                             .build();
                     });
         }
@@ -227,6 +235,7 @@ public class CharacterService {
                         ACCOUNTS_D_O.NAME.as("accountName"), 
                         ACCOUNTS_D_O.BANNED.as("banned"), 
                         ACCOUNTS_D_O.TEMPBAN.as("tempban"),
+                        ACCOUNTS_D_O.BANREASON.as("banReason"),
                         GUILDS_D_O.NAME.as("guildName"))
                 .from(CHARACTERS_D_O)
                 .leftJoin(ACCOUNTS_D_O).on(CHARACTERS_D_O.ACCOUNTID.eq(ACCOUNTS_D_O.ID))
@@ -314,11 +323,17 @@ public class CharacterService {
                 // 检查在线玩家的封禁状态
                 boolean isBanned = onlineChr.isBanned();
                 int banStatus = 0;
+                String banReason = null;
+                String tempBanTime = null;
+                
                 if (isBanned) {
                     banStatus = 1; // 永久封禁
+                    banReason = onlineChr.getClient().getBanReason();
                 } else if (onlineChr.getClient().getTempBanCalendar() != null && onlineChr.getClient().getTempBanCalendar().getTimeInMillis() > System.currentTimeMillis()) {
                     isBanned = true;
                     banStatus = 2; // 临时封禁
+                    banReason = onlineChr.getClient().getBanReason();
+                    tempBanTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(onlineChr.getClient().getTempBanCalendar().getTime());
                 }
 
                 return ChrOnlineListRtnDTO.builder()
@@ -345,6 +360,8 @@ public class CharacterService {
                         .lastLogoutTime(null)
                         .banned(isBanned)
                         .banStatus(banStatus)
+                        .banReason(banReason)
+                        .tempBanTime(tempBanTime)
                         .build();
             }
 
@@ -355,6 +372,8 @@ public class CharacterService {
 
             boolean banned = false;
             int banStatus = 0;
+            String banReason = null;
+            String tempBanTime = null;
             
             // 优先使用 CharactersDO 中映射的字段
             if (charactersDO.getBanned() != null && charactersDO.getBanned() > 0) {
@@ -365,6 +384,7 @@ public class CharacterService {
             if (charactersDO.getTempban() != null && charactersDO.getTempban().after(new Timestamp(System.currentTimeMillis()))) {
                 banned = true;
                 banStatus = 2; // 临时封禁
+                tempBanTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getTempban());
             }
             
             // 如果 CharactersDO 中没有映射，尝试从 extra 中获取 (兼容旧逻辑)
@@ -388,7 +408,27 @@ public class CharacterService {
                     if (tempban.after(new Timestamp(System.currentTimeMillis()))) {
                         banned = true;
                         banStatus = 2;
+                        tempBanTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(tempban);
                     }
+                }
+            }
+
+            // 获取封禁原因 (从关联查询的 extra 中获取)
+            if (charactersDO.getExtra() != null) {
+                Object reason = charactersDO.getExtra().get("banReason");
+                if (reason == null) {
+                    reason = charactersDO.getExtra().get("banreason");
+                }
+                if (reason != null) {
+                    banReason = reason.toString();
+                }
+            }
+
+            // 如果从 extra 获取失败，尝试直接查询账号信息
+            if (banReason == null && (banStatus == 1 || banStatus == 2)) {
+                AccountsDO account = accountService.findById(charactersDO.getAccountid());
+                if (account != null) {
+                    banReason = account.getBanreason();
                 }
             }
 
@@ -416,6 +456,8 @@ public class CharacterService {
                     .lastLogoutTime(charactersDO.getLastLogoutTime() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getLastLogoutTime()) : null)
                     .banned(banned)
                     .banStatus(banStatus)
+                    .banReason(banReason)
+                    .tempBanTime(tempBanTime)
                     .build();
         }).filter(Objects::nonNull).collect(Collectors.toList()); // 过滤掉返回null的记录
 

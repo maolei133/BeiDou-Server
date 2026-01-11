@@ -44,4 +44,6 @@ public class ChrOnlineListRtnDTO {
     private int skinColor;
     private boolean banned;
     private int banStatus; // 0: 未封禁, 1: 永久封禁, 2: 临时封禁
+    private String banReason;
+    private String tempBanTime;
 }
