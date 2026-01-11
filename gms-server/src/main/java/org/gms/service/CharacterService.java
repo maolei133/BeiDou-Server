@@ -851,7 +851,7 @@ public class CharacterService {
         if (!player.isLoggedIn()) {
             return;
         }
-        log.info(I18nUtil.getLogMessage(notAutosave ? "Character.saveCharToDB.info1" : "Character.saveCharToDB.info2", player.getName()));
+        log.info(I18nUtil.getLogMessage(notAutosave ? "Character.saveCharToDB.info1" : "Character.saveCharToDB.info2"), player.getName());
         Server.getInstance().updateCharacterEntry(player);
 
         CharactersDO cdo = Character.toCharactersDO(player);
