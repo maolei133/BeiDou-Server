@@ -66,6 +66,7 @@ import org.gms.service.*;
 import org.gms.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.SpringApplication;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -1604,11 +1605,15 @@ public class Server {
         TimerManager.getInstance().register(this::disconnectIdlesOnLoginState, 300000);
     }
 
-    public final Runnable shutdown(final boolean restart) {//no player should be online when trying to shutdown!
-        return () -> shutdownInternal(restart);
+    public final Runnable shutdown(final boolean restart, final boolean exit) {//no player should be online when trying to shutdown!
+        return () -> shutdownInternal(restart, exit);
     }
 
     public synchronized void shutdownInternal(boolean restart) {
+        shutdownInternal(restart, false);
+    }
+
+    public synchronized void shutdownInternal(boolean restart, boolean exit) {
         log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info1"), restart ?
                 I18nUtil.getLogMessage("Server.shutdownInternal.info2") : I18nUtil.getLogMessage("Server.shutdownInternal.info3"));
         if (getWorlds() == null) {
@@ -1643,6 +1648,10 @@ public class Server {
             log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info5"));
             instance = null;
             getInstance().init();
+        } else if (exit) {
+            log.info("Server shutdown complete. Exiting application.");
+            SpringApplication.exit(ServerManager.getApplicationContext());
+            System.exit(0);
         }
     }
 
@@ -1665,6 +1674,10 @@ public class Server {
     }
 
     public synchronized void shutdownWithMsgAndInternal(ServerShutdownDTO serverShutdownDTO) {
+        shutdownWithMsgAndInternal(serverShutdownDTO, false);
+    }
+
+    public synchronized void shutdownWithMsgAndInternal(ServerShutdownDTO serverShutdownDTO, boolean exit) {
 
         int time = 60000;
         // 原来就支持立即停止，不能忽视本地用户
@@ -1713,7 +1726,58 @@ public class Server {
 
             }
         }
-        TimerManager.getInstance().schedule(Server.getInstance().shutdown(false), time);
+        
+        // 调度执行关服逻辑
+        TimerManager.getInstance().schedule(() -> {
+            // 1. 断开所有玩家连接
+            for (World w : getWorlds()) {
+                w.getPlayerStorage().disconnectAll();
+            }
+            
+            // 2. 循环检查在线人数，直到为0或超时
+            final long checkInterval = 5000; // 5秒检查一次
+            final long maxWaitTime = 30000; // 最多等待30秒
+            final long startTime = System.currentTimeMillis();
+            
+            // 使用新线程来执行检查和后续操作，避免阻塞TimerManager线程
+            ThreadManager.getInstance().newTask(() -> {
+                try {
+                    while (System.currentTimeMillis() - startTime < maxWaitTime) {
+                        int onlineCount = 0;
+                        for (World w : getWorlds()) {
+                            onlineCount += w.getPlayerStorage().getAllCharacters().size();
+                        }
+                        
+                        if (onlineCount == 0) {
+                            break;
+                        }
+                        
+                        try {
+                            Thread.sleep(checkInterval);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    
+                    // 3. 延时30秒确保数据保存
+                    log.info("All players disconnected or timeout. Waiting 30s for data save...");
+                    try {
+                        Thread.sleep(30000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    
+                    // 4. 执行关服
+                    Server.getInstance().shutdown(false, exit).run();
+                    
+                } catch (Exception e) {
+                    log.error("Error during safe shutdown sequence", e);
+                    // 发生错误也尝试强制关服
+                    Server.getInstance().shutdown(false, exit).run();
+                }
+            });
+
+        }, time);
     }
 
 

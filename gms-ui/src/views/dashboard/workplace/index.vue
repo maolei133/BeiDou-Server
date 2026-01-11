@@ -64,20 +64,6 @@
         </a-space>
       </a-card>
 
-      <!-- 完全停服并退出BAT的确认框 -->
-      <a-modal
-        v-model:visible="shutdownConfirmVisible"
-        class="arco-modal-auto"
-        draggable
-        @ok="handleShutdownConfirm"
-        @cancel="handleShutdownCancel"
-      >
-        <template #title>
-          {{ $t('workplace.button.shutdown') }}
-        </template>
-        <p>{{ $t('workplace.button.shutdown.confirm') }}</p>
-      </a-modal>
-
       <!-- 重启服务端的确认框 -->
       <a-modal
         v-model:visible="restartConfirmVisible"
@@ -92,7 +78,7 @@
         <p>{{ $t('workplace.button.restart.confirm') }}</p>
       </a-modal>
 
-      <!-- 停服倒计时配置框 -->
+      <!-- 停服/关服倒计时配置框 -->
       <a-modal
         v-model:visible="stopConfigVisible"
         modal-class="arco-modal-auto"
@@ -101,7 +87,11 @@
         @cancel="handleStopConfigCancel"
       >
         <template #title>
-          {{ $t('workplace.button.stop.config') }}
+          {{
+            currentAction === 'shutdown'
+              ? $t('workplace.button.shutdown')
+              : $t('workplace.button.stop.config')
+          }}
         </template>
         <a-form :model="stopConfigData" layout="vertical">
           <a-form-item :label="$t('workplace.stop.mode')">
@@ -215,8 +205,9 @@
   const { loading, setLoading } = useLoading(false);
   const serverStatus = ref<'resting' | 'running'>('resting');
   const stopConfigVisible = ref(false);
-  const shutdownConfirmVisible = ref(false); // 新增用于确认关机的模态框可见性控制
   const restartConfirmVisible = ref(false); // 新增用于确认重启的模态框可见性控制
+  const currentAction = ref<'stop' | 'shutdown'>('stop'); // 记录当前操作是停止服务还是关闭程序
+
   const stopConfigData = reactive({
     mode: 'minutes' as 'minutes' | 'time',
     minutes: 0,
@@ -326,7 +317,13 @@
 
   const handleButtonClick = async (action: string) => {
     if (action === 'shutdown') {
-      shutdownConfirmVisible.value = true;
+      currentAction.value = 'shutdown';
+      stopConfigVisible.value = true;
+      return;
+    }
+    if (action === 'stop') {
+      currentAction.value = 'stop';
+      stopConfigVisible.value = true;
       return;
     }
     if (action === 'restart') {
@@ -339,13 +336,6 @@
       switch (action) {
         case 'start':
           await startServer();
-          break;
-        case 'stop':
-          stopConfigVisible.value = true;
-          setLoading(false);
-          return;
-        case 'restart':
-          await restartServer();
           break;
         case 'reloadEvents':
           await reloadEventsByGMCommand();
@@ -388,26 +378,6 @@
     }
   };
 
-  const handleShutdownConfirm = async () => {
-    try {
-      setLoading(true);
-      await shutdown();
-      Message.success(t('workplace.button.shutdown.success'));
-      // 立即尝试更新服务器状态
-      await loadSeverStatus();
-    } catch (err) {
-      // console.error(err);
-      Message.error(t('common.requestFailed'));
-    } finally {
-      shutdownConfirmVisible.value = false;
-      setLoading(false);
-    }
-  };
-
-  const handleShutdownCancel = () => {
-    shutdownConfirmVisible.value = false;
-  };
-
   const handleRestartConfirm = async () => {
     try {
       setLoading(true);
@@ -447,7 +417,12 @@
         showChatMsg: stopConfigData.showChatMsg,
       };
 
-      await stopServer(stopConfigParams);
+      if (currentAction.value === 'shutdown') {
+        await shutdown(stopConfigParams);
+      } else {
+        await stopServer(stopConfigParams);
+      }
+
       Message.success(t('workplace.stop.shutdownInProgress'));
 
       // 如果设置了延迟时间，则启动一个定时器，在延迟时间结束后更新服务器状态

@@ -28,12 +28,21 @@ public class ServerController {
 
     @Tag(name = "/server/" + ApiConstant.LATEST)
     @Operation(summary = "停止所有")
-    @GetMapping("/" + ApiConstant.LATEST + "/shutdown")
-    public void shutdown() {
-        // 这里只能触发destroy，但服务不能正常停止
-        SpringApplication.exit(applicationContext);
-        // 这里才能正常的停止
-        System.exit(0);
+    @PostMapping("/" + ApiConstant.LATEST + "/shutdown")
+    public ResultBody<Object> shutdown(
+            @Parameter(
+                    name = "stopConfigData", in = ParameterIn.DEFAULT, required = false,
+                    description = "停服请求参数：包含停服自定义消息，停服倒计时(单位：分钟)"
+            )
+            @RequestBody(required = false) SubmitBody<ServerShutdownDTO> request) {
+        if (request != null && request.getData() != null) {
+            Server.getInstance().shutdownWithMsgAndInternal(request.getData(), true);
+        } else {
+            // 兼容旧的直接调用，立即停止
+            SpringApplication.exit(applicationContext);
+            System.exit(0);
+        }
+        return ResultBody.success();
     }
 
     @Tag(name = "/server/" + ApiConstant.LATEST)
@@ -54,7 +63,7 @@ public class ServerController {
             )
             @RequestBody SubmitBody<ServerShutdownDTO> request) {
         System.out.println(request.getData());
-        Server.getInstance().shutdownWithMsgAndInternal(request.getData());
+        Server.getInstance().shutdownWithMsgAndInternal(request.getData(), false);
         return ResultBody.success();
     }
 
