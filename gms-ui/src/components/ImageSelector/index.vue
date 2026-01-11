@@ -325,10 +325,12 @@
       for (let i = 0; i < rawList.length; i += 1) {
         const item = rawList[i];
         const baseId = getBaseId(item.id);
-        if (!groups.has(baseId)) {
-          groups.set(baseId, []);
+        let group = groups.get(baseId);
+        if (!group) {
+          group = [];
+          groups.set(baseId, group);
         }
-        groups.get(baseId)!.push(item);
+        group.push(item);
       }
 
       const processed: InformationResult[] = [];

@@ -17,14 +17,29 @@
       >
         <a-input v-model="form.reason" placeholder="请输入封禁原因" />
       </a-form-item>
-      <a-form-item field="duration" :label="$t('account.player.ban.duration')">
+      <a-form-item :label="$t('account.player.ban.duration')">
+        <a-radio-group v-model="banType" type="button">
+          <a-radio value="permanent">永久</a-radio>
+          <a-radio value="duration">时长</a-radio>
+          <a-radio value="date">日期</a-radio>
+        </a-radio-group>
+      </a-form-item>
+      <a-form-item v-if="banType === 'duration'" field="duration" label="时长">
         <a-input-number
           v-model="form.duration"
-          placeholder="留空或0为永久封禁"
-          :min="0"
+          placeholder="请输入封禁分钟数"
+          :min="1"
         >
           <template #suffix>分钟</template>
         </a-input-number>
+      </a-form-item>
+      <a-form-item v-if="banType === 'date'" field="banUntil" label="解封时间">
+        <a-date-picker
+          v-model="banUntilDate"
+          show-time
+          format="YYYY-MM-DD HH:mm:ss"
+          style="width: 100%"
+        />
       </a-form-item>
       <a-form-item :label="$t('account.player.ban.options')">
         <a-space direction="vertical">
@@ -64,7 +79,7 @@
           <a-textarea
             v-if="form.notify"
             v-model="form.notifyContent"
-            placeholder="请输入通知内容"
+            placeholder="请输入通知内容，默认使用封禁原因"
             auto-size
           />
         </a-space>
@@ -95,13 +110,17 @@
 
   const { t } = useI18n();
   const formRef = ref();
+  const banType = ref('permanent');
+  const banUntilDate = ref<string | undefined>(undefined);
+
   const form = ref({
     reason: '',
     duration: undefined as number | undefined,
+    banUntil: undefined as number | undefined,
     banIp: false,
     banMac: false,
     banHwid: false,
-    notify: false,
+    notify: true,
     notifyContent: '',
     ips: [] as string[],
     macs: [] as string[],
@@ -141,14 +160,17 @@
         form.value = {
           reason: '',
           duration: undefined,
+          banUntil: undefined,
           banIp: false,
           banMac: false,
           banHwid: false,
-          notify: false,
+          notify: true,
           notifyContent: '',
           ips: [],
           macs: [],
         };
+        banType.value = 'permanent';
+        banUntilDate.value = undefined;
         banInfo.value = { ips: [], macs: [], hwid: '' };
         fetchBanInfo();
       }
@@ -162,6 +184,28 @@
   const handleSubmit = async () => {
     const res = await formRef.value?.validate();
     if (res) return false;
+
+    // 仅临时封禁时，不能永久封禁账号（这里逻辑有点绕，其实是如果选择了时长或日期，就不是永久封禁）
+    // 但需求是“仅临时封禁，则不能永久封禁账号”，这通常意味着如果选择了时长，后端不应该把账号设为永久封禁
+    // 前端只需要传正确的参数即可
+
+    if (banType.value === 'permanent') {
+      form.value.duration = 0;
+      form.value.banUntil = undefined;
+    } else if (banType.value === 'duration') {
+      if (!form.value.duration || form.value.duration <= 0) {
+        Message.warning('请输入有效的封禁时长');
+        return false;
+      }
+      form.value.banUntil = undefined;
+    } else if (banType.value === 'date') {
+      if (!banUntilDate.value) {
+        Message.warning('请选择解封时间');
+        return false;
+      }
+      form.value.banUntil = new Date(banUntilDate.value).getTime();
+      form.value.duration = undefined;
+    }
 
     try {
       await banPlayer({

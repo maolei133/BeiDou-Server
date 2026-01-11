@@ -421,8 +421,11 @@
                   <a-doption value="disconnect">{{
                     $t('account.player.button.disconnect')
                   }}</a-doption>
-                  <a-doption value="ban">{{
+                  <a-doption v-if="!record.banned" value="ban">{{
                     $t('account.player.button.ban')
+                  }}</a-doption>
+                  <a-doption v-else value="unban">{{
+                    $t('account.player.button.unban')
                   }}</a-doption>
                 </template>
               </a-dropdown>
@@ -451,7 +454,10 @@
                       <a-doption value="edit">编辑</a-doption>
                       <a-doption value="give">发放</a-doption>
                       <a-doption value="disconnect">断开</a-doption>
-                      <a-doption value="ban">封禁</a-doption>
+                      <a-doption v-if="!item.banned" value="ban"
+                        >封禁</a-doption
+                      >
+                      <a-doption v-else value="unban">解封</a-doption>
                     </template>
                   </a-dropdown>
                 </a-space>
@@ -950,6 +956,7 @@
     getEquInitialInfo,
     getItemInitialInfo,
     disconnectPlayer,
+    unbanPlayer,
   } from '@/api/player';
   import { getJobs, getGuilds, InformationResult } from '@/api/information';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
@@ -1325,6 +1332,23 @@
     banFormVisible.value = true;
   };
 
+  const handleUnban = (record: OnlinePlayer) => {
+    Modal.confirm({
+      title: t('account.player.button.unban'),
+      content: `确定要解封玩家 ${record.name} 吗？`,
+      onOk: async () => {
+        setLoading(true);
+        try {
+          await unbanPlayer(record.id);
+          Message.success(t('message.success'));
+          loadData();
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+  };
+
   const handleGlobalAction = (
     value: string | number | Record<string, any> | undefined
   ) => {
@@ -1349,6 +1373,8 @@
       handleDisconnect(record);
     } else if (value === 'ban') {
       handleBan(record);
+    } else if (value === 'unban') {
+      handleUnban(record);
     }
   };
 

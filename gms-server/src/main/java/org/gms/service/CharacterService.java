@@ -171,12 +171,17 @@ public class CharacterService {
                             .fame(chr.getFame())
                             .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(chr.getLoginTime()))) // 新增
                             .lastLogoutTime(null) // 在线玩家登出时间为null
+                            .banned(chr.isBanned())
                             .build());
         }
 
         // 状态为0（全部）或2（离线）
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .select(CHARACTERS_D_O.ALL_COLUMNS, ACCOUNTS_D_O.NAME.as("accountName"), GUILDS_D_O.NAME.as("guildName"))
+                .select(CHARACTERS_D_O.ALL_COLUMNS, 
+                        ACCOUNTS_D_O.NAME.as("accountName"), 
+                        ACCOUNTS_D_O.BANNED.as("banned"), 
+                        ACCOUNTS_D_O.TEMPBAN.as("tempban"),
+                        GUILDS_D_O.NAME.as("guildName"))
                 .from(CHARACTERS_D_O)
                 .leftJoin(ACCOUNTS_D_O).on(CHARACTERS_D_O.ACCOUNTID.eq(ACCOUNTS_D_O.ID))
                 .leftJoin(GUILDS_D_O).on(CHARACTERS_D_O.GUILDID.eq(GUILDS_D_O.GUILDID))
@@ -267,6 +272,7 @@ public class CharacterService {
                         .fame(onlineChr.getFame())
                         .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(onlineChr.getLoginTime())))
                         .lastLogoutTime(null)
+                        .banned(onlineChr.isBanned())
                         .build();
             }
 
@@ -274,6 +280,25 @@ public class CharacterService {
             // 离线玩家不应该有在线时长筛选
             if (request.getMinOnlineTime() != null || request.getMaxOnlineTime() != null) return null;
             if (request.getChannel() != null) return null; // 离线玩家没有频道
+
+            boolean banned = false;
+            if (charactersDO.getExtra() != null) {
+                Object bannedObj = charactersDO.getExtra().get("banned");
+                if (bannedObj instanceof Boolean) {
+                    banned = (Boolean) bannedObj;
+                } else if (bannedObj instanceof Number) {
+                    banned = ((Number) bannedObj).intValue() > 0;
+                }
+                
+                // Check tempban
+                Object tempbanObj = charactersDO.getExtra().get("tempban");
+                if (tempbanObj instanceof Timestamp) {
+                    Timestamp tempban = (Timestamp) tempbanObj;
+                    if (tempban.after(new Timestamp(System.currentTimeMillis()))) {
+                        banned = true;
+                    }
+                }
+            }
 
             return ChrOnlineListRtnDTO.builder()
                     .world(charactersDO.getWorld())
@@ -297,6 +322,7 @@ public class CharacterService {
                     .fame(charactersDO.getFame())
                     .loginTime(charactersDO.getCreatedate() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getCreatedate()) : null) // 离线显示创建时间
                     .lastLogoutTime(charactersDO.getLastLogoutTime() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getLastLogoutTime()) : null)
+                    .banned(banned)
                     .build();
         }).filter(Objects::nonNull).collect(Collectors.toList()); // 过滤掉返回null的记录
 
@@ -593,7 +619,7 @@ public class CharacterService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteCharFromDB(Character player, int senderAccId) {
         int cid = player.getId();
-        if (!Server.getInstance().haveCharacterEntry(senderAccId, cid)) {    // thanks zera (EpiphanyMS) for pointing a critical exploit with non-authed character deletion request
+        if (!Server.getInstance().haveCharacterEntry(senderAccId, cid)) {    // thanks zera (EpiphanyMS) for pointing the critical exploit with non-authed character deletion request
             throw new BizException(I18nUtil.getExceptionMessage("UNKNOWN_CHARACTER"));
         }
         int world;
@@ -1353,6 +1379,7 @@ public class CharacterService {
         List<Integer> ids = request.getIds();
         String reason = request.getReason();
         Integer duration = request.getDuration();
+        Long banUntil = request.getBanUntil();
         boolean banIp = request.isBanIp();
         boolean banMac = request.isBanMac();
         boolean banHwid = request.isBanHwid();
@@ -1361,15 +1388,21 @@ public class CharacterService {
 
         // 计算封禁截止时间
         Timestamp tempBan = null;
-        if (duration != null && duration > 0) {
+        boolean isTempBan = false;
+        if (banUntil != null && banUntil > 0) {
+            tempBan = new Timestamp(banUntil);
+            isTempBan = true;
+        } else if (duration != null && duration > 0) {
             Calendar cal = Calendar.getInstance();
             cal.add(Calendar.MINUTE, duration);
             tempBan = new Timestamp(cal.getTimeInMillis());
+            isTempBan = true;
         } else {
             // 永久封禁，使用默认的永久封禁时间（例如2099年）
             Calendar cal = Calendar.getInstance();
             cal.set(2099, Calendar.DECEMBER, 31, 0, 0, 0);
             tempBan = new Timestamp(cal.getTimeInMillis());
+            isTempBan = false;
         }
 
         List<Integer> targetIds = new ArrayList<>();
@@ -1402,9 +1435,10 @@ public class CharacterService {
             if (accountId == -1) continue;
 
             // 2. 封禁账号
+            // 优化封号逻辑，仅临时封禁，则不能永久封禁账号 (banned = false)
             AccountsDO accountUpdate = AccountsDO.builder()
                     .id(accountId)
-                    .banned(true)
+                    .banned(!isTempBan) 
                     .banreason(reason)
                     .tempban(tempBan)
                     .build();
@@ -1412,7 +1446,7 @@ public class CharacterService {
 
             // 3. 处理在线玩家的额外操作
             if (onlineChr != null) {
-                onlineChr.setBanned(true);
+                onlineChr.setBanned(true); // Always set true in memory to indicate active ban
                 Client c = onlineChr.getClient();
                 
                 if (banIp) {
@@ -1461,12 +1495,23 @@ public class CharacterService {
                     }
                 }
             }
-        }
-
-        // 4. 全服通知
-        if (notify && notifyContent != null && !notifyContent.isEmpty()) {
-            for (World world : Server.getInstance().getWorlds()) {
-                Server.getInstance().broadcastGMMessage(world.getId(), PacketCreator.serverNotice(6, notifyContent));
+            
+            // 4. 全服通知 (单人)
+            if (notify) {
+                String name = (onlineChr != null) ? onlineChr.getName() : (offlineChr != null ? offlineChr.getName() : "未知");
+                String msg = notifyContent;
+                if (msg == null || msg.isEmpty()) {
+                    msg = "[封禁通报] 玩家 {} 已被封禁，原因：{}";
+                }
+                if (msg.contains("{}")) {
+                    msg = msg.replaceFirst("\\{\\}", name);
+                }
+                if (msg.contains("{}")) {
+                    msg = msg.replaceFirst("\\{\\}", reason);
+                }
+                
+                int worldId = (onlineChr != null) ? onlineChr.getWorld() : (offlineChr != null ? offlineChr.getWorld() : 0);
+                Server.getInstance().broadcastMessage(worldId, PacketCreator.sendYellowTip(msg));
             }
         }
     }
@@ -1511,5 +1556,28 @@ public class CharacterService {
                 .macs(macs)
                 .hwid(account.getHwid())
                 .build();
+    }
+    
+    public void unban(Integer charId) {
+        Character onlineChr = null;
+        CharactersDO offlineChr = null;
+
+        for (World world : Server.getInstance().getWorlds()) {
+            onlineChr = world.getPlayerStorage().getCharacterById(charId);
+            if (onlineChr != null) break;
+        }
+
+        if (onlineChr == null) {
+            offlineChr = charactersMapper.selectOneById(charId);
+        }
+
+        int accountId = (onlineChr != null) ? onlineChr.getAccountId() : (offlineChr != null ? offlineChr.getAccountid() : -1);
+        if (accountId == -1) return;
+        
+        accountService.unbanAccount(accountId);
+        
+        if (onlineChr != null) {
+            onlineChr.setBanned(false);
+        }
     }
 }

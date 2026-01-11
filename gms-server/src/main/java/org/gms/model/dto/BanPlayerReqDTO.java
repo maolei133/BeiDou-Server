@@ -10,6 +10,7 @@ public class BanPlayerReqDTO {
     private boolean all;
     private String reason;
     private Integer duration; // minutes, null or 0 for permanent
+    private Long banUntil; // timestamp, if set, overrides duration
     private boolean banIp;
     private boolean banMac;
     private boolean banHwid;

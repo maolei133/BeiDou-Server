@@ -85,4 +85,12 @@ public class CharacterController {
     public ResultBody<BanInfoRtnDTO> getBanInfo(@RequestBody SubmitBody<ChrIdDTO> submitBody) {
         return ResultBody.success(characterService.getBanInfo(submitBody.getData().getId()));
     }
+    
+    @Tag(name = "/character/" + ApiConstant.LATEST)
+    @Operation(summary = "解封玩家")
+    @PostMapping("/" + ApiConstant.LATEST + "/unban")
+    public ResultBody<Object> unban(@RequestBody SubmitBody<ChrIdDTO> submitBody) {
+        characterService.unban(submitBody.getData().getId());
+        return ResultBody.success();
+    }
 }

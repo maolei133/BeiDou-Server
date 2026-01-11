@@ -42,4 +42,5 @@ public class ChrOnlineListRtnDTO {
     private int face;
     private int hair;
     private int skinColor;
+    private boolean banned;
 }

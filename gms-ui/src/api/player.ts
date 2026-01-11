@@ -1,121 +1,5 @@
 import axios from 'axios';
-import { PageState } from '@/store/page';
-
-export interface GiveForm {
-  worldId?: number;
-  playerId?: number;
-  player?: string;
-  type: number;
-  id?: number;
-  quantity?: number;
-  rate?: number;
-  str?: number;
-  dex?: number;
-  int?: number;
-  luk?: number;
-  hp?: number;
-  mp?: number;
-  pAtk?: number;
-  mAtk?: number;
-  pDef?: number;
-  mDef?: number;
-  acc?: number;
-  avoid?: number;
-  hands?: number;
-  speed?: number;
-  jump?: number;
-  upgradeSlot?: number;
-  level?: number;
-  itemLevel?: number;
-  expire?: number;
-  expireDate?: string;
-  expireType?: number;
-  owner?: string;
-  flag?: number;
-}
-
-export interface OnlinePlayer {
-  world: number;
-  accountId: number;
-  accountName?: string;
-  id: number;
-  name: string;
-  map: number;
-  mapName: string;
-  job: number;
-  jobName: string;
-  level: number;
-  gm: number;
-  maxHp: number;
-  maxMp: number;
-  guildName?: string;
-  guildId: number;
-  gender: number;
-  partyId: number;
-  channel: number;
-  fame: number;
-  loginTime?: string;
-  lastLogoutTime?: string;
-  // Add missing fields for edit
-  str?: number;
-  dex?: number;
-  int?: number;
-  luk?: number;
-  hp?: number;
-  mp?: number;
-  ap?: number;
-  sp?: string;
-  face?: number;
-  hair?: number;
-  skinColor?: number;
-  // New fields
-  equipSlots?: number;
-  useSlots?: number;
-  setupSlots?: number;
-  etcSlots?: number;
-  buddyCapacity?: number;
-  merchantMesos?: number;
-  gachaExp?: number;
-  spawnPoint?: number;
-  mountLevel?: number;
-  mountExp?: number;
-  mountTiredness?: number;
-}
-
-export interface UpdatePlayerForm {
-  id: number;
-  name?: string;
-  level?: number;
-  job?: number;
-  str?: number;
-  dex?: number;
-  intAttr?: number;
-  luk?: number;
-  hp?: number;
-  maxHp?: number;
-  mp?: number;
-  maxMp?: number;
-  ap?: number;
-  sp?: string;
-  fame?: number;
-  face?: number;
-  hair?: number;
-  skinColor?: number;
-  gender?: number;
-  // New fields
-  equipSlots?: number;
-  useSlots?: number;
-  setupSlots?: number;
-  etcSlots?: number;
-  buddyCapacity?: number;
-  merchantMesos?: number;
-  gachaExp?: number;
-  map?: number;
-  spawnPoint?: number;
-  mountLevel?: number;
-  mountExp?: number;
-  mountTiredness?: number;
-}
+import { PageResult, SubmitBody, ResultBody } from '@/types/global';
 
 export interface PlayerListParams {
   pageNo: number;
@@ -135,6 +19,156 @@ export interface PlayerListParams {
   maxOnlineTime?: number;
 }
 
+export interface OnlinePlayer {
+  world: number;
+  accountId: number;
+  accountName: string;
+  id: number;
+  name: string;
+  map: number;
+  mapName: string;
+  job: number;
+  jobName: string;
+  level: number;
+  gm: number;
+  maxHp: number;
+  maxMp: number;
+  guildName: string;
+  guildId: number;
+  gender: number;
+  partyId: number;
+  channel: number;
+  fame: number;
+  loginTime: string;
+  lastLogoutTime: string;
+  str: number;
+  dex: number;
+  intAttr: number;
+  luk: number;
+  hp: number;
+  mp: number;
+  ap: number;
+  sp: string;
+  face: number;
+  hair: number;
+  skinColor: number;
+  banned: boolean;
+}
+
+export interface GiveForm {
+  worldId?: number;
+  playerId?: number;
+  player?: string;
+  type: number;
+  quantity?: number;
+  id?: number;
+  rate?: number;
+  str?: number;
+  dex?: number;
+  int?: number;
+  luk?: number;
+  hp?: number;
+  mp?: number;
+  pAtk?: number;
+  mAtk?: number;
+  pDef?: number;
+  mDef?: number;
+  acc?: number;
+  avoid?: number;
+  hands?: number;
+  speed?: number;
+  jump?: number;
+  upgradeSlot?: number;
+  level?: number;
+  itemLevel?: number;
+  expireType?: number;
+  expire?: number;
+  expireDate?: string;
+  owner?: string;
+  flag?: number | number[];
+}
+
+export interface UpdatePlayerForm {
+  id: number;
+  name?: string;
+  level?: number;
+  exp?: number;
+  job?: number;
+  str?: number;
+  dex?: number;
+  intAttr?: number;
+  luk?: number;
+  hp?: number;
+  maxHp?: number;
+  mp?: number;
+  maxMp?: number;
+  ap?: number;
+  sp?: string;
+  fame?: number;
+  meso?: number;
+  gm?: number;
+  face?: number;
+  hair?: number;
+  skinColor?: number;
+  gender?: number;
+  nxCredit?: number;
+  maplePoint?: number;
+  nxPrepaid?: number;
+  equipSlots?: number;
+  useSlots?: number;
+  setupSlots?: number;
+  etcSlots?: number;
+  buddyCapacity?: number;
+  merchantMesos?: number;
+  gachaExp?: number;
+  map?: number;
+  spawnPoint?: number;
+  mountLevel?: number;
+  mountExp?: number;
+  mountTiredness?: number;
+}
+
+export interface ChrDetailRtn {
+  id: number;
+  name: string;
+  level: number;
+  exp: number;
+  job: number;
+  jobName: string;
+  str: number;
+  dex: number;
+  intAttr: number;
+  luk: number;
+  hp: number;
+  maxHp: number;
+  mp: number;
+  maxMp: number;
+  ap: number;
+  sp: string;
+  fame: number;
+  meso: number;
+  gm: number;
+  face: number;
+  hair: number;
+  skinColor: number;
+  gender: number;
+  nxCredit: number;
+  maplePoint: number;
+  nxPrepaid: number;
+  equipSlots: number;
+  useSlots: number;
+  setupSlots: number;
+  etcSlots: number;
+  buddyCapacity: number;
+  merchantMesos: number;
+  gachaExp: number;
+  map: number;
+  spawnPoint: number;
+  mountLevel: number;
+  mountExp: number;
+  mountTiredness: number;
+}
+
 export interface DisconnectReq {
   ids: number[];
   all: boolean;
@@ -145,13 +179,12 @@ export interface BanPlayerReq {
   all: boolean;
   reason: string;
   duration?: number;
+  banUntil?: number;
   banIp: boolean;
   banMac: boolean;
   banHwid: boolean;
   notify: boolean;
-  notifyContent?: string;
-  ips?: string[];
-  macs?: string[];
+  notifyContent: string;
 }
 
 export interface BanInfoRtn {
@@ -161,40 +194,48 @@ export interface BanInfoRtn {
 }
 
 export function getPlayerList(params: PlayerListParams) {
-  return axios.post<PageState<OnlinePlayer>>(
+  return axios.post<ResultBody<PageResult<OnlinePlayer>>>(
     '/character/v1/online/list',
     params
   );
 }
 
 export function givePlayerSrc(data: GiveForm) {
-  return axios.post(`/give/v1/resource`, data);
+  return axios.post<ResultBody<any>>('/give/v1/resource', data);
 }
 
-export function getEquInitialInfo(id: number) {
-  return axios.post(`/common/v1/getEquipmentInfoByItemId`, { id });
+export function getEquInitialInfo(itemId: number) {
+  return axios.get<ResultBody<any>>('/common/v1/getEquInitialInfo', {
+    params: { itemId },
+  });
 }
 
-export function getItemInitialInfo(id: number) {
-  return axios.post(`/common/v1/getItemInfoByItemId`, { id });
+export function getItemInitialInfo(itemId: number) {
+  return axios.get<ResultBody<any>>('/common/v1/getItemInitialInfo', {
+    params: { itemId },
+  });
 }
 
 export function updatePlayer(data: UpdatePlayerForm) {
-  return axios.post(`/character/v1/update`, data);
+  return axios.post<ResultBody<any>>('/character/v1/update', data);
 }
 
 export function getPlayerDetail(id: number) {
-  return axios.post<OnlinePlayer>(`/character/v1/detail`, { id });
+  return axios.post<ResultBody<ChrDetailRtn>>('/character/v1/detail', { id });
 }
 
 export function disconnectPlayer(data: DisconnectReq) {
-  return axios.post(`/character/v1/disconnect`, data);
+  return axios.post<ResultBody<any>>('/character/v1/disconnect', data);
 }
 
 export function banPlayer(data: BanPlayerReq) {
-  return axios.post(`/character/v1/ban`, data);
+  return axios.post<ResultBody<any>>('/character/v1/ban', data);
 }
 
 export function getBanInfo(id: number) {
-  return axios.post<BanInfoRtn>(`/character/v1/banInfo`, { id });
+  return axios.post<ResultBody<BanInfoRtn>>('/character/v1/banInfo', { id });
+}
+
+export function unbanPlayer(id: number) {
+  return axios.post<ResultBody<any>>('/character/v1/unban', { id });
 }
