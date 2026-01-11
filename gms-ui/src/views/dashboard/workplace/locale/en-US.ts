@@ -12,7 +12,12 @@ export default {
     'This operation will immediately shutdown all services. You need to be manually start the services on the server. Are you sure you want to shutdown now?',
   'workplace.dataReload': 'Data Reload',
   'workplace.unit.minutes': 'Minutes',
+  'workplace.stop.mode': 'Shutdown Mode',
+  'workplace.stop.mode.minutes': 'Countdown',
+  'workplace.stop.mode.time': 'Specific Time',
   'workplace.stop.minutes': 'Countdown Minutes',
+  'workplace.stop.time': 'Shutdown Time',
+  'workplace.stop.now': 'Now',
   'workplace.stop.shutdownMsg': 'Shutdown Message',
   'workplace.stop.shutdownMsgDefault':
     'Default: The server is under maintenance and will be shut down in {minutes} minutes. Please log off safely before then to avoid data loss!',
@@ -23,6 +28,8 @@ export default {
   'workplace.button.dataReloadEvents': 'Reload Events',
   'workplace.button.dataReloadMaps': 'Reload Maps',
   'workplace.button.dataReloadPortals': 'Reload Portals',
+  'workplace.button.dataReloadDrops': 'Reload Drops',
+  'workplace.button.dataReloadShops': 'Reload Shops',
   'workplace.stop.shutdownInProgress':
     'Initiating server shutdown, please wait...',
   'common.operationSuccess': 'Operation successful',

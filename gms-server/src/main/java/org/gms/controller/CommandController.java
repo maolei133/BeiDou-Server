@@ -57,5 +57,23 @@ public class CommandController {
         return ResultBody.success();
     }
 
+    //重载爆率
+    @Tag(name = "/command/" + ApiConstant.LATEST)
+    @Operation(summary = "复用GM命令代码进行重载爆率")
+    @GetMapping("/" + ApiConstant.LATEST + "/reloadDropsByGMCommand")
+    public ResultBody reloadDropsByGMCommand() {
+        commandService.reloadDropsByGMCommand();
+        return ResultBody.success();
+    }
+
+    //重载商店
+    @Tag(name = "/command/" + ApiConstant.LATEST)
+    @Operation(summary = "复用GM命令代码进行重载商店")
+    @GetMapping("/" + ApiConstant.LATEST + "/reloadShopsByGMCommand")
+    public ResultBody reloadShopsByGMCommand() {
+        commandService.reloadShopsByGMCommand();
+        return ResultBody.success();
+    }
+
 
 }

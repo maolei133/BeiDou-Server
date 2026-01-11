@@ -17,6 +17,8 @@ import org.gms.net.server.Server;
 import org.gms.net.server.channel.Channel;
 import org.gms.net.server.world.World;
 import org.gms.scripting.portal.PortalScriptManager;
+import org.gms.server.ShopFactory;
+import org.gms.server.life.MonsterInformationProvider;
 import org.gms.server.maps.MapleMap;
 import org.gms.util.I18nUtil;
 import org.gms.util.Pair;
@@ -249,8 +251,16 @@ public class CommandService {
             });
         });
         log.info(I18nUtil.getMessage("ReloadMapCommand.message1"));
-        }
-
     }
 
+    public void reloadDropsByGMCommand() {
+        MonsterInformationProvider.getInstance().clearDrops();
+        log.info(I18nUtil.getMessage("ReloadDropsCommand.message2"));
+    }
 
+    public void reloadShopsByGMCommand() {
+        ShopFactory.getInstance().reloadShops();
+        log.info(I18nUtil.getMessage("ReloadShopsCommand.message1"));
+    }
+
+}

@@ -31,3 +31,11 @@ export function reloadPortalsByGMCommand() {
 export function reloadMapsByGMCommand() {
   return axios.get('/command/v1/reloadMapsByGMCommand');
 }
+
+export function reloadDropsByGMCommand() {
+  return axios.get('/command/v1/reloadDropsByGMCommand');
+}
+
+export function reloadShopsByGMCommand() {
+  return axios.get('/command/v1/reloadShopsByGMCommand');
+}
