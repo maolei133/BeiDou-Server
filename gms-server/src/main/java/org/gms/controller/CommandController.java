@@ -84,5 +84,32 @@ public class CommandController {
         return ResultBody.success();
     }
 
+    //重载技能
+    @Tag(name = "/command/" + ApiConstant.LATEST)
+    @Operation(summary = "复用GM命令代码进行重载技能")
+    @GetMapping("/" + ApiConstant.LATEST + "/reloadSkillsByGMCommand")
+    public ResultBody reloadSkillsByGMCommand() {
+        commandService.reloadSkillsByGMCommand();
+        return ResultBody.success();
+    }
+
+    //重载怪物
+    @Tag(name = "/command/" + ApiConstant.LATEST)
+    @Operation(summary = "复用GM命令代码进行重载怪物")
+    @GetMapping("/" + ApiConstant.LATEST + "/reloadMonstersByGMCommand")
+    public ResultBody reloadMonstersByGMCommand() {
+        commandService.reloadMonstersByGMCommand();
+        return ResultBody.success();
+    }
+
+    //重载反应堆
+    @Tag(name = "/command/" + ApiConstant.LATEST)
+    @Operation(summary = "复用GM命令代码进行重载反应堆")
+    @GetMapping("/" + ApiConstant.LATEST + "/reloadReactorsByGMCommand")
+    public ResultBody reloadReactorsByGMCommand() {
+        commandService.reloadReactorsByGMCommand();
+        return ResultBody.success();
+    }
+
 
 }

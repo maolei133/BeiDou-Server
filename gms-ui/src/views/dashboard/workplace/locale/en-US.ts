@@ -31,6 +31,9 @@ export default {
   'workplace.button.dataReloadDrops': 'Reload Drops',
   'workplace.button.dataReloadShops': 'Reload Shops',
   'workplace.button.dataReloadQuests': 'Reload Quests',
+  'workplace.button.dataReloadSkills': 'Reload Skills',
+  'workplace.button.dataReloadMonsters': 'Reload Monsters',
+  'workplace.button.dataReloadReactors': 'Reload Reactors',
   'workplace.stop.shutdownInProgress':
     'Initiating server shutdown, please wait...',
   'common.operationSuccess': 'Operation successful',

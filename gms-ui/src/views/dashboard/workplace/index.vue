@@ -201,9 +201,12 @@
     reloadDropsByGMCommand,
     reloadEventsByGMCommand,
     reloadMapsByGMCommand,
+    reloadMonstersByGMCommand,
     reloadPortalsByGMCommand,
     reloadQuestsByGMCommand,
+    reloadReactorsByGMCommand,
     reloadShopsByGMCommand,
+    reloadSkillsByGMCommand,
   } from '@/api/command';
   import { useI18n } from 'vue-i18n';
   import dayjs from 'dayjs';
@@ -290,6 +293,21 @@
       action: 'reloadQuests',
       icon: 'icon-schedule',
     },
+    {
+      label: 'dataReloadSkills',
+      action: 'reloadSkills',
+      icon: 'icon-thunderbolt',
+    },
+    {
+      label: 'dataReloadMonsters',
+      action: 'reloadMonsters',
+      icon: 'icon-bug',
+    },
+    {
+      label: 'dataReloadReactors',
+      action: 'reloadReactors',
+      icon: 'icon-interaction',
+    },
   ];
 
   const loadSeverStatus = async () => {
@@ -346,6 +364,15 @@
           break;
         case 'reloadQuests':
           await reloadQuestsByGMCommand();
+          break;
+        case 'reloadSkills':
+          await reloadSkillsByGMCommand();
+          break;
+        case 'reloadMonsters':
+          await reloadMonstersByGMCommand();
+          break;
+        case 'reloadReactors':
+          await reloadReactorsByGMCommand();
           break;
         default:
           break;

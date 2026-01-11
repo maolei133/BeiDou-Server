@@ -43,3 +43,15 @@ export function reloadShopsByGMCommand() {
 export function reloadQuestsByGMCommand() {
   return axios.get('/command/v1/reloadQuestsByGMCommand');
 }
+
+export function reloadSkillsByGMCommand() {
+  return axios.get('/command/v1/reloadSkillsByGMCommand');
+}
+
+export function reloadMonstersByGMCommand() {
+  return axios.get('/command/v1/reloadMonstersByGMCommand');
+}
+
+export function reloadReactorsByGMCommand() {
+  return axios.get('/command/v1/reloadReactorsByGMCommand');
+}

@@ -324,6 +324,10 @@ public class LifeFactory {
         return DataTool.getString(nid + "/d0", npcStringData, "(...)");
     }
 
+    public static void clearMonsterStatsCache() {
+        monsterStats.clear();
+    }
+
     public static class BanishInfo {
 
         private final int map;

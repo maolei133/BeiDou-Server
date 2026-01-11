@@ -169,4 +169,8 @@ public class ReactorFactory {
         }
         return stats;
     }
+
+    public static void clearReactorStatsCache() {
+        reactorStats.clear();
+    }
 }
