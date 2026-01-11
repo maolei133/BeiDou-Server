@@ -446,18 +446,28 @@
                     size="mini"
                     @click="handleWarp(item)"
                   >
-                    传送
+                    {{ $t('account.player.button.warp') }}
                   </a-button>
                   <a-dropdown @select="(val) => handleSingleAction(val, item)">
-                    <a-button size="mini">操作 <icon-down /></a-button>
+                    <a-button size="mini">
+                      {{ $t('account.list.column.operate') }} <icon-down />
+                    </a-button>
                     <template #content>
-                      <a-doption value="edit">编辑</a-doption>
-                      <a-doption value="give">发放</a-doption>
-                      <a-doption value="disconnect">断开</a-doption>
-                      <a-doption v-if="!item.banned" value="ban"
-                        >封禁</a-doption
-                      >
-                      <a-doption v-else value="unban">解封</a-doption>
+                      <a-doption value="edit">
+                        {{ $t('account.player.button.edit') }}
+                      </a-doption>
+                      <a-doption value="give">
+                        {{ $t('account.player.button.give') }}
+                      </a-doption>
+                      <a-doption value="disconnect">
+                        {{ $t('account.player.button.disconnect') }}
+                      </a-doption>
+                      <a-doption v-if="!item.banned" value="ban">
+                        {{ $t('account.player.button.ban') }}
+                      </a-doption>
+                      <a-doption v-else value="unban">
+                        {{ $t('account.player.button.unban') }}
+                      </a-doption>
                     </template>
                   </a-dropdown>
                 </a-space>
@@ -1072,6 +1082,7 @@
     return Array.from(partyIds);
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const uniqueGuilds = computed(() => {
     const guilds = new Map<number, string>();
     tableData.value.forEach((player) => {
@@ -1227,7 +1238,7 @@
   };
 
   const globalGiveClick = () => {
-    giveFormTitle.value = '全服发放资源';
+    giveFormTitle.value = t('account.player.give.title.global');
     formData.value = {
       type: 5,
       playerId: 0,
@@ -1241,7 +1252,7 @@
   };
 
   const giveClick = (data: OnlinePlayer) => {
-    giveFormTitle.value = '发放资源';
+    giveFormTitle.value = t('account.player.give.title');
     formData.value = {
       worldId: data.world,
       playerId: data.id,
@@ -1294,8 +1305,10 @@
 
   const handleDisconnect = (record: OnlinePlayer) => {
     Modal.confirm({
-      title: t('account.player.button.disconnect'),
-      content: `确定要断开玩家 ${record.name} 的连接吗？`,
+      title: t('account.player.disconnect.confirm.title'),
+      content: t('account.player.disconnect.confirm.content', {
+        name: record.name,
+      }),
       onOk: async () => {
         setLoading(true);
         try {
@@ -1311,8 +1324,8 @@
 
   const handleGlobalDisconnect = () => {
     Modal.confirm({
-      title: t('account.player.button.globalDisconnect'),
-      content: '确定要断开所有在线玩家的连接吗？',
+      title: t('account.player.disconnect.global.confirm.title'),
+      content: t('account.player.disconnect.global.confirm.content'),
       onOk: async () => {
         setLoading(true);
         try {
@@ -1334,8 +1347,8 @@
 
   const handleUnban = (record: OnlinePlayer) => {
     Modal.confirm({
-      title: t('account.player.button.unban'),
-      content: `确定要解封玩家 ${record.name} 吗？`,
+      title: t('account.player.unban.confirm.title'),
+      content: t('account.player.unban.confirm.content', { name: record.name }),
       onOk: async () => {
         setLoading(true);
         try {
@@ -1504,9 +1517,9 @@
           formData.value.upgradeSlot = equipData.upgradeSlot || 0;
           formData.value.level = equipData.level || 0;
           formData.value.itemLevel = equipData.itemLevel || 1;
-          Message.success('装备信息加载成功');
+          Message.success(t('account.player.equip.success'));
         } else {
-          Message.warning('未找到该装备信息');
+          Message.warning(t('account.player.equip.warning'));
         }
       } else if (formData.value.type === 5) {
         // 道具
@@ -1517,9 +1530,9 @@
           itemInfo.name = itemData.name;
           itemInfo.desc = itemData.desc;
           itemIconUrl.value = getIconUrl('item', formData.value.id);
-          Message.success('道具信息加载成功');
+          Message.success(t('account.player.item.success'));
         } else {
-          Message.warning('未找到该道具信息');
+          Message.warning(t('account.player.item.warning'));
         }
       }
     } catch (error) {

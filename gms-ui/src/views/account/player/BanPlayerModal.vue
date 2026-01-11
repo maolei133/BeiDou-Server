@@ -13,27 +13,48 @@
       <a-form-item
         field="reason"
         :label="$t('account.player.ban.reason')"
-        :rules="[{ required: true, message: '请输入封禁原因' }]"
+        :rules="[
+          { required: true, message: $t('account.player.ban.reason.required') },
+        ]"
       >
-        <a-input v-model="form.reason" placeholder="请输入封禁原因" />
+        <a-input
+          v-model="form.reason"
+          :placeholder="$t('account.player.ban.reason.placeholder')"
+        />
       </a-form-item>
       <a-form-item :label="$t('account.player.ban.duration')">
         <a-radio-group v-model="banType" type="button">
-          <a-radio value="permanent">永久</a-radio>
-          <a-radio value="duration">时长</a-radio>
-          <a-radio value="date">日期</a-radio>
+          <a-radio value="permanent">
+            {{ $t('account.player.ban.duration.permanent') }}
+          </a-radio>
+          <a-radio value="duration">
+            {{ $t('account.player.ban.duration.time') }}
+          </a-radio>
+          <a-radio value="date">
+            {{ $t('account.player.ban.duration.date') }}
+          </a-radio>
         </a-radio-group>
       </a-form-item>
-      <a-form-item v-if="banType === 'duration'" field="duration" label="时长">
+      <a-form-item
+        v-if="banType === 'duration'"
+        field="duration"
+        :label="$t('account.player.ban.duration.time')"
+      >
         <a-input-number
           v-model="form.duration"
-          placeholder="请输入封禁分钟数"
+          :placeholder="$t('account.player.ban.duration.placeholder')"
           :min="1"
         >
-          <template #suffix>分钟</template>
+          <template #suffix>
+            {{ $t('account.player.ban.duration.suffix') }}
+          </template>
         </a-input-number>
       </a-form-item>
-      <a-form-item v-if="banType === 'date'" field="banUntil" label="解封时间">
+      <a-form-item
+        v-if="banType === 'date'"
+        field="banUntil"
+        :label="$t('account.player.ban.until')"
+      >
         <a-date-picker
           v-model="banUntilDate"
           show-time
@@ -43,31 +64,37 @@
       </a-form-item>
       <a-form-item :label="$t('account.player.ban.options')">
         <a-space direction="vertical">
-          <a-checkbox v-model="form.banIp">封禁 IP</a-checkbox>
+          <a-checkbox v-model="form.banIp">
+            {{ $t('account.player.ban.options.ip') }}
+          </a-checkbox>
           <a-select
             v-if="form.banIp && !all"
             v-model="form.ips"
             multiple
-            placeholder="选择要封禁的IP"
+            :placeholder="$t('account.player.ban.options.ip.placeholder')"
             style="width: 300px"
           >
             <a-option v-for="ip in banInfo.ips" :key="ip" :value="ip">
               {{ ip }}
             </a-option>
           </a-select>
-          <a-checkbox v-model="form.banMac">封禁 MAC</a-checkbox>
+          <a-checkbox v-model="form.banMac">
+            {{ $t('account.player.ban.options.mac') }}
+          </a-checkbox>
           <a-select
             v-if="form.banMac && !all"
             v-model="form.macs"
             multiple
-            placeholder="选择要封禁的MAC"
+            :placeholder="$t('account.player.ban.options.mac.placeholder')"
             style="width: 300px"
           >
             <a-option v-for="mac in banInfo.macs" :key="mac" :value="mac">
               {{ mac }}
             </a-option>
           </a-select>
-          <a-checkbox v-model="form.banHwid">封禁 HWID</a-checkbox>
+          <a-checkbox v-model="form.banHwid">
+            {{ $t('account.player.ban.options.hwid') }}
+          </a-checkbox>
           <div v-if="form.banHwid && !all && banInfo.hwid" style="color: gray">
             HWID: {{ banInfo.hwid }}
           </div>
@@ -75,11 +102,13 @@
       </a-form-item>
       <a-form-item :label="$t('account.player.ban.notify')">
         <a-space direction="vertical" style="width: 100%">
-          <a-checkbox v-model="form.notify">全服通知</a-checkbox>
+          <a-checkbox v-model="form.notify">
+            {{ $t('account.player.ban.notify.all') }}
+          </a-checkbox>
           <a-textarea
             v-if="form.notify"
             v-model="form.notifyContent"
-            placeholder="请输入通知内容，默认使用封禁原因"
+            :placeholder="$t('account.player.ban.notify.placeholder')"
             auto-size
           />
         </a-space>
@@ -134,9 +163,9 @@
 
   const title = computed(() => {
     if (props.all) {
-      return '全服封禁';
+      return t('account.player.ban.title.all');
     }
-    return `封禁玩家: ${props.player?.name || ''}`;
+    return t('account.player.ban.title', { name: props.player?.name || '' });
   });
 
   const fetchBanInfo = async () => {
@@ -194,13 +223,13 @@
       form.value.banUntil = undefined;
     } else if (banType.value === 'duration') {
       if (!form.value.duration || form.value.duration <= 0) {
-        Message.warning('请输入有效的封禁时长');
+        Message.warning(t('account.player.ban.duration.invalid'));
         return false;
       }
       form.value.banUntil = undefined;
     } else if (banType.value === 'date') {
       if (!banUntilDate.value) {
-        Message.warning('请选择解封时间');
+        Message.warning(t('account.player.ban.until.required'));
         return false;
       }
       form.value.banUntil = new Date(banUntilDate.value).getTime();

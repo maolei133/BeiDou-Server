@@ -240,7 +240,7 @@ public class CharacterService {
             }
 
             Job job = Job.getById(charactersDO.getJob());
-            String jobName = (job != null) ? job.getName() : "未知职业";
+            String jobName = (job != null) ? job.getName() : I18nUtil.getMessage("Character.job.unknown");
             
             // 检查角色是否在线，如果在线，则使用内存中的实时数据
             Character onlineChr = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getCharacterById(charactersDO.getId());
@@ -467,10 +467,10 @@ public class CharacterService {
 
         // 如果不在线，从数据库查找
         CharactersDO charactersDO = charactersMapper.selectOneById(id);
-        RequireUtil.requireNotNull(charactersDO, "Character not found");
+        RequireUtil.requireNotNull(charactersDO, I18nUtil.getExceptionMessage("Character.notFound"));
 
         Job job = Job.getById(charactersDO.getJob());
-        String jobName = (job != null) ? job.getName() : "未知职业";
+        String jobName = (job != null) ? job.getName() : I18nUtil.getMessage("Character.job.unknown");
 
         AccountsDO accountsDO = accountService.findById(charactersDO.getAccountid());
 
@@ -701,7 +701,7 @@ public class CharacterService {
         if (!player.isLoggedIn()) {
             return;
         }
-        log.info(I18nUtil.getLogMessage(notAutosave ? "Character.saveCharToDB.info1" : "Character.saveCharToDB.info2"), player.getName());
+        log.info(I18nUtil.getLogMessage(notAutosave ? "Character.saveCharToDB.info1" : "Character.saveCharToDB.info2", player.getName()));
         Server.getInstance().updateCharacterEntry(player);
 
         CharactersDO cdo = Character.toCharactersDO(player);
@@ -1501,13 +1501,7 @@ public class CharacterService {
                 String name = (onlineChr != null) ? onlineChr.getName() : (offlineChr != null ? offlineChr.getName() : "未知");
                 String msg = notifyContent;
                 if (msg == null || msg.isEmpty()) {
-                    msg = "[封禁通报] 玩家 {} 已被封禁，原因：{}";
-                }
-                if (msg.contains("{}")) {
-                    msg = msg.replaceFirst("\\{\\}", name);
-                }
-                if (msg.contains("{}")) {
-                    msg = msg.replaceFirst("\\{\\}", reason);
+                    msg = I18nUtil.getMessage("Character.ban.notice", name, reason);
                 }
                 
                 int worldId = (onlineChr != null) ? onlineChr.getWorld() : (offlineChr != null ? offlineChr.getWorld() : 0);
