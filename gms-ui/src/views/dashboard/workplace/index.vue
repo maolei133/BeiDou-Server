@@ -202,6 +202,7 @@
     reloadEventsByGMCommand,
     reloadMapsByGMCommand,
     reloadPortalsByGMCommand,
+    reloadQuestsByGMCommand,
     reloadShopsByGMCommand,
   } from '@/api/command';
   import { useI18n } from 'vue-i18n';
@@ -284,6 +285,11 @@
       action: 'reloadShops',
       icon: 'icon-shopping-cart',
     },
+    {
+      label: 'dataReloadQuests',
+      action: 'reloadQuests',
+      icon: 'icon-schedule',
+    },
   ];
 
   const loadSeverStatus = async () => {
@@ -337,6 +343,9 @@
           break;
         case 'reloadShops':
           await reloadShopsByGMCommand();
+          break;
+        case 'reloadQuests':
+          await reloadQuestsByGMCommand();
           break;
         default:
           break;

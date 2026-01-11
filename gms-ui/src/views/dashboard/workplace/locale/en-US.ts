@@ -30,6 +30,7 @@ export default {
   'workplace.button.dataReloadPortals': 'Reload Portals',
   'workplace.button.dataReloadDrops': 'Reload Drops',
   'workplace.button.dataReloadShops': 'Reload Shops',
+  'workplace.button.dataReloadQuests': 'Reload Quests',
   'workplace.stop.shutdownInProgress':
     'Initiating server shutdown, please wait...',
   'common.operationSuccess': 'Operation successful',

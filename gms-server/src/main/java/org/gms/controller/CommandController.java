@@ -75,5 +75,14 @@ public class CommandController {
         return ResultBody.success();
     }
 
+    //重载任务
+    @Tag(name = "/command/" + ApiConstant.LATEST)
+    @Operation(summary = "复用GM命令代码进行重载任务")
+    @GetMapping("/" + ApiConstant.LATEST + "/reloadQuestsByGMCommand")
+    public ResultBody reloadQuestsByGMCommand() {
+        commandService.reloadQuestsByGMCommand();
+        return ResultBody.success();
+    }
+
 
 }

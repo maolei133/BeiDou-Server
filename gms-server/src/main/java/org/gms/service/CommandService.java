@@ -20,6 +20,7 @@ import org.gms.scripting.portal.PortalScriptManager;
 import org.gms.server.ShopFactory;
 import org.gms.server.life.MonsterInformationProvider;
 import org.gms.server.maps.MapleMap;
+import org.gms.server.quest.Quest;
 import org.gms.util.I18nUtil;
 import org.gms.util.Pair;
 import org.gms.util.RequireUtil;
@@ -261,6 +262,11 @@ public class CommandService {
     public void reloadShopsByGMCommand() {
         ShopFactory.getInstance().reloadShops();
         log.info(I18nUtil.getMessage("ReloadShopsCommand.message1"));
+    }
+
+    public void reloadQuestsByGMCommand() {
+        Quest.clearCache();
+        log.info(I18nUtil.getMessage("ClearQuestCacheCommand.message2"));
     }
 
 }

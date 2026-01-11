@@ -39,3 +39,7 @@ export function reloadDropsByGMCommand() {
 export function reloadShopsByGMCommand() {
   return axios.get('/command/v1/reloadShopsByGMCommand');
 }
+
+export function reloadQuestsByGMCommand() {
+  return axios.get('/command/v1/reloadQuestsByGMCommand');
+}

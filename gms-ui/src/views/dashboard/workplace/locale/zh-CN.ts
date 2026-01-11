@@ -33,6 +33,7 @@ export default {
   'workplace.button.dataReloadPortals': '重载传送点',
   'workplace.button.dataReloadDrops': '重载爆率',
   'workplace.button.dataReloadShops': '重载商店',
+  'workplace.button.dataReloadQuests': '重载任务',
   'workplace.stop.shutdownInProgress': '发起服务器关闭操作，请等待...',
   'common.operationSuccess': '操作成功',
   'common.requestFailed': '请求失败',
