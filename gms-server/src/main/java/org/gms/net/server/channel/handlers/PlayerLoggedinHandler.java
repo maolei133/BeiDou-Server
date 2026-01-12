@@ -480,7 +480,7 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
                 player.setLoginTime(System.currentTimeMillis());
             }
 
-            Server.getInstance().sendShutdownNotice(c);
+//            Server.getInstance().sendShutdownNotice(c);
 
         } catch (Exception e) {
             e.printStackTrace();

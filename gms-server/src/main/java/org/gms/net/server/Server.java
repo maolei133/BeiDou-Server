@@ -1705,21 +1705,21 @@ public class Server {
         int minutes = serverShutdownDTO.getMinutes();
         long time = minutes * 60000L;
         this.shutdownTime = System.currentTimeMillis() + time;
-        
-        // 启动倒计时线程
-        ThreadManager.getInstance().newTask(() -> {
+
+        // 启动一个独立的平台线程来执行关服倒计时，避免死锁
+        new Thread(() -> {
             long remainingTime = time;
             boolean firstNotice = true;
-            
+
             while (remainingTime > 0) {
                 // 剩余时间（毫秒）
                 long timeLeft = remainingTime;
-                
+
                 // 1. 关服前5分钟禁止登录和切换频道
                 if (timeLeft <= 5 * 60 * 1000) {
                     setShutdown(true); // 设置为关服状态，禁止登录和切换频道
                 }
-                
+
                 // 2. 广播消息逻辑
                 if (firstNotice || timeLeft > 30 * 60 * 1000) {
                     // 大于30分钟，每30分钟通知一次（这里简化为只在开始时通知，或者按需添加循环）
@@ -1730,7 +1730,7 @@ public class Server {
                 } else if (timeLeft <= 30 * 60 * 1000 && timeLeft > 5 * 60 * 1000) {
                     // 30分钟内，每10分钟通知一次？或者只在30分、20分、10分通知
                     if (timeLeft % (10 * 60 * 1000) == 0 || timeLeft == 30 * 60 * 1000) {
-                         broadcastShutdownMessage(timeLeft, serverShutdownDTO, false, false);
+                        broadcastShutdownMessage(timeLeft, serverShutdownDTO, false, false);
                     }
                 } else if (timeLeft <= 5 * 60 * 1000 && timeLeft > 10 * 1000) {
                     // 最后5分钟，每分钟通知一次
@@ -1743,7 +1743,7 @@ public class Server {
                         broadcastShutdownMessage(timeLeft, serverShutdownDTO, false, false);
                     }
                 }
-                
+
                 try {
                     Thread.sleep(1000); // 每秒检查一次
                     remainingTime -= 1000;
@@ -1751,16 +1751,16 @@ public class Server {
                     log.error("Shutdown countdown interrupted", e);
                 }
             }
-            
+
             // 倒计时结束，执行关服流程
             log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.finished"));
-            
+
             // 1. 断开所有玩家连接
             log.info(I18nUtil.getLogMessage("Server.shutdown.disconnect.all"));
             for (World w : getWorlds()) {
                 w.getPlayerStorage().disconnectAll();
             }
-            
+
             // 2. 循环检查在线人数
             long startCheckTime = System.currentTimeMillis();
             while (System.currentTimeMillis() - startCheckTime < 30000) {
@@ -1768,19 +1768,19 @@ public class Server {
                 for (World w : getWorlds()) {
                     onlineCount += w.getPlayerStorage().getAllCharacters().size();
                 }
-                
+
                 log.info(I18nUtil.getLogMessage("Server.shutdown.check.online"), onlineCount);
                 if (onlineCount == 0) {
                     break;
                 }
-                
+
                 try {
                     Thread.sleep(5000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
-            
+
             // 3. 延时30秒确保数据保存
             log.info(I18nUtil.getLogMessage("Server.shutdown.wait.save"));
             try {
@@ -1788,12 +1788,12 @@ public class Server {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            
+
             // 4. 执行关服
             log.info(I18nUtil.getLogMessage("Server.shutdown.executing"));
             Server.getInstance().shutdown(false, exit).run();
             log.info(I18nUtil.getLogMessage("Server.shutdown.complete"));
-        });
+        }, "Shutdown-Countdown-Thread").start();
     }
 
     private void broadcastShutdownMessage(long timeLeft, ServerShutdownDTO dto, boolean firstNotice, boolean showPopup) {
@@ -1845,8 +1845,18 @@ public class Server {
         long shutdownRemaining = getShutdownRemainingTime();
         if (shutdownRemaining > 0 && shutdownRemaining <= 30 * 60 * 1000) {
             int minutes = (int) (shutdownRemaining / 60000);
-            c.getPlayer().dropMessage(0,c.getChannelServer().getServerMessage());
-            c.getPlayer().dropMessage(I18nUtil.getMessage("ShutdownCommand.message7",I18nUtil.getMessage("ShutdownCommand.message5", minutes));
+            String timeStr = I18nUtil.getMessage("ShutdownCommand.message5", minutes);
+            String msg = I18nUtil.getMessage("ShutdownCommand.message7", timeStr);
+
+            // In-game players get a popup
+            if (c.getPlayer() != null) {
+                c.getPlayer().dropMessage(0,c.getChannelServer().getServerMessage());
+                c.getPlayer().dropMessage(1, msg);
+            }
+            // Players on login/char select screen get a notice packet
+            else {
+                c.sendPacket(PacketCreator.serverNotice(1, msg));
+            }
         }
     }
 }
