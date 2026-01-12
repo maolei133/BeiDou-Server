@@ -147,6 +147,7 @@ public class Server {
     @Getter
     @Setter
     private boolean shutdown = false;
+    private long shutdownTime = 0;
     public static long uptime = System.currentTimeMillis();
     private long nextTime;
 
@@ -1678,6 +1679,14 @@ public class Server {
         return true;
     }
 
+    public long getShutdownRemainingTime() {
+        if (shutdownTime == 0) {
+            return -1;
+        }
+        long remaining = shutdownTime - System.currentTimeMillis();
+        return remaining > 0 ? remaining : 0;
+    }
+
     public synchronized void shutdownWithMsgAndInternal(ServerShutdownDTO serverShutdownDTO) {
         shutdownWithMsgAndInternal(serverShutdownDTO, false);
     }
@@ -1695,6 +1704,7 @@ public class Server {
     public synchronized void shutdownWithMsgAndInternal(ServerShutdownDTO serverShutdownDTO, boolean exit) {
         int minutes = serverShutdownDTO.getMinutes();
         long time = minutes * 60000L;
+        this.shutdownTime = System.currentTimeMillis() + time;
         
         // 启动倒计时线程
         ThreadManager.getInstance().newTask(() -> {
@@ -1828,6 +1838,15 @@ public class Server {
                     }
                 }
             }
+        }
+    }
+
+    public void sendShutdownNotice(Client c) {
+        long shutdownRemaining = getShutdownRemainingTime();
+        if (shutdownRemaining > 0 && shutdownRemaining <= 30 * 60 * 1000) {
+            int minutes = (int) (shutdownRemaining / 60000);
+            c.getPlayer().dropMessage(0,c.getChannelServer().getServerMessage());
+            c.getPlayer().dropMessage(I18nUtil.getMessage("ShutdownCommand.message7",I18nUtil.getMessage("ShutdownCommand.message5", minutes));
         }
     }
 }
