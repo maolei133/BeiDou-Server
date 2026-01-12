@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
  * @author Ronan
@@ -49,7 +50,7 @@ public class ThreadManager {
     public void stop() {
         executorService.shutdown();
         try {
-            boolean ignore = executorService.awaitTermination(5, MINUTES);
+            boolean ignore = executorService.awaitTermination(30, SECONDS);
         } catch (InterruptedException ignore) {
 
         }
