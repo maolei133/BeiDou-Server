@@ -26,6 +26,7 @@ import org.gms.client.autoban.AutobanFactory;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
+import org.gms.util.PacketCreator;
 
 /**
  * @author Matze
@@ -34,6 +35,14 @@ public final class ChangeChannelHandler extends AbstractPacketHandler {
 
     @Override
     public final void handlePacket(InPacket p, Client c) {
+        if (Server.getInstance().isShutdown()) {
+            c.getPlayer().dropMessage(1, "服务器即将关闭，暂时无法切换频道。");
+            c.sendPacket(PacketCreator.enableActions());
+            return;
+        }
+
+        Server.getInstance().sendShutdownNotice(c);
+
         int channel = p.readByte() + 1;
         p.readInt();
         c.getPlayer().getAutoBanManager().setTimestamp(6, Server.getInstance().getCurrentTimestamp(), 3);
