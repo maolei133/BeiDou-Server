@@ -9,6 +9,7 @@ export interface InformationSearch {
   pageSize?: number;
   gender?: number;
   color?: number | null;
+  category?: string;
 }
 
 export interface InformationResult {
@@ -69,6 +70,10 @@ export function getMapsByStreetName(streetName: string) {
   return axios.get<InformationResult[]>('/common/v1/getMapsByStreetName', {
     params: { streetName },
   });
+}
+
+export function getEquipCategories() {
+  return axios.get<string[]>('/common/v1/getEquipCategories');
 }
 
 export function getJobs() {

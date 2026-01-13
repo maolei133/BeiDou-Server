@@ -1,5 +1,6 @@
 export default {
   'informationSearch.placeholder.type': 'Select information type',
+  'informationSearch.placeholder.category': 'Select equipment category',
   'informationSearch.placeholder.filter': 'Input search text',
 
   'informationSearch.type.cash': 'cash',
@@ -12,6 +13,26 @@ export default {
   'informationSearch.type.npc': 'npc',
   'informationSearch.type.pet': 'pet',
   'informationSearch.type.skill': 'skill',
+
+  'informationSearch.equipCategory.Accessory': 'Accessory',
+  'informationSearch.equipCategory.Android': 'Android',
+  'informationSearch.equipCategory.Cap': 'Cap',
+  'informationSearch.equipCategory.Cape': 'Cape',
+  'informationSearch.equipCategory.Coat': 'Coat',
+  'informationSearch.equipCategory.Dragon': 'Dragon',
+  'informationSearch.equipCategory.Face': 'Face',
+  'informationSearch.equipCategory.Glove': 'Glove',
+  'informationSearch.equipCategory.Hair': 'Hair',
+  'informationSearch.equipCategory.Longcoat': 'Longcoat',
+  'informationSearch.equipCategory.Mechanic': 'Mechanic',
+  'informationSearch.equipCategory.Pants': 'Pants',
+  'informationSearch.equipCategory.PetEquip': 'PetEquip',
+  'informationSearch.equipCategory.Ring': 'Ring',
+  'informationSearch.equipCategory.Shield': 'Shield',
+  'informationSearch.equipCategory.Shoes': 'Shoes',
+  'informationSearch.equipCategory.Taming': 'TamingMob',
+  'informationSearch.equipCategory.Weapon': 'Weapon',
+  'informationSearch.equipCategory.Bits': 'Bits',
 
   'informationSearch.column.type': 'Type',
   'informationSearch.column.id': 'ID',

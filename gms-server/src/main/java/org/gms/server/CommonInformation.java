@@ -14,6 +14,7 @@ import org.gms.util.I18nUtil;
 import org.gms.util.RequireUtil;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -21,6 +22,7 @@ public class CommonInformation {
     private static CommonInformation instance;
     private final DataProvider stringData;
     private List<InformationResult> cachedMaps;
+    private List<String> cachedEquipCategories;
 
     private CommonInformation() {
         stringData = DataProviderFactory.getDataProvider(WZFiles.STRING);
@@ -84,6 +86,33 @@ public class CommonInformation {
                 .filter(map -> streetName.equals(map.getDesc()))
                 .collect(Collectors.toList());
     }
+    
+    /**
+     * 获取所有装备分类
+     */
+    public List<String> getEquipCategories() {
+        if (cachedEquipCategories != null) {
+            return cachedEquipCategories;
+        }
+        synchronized (this) {
+            if (cachedEquipCategories != null) {
+                return cachedEquipCategories;
+            }
+            List<String> categories = new ArrayList<>();
+            Data data = stringData.getData("Eqp.img");
+            if (data != null) {
+                Data eqpNode = data.getChildByPath("Eqp");
+                if (eqpNode != null) {
+                    for (Data child : eqpNode.getChildren()) {
+                        categories.add(child.getName());
+                    }
+                }
+            }
+            Collections.sort(categories);
+            cachedEquipCategories = categories;
+            return cachedEquipCategories;
+        }
+    }
 
     /**
      * 硬查xml
@@ -98,7 +127,7 @@ public class CommonInformation {
             if (infType == null) {
                 throw new BizException(I18nUtil.getExceptionMessage("UNSUPPORTED_TYPE"));
             }
-            total += searchXML(results, infType, condition.getFilter(), condition.getFilterType(), condition.isFullMatch(), condition.getPage(), condition.getPageSize(), condition.getGender(), condition.getColor());
+            total += searchXML(results, infType, condition);
         }
         
         // 构造分页对象
@@ -115,9 +144,19 @@ public class CommonInformation {
         return page;
     }
 
-    private long searchXML(List<InformationResult> results, InformationType infType, String filter, int filterType, boolean fullMatch, Integer page, Integer pageSize, Integer gender, Integer color) {
+    private long searchXML(List<InformationResult> results, InformationType infType, InformationSearch condition) {
         Data data;
         long count = 0;
+        
+        String filter = condition.getFilter();
+        int filterType = condition.getFilterType();
+        boolean fullMatch = condition.isFullMatch();
+        Integer page = condition.getPage();
+        Integer pageSize = condition.getPageSize();
+        Integer gender = condition.getGender();
+        Integer color = condition.getColor();
+        String category = condition.getCategory();
+
         switch (infType) {
             case CASH -> {
                 data = stringData.getData("Cash.img");
@@ -128,9 +167,18 @@ public class CommonInformation {
                 count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
             }
             case EQP -> {
-                data = stringData.getData("Eqp.img").getChildByPath("Eqp");
-                for (Data child : data.getChildren()) {
-                    count += addResult(results, infType, child, filter, filterType, fullMatch, page, pageSize, gender, color);
+                Data eqpData = stringData.getData("Eqp.img").getChildByPath("Eqp");
+                if (category != null && !category.isEmpty()) {
+                    // 如果指定了分类，只搜索该分类
+                    Data child = eqpData.getChildByPath(category);
+                    if (child != null) {
+                        count += addResult(results, infType, child, filter, filterType, fullMatch, page, pageSize, gender, color);
+                    }
+                } else {
+                    // 否则搜索所有分类
+                    for (Data child : eqpData.getChildren()) {
+                        count += addResult(results, infType, child, filter, filterType, fullMatch, page, pageSize, gender, color);
+                    }
                 }
             }
             case ETC -> {

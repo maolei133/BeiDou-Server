@@ -9,11 +9,11 @@
         <a-select
           v-model="condition.types"
           :placeholder="$t('informationSearch.placeholder.type')"
-          :readonly="true"
           multiple
           :max-tag-count="3"
           allow-clear
           class="a-space-son"
+          @change="handleTypeChange"
         >
           <a-option value="cash">
             {{ $t('informationSearch.type.cash') }}
@@ -46,6 +46,24 @@
             {{ $t('informationSearch.type.skill') }}
           </a-option>
         </a-select>
+
+        <a-select
+          v-if="showEquipCategory"
+          v-model="condition.category"
+          :placeholder="$t('informationSearch.placeholder.category')"
+          allow-clear
+          allow-search
+          class="a-space-son"
+        >
+          <a-option
+            v-for="option in categoryOptions"
+            :key="option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </a-option>
+        </a-select>
+
         <a-input
           v-model="condition.filter"
           :placeholder="$t('informationSearch.placeholder.filter')"
@@ -113,10 +131,11 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref } from 'vue';
+  import { ref, computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Message } from '@arco-design/web-vue';
   import useLoading from '@/hooks/loading';
+  import useEquipCategories from '@/hooks/useEquipCategories';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import {
     InformationSearch,
@@ -126,11 +145,26 @@
 
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(false);
+  const { categoryOptions, loadCategories } = useEquipCategories();
+
   const informationList = ref<InformationResult[]>([]);
   const condition = ref<InformationSearch>({
     types: [],
     filter: '',
+    category: undefined,
   });
+
+  const showEquipCategory = computed(() => {
+    return condition.value.types && condition.value.types.includes('eqp');
+  });
+
+  const handleTypeChange = () => {
+    if (showEquipCategory.value) {
+      loadCategories();
+    } else {
+      condition.value.category = undefined;
+    }
+  };
 
   const getImg = (type: string, id: number) => {
     let imgType = type.toLowerCase();
@@ -141,33 +175,28 @@
   };
 
   const searchData = async () => {
-    if (!condition.value.filter) {
+    if (!condition.value.filter && !condition.value.category) {
       Message.error({
         content: t('informationSearch.check.filter'),
         duration: 3 * 1000,
       });
       return;
     }
+
     setLoading(true);
     try {
       const { data } = await informationSearch(condition.value);
-      // 修复：后端返回的数据结构为 { records: [], ... }
-      // 如果 data 是数组，直接赋值
       if (Array.isArray(data)) {
         informationList.value = data;
       } else if (data && Array.isArray((data as any).records)) {
-        // 如果 data 是对象且包含 records 属性，则取 records
         informationList.value = (data as any).records;
       } else if (data && Array.isArray((data as any).data)) {
-        // 兼容旧逻辑，如果 data 是对象且包含 data 属性
         informationList.value = (data as any).data;
       } else {
-        // 兜底，如果结构不符合预期，清空列表或保持原样
         informationList.value = [];
         console.warn('Unexpected API response structure:', data);
       }
     } catch (err) {
-      // 错误处理
       console.error('Search failed:', err);
       informationList.value = [];
     } finally {
@@ -178,7 +207,8 @@
   const resetSearch = () => {
     condition.value.types = [];
     condition.value.filter = '';
-    informationList.value = []; // 重置时也清空列表
+    condition.value.category = undefined;
+    informationList.value = [];
   };
 
   const getTag = (type: string) => {

@@ -40,4 +40,10 @@ public class InformationSearch {
      */
     private Integer gender;
     private Integer color;
+    
+    /**
+     * 装备分类筛选 (仅当 types 包含 eqp 时有效)
+     * 例如: Weapon, Cap, Coat, Pants, Shoes, Gloves, Cape, Shield, etc.
+     */
+    private String category;
 }

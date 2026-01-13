@@ -136,6 +136,10 @@ public class CommonService {
     public List<InformationResult> getMapsByStreetName(String streetName) {
         return CommonInformation.getInstance().getMapsByStreetName(streetName);
     }
+    
+    public List<String> getEquipCategories() {
+        return CommonInformation.getInstance().getEquipCategories();
+    }
 
     public List<InformationResult> getJobs() {
         return Arrays.stream(Job.values())

@@ -1,5 +1,6 @@
 export default {
   'informationSearch.placeholder.type': '请选择资料类型',
+  'informationSearch.placeholder.category': '请选择装备分类',
   'informationSearch.placeholder.filter': '请输入搜索文本',
 
   'informationSearch.type.cash': '现金',
@@ -12,6 +13,26 @@ export default {
   'informationSearch.type.npc': 'NPC',
   'informationSearch.type.pet': '宠物',
   'informationSearch.type.skill': '技能',
+
+  'informationSearch.equipCategory.Accessory': '饰品',
+  'informationSearch.equipCategory.Android': '安卓',
+  'informationSearch.equipCategory.Cap': '帽子',
+  'informationSearch.equipCategory.Cape': '披风',
+  'informationSearch.equipCategory.Coat': '上衣',
+  'informationSearch.equipCategory.Dragon': '龙神',
+  'informationSearch.equipCategory.Face': '脸型',
+  'informationSearch.equipCategory.Glove': '手套',
+  'informationSearch.equipCategory.Hair': '发型',
+  'informationSearch.equipCategory.Longcoat': '套服',
+  'informationSearch.equipCategory.Mechanic': '机械师',
+  'informationSearch.equipCategory.Pants': '裤子',
+  'informationSearch.equipCategory.PetEquip': '宠物装备',
+  'informationSearch.equipCategory.Ring': '戒指',
+  'informationSearch.equipCategory.Shield': '盾牌',
+  'informationSearch.equipCategory.Shoes': '鞋子',
+  'informationSearch.equipCategory.Taming': '骑宠',
+  'informationSearch.equipCategory.Weapon': '武器',
+  'informationSearch.equipCategory.Bits': '组件',
 
   'informationSearch.column.type': '类型',
   'informationSearch.column.id': 'ID',
