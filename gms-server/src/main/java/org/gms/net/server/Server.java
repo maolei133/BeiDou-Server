@@ -1706,6 +1706,8 @@ public class Server {
         long time = minutes * 60000L;
         this.shutdownTime = System.currentTimeMillis() + time;
 
+        log.info("开始执行关服倒计时，预计关服时间: {}, 剩余时间: {} 分钟", new Date(this.shutdownTime), minutes);
+
         // 启动一个独立的平台线程来执行关服倒计时，避免死锁
         new Thread(() -> {
             long remainingTime = time;
@@ -1800,7 +1802,7 @@ public class Server {
         String msg;
         if (firstNotice) {
             // 首次通知，使用特定格式
-            LocalDateTime shutdownTime = LocalDateTime.now().plusMinutes(timeLeft);
+            LocalDateTime shutdownTime = LocalDateTime.now().plus(Duration.ofMillis(timeLeft));
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
             String timeStr = shutdownTime.format(formatter);
             String customMsg = dto.getShutdownMsg() != null ? dto.getShutdownMsg() : "";
@@ -1820,6 +1822,8 @@ public class Server {
 
             msg = I18nUtil.getMessage("ShutdownCommand.message7", strTime);
         }
+
+        log.info("发送关服通知: 剩余时间={}ms, 消息={}", timeLeft, msg);
 
         for (World w : Server.getInstance().getWorlds()) {
             if (dto.getShowServerMsg()) {
@@ -1844,13 +1848,26 @@ public class Server {
     public void sendShutdownNotice(Client c) {
         long shutdownRemaining = getShutdownRemainingTime();
         if (shutdownRemaining > 0 && shutdownRemaining <= 30 * 60 * 1000) {
-            int minutes = (int) (shutdownRemaining / 60000);
-            String timeStr = I18nUtil.getMessage("ShutdownCommand.message5", minutes);
-            String msg = I18nUtil.getMessage("ShutdownCommand.message7", timeStr);
+            int seconds = (int) (shutdownRemaining / 1000) % 60;
+            int minutes = (int) ((shutdownRemaining / (1000 * 60)) % 60);
+            int hours = (int) ((shutdownRemaining / (1000 * 60 * 60)) % 24);
+            int days = (int) (shutdownRemaining / (1000 * 60 * 60 * 24));
+
+            StringBuilder strTime = new StringBuilder();
+            if (days > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message3", days));
+            if (hours > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message4", hours));
+            if (minutes > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message5", minutes));
+            if (seconds > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message6", seconds));
+
+            if (strTime.length() == 0) {
+                strTime.append(I18nUtil.getMessage("ShutdownCommand.message6", 0));
+            }
+
+            String msg = I18nUtil.getMessage("ShutdownCommand.message7", strTime.toString());
 
             // In-game players get a popup
             if (c.getPlayer() != null) {
-                c.getPlayer().dropMessage(0,c.getChannelServer().getServerMessage());
+                c.getPlayer().dropMessage(0,c.getChannelServer().getServerMessage()+msg);
                 c.getPlayer().dropMessage(1, msg);
             }
             // Players on login/char select screen get a notice packet

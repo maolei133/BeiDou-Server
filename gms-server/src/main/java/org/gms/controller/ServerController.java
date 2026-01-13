@@ -13,6 +13,8 @@ import org.gms.model.dto.ServerShutdownDTO;
 import org.gms.model.dto.SubmitBody;
 import org.gms.net.server.Server;
 import org.gms.service.ServerService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +25,7 @@ import java.util.List;
 @AllArgsConstructor
 @RequestMapping("/server")
 public class ServerController {
+    private static final Logger log = LoggerFactory.getLogger(ServerController.class);
     private final ApplicationContext applicationContext;
     private final ServerService serverService;
 
@@ -36,8 +39,10 @@ public class ServerController {
             )
             @RequestBody(required = false) SubmitBody<ServerShutdownDTO> request) {
         if (request != null && request.getData() != null) {
+            log.info("接收到停服请求: {}", request.getData());
             Server.getInstance().shutdownWithMsgAndInternal(request.getData(), true);
         } else {
+            log.info("接收到立即停服请求");
             // 兼容旧的直接调用，立即停止
             SpringApplication.exit(applicationContext);
             System.exit(0);
@@ -49,6 +54,7 @@ public class ServerController {
     @Operation(summary = "停止服务")
     @GetMapping("/" + ApiConstant.LATEST + "/stopServer")
     public ResultBody<Object> stopServer() {
+        log.info("接收到停止服务请求");
         Server.getInstance().shutdownInternal(false);
         return ResultBody.success();
     }
@@ -62,7 +68,7 @@ public class ServerController {
                     description = "停服请求参数：包含停服自定义消息，停服倒计时(单位：分钟)"
             )
             @RequestBody SubmitBody<ServerShutdownDTO> request) {
-        System.out.println(request.getData());
+        log.info("接收到自定义停止服务请求: {}", request.getData());
         Server.getInstance().shutdownWithMsgAndInternal(request.getData(), false);
         return ResultBody.success();
     }
@@ -71,6 +77,7 @@ public class ServerController {
     @Operation(summary = "启动服务")
     @GetMapping("/" + ApiConstant.LATEST + "/startServer")
     public ResultBody<Object> startServer() {
+        log.info("接收到启动服务请求");
         Server.getInstance().init();
         return ResultBody.success();
     }
@@ -79,6 +86,7 @@ public class ServerController {
     @Operation(summary = "重启服务")
     @GetMapping("/" + ApiConstant.LATEST + "/restartServer")
     public ResultBody<Object> restartServer() {
+        log.info("接收到重启服务请求");
         Server.getInstance().shutdownInternal(true);
         return ResultBody.success();
     }
