@@ -124,16 +124,31 @@ public class FredrickProcessor {
 
     public static void removeFredrickLog(int cid) {
         FredstorageMapper mapper = SpringContextUtil.getBean(FredstorageMapper.class);
-        mapper.deleteById(cid);
+        QueryWrapper query = QueryWrapper.create()
+                .where(FredstorageDO::getCid).eq(cid);
+        mapper.deleteByQuery(query);
     }
 
     public static void insertFredrickLog(int cid) {
         FredstorageMapper mapper = SpringContextUtil.getBean(FredstorageMapper.class);
-        FredstorageDO logEntry = new FredstorageDO();
-        logEntry.setCid((long) cid);
-        logEntry.setDaynotes(0L);
-        logEntry.setTimestamp(new Timestamp(System.currentTimeMillis()));
-        mapper.insert(logEntry, true); // Overwrite if exists
+        
+        // 先检查是否存在
+        QueryWrapper query = QueryWrapper.create()
+                .where(FredstorageDO::getCid).eq(cid);
+        FredstorageDO existing = mapper.selectOneByQuery(query);
+        
+        if (existing != null) {
+            // 如果存在，更新时间戳
+            existing.setTimestamp(new Timestamp(System.currentTimeMillis()));
+            mapper.update(existing);
+        } else {
+            // 如果不存在，插入新记录
+            FredstorageDO logEntry = new FredstorageDO();
+            logEntry.setCid((long) cid);
+            logEntry.setDaynotes(0L);
+            logEntry.setTimestamp(new Timestamp(System.currentTimeMillis()));
+            mapper.insert(logEntry);
+        }
     }
 
     private static void removeFredrickReminders(List<Pair<Integer, Integer>> expiredCids) {
@@ -219,7 +234,11 @@ public class FredrickProcessor {
             }
 
             removeFredrickReminders(expiredCids);
-            fredstorageMapper.deleteBatchByIds(cidsToRemove);
+            
+            // 使用 QueryWrapper 删除，避免直接使用 deleteBatchByIds 可能导致的问题（如果 id 不是主键）
+            QueryWrapper deleteFredstorageQuery = QueryWrapper.create()
+                    .where(FredstorageDO::getCid).in(cidsToRemove);
+            fredstorageMapper.deleteByQuery(deleteFredstorageQuery);
         }
 
         if (!notifCids.isEmpty()) {
