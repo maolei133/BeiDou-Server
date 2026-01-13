@@ -60,7 +60,7 @@
             <div class="card-header">
               <span>{{ $t('logs.monitor.chart.categoryQps') }}</span>
               <el-button text bg size="small" @click="refreshCategoryStats"
-                >鍒锋柊</el-button
+                >刷新</el-button
               >
             </div>
           </template>
@@ -73,7 +73,7 @@
             <div class="card-header">
               <span>{{ $t('logs.monitor.chart.categorySuccessRate') }}</span>
               <el-button text bg size="small" @click="refreshCategoryStats"
-                >鍒锋柊</el-button
+                >刷新</el-button
               >
             </div>
           </template>
@@ -89,7 +89,7 @@
             <div class="card-header">
               <span>{{ $t('logs.monitor.chart.queueStats') }}</span>
               <el-button text bg size="small" @click="refreshQueueStats"
-                >鍒锋柊</el-button
+                >刷新</el-button
               >
             </div>
           </template>
@@ -102,7 +102,7 @@
             <div class="card-header">
               <span>{{ $t('logs.monitor.indicator.performanceMetrics') }}</span>
               <el-button text bg size="small" @click="refreshSystemStats"
-                >鍒锋柊</el-button
+                >刷新</el-button
               >
             </div>
           </template>
@@ -156,7 +156,7 @@
             <div class="card-header">
               <span>{{ $t('logs.monitor.table.categoryStats') }}</span>
               <el-button text bg size="small" @click="refreshCategoryStats"
-                >鍒锋柊</el-button
+                >刷新</el-button
               >
             </div>
           </template>
@@ -296,7 +296,7 @@
       async refreshSystemStats() {
         try {
           const response = await logsApi.getSystemStats();
-          if (response.code === 20000) {
+          if (response && response.code === 20000) {
             const stats = response.data;
             this.systemStats.totalCount = stats.totalCount;
             this.systemStats.successCount = stats.successCount;
@@ -306,38 +306,40 @@
                 ? Math.round((stats.successCount / stats.totalCount) * 100)
                 : 0;
 
-            // 璁＄畻QPS锛堣繖閲岄渶瑕佸疄闄呯殑鏃堕棿鎴筹級
+            // 计算QPS（这里需要实际的时间戳）
             this.systemStats.qps = Math.floor(stats.totalCount / 10);
 
-            // 璁＄畻骞冲潎寤惰繜
+            // 计算平均延迟
             this.systemStats.avgLatency =
               stats.totalTime > 0
                 ? (stats.totalTime / stats.totalCount).toFixed(2)
                 : 0;
           }
-        } catch (error) {
-          this.$message.error(`鑾峰彇绯荤粺缁熻澶辫触: ${error.message}`);
+        } catch (error: unknown) {
+          const msg = (error as any)?.message || 'Unknown error';
+          this.$message.error(`获取系统统计失败: ${msg}`);
         }
       },
       async refreshCategoryStats() {
         try {
           const response = await logsApi.getCategoryStats();
-          if (response.code === 20000) {
+          if (response && response.code === 20000) {
             this.categoryStats = response.data;
             this.categoryStatsTable = response.data;
             this.updateCategoryCharts();
           }
-        } catch (error) {
-          this.$message.error(`鑾峰彇鍒嗙被缁熻澶辫触: ${error.message}`);
+        } catch (error: unknown) {
+          const msg = (error as any)?.message || 'Unknown error';
+          this.$message.error(`获取分类统计失败: ${msg}`);
         }
       },
       async refreshQueueStats() {
         try {
           const response = await logsApi.getQueueStats();
-          if (response.code === 20000) {
-            // 瑙ｆ瀽闃熷垪缁熻淇℃伅
+          if (response && response.code === 20000) {
+            // 解析队列统计信息
             const stats = response.data;
-            const regex = /楂橀闃熷垪: (\d+), 涓闃熷垪: (\d+), 浣庨闃熷垪: (\d+)/;
+            const regex = /高频队列: (\d+), 中频队列: (\d+), 低频队列: (\d+)/;
             const match = stats.match(regex);
             if (match) {
               this.queueStats.highQueueDepth = parseInt(match[1], 10);
@@ -350,26 +352,28 @@
             }
             this.updateQueueChart();
           }
-        } catch (error) {
-          this.$message.error(`鑾峰彇闃熷垪缁熻澶辫触: ${error.message}`);
+        } catch (error: unknown) {
+          const msg = (error as any)?.message || 'Unknown error';
+          this.$message.error(`获取队列统计失败: ${msg}`);
         }
       },
       async refreshContextStats() {
         try {
           const response = await logsApi.getContextStats();
-          if (response.code === 20000) {
+          if (response && response.code === 20000) {
             const stats = response.data;
-            const match = stats.match(/娲昏穬涓婁笅鏂? (\d+)/);
+            const match = stats.match(/活跃上下文: (\d+)/);
             if (match) {
               this.queueStats.activeContext = parseInt(match[1], 10);
             }
           }
-        } catch (error) {
-          this.$message.error(`鑾峰彇涓婁笅鏂囩粺璁″け璐? ${error.message}`);
+        } catch (error: unknown) {
+          const msg = (error as any)?.message || 'Unknown error';
+          this.$message.error(`获取上下文统计失败: ${msg}`);
         }
       },
       updateCategoryCharts() {
-        // 鏇存柊鍒嗙被QPS鍥捐〃
+        // 更新分类QPS图表
         const qpsData = this.categoryStats
           .sort((a, b) => this.calculateQPS(b) - this.calculateQPS(a))
           .slice(0, 10);
@@ -395,7 +399,8 @@
           tooltip: { trigger: 'axis' },
         });
 
-        // 鏇存柊鍒嗙被鎴愬姛鐜囧浘琛?        const successRateData = this.categoryStats
+        // 更新分类成功率图表
+        const successRateData = this.categoryStats
           .sort(
             (a, b) =>
               this.calculateSuccessRate(b) - this.calculateSuccessRate(a)
@@ -437,9 +442,9 @@
           series: [
             {
               data: [
-                { value: this.queueStats.highQueueDepth, name: '楂橀闃熷垪' },
-                { value: this.queueStats.mediumQueueDepth, name: '涓闃熷垪' },
-                { value: this.queueStats.lowQueueDepth, name: '浣庨闃熷垪' },
+                { value: this.queueStats.highQueueDepth, name: '高频队列' },
+                { value: this.queueStats.mediumQueueDepth, name: '中频队列' },
+                { value: this.queueStats.lowQueueDepth, name: '低频队列' },
               ],
               type: 'pie',
             },
@@ -475,25 +480,26 @@
           this.refreshQueueStats();
           this.refreshContextStats();
         }, 10000);
-        this.$message.success('鑷姩鍒锋柊宸插惎鐢?);
+        this.$message.success('自动刷新已启用');
       },
       stopAutoRefresh() {
         this.autoRefreshEnabled = false;
         clearInterval(this.autoRefreshTimer);
-        this.$message.success('鑷姩鍒锋柊宸插仠姝?);
+        this.$message.success('自动刷新已停止');
       },
       async clearMonitorData() {
         try {
           const response = await logsApi.clearMonitorData();
-          if (response.code === 20000) {
-            this.$message.success('鐩戞帶鏁版嵁宸叉竻绌?);
+          if (response && response.code === 20000) {
+            this.$message.success('监控数据已清空');
             this.refreshSystemStats();
             this.refreshCategoryStats();
             this.refreshQueueStats();
             this.refreshContextStats();
           }
-        } catch (error) {
-          this.$message.error(`娓呯┖鏁版嵁澶辫触: ${error.message}`);
+        } catch (error: unknown) {
+          const msg = (error as any)?.message || 'Unknown error';
+          this.$message.error(`清空数据失败: ${msg}`);
         }
       },
     },
@@ -530,7 +536,7 @@
     color: #303133;
   }
 
-  /* 缁熻鎸囨爣鏍峰紡 */
+  /* 统计指标样式 */
   ::v-deep .el-statistic__title {
     font-size: 12px;
     color: #909399;
@@ -546,7 +552,7 @@
     font-family: 'Courier New', monospace;
   }
 
-  /* 琛ㄦ牸鏍峰紡 */
+  /* 表格样式 */
   ::v-deep .el-table {
     font-size: 13px;
   }
@@ -561,7 +567,7 @@
     background-color: #f5f7fa !important;
   }
 
-  /* 鎸夐挳鏍峰紡 */
+  /* 按钮样式 */
   ::v-deep .el-button {
     border-radius: 4px;
     font-weight: 500;
@@ -573,7 +579,7 @@
     box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.15);
   }
 
-  /* 杩涘害鏉℃牱寮?*/
+  /* 进度条样式 */
   ::v-deep .el-progress {
     margin: 0;
   }
@@ -582,7 +588,7 @@
     border-radius: 3px;
   }
 
-  /* 澶撮儴鏍峰紡 - 缁熻闈㈡澘 */
+  /* 头部样式 - 统计面板 */
   ::v-deep .el-row {
     margin-bottom: 20px;
   }
@@ -603,4 +609,3 @@
     }
   }
 </style>
-

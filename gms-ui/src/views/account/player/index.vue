@@ -1277,8 +1277,10 @@
         name: searchName,
         guildId: searchGuildId,
       });
-      tableData.value = data.records;
-      total.value = data.totalRow;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = data as any;
+      tableData.value = result.records;
+      total.value = result.totalRow;
     } finally {
       setLoading(false);
     }

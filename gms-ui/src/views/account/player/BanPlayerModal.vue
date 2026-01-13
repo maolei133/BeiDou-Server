@@ -172,10 +172,12 @@
     if (props.player && !props.all) {
       try {
         const { data } = await getBanInfo(props.player.id);
-        banInfo.value = data;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const info = data as any;
+        banInfo.value = info;
         // 默认全选
-        form.value.ips = data.ips;
-        form.value.macs = data.macs;
+        form.value.ips = info.ips || [];
+        form.value.macs = info.macs || [];
       } catch (error) {
         // ignore
       }

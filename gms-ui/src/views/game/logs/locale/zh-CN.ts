@@ -7,7 +7,6 @@ export default {
   'menu.game.logs.alert': '告警规则',
   'menu.game.logs.backup': '备份管理',
   'menu.game.logs.dashboard': '仪表板',
-  'menu.game.logs.config': '配置管理',
 
   // 页面标题
   'logs.page.title': '日志管理系统',
@@ -19,7 +18,6 @@ export default {
   'logs.tab.alert': '告警规则',
   'logs.tab.backup': '备份管理',
   'logs.tab.dashboard': '仪表板',
-  'logs.tab.config': '配置',
 
   // === 仪表板页面 ===
   'logs.dashboard.title': '仪表板总览',

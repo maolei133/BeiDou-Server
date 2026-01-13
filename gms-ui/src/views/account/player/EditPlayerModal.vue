@@ -494,7 +494,7 @@
       // 兼容分页返回结构
       // @ts-ignore
       const records = data.records || data;
-      if (records && records.length > 0) {
+      if (records && Array.isArray(records) && records.length > 0) {
         if (type === 'face') {
           faceNameMap.value[id] = records[0].name;
         } else if (type === 'hair') {
