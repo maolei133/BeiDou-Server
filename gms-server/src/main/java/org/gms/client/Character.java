@@ -8913,16 +8913,33 @@ public class Character extends AbstractCharacterObject {
 
     private void equipPendantOfSpirit() {   //精灵吊坠装备时长经验计算
         if (pendantOfSpirit == null) {
-            pendantOfSpirit = TimerManager.getInstance().register(() -> {
+            // 在启动定时器前，先加载一次离线时长（如果开启了配置）
+            if (GameConfig.getServerBoolean("offline_pendant_of_spirit_enabled")) {
                 String type = "精灵吊坠时长";
                 ExtendValueDO extendValueDO = ExtendUtil.getExtendValue(String.valueOf(id), ExtendType.CHARACTER_EXTEND_DAILY.getType(), type);
-                // 检查是否需要加载离线保存的精灵吊坠时长（默认false）
-                if (GameConfig.getServerBoolean("offline_pendant_of_spirit_enabled") && extendValueDO != null && extendValueDO.getExtendValue() != null) {
-                    pendantExp = Byte.parseByte(extendValueDO.getExtendValue());
+                if (extendValueDO != null && extendValueDO.getExtendValue() != null) {
+                    try {
+                        byte savedExp = Byte.parseByte(extendValueDO.getExtendValue());
+                        // 只有当保存的值合法且大于当前内存值时才覆盖，防止回档
+                        if (savedExp > pendantExp && savedExp <= 3) {
+                            pendantExp = savedExp;
+                        }
+                    } catch (NumberFormatException e) {
+                        log.error("玩家 {} 解析精灵吊坠时长出错",getName(), e);
+                    }
                 }
+            }
+
+            pendantOfSpirit = TimerManager.getInstance().register(() -> {
                 if (pendantExp < 3) {
-                    ExtendUtil.saveOrUpdateExtendValue(String.valueOf(id),ExtendType.CHARACTER_EXTEND_DAILY.getType(), type,String.valueOf(pendantExp));//保存时长
                     pendantExp++;
+
+                    // 保存新时长
+                    if (GameConfig.getServerBoolean("offline_pendant_of_spirit_enabled")) {
+                        String type = "精灵吊坠时长";
+                        ExtendUtil.saveOrUpdateExtendValue(String.valueOf(id), ExtendType.CHARACTER_EXTEND_DAILY.getType(), type, String.valueOf(pendantExp));
+                    }
+
                     //用于准确提示装备1小时内还是装备经过几小时
                     message(I18nUtil.getMessage(pendantExp <= 2 ? "Character.equipPendantOfSpirit.message1" : "Character.equipPendantOfSpirit.message2", pendantExp == 3 ? 2 : pendantExp, pendantExp * 10));
                 } else {
