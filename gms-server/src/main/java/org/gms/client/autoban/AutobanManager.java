@@ -46,12 +46,26 @@ public class AutobanManager {
     
     // 排除检测的技能ID集合
     private static final Set<Integer> EXCLUDED_SKILLS = new HashSet<>();
+    // 终极武器技能集合
+    private static final Set<Integer> FINAL_ATTACK_SKILLS = new HashSet<>();
     
     // 初始化排除检测的技能ID集合
     static {
         EXCLUDED_SKILLS.add(WindArcher.HURRICANE);
         EXCLUDED_SKILLS.add(Bowmaster.HURRICANE);
         EXCLUDED_SKILLS.add(Corsair.RAPID_FIRE);
+
+        // 初始化终极武器技能集合
+        FINAL_ATTACK_SKILLS.add(Fighter.FINAL_ATTACK_SWORD);
+        FINAL_ATTACK_SKILLS.add(Fighter.FINAL_ATTACK_AXE);
+        FINAL_ATTACK_SKILLS.add(Page.FINAL_ATTACK_BW);
+        FINAL_ATTACK_SKILLS.add(Page.FINAL_ATTACK_SWORD);
+        FINAL_ATTACK_SKILLS.add(Spearman.FINAL_ATTACK_SPEAR);
+        FINAL_ATTACK_SKILLS.add(Spearman.FINAL_ATTACK_POLEARM);
+        FINAL_ATTACK_SKILLS.add(Hunter.FINAL_ATTACK);
+        FINAL_ATTACK_SKILLS.add(Crossbowman.FINAL_ATTACK);
+        FINAL_ATTACK_SKILLS.add(WindArcher.FINAL_ATTACK);
+        FINAL_ATTACK_SKILLS.add(DawnWarrior.FINAL_ATTACK);
     }
     
     private final Character chr; // 关联的玩家角色
@@ -630,8 +644,15 @@ public class AutobanManager {
      */
     public boolean checkMobCount(StatEffect attackEffect, int numAttacked, int skillId, int skillLevel) {
         if (!useAntiCheat()) return false;
-        if (numAttacked > attackEffect.getMobCount()) {
-            addPoint(AutobanFactory.MOB_COUNT, "尝试使用: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" + " 目标数量: " + numAttacked + " 上限: " + attackEffect.getMobCount() + " 已作废");
+        int maxMobCount = attackEffect.getMobCount();
+
+        // 终极武器技能（终极剑、终极弓等）的攻击数量上限应以上一个技能为准
+        if (FINAL_ATTACK_SKILLS.contains(skillId)) {
+            maxMobCount = numAttacked;
+        }
+
+        if (numAttacked > maxMobCount) {
+            addPoint(AutobanFactory.MOB_COUNT, "尝试使用: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" + " 目标数量: " + numAttacked + " 上限: " + maxMobCount + " 已作废");
             return true;
         }
         return false;
