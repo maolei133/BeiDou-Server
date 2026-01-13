@@ -8,6 +8,7 @@ import org.gms.client.Job;
 import org.gms.client.SkinColor;
 import org.gms.client.inventory.Equip;
 import org.gms.constants.api.InformationType;
+import org.gms.constants.inventory.EquipType;
 import org.gms.dao.entity.GuildsDO;
 import org.gms.dao.mapper.GuildsMapper;
 import org.gms.exception.BizException;
@@ -22,9 +23,7 @@ import org.gms.util.RequireUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -139,6 +138,66 @@ public class CommonService {
     
     public List<String> getEquipCategories() {
         return CommonInformation.getInstance().getEquipCategories();
+    }
+
+    public Map<String, List<String>> getEquipSubCategories() {
+        Map<String, List<String>> subCategories = new HashMap<>();
+        
+        // Weapon 子分类
+        List<String> weaponSubs = Arrays.stream(EquipType.values())
+                .filter(type -> {
+                    int val = type.getValue();
+                    // 武器ID通常在 130xxxx - 149xxxx 之间
+                    // EquipType 的 value 是 ID 前缀 (如 1302, 1402)
+                    // 或者 130, 140 等
+                    return val >= 1300 && val < 1500;
+                })
+                .map(Enum::name)
+                .collect(Collectors.toList());
+        subCategories.put("Weapon", weaponSubs);
+
+        // Accessory 子分类
+        List<String> accessorySubs = Arrays.stream(EquipType.values())
+                .filter(type -> {
+                    int val = type.getValue();
+                    // 饰品ID通常在 101xxxx - 115xxxx 之间
+                    // 排除掉 CAPE(110), RING(111) 等已经是一级分类的
+                    // 虽然 RING(111) 在 EquipType 中定义了，但如果它是一级分类，这里可以保留也可以排除
+                    // 根据用户反馈，CAPE, COAT, GLOVES, LONGCOAT, PANTS, RING, SHIELD, SHOES 是一级分类
+                    // 它们的 ID 分别是:
+                    // CAPE: 110
+                    // COAT: 104
+                    // GLOVES: 108
+                    // LONGCOAT: 105
+                    // PANTS: 106
+                    // RING: 111
+                    // SHIELD: 109
+                    // SHOES: 107
+                    // 所以我们需要排除这些 ID
+                    // 修正：用户要求 RING 也归类到饰品里
+                    return (val >= EquipType.FACE_ACCESSORY.getValue() && val <= EquipType.EARRINGS.getValue()) || // Face, Eye, Earrings
+                           val == EquipType.RING.getValue() || // Ring
+                           val == EquipType.PENDANT.getValue() || // Pendant
+                           val == EquipType.BELT.getValue() || // Belt
+                           val == EquipType.MEDAL.getValue() || // Medal
+                           val == EquipType.SHOULDER.getValue();   // Shoulder
+                })
+                .map(Enum::name)
+                .collect(Collectors.toList());
+        subCategories.put("Accessory", accessorySubs);
+
+        // PetEquip 子分类
+        List<String> petEquipSubs = Arrays.stream(EquipType.values())
+                .filter(type -> {
+                    int val = type.getValue();
+                    // 宠物装备ID通常在 180xxxx - 183xxxx 之间
+                    return val >= EquipType.PET_EQUIP.getValue() && val <= EquipType.PET_EQUIP_QUOTE.getValue();
+                })
+                .map(Enum::name)
+                .collect(Collectors.toList());
+        subCategories.put("PetEquip", petEquipSubs);
+        
+        return subCategories;
     }
 
     public List<InformationResult> getJobs() {

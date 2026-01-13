@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @AllArgsConstructor
@@ -81,6 +82,13 @@ public class CommonController {
     @GetMapping("/" + ApiConstant.LATEST + "/getEquipCategories")
     public ResultBody<List<String>> getEquipCategories() {
         return ResultBody.success(commonService.getEquipCategories());
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取装备子分类映射")
+    @GetMapping("/" + ApiConstant.LATEST + "/getEquipSubCategories")
+    public ResultBody<Map<String, List<String>>> getEquipSubCategories() {
+        return ResultBody.success(commonService.getEquipSubCategories());
     }
 
     @Tag(name = "/common/" + ApiConstant.LATEST)

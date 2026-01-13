@@ -2,6 +2,7 @@ package org.gms.server;
 
 import com.mybatisflex.core.paginate.Page;
 import org.gms.constants.api.InformationType;
+import org.gms.constants.inventory.EquipType;
 import org.gms.exception.BizException;
 import org.gms.model.pojo.InformationSearch;
 import org.gms.model.pojo.InformationResult;
@@ -156,38 +157,48 @@ public class CommonInformation {
         Integer gender = condition.getGender();
         Integer color = condition.getColor();
         String category = condition.getCategory();
+        String subCategory = condition.getSubCategory();
 
         switch (infType) {
             case CASH -> {
                 data = stringData.getData("Cash.img");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
             case CONSUME -> {
                 data = stringData.getData("Consume.img");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
             case EQP -> {
                 Data eqpData = stringData.getData("Eqp.img").getChildByPath("Eqp");
                 if (category != null && !category.isEmpty()) {
                     // 如果指定了分类，只搜索该分类
-                    Data child = eqpData.getChildByPath(category);
-                    if (child != null) {
-                        count += addResult(results, infType, child, filter, filterType, fullMatch, page, pageSize, gender, color);
+                    // 特殊处理：如果 category 是 Accessory，并且 subCategory 是 RING，
+                    // 且 WZ 结构中 Ring 是独立的一级分类，则需要去 Ring 节点下搜索
+                    if ("Accessory".equals(category) && "RING".equals(subCategory)) {
+                        Data ringNode = eqpData.getChildByPath("Ring");
+                        if (ringNode != null) {
+                            count += addResult(results, infType, ringNode, filter, filterType, fullMatch, page, pageSize, gender, color, subCategory);
+                        }
+                    } else {
+                        Data child = eqpData.getChildByPath(category);
+                        if (child != null) {
+                            count += addResult(results, infType, child, filter, filterType, fullMatch, page, pageSize, gender, color, subCategory);
+                        }
                     }
                 } else {
                     // 否则搜索所有分类
                     for (Data child : eqpData.getChildren()) {
-                        count += addResult(results, infType, child, filter, filterType, fullMatch, page, pageSize, gender, color);
+                        count += addResult(results, infType, child, filter, filterType, fullMatch, page, pageSize, gender, color, subCategory);
                     }
                 }
             }
             case ETC -> {
                 data = stringData.getData("Etc.img").getChildByPath("Etc");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
             case INS -> {
                 data = stringData.getData("Ins.img");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
             case MAP -> {
                 data = stringData.getData("Map.img");
@@ -197,33 +208,33 @@ public class CommonInformation {
             }
             case MOB -> {
                 data = stringData.getData("Mob.img");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
             case NPC -> {
                 data = stringData.getData("Npc.img");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
             case PET -> {
                 data = stringData.getData("Pet.img");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
             case SKILL -> {
                 data = stringData.getData("Skill.img");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
             case HAIR -> {
                 data = stringData.getData("Eqp.img").getChildByPath("Eqp/Hair");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
             case FACE -> {
                 data = stringData.getData("Eqp.img").getChildByPath("Eqp/Face");
-                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color);
+                count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
         }
         return count;
     }
 
-    private long addResult(List<InformationResult> results, InformationType infType, Data data, String filter, int filterType, boolean fullMatch, Integer page, Integer pageSize, Integer gender, Integer color) {
+    private long addResult(List<InformationResult> results, InformationType infType, Data data, String filter, int filterType, boolean fullMatch, Integer page, Integer pageSize, Integer gender, Integer color, String subCategory) {
         RequireUtil.requireNotNull(data, I18nUtil.getExceptionMessage("MISSING_RESOURCE", infType.getType()));
         
         int start = 0;
@@ -243,6 +254,13 @@ public class CommonInformation {
             // 检查性别和颜色
             if (!checkHairFaceLogic(infType, id, gender, color)) {
                 continue;
+            }
+
+            // 检查子分类
+            if (subCategory != null && !subCategory.isEmpty()) {
+                if (!checkSubCategory(id, subCategory)) {
+                    continue;
+                }
             }
 
             if (isMatch(id, name, desc, filter, filterType, fullMatch)) {
@@ -377,6 +395,27 @@ public class CommonInformation {
             
             return true;
         } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 检查物品ID是否属于指定的子分类
+     * @param idStr 物品ID字符串
+     * @param subCategory 子分类名称 (对应 EquipType 枚举名)
+     * @return 是否匹配
+     */
+    private boolean checkSubCategory(String idStr, String subCategory) {
+        try {
+            int id = Integer.parseInt(idStr);
+            EquipType type = EquipType.valueOf(subCategory);
+            
+            // 特殊处理：EquipType 的逻辑是基于 ID 前缀的
+            // EquipType.getEquipTypeById(id) 会返回该 ID 对应的类型
+            // 我们只需要比较两者是否相等
+            return EquipType.getEquipTypeById(id) == type;
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // 如果 subCategory 不是有效的 EquipType 枚举名，或者 ID 解析失败
             return false;
         }
     }

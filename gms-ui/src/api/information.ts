@@ -10,6 +10,7 @@ export interface InformationSearch {
   gender?: number;
   color?: number | null;
   category?: string;
+  subCategory?: string;
 }
 
 export interface InformationResult {
@@ -74,6 +75,12 @@ export function getMapsByStreetName(streetName: string) {
 
 export function getEquipCategories() {
   return axios.get<string[]>('/common/v1/getEquipCategories');
+}
+
+export function getEquipSubCategories() {
+  return axios.get<Record<string, string[]>>(
+    '/common/v1/getEquipSubCategories'
+  );
 }
 
 export function getJobs() {

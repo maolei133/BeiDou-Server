@@ -1,6 +1,7 @@
 export default {
   'informationSearch.placeholder.type': '请选择资料类型',
   'informationSearch.placeholder.category': '请选择装备分类',
+  'informationSearch.placeholder.subCategory': '请选择子分类',
   'informationSearch.placeholder.filter': '请输入搜索文本',
 
   'informationSearch.type.cash': '现金',
@@ -33,6 +34,40 @@ export default {
   'informationSearch.equipCategory.Taming': '骑宠',
   'informationSearch.equipCategory.Weapon': '武器',
   'informationSearch.equipCategory.Bits': '组件',
+
+  'informationSearch.equipSubCategory.SWORD': '单手剑',
+  'informationSearch.equipSubCategory.AXE': '单手斧',
+  'informationSearch.equipSubCategory.MACE': '单手钝器',
+  'informationSearch.equipSubCategory.DAGGER': '短刀',
+  'informationSearch.equipSubCategory.WAND': '短杖',
+  'informationSearch.equipSubCategory.STAFF': '长杖',
+  'informationSearch.equipSubCategory.SWORD_2H': '双手剑',
+  'informationSearch.equipSubCategory.AXE_2H': '双手斧',
+  'informationSearch.equipSubCategory.MACE_2H': '双手钝器',
+  'informationSearch.equipSubCategory.SPEAR': '枪',
+  'informationSearch.equipSubCategory.POLEARM': '矛',
+  'informationSearch.equipSubCategory.BOW': '弓',
+  'informationSearch.equipSubCategory.CROSSBOW': '弩',
+  'informationSearch.equipSubCategory.CLAW': '拳套',
+  'informationSearch.equipSubCategory.KNUCKLER': '指虎',
+  'informationSearch.equipSubCategory.PISTOL': '手铳',
+
+  'informationSearch.equipSubCategory.FACE_ACCESSORY': '脸饰',
+  'informationSearch.equipSubCategory.EYE_ACCESSORY': '眼饰',
+  'informationSearch.equipSubCategory.EARRINGS': '耳环',
+  'informationSearch.equipSubCategory.PENDANT': '项链',
+  'informationSearch.equipSubCategory.BELT': '腰带',
+  'informationSearch.equipSubCategory.MEDAL': '勋章',
+  'informationSearch.equipSubCategory.SHOULDER': '肩饰',
+
+  'informationSearch.equipSubCategory.PET_EQUIP': '外观服饰',
+  'informationSearch.equipSubCategory.PET_EQUIP_FIELD': '功能道具',
+  'informationSearch.equipSubCategory.PET_EQUIP_LABEL': '名片戒指',
+  'informationSearch.equipSubCategory.PET_EQUIP_QUOTE': '聊天戒指',
+
+  'informationSearch.group.character': '人物装备',
+  'informationSearch.group.pet': '宠物装备',
+  'informationSearch.group.other': '其他',
 
   'informationSearch.column.type': '类型',
   'informationSearch.column.id': 'ID',

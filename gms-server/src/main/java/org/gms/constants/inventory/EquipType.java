@@ -26,51 +26,66 @@ import java.util.Map;
  * @author RonanLana
  */
 public enum EquipType {
-    UNDEFINED(-1),
-    ACCESSORY(0),
-    CAP(100),
-    CAPE(110),
-    COAT(104),
-    FACE(2),
-    GLOVES(108),
-    HAIR(3),
-    LONGCOAT(105),
-    PANTS(106),
-    PET_EQUIP(180),
-    PET_EQUIP_FIELD(181),
-    PET_EQUIP_LABEL(182),
-    PET_EQUIP_QUOTE(183),
-    RING(111),
-    SHIELD(109),
-    SHOES(107),
-    TAMING(190),
-    TAMING_SADDLE(191),
-    SWORD(1302),
-    AXE(1312),
-    MACE(1322),
-    DAGGER(1332),
-    WAND(1372),
-    STAFF(1382),
-    SWORD_2H(1402),
-    AXE_2H(1412),
-    MACE_2H(1422),
-    SPEAR(1432),
-    POLEARM(1442),
-    BOW(1452),
-    CROSSBOW(1462),
-    CLAW(1472),
-    KNUCKLER(1482),
-    PISTOL(1492);
+    UNDEFINED(-1, "未知"),
+    ACCESSORY(0, "饰品"),
+    CAP(100, "帽子"),
+    CAPE(110, "披风"),
+    COAT(104, "上衣"),
+    FACE(2, "脸型"),
+    GLOVES(108, "手套"),
+    HAIR(3, "发型"),
+    LONGCOAT(105, "套服"),
+    PANTS(106, "裤子"),
+    PET_EQUIP(180, "宠物装备"),
+    PET_EQUIP_FIELD(181, "宠物装备(Field)"),
+    PET_EQUIP_LABEL(182, "宠物装备(Label)"),
+    PET_EQUIP_QUOTE(183, "宠物装备(Quote)"),
+    RING(111, "戒指"),
+    SHIELD(109, "盾牌"),
+    SHOES(107, "鞋子"),
+    TAMING(190, "骑宠"),
+    TAMING_SADDLE(191, "骑宠鞍"),
+    SWORD(1302, "单手剑"),
+    AXE(1312, "单手斧"),
+    MACE(1322, "单手钝器"),
+    DAGGER(1332, "短刀"),
+    WAND(1372, "短杖"),
+    STAFF(1382, "长杖"),
+    SWORD_2H(1402, "双手剑"),
+    AXE_2H(1412, "双手斧"),
+    MACE_2H(1422, "双手钝器"),
+    SPEAR(1432, "枪"),
+    POLEARM(1442, "矛"),
+    BOW(1452, "弓"),
+    CROSSBOW(1462, "弩"),
+    CLAW(1472, "拳套"),
+    KNUCKLER(1482, "指虎"),
+    PISTOL(1492, "手铳"),
+    
+    // 饰品细分
+    FACE_ACCESSORY(101, "脸饰"),
+    EYE_ACCESSORY(102, "眼饰"),
+    EARRINGS(103, "耳环"),
+    PENDANT(112, "项链"),
+    BELT(113, "腰带"),
+    MEDAL(114, "勋章"),
+    SHOULDER(115, "肩饰");
 
     private final int i;
+    private final String name;
     private static final Map<Integer, EquipType> map = new HashMap(34);
 
-    EquipType(int val) {
+    EquipType(int val, String name) {
         this.i = val;
+        this.name = name;
     }
 
     public int getValue() {
         return i;
+    }
+
+    public String getName() {
+        return name;
     }
 
     static {

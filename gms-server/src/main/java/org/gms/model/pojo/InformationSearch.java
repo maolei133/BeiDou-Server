@@ -46,4 +46,11 @@ public class InformationSearch {
      * 例如: Weapon, Cap, Coat, Pants, Shoes, Gloves, Cape, Shield, etc.
      */
     private String category;
+
+    /**
+     * 装备子分类筛选 (仅当 types 包含 eqp 时有效)
+     * 例如: One-Handed Sword, One-Handed Axe, etc.
+     * 对应 EquipType 枚举中的名称或自定义名称
+     */
+    private String subCategory;
 }

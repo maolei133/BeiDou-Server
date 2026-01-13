@@ -1,6 +1,7 @@
 export default {
   'informationSearch.placeholder.type': 'Select information type',
   'informationSearch.placeholder.category': 'Select equipment category',
+  'informationSearch.placeholder.subCategory': 'Select sub category',
   'informationSearch.placeholder.filter': 'Input search text',
 
   'informationSearch.type.cash': 'cash',
@@ -33,6 +34,40 @@ export default {
   'informationSearch.equipCategory.Taming': 'TamingMob',
   'informationSearch.equipCategory.Weapon': 'Weapon',
   'informationSearch.equipCategory.Bits': 'Bits',
+
+  'informationSearch.equipSubCategory.SWORD': 'One-Handed Sword',
+  'informationSearch.equipSubCategory.AXE': 'One-Handed Axe',
+  'informationSearch.equipSubCategory.MACE': 'One-Handed Blunt',
+  'informationSearch.equipSubCategory.DAGGER': 'Dagger',
+  'informationSearch.equipSubCategory.WAND': 'Wand',
+  'informationSearch.equipSubCategory.STAFF': 'Staff',
+  'informationSearch.equipSubCategory.SWORD_2H': 'Two-Handed Sword',
+  'informationSearch.equipSubCategory.AXE_2H': 'Two-Handed Axe',
+  'informationSearch.equipSubCategory.MACE_2H': 'Two-Handed Blunt',
+  'informationSearch.equipSubCategory.SPEAR': 'Spear',
+  'informationSearch.equipSubCategory.POLEARM': 'Pole Arm',
+  'informationSearch.equipSubCategory.BOW': 'Bow',
+  'informationSearch.equipSubCategory.CROSSBOW': 'Crossbow',
+  'informationSearch.equipSubCategory.CLAW': 'Claw',
+  'informationSearch.equipSubCategory.KNUCKLER': 'Knuckle',
+  'informationSearch.equipSubCategory.PISTOL': 'Gun',
+
+  'informationSearch.equipSubCategory.FACE_ACCESSORY': 'Face Accessory',
+  'informationSearch.equipSubCategory.EYE_ACCESSORY': 'Eye Accessory',
+  'informationSearch.equipSubCategory.EARRINGS': 'Earrings',
+  'informationSearch.equipSubCategory.PENDANT': 'Pendant',
+  'informationSearch.equipSubCategory.BELT': 'Belt',
+  'informationSearch.equipSubCategory.MEDAL': 'Medal',
+  'informationSearch.equipSubCategory.SHOULDER': 'Shoulder',
+
+  'informationSearch.equipSubCategory.PET_EQUIP': 'Pet Equip',
+  'informationSearch.equipSubCategory.PET_EQUIP_FIELD': 'Pet Equip (Field)',
+  'informationSearch.equipSubCategory.PET_EQUIP_LABEL': 'Pet Equip (Label)',
+  'informationSearch.equipSubCategory.PET_EQUIP_QUOTE': 'Pet Equip (Quote)',
+
+  'informationSearch.group.character': 'Character Equipment',
+  'informationSearch.group.pet': 'Pet Equipment',
+  'informationSearch.group.other': 'Other',
 
   'informationSearch.column.type': 'Type',
   'informationSearch.column.id': 'ID',

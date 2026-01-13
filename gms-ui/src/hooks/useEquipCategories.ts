@@ -1,10 +1,11 @@
 import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { getEquipCategories } from '@/api/information';
+import { getEquipCategories, getEquipSubCategories } from '@/api/information';
 
 export default function useEquipCategories() {
   const { t } = useI18n();
   const rawCategories = ref<string[]>([]);
+  const rawSubCategories = ref<Record<string, string[]>>({});
   const loading = ref(false);
 
   // 计算属性：自动将原始 Key 转换为 { label, value } 格式
@@ -21,14 +22,39 @@ export default function useEquipCategories() {
     });
   });
 
+  const getSubCategoryOptions = (category: string) => {
+    const subs = rawSubCategories.value[category];
+    if (!subs) return [];
+
+    return subs.map((sub) => {
+      // 特殊处理 RING，复用已有的 equipCategory 翻译
+      let key;
+      if (sub === 'RING') {
+        key = 'informationSearch.equipCategory.Ring';
+      } else {
+        key = `informationSearch.equipSubCategory.${sub}`;
+      }
+
+      const translated = t(key);
+      return {
+        value: sub,
+        label: translated !== key ? translated : sub,
+      };
+    });
+  };
+
   const loadCategories = async () => {
     // 如果已经加载过，就不再重复请求
     if (rawCategories.value.length > 0) return;
 
     loading.value = true;
     try {
-      const { data } = await getEquipCategories();
-      rawCategories.value = data;
+      const [categoriesRes, subCategoriesRes] = await Promise.all([
+        getEquipCategories(),
+        getEquipSubCategories(),
+      ]);
+      rawCategories.value = categoriesRes.data;
+      rawSubCategories.value = subCategoriesRes.data;
     } catch (err) {
       console.error('Failed to load equip categories:', err);
     } finally {
@@ -39,6 +65,7 @@ export default function useEquipCategories() {
   return {
     rawCategories,
     categoryOptions,
+    getSubCategoryOptions,
     loadCategories,
     loading,
   };
