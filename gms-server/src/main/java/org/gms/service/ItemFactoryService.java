@@ -201,21 +201,22 @@ public class ItemFactoryService {
 
     @Transactional
     public void saveItemsMerchant(int typeValue, List<Pair<Item, InventoryType>> items, List<Short> bundlesList, int id) {
-        inventorymerchantMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYMERCHANT_D_O.CHARACTERID.eq(id)));
-
-        QueryWrapper selectQuery = QueryWrapper.create()
+        // 1. 先查询出该角色下所有雇佣商人的物品ID
+        QueryWrapper selectMerchantItemsQuery = QueryWrapper.create()
                 .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
                 .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue))
                 .and(INVENTORYITEMS_D_O.CHARACTERID.eq(id));
-        
-        List<Long> itemIdsToDelete = inventoryitemsMapper.selectListByQueryAs(selectQuery, Long.class);
+
+        List<Long> itemIdsToDelete = inventoryitemsMapper.selectListByQueryAs(selectMerchantItemsQuery, Long.class);
+
+        // 2. 如果存在旧数据，则进行级联删除
         if (!itemIdsToDelete.isEmpty()) {
+            // 删除关联的装备信息
             inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
-            
-            QueryWrapper deleteQuery = QueryWrapper.create()
-                    .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue))
-                    .and(INVENTORYITEMS_D_O.CHARACTERID.eq(id));
-            inventoryitemsMapper.deleteByQuery(deleteQuery);
+            // 删除关联的商人信息
+            inventorymerchantMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYMERCHANT_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
+            // 删除物品基础信息
+            inventoryitemsMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYITEMS_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
         }
 
         if (items == null || items.isEmpty()) {
