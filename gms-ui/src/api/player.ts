@@ -208,15 +208,15 @@ export function givePlayerSrc(data: GiveForm) {
   return axios.post<ResultBody<any>>('/give/v1/resource', data);
 }
 
-export function getEquInitialInfo(itemId: number) {
-  return axios.get<ResultBody<any>>('/common/v1/getEquInitialInfo', {
-    params: { itemId },
+export function getEquInitialInfo(id: number) {
+  return axios.post<ResultBody<any>>('/common/v1/getEquipmentInfoByItemId', {
+    id,
   });
 }
 
-export function getItemInitialInfo(itemId: number) {
-  return axios.get<ResultBody<any>>('/common/v1/getItemInitialInfo', {
-    params: { itemId },
+export function getItemInitialInfo(id: number) {
+  return axios.post<ResultBody<any>>('/common/v1/getItemInfoByItemId', {
+    id,
   });
 }
 

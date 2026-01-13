@@ -1384,6 +1384,9 @@
       }
       await givePlayerSrc(submitData);
       Message.success(t('message.success'));
+      return true;
+    } catch (error) {
+      return false;
     } finally {
       setLoading(false);
     }

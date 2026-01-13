@@ -293,12 +293,21 @@ public class GiveService {
             }
         }
 
+        boolean result;
         if (isPet) {
-            InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, petId, flag, finalExpiration);
-            chr.message(I18nUtil.getMessage("Give.Pet.Chr", quantity, itemName));
+            result = InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, petId, flag, finalExpiration);
+            if (result) {
+                chr.message(I18nUtil.getMessage("Give.Pet.Chr", quantity, itemName));
+            }
         } else {
-            InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, -1, flag, finalExpiration);
-            chr.message(I18nUtil.getMessage("Give.Item.Chr", quantity, itemName));
+            result = InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, -1, flag, finalExpiration);
+            if (result) {
+                chr.message(I18nUtil.getMessage("Give.Item.Chr", quantity, itemName));
+            }
+        }
+
+        if (!result) {
+            throw new BizException("发放失败，请检查背包空间或唯一物品限制");
         }
 
         String flagDetail = getFlagDetail(flag);
@@ -366,7 +375,7 @@ public class GiveService {
         if (!ItemConstants.getInventoryType(submitData.getId()).equals(InventoryType.EQUIP)) {
             throw new BizException(I18nUtil.getExceptionMessage("ONLY_SUPPORT_GIVE_EQUIP"));
         }
-        chr.gainEquip(
+        boolean result = chr.gainEquip(
                 submitData.getId(),
                 submitData.getStr(),
                 submitData.getDex(),
@@ -390,6 +399,11 @@ public class GiveService {
                 submitData.getOwner(),
                 submitData.getFlag()
             );
+
+        if (!result) {
+            throw new BizException("发放失败，请检查背包空间或唯一物品限制");
+        }
+
         chr.message(I18nUtil.getMessage("Give.Equip.Chr", submitData.getId().toString(), itemName));
         log.info(I18nUtil.getLogMessage("Give.Equip.Chr.info1",
                 chr.getId(),
