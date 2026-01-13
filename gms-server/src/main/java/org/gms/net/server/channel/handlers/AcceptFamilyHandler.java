@@ -141,15 +141,21 @@ public final class AcceptFamilyHandler extends AbstractPacketHandler {
             familyCharacterDO.setCid(characterID);
             familyCharacterDO.setFamilyid(familyID);
             familyCharacterDO.setSeniorid(seniorID);
+            familyCharacterDO.setReputation(0);
+            familyCharacterDO.setTodaysrep(0);
+            familyCharacterDO.setTotalreputation(0);
+            familyCharacterDO.setReptosenior(0);
+            familyCharacterDO.setPrecepts("");
+            familyCharacterDO.setLastresettime(System.currentTimeMillis());
             familyCharacterMapper.insert(familyCharacterDO);
         } catch (Exception e) {
-            log.error("Could not save new family record for chrId {}", characterID, e);
+            log.error("无法保存角色ID {} 的新家族记录", characterID, e);
         }
         if (updateChar) {
             try {
                 charactersMapper.updateFamilyId(characterID, familyID);
             } catch (Exception e) {
-                log.error("Could not update 'characters' 'familyid' record for chrId {}", characterID, e);
+                log.error("无法更新角色ID {} 的家族ID记录", characterID, e);
             }
         }
     }
