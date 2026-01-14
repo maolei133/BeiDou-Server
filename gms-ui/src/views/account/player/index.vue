@@ -266,6 +266,7 @@
                 <a-doption value="disconnect">{{
                   $t('account.player.button.globalDisconnect')
                 }}</a-doption>
+                <a-doption value="duey">发放快递</a-doption>
               </template>
             </a-dropdown>
           </a-space>
@@ -507,6 +508,7 @@
                   <a-doption v-else value="unban">{{
                     $t('account.player.button.unban')
                   }}</a-doption>
+                  <a-doption value="duey">发放快递</a-doption>
                 </template>
               </a-dropdown>
             </template>
@@ -548,6 +550,7 @@
                       <a-doption v-else value="unban">
                         {{ $t('account.player.button.unban') }}
                       </a-doption>
+                      <a-doption value="duey">发放快递</a-doption>
                     </template>
                   </a-dropdown>
                 </a-space>
@@ -1030,6 +1033,11 @@
       :loading="loading"
       @success="loadData"
     />
+    <SendDueyModal
+      v-model:visible="dueyFormVisible"
+      :default-receiver="dueyTargetName"
+      @success="loadData"
+    />
   </div>
 </template>
 
@@ -1050,6 +1058,7 @@
   } from '@/api/player';
   import { getJobs, getGuilds, InformationResult } from '@/api/information';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
+  import SendDueyModal from '@/views/game/duey/list/components/SendDueyModal.vue';
   import WarpModal from './WarpModal.vue';
   import EditPlayerModal from './EditPlayerModal.vue';
   import BanPlayerModal from './BanPlayerModal.vue';
@@ -1103,6 +1112,8 @@
   const banFormVisible = ref(false);
   const banTarget = ref<OnlinePlayer | null>(null);
   const banAll = ref(false);
+  const dueyFormVisible = ref(false);
+  const dueyTargetName = ref('');
 
   const formData = ref<GiveForm>({
     type: 5,
@@ -1456,6 +1467,16 @@
     });
   };
 
+  const handleDuey = (record: OnlinePlayer) => {
+    dueyTargetName.value = record.name;
+    dueyFormVisible.value = true;
+  };
+
+  const handleGlobalDuey = () => {
+    dueyTargetName.value = '';
+    dueyFormVisible.value = true;
+  };
+
   const handleGlobalAction = (
     value: string | number | Record<string, any> | undefined
   ) => {
@@ -1465,6 +1486,8 @@
       globalGiveClick();
     } else if (value === 'disconnect') {
       handleGlobalDisconnect();
+    } else if (value === 'duey') {
+      handleGlobalDuey();
     }
   };
 
@@ -1524,6 +1547,8 @@
       handleBan(record);
     } else if (value === 'unban') {
       handleUnban(record);
+    } else if (value === 'duey') {
+      handleDuey(record);
     }
   };
 

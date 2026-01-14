@@ -164,6 +164,38 @@ const GAME: AppRouteRecordRaw = {
         },
       ],
     },
+    {
+      path: 'duey',
+      name: 'Duey',
+      component: () => import('@/layout/page-layout.vue'),
+      meta: {
+        locale: 'menu.dashboard.duey',
+        requiresAuth: true,
+        roles: ['admin'],
+      },
+      children: [
+        {
+          path: 'list',
+          name: 'DueyList',
+          component: () => import('@/views/game/duey/list/index.vue'),
+          meta: {
+            locale: 'menu.dashboard.duey.list',
+            requiresAuth: true,
+            roles: ['admin'],
+          },
+        },
+        {
+          path: 'config',
+          name: 'DueyConfig',
+          component: () => import('@/views/game/duey/config/index.vue'),
+          meta: {
+            locale: 'menu.dashboard.duey.config',
+            requiresAuth: true,
+            roles: ['admin'],
+          },
+        },
+      ],
+    },
   ],
 };
 
