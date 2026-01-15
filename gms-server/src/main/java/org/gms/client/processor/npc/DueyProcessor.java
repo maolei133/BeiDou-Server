@@ -185,6 +185,10 @@ public class DueyProcessor {
         newPackage.setMessage(message);
         newPackage.setType(quick ? 1 : 0);
         newPackage.setChecked(1);
+        
+        // 设置默认过期时间
+        long expireDuration = GameConfig.getServerLong("duey_expire_time", 2592000000L);
+        newPackage.setExpireDate(new Timestamp(System.currentTimeMillis() + expireDuration));
 
         if (mapper.insert(newPackage, true) > 0) {
             return newPackage.getPackageid().intValue();
@@ -457,14 +461,30 @@ public class DueyProcessor {
 
     public static void runDueyExpireSchedule() {
         DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        
+        // 1. 清理旧逻辑的过期包裹 (timestamp + duey_expire_time < now)
+        // 兼容旧数据，如果 expire_date 为空，则使用 timestamp 计算
         Calendar c = Calendar.getInstance();
         c.setTimeInMillis(System.currentTimeMillis() - GameConfig.getServerLong("duey_expire_time"));
         final Timestamp ts = new Timestamp(c.getTime().getTime());
 
-        QueryWrapper query = QueryWrapper.create().select(DueypackagesDO::getPackageid).where(DueypackagesDO::getTimestamp).lt(ts);
-        List<DueypackagesDO> toRemove = mapper.selectListByQuery(query);
-
-        for (DueypackagesDO pkg : toRemove) {
+        QueryWrapper queryOld = QueryWrapper.create()
+                .select(DueypackagesDO::getPackageid)
+                .where(DueypackagesDO::getExpireDate).isNull()
+                .and(DueypackagesDO::getTimestamp).lt(ts);
+        
+        List<DueypackagesDO> toRemoveOld = mapper.selectListByQuery(queryOld);
+        for (DueypackagesDO pkg : toRemoveOld) {
+            removePackageFromDB(pkg.getPackageid().intValue());
+        }
+        
+        // 2. 清理新逻辑的过期包裹 (expire_date < now)
+        QueryWrapper queryNew = QueryWrapper.create()
+                .select(DueypackagesDO::getPackageid)
+                .where(DueypackagesDO::getExpireDate).le(new Timestamp(System.currentTimeMillis()));
+        
+        List<DueypackagesDO> toRemoveNew = mapper.selectListByQuery(queryNew);
+        for (DueypackagesDO pkg : toRemoveNew) {
             removePackageFromDB(pkg.getPackageid().intValue());
         }
     }

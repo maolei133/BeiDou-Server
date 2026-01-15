@@ -157,6 +157,21 @@ public class ItemInformationProvider {
         isQuestItemCache.put(0, false);
         isPartyQuestItemCache.put(0, false);
     }
+    
+    public InventoryType getInventoryType(int itemId) {
+        if (itemId >= 1000000 && itemId < 2000000) {
+            return InventoryType.EQUIP;
+        } else if (itemId >= 2000000 && itemId < 3000000) {
+            return InventoryType.USE;
+        } else if (itemId >= 3000000 && itemId < 4000000) {
+            return InventoryType.SETUP;
+        } else if (itemId >= 4000000 && itemId < 5000000) {
+            return InventoryType.ETC;
+        } else if (itemId >= 5000000 && itemId < 6000000) {
+            return InventoryType.CASH;
+        }
+        return InventoryType.UNDEFINED;
+    }
 
 
     public List<Pair<Integer, String>> getAllItems() {

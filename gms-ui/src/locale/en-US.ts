@@ -10,6 +10,7 @@ import account from '@/views/account/locale/en-US';
 import login from '@/views/login/locale/en-US';
 import inventory from '@/views/game/inventory/locale/en-US';
 import logs from '@/views/game/logs/locale/en-US';
+import duey from '@/views/game/duey/locale/en-US';
 import base from './en-US/base';
 
 export default {
@@ -54,6 +55,7 @@ export default {
   'settings.userSettings': 'User Settings',
   'settings.logout': 'Logout',
   'settings.version': 'Version',
+  'playerSelector.title': 'Select Player',
   ...base,
   ...workplace,
   ...login,
@@ -67,4 +69,5 @@ export default {
   ...inventory,
   ...config,
   ...logs,
+  ...duey,
 };

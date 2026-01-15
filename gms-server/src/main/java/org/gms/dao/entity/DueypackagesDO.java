@@ -44,5 +44,7 @@ public class DueypackagesDO implements Serializable {
     private Integer checked;
 
     private Integer type;
+    
+    private Timestamp expireDate;
 
 }

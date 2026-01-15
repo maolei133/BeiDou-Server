@@ -10,6 +10,7 @@ import account from '@/views/account/locale/zh-CN';
 import login from '@/views/login/locale/zh-CN';
 import inventory from '@/views/game/inventory/locale/zh-CN';
 import logs from '@/views/game/logs/locale/zh-CN';
+import duey from '@/views/game/duey/locale/zh-CN';
 import baseConfig from './zh-CN/base';
 
 export default {
@@ -57,6 +58,7 @@ export default {
   'settings.userSettings': '用户设置',
   'settings.logout': '退出登录',
   'settings.version': '版本',
+  'playerSelector.title': '选择玩家',
   ...baseConfig, // 基本配置（示范如何外部导入）
   ...workplace,
   ...login,
@@ -70,4 +72,5 @@ export default {
   ...inventory,
   ...config,
   ...logs,
+  ...duey,
 };

@@ -20,6 +20,8 @@ export interface DueyPackage {
   checked: number;
   type: number;
   items: DueyItem[];
+  expireTime: string;
+  deliveryTime: string;
 }
 
 export interface DueyListParams {
@@ -36,8 +38,7 @@ export interface DueyListParams {
 }
 
 export interface SendDueyReq {
-  receiverName?: string;
-  receiverId?: number;
+  receiverIds?: number[];
   isAll?: boolean;
   mesos?: number;
   message?: string;
@@ -47,6 +48,28 @@ export interface SendDueyReq {
   senderName?: string;
   expireTime?: number;
   expireDays?: number;
+  deliveryTime?: number;
+
+  // 装备属性
+  str?: number;
+  dex?: number;
+  int?: number;
+  luk?: number;
+  hp?: number;
+  mp?: number;
+  watk?: number;
+  matk?: number;
+  wdef?: number;
+  mdef?: number;
+  acc?: number;
+  avoid?: number;
+  hands?: number;
+  speed?: number;
+  jump?: number;
+  upgradeSlots?: number;
+  level?: number;
+  itemLevel?: number;
+  flag?: number;
 }
 
 export function getDueyList(params: DueyListParams) {

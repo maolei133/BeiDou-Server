@@ -16,4 +16,8 @@ public class DueyPackageRtnDTO {
     private Integer checked;
     private Integer type;
     private List<ItemInfoRtnDTO> items;
+    
+    // 新增字段
+    private Timestamp expireTime;
+    private Timestamp deliveryTime;
 }

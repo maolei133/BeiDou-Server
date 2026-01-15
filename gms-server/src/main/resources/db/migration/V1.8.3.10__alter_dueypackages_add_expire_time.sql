@@ -1,0 +1,1 @@
+ALTER TABLE `dueypackages` ADD COLUMN `expire_date` TIMESTAMP NULL DEFAULT NULL;
