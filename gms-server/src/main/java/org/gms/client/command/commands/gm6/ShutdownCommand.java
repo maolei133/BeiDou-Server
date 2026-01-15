@@ -79,6 +79,6 @@ public class ShutdownCommand extends Command {
             }
         }
 
-        TimerManager.getInstance().schedule(Server.getInstance().shutdown(false), time);
+        TimerManager.getInstance().schedule(Server.getInstance().shutdown(false, true), time);
     }
 }

@@ -1,6 +1,7 @@
 package org.gms.controller;
 
 
+import com.mybatisflex.core.paginate.Page;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @AllArgsConstructor
@@ -34,6 +36,13 @@ public class CommonController {
     }
 
     @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "查询道具基础属性信息")
+    @PostMapping("/" + ApiConstant.LATEST + "/getItemInfoByItemId")
+    public ResultBody<Object> getItemInfoByItemId(@RequestBody SubmitBody<ItemInfoReqDTO> submitBody) {
+        return ResultBody.success(commonService.getItemInfoByItemId(submitBody.getData()));
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
     @Operation(summary = "查询所有世界中当前在线玩家数量")
     @PostMapping("/" + ApiConstant.LATEST + "/getAllWorldsOnlinePlayersCount")
     public ResultBody<Integer> getAllWorldsOnlinePlayersCount(@RequestBody SubmitBody<ServerInfoReqDto> submitBody) {
@@ -43,7 +52,7 @@ public class CommonController {
     @Tag(name = "/common/" + ApiConstant.LATEST)
     @Operation(summary = "资料查询，根据id或者name查询对应信息")
     @PostMapping("/" + ApiConstant.LATEST + "/informationSearch")
-    public ResultBody<List<InformationResult>> informationSearch(@RequestBody SubmitBody<InformationSearch> submitBody) {
+    public ResultBody<Page<InformationResult>> informationSearch(@RequestBody SubmitBody<InformationSearch> submitBody) {
         return ResultBody.success(commonService.getInformation(submitBody.getData()));
     }
 
@@ -66,5 +75,40 @@ public class CommonController {
     @GetMapping("/" + ApiConstant.LATEST + "/getMapsByStreetName")
     public ResultBody<List<InformationResult>> getMapsByStreetName(@RequestParam String streetName) {
         return ResultBody.success(commonService.getMapsByStreetName(streetName));
+    }
+    
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取所有装备分类")
+    @GetMapping("/" + ApiConstant.LATEST + "/getEquipCategories")
+    public ResultBody<List<String>> getEquipCategories() {
+        return ResultBody.success(commonService.getEquipCategories());
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取装备子分类映射")
+    @GetMapping("/" + ApiConstant.LATEST + "/getEquipSubCategories")
+    public ResultBody<Map<String, List<String>>> getEquipSubCategories() {
+        return ResultBody.success(commonService.getEquipSubCategories());
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取所有职业信息")
+    @GetMapping("/" + ApiConstant.LATEST + "/getJobs")
+    public ResultBody<List<InformationResult>> getJobs() {
+        return ResultBody.success(commonService.getJobs());
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取所有肤色信息")
+    @GetMapping("/" + ApiConstant.LATEST + "/getSkinColors")
+    public ResultBody<List<InformationResult>> getSkinColors() {
+        return ResultBody.success(commonService.getSkinColors());
+    }
+
+    @Tag(name = "/common/" + ApiConstant.LATEST)
+    @Operation(summary = "获取所有家族信息")
+    @GetMapping("/" + ApiConstant.LATEST + "/getGuilds")
+    public ResultBody<List<InformationResult>> getGuilds() {
+        return ResultBody.success(commonService.getGuilds());
     }
 }

@@ -117,7 +117,8 @@
           const response = await dashboardApi.getOverview();
           // 响应已经在 interceptor 中处理，成功时 response 就是 data
           if (response && response.data) {
-            overview.value = response.data;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            overview.value = response.data as any;
           }
         } catch (error) {
           Message.error(t('logs.message.error'));

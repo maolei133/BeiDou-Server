@@ -215,7 +215,7 @@ public class ConfigService {
             throw new BizException(msg);
         }
         // 异步重启，这里千万不要用ThreadManager，因为停止服务会注销所有线程
-        Thread.startVirtualThread(Server.getInstance().shutdown(true));
+        Thread.startVirtualThread(Server.getInstance().shutdown(true, false));
         // 返回成功的数量
         return 1;
     }

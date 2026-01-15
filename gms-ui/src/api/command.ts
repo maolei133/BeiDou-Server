@@ -31,3 +31,27 @@ export function reloadPortalsByGMCommand() {
 export function reloadMapsByGMCommand() {
   return axios.get('/command/v1/reloadMapsByGMCommand');
 }
+
+export function reloadDropsByGMCommand() {
+  return axios.get('/command/v1/reloadDropsByGMCommand');
+}
+
+export function reloadShopsByGMCommand() {
+  return axios.get('/command/v1/reloadShopsByGMCommand');
+}
+
+export function reloadQuestsByGMCommand() {
+  return axios.get('/command/v1/reloadQuestsByGMCommand');
+}
+
+export function reloadSkillsByGMCommand() {
+  return axios.get('/command/v1/reloadSkillsByGMCommand');
+}
+
+export function reloadMonstersByGMCommand() {
+  return axios.get('/command/v1/reloadMonstersByGMCommand');
+}
+
+export function reloadReactorsByGMCommand() {
+  return axios.get('/command/v1/reloadReactorsByGMCommand');
+}

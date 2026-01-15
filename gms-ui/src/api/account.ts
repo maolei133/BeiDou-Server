@@ -47,7 +47,7 @@ export function getAccountList(
   if (isValidString(lastLoginEnd)) url += `&lastLoginEnd=${lastLoginEnd}`;
   if (isValidString(createdAtStart)) url += `&createdAtStart=${createdAtStart}`;
   if (isValidString(createdAtEnd)) url += `&createdAtEnd=${createdAtEnd}`;
-  return axios.get<PageState>(url);
+  return axios.get<PageState<any>>(url);
 }
 
 export function addAccount(data: RegisterForm) {

@@ -35,3 +35,21 @@ export interface GeneralChart {
   xAxis: string[];
   data: Array<{ name: string; value: number[] }>;
 }
+
+export interface PageResult<T> {
+  records: T[];
+  totalRow: number;
+  totalPage: number;
+  pageNo: number;
+  pageSize: number;
+}
+
+export interface ResultBody<T> {
+  code: number;
+  message: string;
+  data: T;
+}
+
+export interface SubmitBody {
+  [key: string]: any;
+}

@@ -98,7 +98,15 @@ public class GlobalExceptionHandler {
     @ResponseBody
     public ResultBody<Object> exceptionHandler(HttpServletRequest req, RuntimeException e) {
         logExceptionDetails(req, e, "运行时异常");
-        return ResultBody.error(req, BizExceptionEnum.BODY_NOT_MATCH);
+        // 如果是 BizException 包装的 RuntimeException，尝试提取信息
+        if (e instanceof BizException) {
+             BizException be = (BizException) e;
+             return ResultBody.error(req, be.getErrorCode(), be.getErrorMsg());
+        }
+        // 对于其他 RuntimeException，返回通用错误，但可以在日志中看到详情
+        // 如果需要把错误信息返回给前端，可以使用 e.getMessage()
+        // return ResultBody.error(req, BizExceptionEnum.INTERNAL_SERVER_ERROR.getResultCode(), e.getMessage());
+        return ResultBody.error(req, BizExceptionEnum.BODY_NOT_MATCH.getResultCode(), e.getMessage());
     }
 
     /**

@@ -60,6 +60,14 @@ public final class LoginPasswordHandler implements PacketHandler {
             return;
         }
 
+        if (Server.getInstance().isShutdown()) {
+            c.sendPacket(PacketCreator.serverNotice(1, "服务器即将维护，暂时无法登录。"));
+            c.sendPacket(PacketCreator.getLoginFailed(1));
+            return;
+        }
+
+        Server.getInstance().sendShutdownNotice(c);
+
         String login = p.readString();
         String pwd = p.readString();
         c.setAccountName(login);

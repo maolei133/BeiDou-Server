@@ -40,6 +40,16 @@ public final class ExpTable {
     }
 
     public static int getEquipExpNeededForLevel(int level) {
+        if (level < 0) {
+            level = 0;
+        } else if (level >= equip.length) {
+            // 动态计算超出数组范围的经验值，使用二次函数增长
+            int baseLevel = equip.length - 1;
+            int baseExp = equip[baseLevel];
+            int diff = level - baseLevel;
+            // 使用二次增长公式：baseExp + diff^2 * 1000，确保等级越高经验需求越大
+            return baseExp + diff * diff * 1000;
+        }
         return equip[level];
     }
 }

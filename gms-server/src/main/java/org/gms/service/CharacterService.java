@@ -19,16 +19,19 @@ import org.gms.constants.string.ExtendType;
 import org.gms.dao.entity.*;
 import org.gms.dao.mapper.*;
 import org.gms.exception.BizException;
-import org.gms.model.dto.ChrOnlineListReqDTO;
-import org.gms.model.dto.ChrOnlineListRtnDTO;
+import org.gms.model.dto.*;
 import org.gms.model.pojo.SkillEntry;
+import org.gms.util.PacketCreator;
 import org.gms.net.server.PlayerCoolDownValueHolder;
 import org.gms.net.server.Server;
+import org.gms.net.server.channel.Channel;
+import org.gms.net.server.guild.Guild;
 import org.gms.net.server.guild.GuildCharacter;
 import org.gms.net.server.world.Messenger;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.World;
+import org.gms.server.CashShop;
 import org.gms.server.Storage;
 import org.gms.server.events.Events;
 import org.gms.server.life.MobSkill;
@@ -51,10 +54,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.mybatisflex.core.query.QueryMethods.dateDiff;
 import static com.mybatisflex.core.query.QueryMethods.now;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.gms.dao.entity.table.AccountsDOTableDef.ACCOUNTS_D_O;
 import static org.gms.dao.entity.table.AreaInfoDOTableDef.AREA_INFO_D_O;
 import static org.gms.dao.entity.table.BbsRepliesDOTableDef.BBS_REPLIES_D_O;
@@ -67,6 +73,7 @@ import static org.gms.dao.entity.table.ExtendValueDOTableDef.EXTEND_VALUE_D_O;
 import static org.gms.dao.entity.table.FamelogDOTableDef.FAMELOG_D_O;
 import static org.gms.dao.entity.table.FamilyCharacterDOTableDef.FAMILY_CHARACTER_D_O;
 import static org.gms.dao.entity.table.FredstorageDOTableDef.FREDSTORAGE_D_O;
+import static org.gms.dao.entity.table.GuildsDOTableDef.GUILDS_D_O;
 import static org.gms.dao.entity.table.KeymapDOTableDef.KEYMAP_D_O;
 import static org.gms.dao.entity.table.MonsterbookDOTableDef.MONSTERBOOK_D_O;
 import static org.gms.dao.entity.table.PetignoresDOTableDef.PETIGNORES_D_O;
@@ -78,6 +85,10 @@ import static org.gms.dao.entity.table.SkillsDOTableDef.SKILLS_D_O;
 import static org.gms.dao.entity.table.TrocklocationsDOTableDef.TROCKLOCATIONS_D_O;
 import static org.gms.dao.entity.table.WishlistsDOTableDef.WISHLISTS_D_O;
 
+/**
+ * 角色服务类
+ * 提供角色的增删改查、状态管理、数据持久化等功能
+ */
 @Service
 @AllArgsConstructor
 @Slf4j
@@ -111,42 +122,548 @@ public class CharacterService {
     private final PetignoresMapper petignoresMapper;
     private final QuickslotkeymappedMapper quickslotkeymappedMapper;
     private final ItemFactoryService itemFactoryService;
+    private final AccountService accountService;
 
+    /**
+     * 根据ID查找角色实体
+     * @param id 角色ID
+     * @return 角色实体对象
+     */
     public CharactersDO findById(int id) {
         return charactersMapper.selectOneById(id);
     }
 
+    /**
+     * 更新角色信息
+     * @param condition 更新条件和内容
+     */
     public void update(CharactersDO condition) {
         charactersMapper.update(condition);
     }
 
+    /**
+     * 获取角色在线列表（支持分页和筛选）
+     * @param request 查询请求参数
+     * @return 分页的角色列表DTO
+     */
     public Page<ChrOnlineListRtnDTO> getChrOnlineList(ChrOnlineListReqDTO request) {
-        Collection<Character> chrList = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getAllCharacters();
-        return BasePageUtil.create(chrList, request)
-                .filter(chr -> (Objects.isNull(request.getId()) || Objects.equals(chr.getId(), request.getId()))
-                        && (RequireUtil.isEmpty(request.getName()) || chr.getName().contains(request.getName()))
-                        && (Objects.isNull(request.getMap()) || Objects.equals(chr.getMap().getId(), request.getMap())))
-                .page(chr -> ChrOnlineListRtnDTO.builder()
-                        .accountId(chr.getAccountId())
-                        .id(chr.getId())
-                        .name(chr.getName())
-                        .map(chr.getMap().getId())
-                        .mapName(chr.getMap().getMapName())
-                        .job(chr.getJob().getId())
-                        .jobName(chr.getJob().getName())
-                        .level(chr.getLevel())
-                        .gm(chr.gmLevel())
-                        .maxHp(chr.getMaxHp())
-                        .maxMp(chr.getMaxMp())
-                        .guildId(chr.getGuildId())
-                        .guildName(chr.getGuild() != null ? chr.getGuild().getName() : null)
-                        .gender(chr.getGender())
-                        .partyId(chr.getPartyId())
-                        .channel(chr.getClient().getChannel())
-                        .fame(chr.getFame())
-                        .build());
+        // 默认状态为在线
+        Integer status = request.getStatus() == null ? 1 : request.getStatus();
+
+        // 状态为1（在线）
+        if (status == 1) {
+            Collection<Character> chrList = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getAllCharacters();
+            return BasePageUtil.create(chrList, request)
+                    .filter(chr -> {
+                        // 基础条件过滤
+                        boolean basicMatch = (Objects.isNull(request.getId()) || Objects.equals(chr.getId(), request.getId()))
+                            && (RequireUtil.isEmpty(request.getName()) || chr.getName().contains(request.getName()))
+                            && (Objects.isNull(request.getMap()) || Objects.equals(chr.getMap().getId(), request.getMap()))
+                            && (Objects.isNull(request.getAccountId()) || Objects.equals(chr.getAccountId(), request.getAccountId()))
+                            && (Objects.isNull(request.getChannel()) || Objects.equals(chr.getClient().getChannel(), request.getChannel()))
+                            && (Objects.isNull(request.getJob()) || Objects.equals(chr.getJob().getId(), request.getJob()))
+                            && (Objects.isNull(request.getPartyId()) || Objects.equals(chr.getPartyId(), request.getPartyId()))
+                            && (Objects.isNull(request.getGuildId()) || Objects.equals(chr.getGuildId(), request.getGuildId()))
+                            && (Objects.isNull(request.getMinLevel()) || chr.getLevel() >= request.getMinLevel())
+                            && (Objects.isNull(request.getMaxLevel()) || chr.getLevel() <= request.getMaxLevel())
+                            && (Objects.isNull(request.getMinOnlineTime()) || (System.currentTimeMillis() - chr.getLoginTime()) / 60000 >= request.getMinOnlineTime())
+                            && (Objects.isNull(request.getMaxOnlineTime()) || (System.currentTimeMillis() - chr.getLoginTime()) / 60000 <= request.getMaxOnlineTime());
+                        
+                        if (!basicMatch) return false;
+
+                        // 封禁状态过滤
+                        if (request.getBanStatus() != null && request.getBanStatus() != 0) {
+                            boolean isPermBan = chr.isBanned();
+                            boolean isTempBan = !isPermBan && chr.getClient().getTempBanCalendar() != null && chr.getClient().getTempBanCalendar().getTimeInMillis() > System.currentTimeMillis();
+                            
+                            if (request.getBanStatus() == 1) return !isPermBan && !isTempBan; // 正常
+                            if (request.getBanStatus() == 2) return isPermBan; // 永久
+                            if (request.getBanStatus() == 3) return isTempBan; // 临时
+                            if (request.getBanStatus() == 4) return isPermBan || isTempBan; // 所有封禁
+                        }
+                        return true;
+                    })
+                    .page(chr -> {
+                        boolean isBanned = chr.isBanned();
+                        int banStatus = 0;
+                        String banReason = null;
+                        String tempBanTime = null;
+                        
+                        if (isBanned) {
+                            banStatus = 1; // 永久封禁
+                            banReason = chr.getClient().getBanReason();
+                        } else if (chr.getClient().getTempBanCalendar() != null && chr.getClient().getTempBanCalendar().getTimeInMillis() > System.currentTimeMillis()) {
+                            isBanned = true;
+                            banStatus = 2; // 临时封禁
+                            banReason = chr.getClient().getBanReason();
+                            tempBanTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(chr.getClient().getTempBanCalendar().getTime());
+                        }
+                        
+                        return ChrOnlineListRtnDTO.builder()
+                            .world(chr.getWorld())
+                            .accountId(chr.getAccountId())
+                            .accountName(chr.getClient().getAccountName())
+                            .id(chr.getId())
+                            .name(chr.getName())
+                            .map(chr.getMap().getId())
+                            .mapName(chr.getMap().getMapName())
+                            .job(chr.getJob().getId())
+                            .jobName(chr.getJob().getName())
+                            .level(chr.getLevel())
+                            .gm(chr.gmLevel())
+                            .maxHp(chr.getMaxHp())
+                            .maxMp(chr.getMaxMp())
+                            .guildId(chr.getGuildId())
+                            .guildName(chr.getGuild() != null ? chr.getGuild().getName() : null)
+                            .gender(chr.getGender())
+                            .partyId(chr.getPartyId())
+                            .channel(chr.getClient().getChannel())
+                            .fame(chr.getFame())
+                            .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(chr.getLoginTime())))
+                            .lastLogoutTime(null) // 在线玩家登出时间为null
+                            .banned(isBanned)
+                            .banStatus(banStatus)
+                            .banReason(banReason)
+                            .tempBanTime(tempBanTime)
+                            .build();
+                    });
+        }
+
+        // 状态为0（全部）或2（离线）
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .select(CHARACTERS_D_O.ALL_COLUMNS, 
+                        ACCOUNTS_D_O.NAME.as("accountName"), 
+                        ACCOUNTS_D_O.BANNED.as("banned"), 
+                        ACCOUNTS_D_O.TEMPBAN.as("tempban"),
+                        ACCOUNTS_D_O.BANREASON.as("banReason"),
+                        GUILDS_D_O.NAME.as("guildName"))
+                .from(CHARACTERS_D_O)
+                .leftJoin(ACCOUNTS_D_O).on(CHARACTERS_D_O.ACCOUNTID.eq(ACCOUNTS_D_O.ID))
+                .leftJoin(GUILDS_D_O).on(CHARACTERS_D_O.GUILDID.eq(GUILDS_D_O.GUILDID))
+                .where(CHARACTERS_D_O.WORLD.eq(request.getWorld()))
+                .and(CHARACTERS_D_O.ID.eq(request.getId(), Objects::nonNull))
+                .and(CHARACTERS_D_O.NAME.like(request.getName(), RequireUtil::isNotEmpty))
+                .and(CHARACTERS_D_O.MAP.eq(request.getMap(), Objects::nonNull))
+                .and(CHARACTERS_D_O.ACCOUNTID.eq(request.getAccountId(), Objects::nonNull))
+                .and(CHARACTERS_D_O.JOB.eq(request.getJob(), Objects::nonNull))
+                .and(CHARACTERS_D_O.PARTY.eq(request.getPartyId(), Objects::nonNull))
+                .and(CHARACTERS_D_O.GUILDID.eq(request.getGuildId(), Objects::nonNull))
+                .and(CHARACTERS_D_O.LEVEL.ge(request.getMinLevel(), Objects::nonNull))
+                .and(CHARACTERS_D_O.LEVEL.le(request.getMaxLevel(), Objects::nonNull));
+
+        if (request.getBanStatus() != null && request.getBanStatus() != 0) {
+            if (request.getBanStatus() == 1) { // 未封禁
+                queryWrapper.and(ACCOUNTS_D_O.BANNED.eq(0).or(ACCOUNTS_D_O.BANNED.isNull()))
+                        .and(ACCOUNTS_D_O.TEMPBAN.lt(new Timestamp(System.currentTimeMillis())).or(ACCOUNTS_D_O.TEMPBAN.isNull()));
+            } else if (request.getBanStatus() == 2) { // 永久封禁
+                queryWrapper.and(ACCOUNTS_D_O.BANNED.eq(1));
+            } else if (request.getBanStatus() == 3) { // 临时封禁
+                queryWrapper.and(ACCOUNTS_D_O.TEMPBAN.gt(new Timestamp(System.currentTimeMillis())));
+            } else if (request.getBanStatus() == 4) { // 已封禁 (永久或临时)
+                queryWrapper.and(
+                    ACCOUNTS_D_O.BANNED.eq(1)
+                    .or(ACCOUNTS_D_O.TEMPBAN.gt(new Timestamp(System.currentTimeMillis())))
+                );
+            }
+        }
+
+        if (status == 2) { // 离线
+            Collection<Character> onlineChars = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getAllCharacters();
+            if (!onlineChars.isEmpty()) {
+                List<Integer> onlineCharIds = onlineChars.stream().map(Character::getId).collect(Collectors.toList());
+                queryWrapper.and(CHARACTERS_D_O.ID.notIn(onlineCharIds));
+            }
+        }
+
+        Page<CharactersDO> charPage = charactersMapper.paginateAs(new Page<>(request.getPageNo(), request.getPageSize()), queryWrapper, CharactersDO.class);
+
+        List<ChrOnlineListRtnDTO> dtoList = charPage.getRecords().stream().map(charactersDO -> {
+            String mapName = "未知地图";
+            List<Channel> channels = Server.getInstance().getChannelsFromWorld(request.getWorld());
+            if (!channels.isEmpty()) {
+                try {
+                    MapleMap map = channels.get(0).getMapFactory().getMap(charactersDO.getMap());
+                    if (map != null) {
+                        mapName = map.getMapName();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            
+            // 优先使用关联查询出的 guildName，如果为空则尝试从内存获取
+            String guildName = null;
+            if (charactersDO.getExtra() != null) {
+                guildName = (String) charactersDO.getExtra().get("guildName");
+            }
+            
+            if (guildName == null && charactersDO.getGuildid() != null && charactersDO.getGuildid() > 0) {
+                Guild guild = Server.getInstance().getGuild(charactersDO.getGuildid());
+                if (guild != null) {
+                    guildName = guild.getName();
+                } else {
+                    // 兜底：查数据库
+                    GuildsDO g = guildsMapper.selectOneById(charactersDO.getGuildid());
+                    if (g != null) {
+                        guildName = g.getName();
+                    }
+                }
+            }
+
+            Job job = Job.getById(charactersDO.getJob());
+            String jobName = (job != null) ? job.getName() : I18nUtil.getMessage("Character.job.unknown");
+            
+            // 检查角色是否在线，如果在线，则使用内存中的实时数据
+            Character onlineChr = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getCharacterById(charactersDO.getId());
+            if (onlineChr != null) {
+                // 再次过滤内存数据，因为数据库查询可能包含在线玩家，但内存数据更准确
+                if (request.getChannel() != null && onlineChr.getClient().getChannel() != request.getChannel()) return null;
+                if (request.getMinOnlineTime() != null && (System.currentTimeMillis() - onlineChr.getLoginTime()) / 60000 < request.getMinOnlineTime()) return null;
+                if (request.getMaxOnlineTime() != null && (System.currentTimeMillis() - onlineChr.getLoginTime()) / 60000 > request.getMaxOnlineTime()) return null;
+
+                // 检查在线玩家的封禁状态
+                boolean isBanned = onlineChr.isBanned();
+                int banStatus = 0;
+                String banReason = null;
+                String tempBanTime = null;
+                
+                if (isBanned) {
+                    banStatus = 1; // 永久封禁
+                    banReason = onlineChr.getClient().getBanReason();
+                } else if (onlineChr.getClient().getTempBanCalendar() != null && onlineChr.getClient().getTempBanCalendar().getTimeInMillis() > System.currentTimeMillis()) {
+                    isBanned = true;
+                    banStatus = 2; // 临时封禁
+                    banReason = onlineChr.getClient().getBanReason();
+                    tempBanTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(onlineChr.getClient().getTempBanCalendar().getTime());
+                }
+
+                return ChrOnlineListRtnDTO.builder()
+                        .world(onlineChr.getWorld())
+                        .accountId(onlineChr.getAccountId())
+                        .accountName(onlineChr.getClient().getAccountName())
+                        .id(onlineChr.getId())
+                        .name(onlineChr.getName())
+                        .map(onlineChr.getMap().getId())
+                        .mapName(onlineChr.getMap().getMapName())
+                        .job(onlineChr.getJob().getId())
+                        .jobName(onlineChr.getJob().getName())
+                        .level(onlineChr.getLevel())
+                        .gm(onlineChr.gmLevel())
+                        .maxHp(onlineChr.getMaxHp())
+                        .maxMp(onlineChr.getMaxMp())
+                        .guildId(onlineChr.getGuildId())
+                        .guildName(onlineChr.getGuild() != null ? onlineChr.getGuild().getName() : null)
+                        .gender(onlineChr.getGender())
+                        .partyId(onlineChr.getPartyId())
+                        .channel(onlineChr.getClient().getChannel())
+                        .fame(onlineChr.getFame())
+                        .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(onlineChr.getLoginTime())))
+                        .lastLogoutTime(null)
+                        .banned(isBanned)
+                        .banStatus(banStatus)
+                        .banReason(banReason)
+                        .tempBanTime(tempBanTime)
+                        .build();
+            }
+
+            // 离线玩家的数据
+            // 离线玩家不应该有在线时长筛选
+            if (request.getMinOnlineTime() != null || request.getMaxOnlineTime() != null) return null;
+            if (request.getChannel() != null) return null; // 离线玩家没有频道
+
+            boolean banned = false;
+            int banStatus = 0;
+            String banReason = null;
+            String tempBanTime = null;
+            
+            // 优先使用 CharactersDO 中映射的字段
+            if (charactersDO.getBanned() != null && charactersDO.getBanned() > 0) {
+                banned = true;
+                banStatus = 1; // 永久封禁
+            }
+            
+            if (charactersDO.getTempban() != null && charactersDO.getTempban().after(new Timestamp(System.currentTimeMillis()))) {
+                banned = true;
+                banStatus = 2; // 临时封禁
+                tempBanTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getTempban());
+            }
+            
+            // 如果 CharactersDO 中没有映射，尝试从 extra 中获取 (兼容旧逻辑)
+            if (!banned && charactersDO.getExtra() != null) {
+                Object bannedObj = charactersDO.getExtra().get("banned");
+                if (bannedObj instanceof Boolean) {
+                    if ((Boolean) bannedObj) {
+                        banned = true;
+                        banStatus = 1;
+                    }
+                } else if (bannedObj instanceof Number) {
+                    if (((Number) bannedObj).intValue() > 0) {
+                        banned = true;
+                        banStatus = 1;
+                    }
+                }
+                
+                Object tempbanObj = charactersDO.getExtra().get("tempban");
+                if (tempbanObj instanceof Timestamp) {
+                    Timestamp tempban = (Timestamp) tempbanObj;
+                    if (tempban.after(new Timestamp(System.currentTimeMillis()))) {
+                        banned = true;
+                        banStatus = 2;
+                        tempBanTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(tempban);
+                    }
+                }
+            }
+
+            // 获取封禁原因 (从关联查询的 extra 中获取)
+            if (charactersDO.getExtra() != null) {
+                Object reason = charactersDO.getExtra().get("banReason");
+                if (reason == null) {
+                    reason = charactersDO.getExtra().get("banreason");
+                }
+                if (reason != null) {
+                    banReason = reason.toString();
+                }
+            }
+
+            // 如果从 extra 获取失败，尝试直接查询账号信息
+            if (banReason == null && (banStatus == 1 || banStatus == 2)) {
+                AccountsDO account = accountService.findById(charactersDO.getAccountid());
+                if (account != null) {
+                    banReason = account.getBanreason();
+                }
+            }
+
+            return ChrOnlineListRtnDTO.builder()
+                    .world(charactersDO.getWorld())
+                    .accountId(charactersDO.getAccountid())
+                    .accountName(charactersDO.getAccountName())
+                    .id(charactersDO.getId())
+                    .name(charactersDO.getName())
+                    .map(charactersDO.getMap())
+                    .mapName(mapName)
+                    .job(charactersDO.getJob())
+                    .jobName(jobName)
+                    .level(charactersDO.getLevel())
+                    .gm(charactersDO.getGm())
+                    .maxHp(charactersDO.getMaxhp())
+                    .maxMp(charactersDO.getMaxmp())
+                    .guildId(charactersDO.getGuildid())
+                    .guildName(guildName)
+                    .gender(charactersDO.getGender())
+                    .partyId(charactersDO.getParty())
+                    .channel(-1) // 离线
+                    .fame(charactersDO.getFame())
+                    .loginTime(charactersDO.getCreatedate() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getCreatedate()) : null) // 离线显示创建时间
+                    .lastLogoutTime(charactersDO.getLastLogoutTime() != null ? new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(charactersDO.getLastLogoutTime()) : null)
+                    .banned(banned)
+                    .banStatus(banStatus)
+                    .banReason(banReason)
+                    .tempBanTime(tempBanTime)
+                    .build();
+        }).filter(Objects::nonNull).collect(Collectors.toList()); // 过滤掉返回null的记录
+
+        // 重新封装为 Page 对象
+        Page<ChrOnlineListRtnDTO> resultPage = new Page<>();
+        resultPage.setPageNumber(charPage.getPageNumber());
+        resultPage.setPageSize(charPage.getPageSize());
+        resultPage.setTotalRow(charPage.getTotalRow());
+        resultPage.setRecords(dtoList);
+        
+        return resultPage;
     }
 
+    /**
+     * 更新角色详细信息
+     * @param request 更新请求
+     */
+    public void updateCharacter(UpdateCharacterReqDTO request) {
+        RequireUtil.requireNotNull(request.getId(), "Character ID cannot be null");
+
+        // 1. 尝试获取在线玩家
+        Character onlineChr = null;
+        try {
+            for (World world : Server.getInstance().getWorlds()) {
+                onlineChr = world.getPlayerStorage().getCharacterById(request.getId());
+                if (onlineChr != null) {
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+
+        if (onlineChr != null) {
+            // 在线玩家：调用 Character 类中的方法进行更新
+            onlineChr.updateCharacterDetails(request);
+            return;
+        }
+
+        // 2. 离线玩家：直接更新数据库
+        CharactersDO charactersDO = new CharactersDO();
+        charactersDO.setId(request.getId());
+        if (request.getName() != null) charactersDO.setName(request.getName());
+        if (request.getLevel() != null) charactersDO.setLevel(request.getLevel());
+        if (request.getExp() != null) charactersDO.setExp(request.getExp());
+        if (request.getJob() != null) charactersDO.setJob(request.getJob());
+        if (request.getStr() != null) charactersDO.setAttrStr(request.getStr());
+        if (request.getDex() != null) charactersDO.setAttrDex(request.getDex());
+        if (request.getIntAttr() != null) charactersDO.setAttrInt(request.getIntAttr());
+        if (request.getLuk() != null) charactersDO.setAttrLuk(request.getLuk());
+        if (request.getHp() != null) charactersDO.setHp(request.getHp());
+        if (request.getMaxHp() != null) charactersDO.setMaxhp(request.getMaxHp());
+        if (request.getMp() != null) charactersDO.setMp(request.getMp());
+        if (request.getMaxMp() != null) charactersDO.setMaxmp(request.getMaxMp());
+        if (request.getAp() != null) charactersDO.setAp(request.getAp());
+        if (request.getSp() != null) charactersDO.setSp(request.getSp());
+        if (request.getFame() != null) charactersDO.setFame(request.getFame());
+        if (request.getMeso() != null) charactersDO.setMeso(request.getMeso());
+        if (request.getGm() != null) charactersDO.setGm(request.getGm());
+        if (request.getFace() != null) charactersDO.setFace(request.getFace());
+        if (request.getHair() != null) charactersDO.setHair(request.getHair());
+        if (request.getSkinColor() != null) charactersDO.setSkincolor(request.getSkinColor());
+        if (request.getGender() != null) charactersDO.setGender(request.getGender());
+
+        // 新增字段更新
+        if (request.getEquipSlots() != null) charactersDO.setEquipslots(request.getEquipSlots());
+        if (request.getUseSlots() != null) charactersDO.setUseslots(request.getUseSlots());
+        if (request.getSetupSlots() != null) charactersDO.setSetupslots(request.getSetupSlots());
+        if (request.getEtcSlots() != null) charactersDO.setEtcslots(request.getEtcSlots());
+        if (request.getBuddyCapacity() != null) charactersDO.setBuddyCapacity(request.getBuddyCapacity());
+        if (request.getMerchantMesos() != null) charactersDO.setMerchantmesos(request.getMerchantMesos());
+        if (request.getGachaExp() != null) charactersDO.setGachaexp(request.getGachaExp());
+        if (request.getMap() != null) charactersDO.setMap(request.getMap());
+        if (request.getSpawnPoint() != null) charactersDO.setSpawnpoint(request.getSpawnPoint());
+        if (request.getMountLevel() != null) charactersDO.setMountlevel(request.getMountLevel());
+        if (request.getMountExp() != null) charactersDO.setMountexp(request.getMountExp());
+        if (request.getMountTiredness() != null) charactersDO.setMounttiredness(request.getMountTiredness());
+
+        charactersMapper.update(charactersDO);
+
+        // 更新账号货币
+        CharactersDO chr = charactersMapper.selectOneById(request.getId());
+        if (chr != null) {
+            AccountsDO accountsDO = new AccountsDO();
+            accountsDO.setId(chr.getAccountid());
+            if (request.getNxCredit() != null) accountsDO.setNxCredit(request.getNxCredit());
+            if (request.getMaplePoint() != null) accountsDO.setMaplePoint(request.getMaplePoint());
+            if (request.getNxPrepaid() != null) accountsDO.setNxPrepaid(request.getNxPrepaid());
+            accountService.update(accountsDO);
+        }
+    }
+
+    /**
+     * 获取角色详情
+     * @param id 角色ID
+     * @return 角色详情DTO
+     */
+    public ChrDetailRtnDTO getCharacterDetail(Integer id) {
+        RequireUtil.requireNotNull(id, "Character ID cannot be null");
+
+        // 优先从在线玩家中查找
+        try {
+            for (World world : Server.getInstance().getWorlds()) {
+                Character onlineChr = world.getPlayerStorage().getCharacterById(id);
+                if (onlineChr != null) {
+                    return ChrDetailRtnDTO.builder()
+                            .id(onlineChr.getId())
+                            .name(onlineChr.getName())
+                            .level(onlineChr.getLevel())
+                            .exp(onlineChr.getExp())
+                            .job(onlineChr.getJob().getId())
+                            .jobName(onlineChr.getJob().getName())
+                            .str(onlineChr.getStr())
+                            .dex(onlineChr.getDex())
+                            .intAttr(onlineChr.getInt())
+                            .luk(onlineChr.getLuk())
+                            .hp(onlineChr.getHp())
+                            .maxHp(onlineChr.getMaxHp())
+                            .mp(onlineChr.getMp())
+                            .maxMp(onlineChr.getMaxMp())
+                            .ap(onlineChr.getRemainingAp())
+                            .sp(Arrays.stream(onlineChr.getRemainingSps()).mapToObj(String::valueOf).collect(Collectors.joining(",")))
+                            .fame(onlineChr.getFame())
+                            .meso(onlineChr.getMeso())
+                            .gm(onlineChr.gmLevel())
+                            .face(onlineChr.getFace())
+                            .hair(onlineChr.getHair())
+                            .skinColor(onlineChr.getSkinColor().getId())
+                            .gender(onlineChr.getGender())
+                            .nxCredit(onlineChr.getCashShop().getCash(CashShop.NX_CREDIT))
+                            .maplePoint(onlineChr.getCashShop().getCash(CashShop.MAPLE_POINT))
+                            .nxPrepaid(onlineChr.getCashShop().getCash(CashShop.NX_PREPAID))
+                            .equipSlots((int) onlineChr.getSlots(InventoryType.EQUIP.getType()))
+                            .useSlots((int) onlineChr.getSlots(InventoryType.USE.getType()))
+                            .setupSlots((int) onlineChr.getSlots(InventoryType.SETUP.getType()))
+                            .etcSlots((int) onlineChr.getSlots(InventoryType.ETC.getType()))
+                            .buddyCapacity(onlineChr.getBuddylist().getCapacity())
+                            .merchantMesos(onlineChr.getMerchantMeso())
+                            .gachaExp(onlineChr.getGachaExp())
+                            .map(onlineChr.getMapId())
+                            .spawnPoint(onlineChr.getInitialSpawnPoint())
+                            .mountLevel(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getLevel() : 1)
+                            .mountExp(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getExp() : 0)
+                            .mountTiredness(onlineChr.getMapleMount() != null ? onlineChr.getMapleMount().getTiredness() : 0)
+                            .build();
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+
+        // 如果不在线，从数据库查找
+        CharactersDO charactersDO = charactersMapper.selectOneById(id);
+        RequireUtil.requireNotNull(charactersDO, I18nUtil.getExceptionMessage("Character.notFound"));
+
+        Job job = Job.getById(charactersDO.getJob());
+        String jobName = (job != null) ? job.getName() : I18nUtil.getMessage("Character.job.unknown");
+
+        AccountsDO accountsDO = accountService.findById(charactersDO.getAccountid());
+
+        return ChrDetailRtnDTO.builder()
+                .id(charactersDO.getId())
+                .name(charactersDO.getName())
+                .level(charactersDO.getLevel())
+                .exp(charactersDO.getExp())
+                .job(charactersDO.getJob())
+                .jobName(jobName)
+                .str(charactersDO.getAttrStr())
+                .dex(charactersDO.getAttrDex())
+                .intAttr(charactersDO.getAttrInt())
+                .luk(charactersDO.getAttrLuk())
+                .hp(charactersDO.getHp())
+                .maxHp(charactersDO.getMaxhp())
+                .mp(charactersDO.getMp())
+                .maxMp(charactersDO.getMaxmp())
+                .ap(charactersDO.getAp())
+                .sp(charactersDO.getSp())
+                .fame(charactersDO.getFame())
+                .meso(charactersDO.getMeso())
+                .gm(charactersDO.getGm())
+                .face(charactersDO.getFace())
+                .hair(charactersDO.getHair())
+                .skinColor(charactersDO.getSkincolor())
+                .gender(charactersDO.getGender())
+                .nxCredit(accountsDO != null ? accountsDO.getNxCredit() : 0)
+                .maplePoint(accountsDO != null ? accountsDO.getMaplePoint() : 0)
+                .nxPrepaid(accountsDO != null ? accountsDO.getNxPrepaid() : 0)
+                .equipSlots(charactersDO.getEquipslots())
+                .useSlots(charactersDO.getUseslots())
+                .setupSlots(charactersDO.getSetupslots())
+                .etcSlots(charactersDO.getEtcslots())
+                .buddyCapacity(charactersDO.getBuddyCapacity())
+                .merchantMesos(charactersDO.getMerchantmesos())
+                .gachaExp(charactersDO.getGachaexp())
+                .map(charactersDO.getMap())
+                .spawnPoint(charactersDO.getSpawnpoint())
+                .mountLevel(charactersDO.getMountlevel())
+                .mountExp(charactersDO.getMountexp())
+                .mountTiredness(charactersDO.getMounttiredness())
+                .build();
+    }
+
+    /**
+     * 更新角色扩展倍率
+     * @param data 扩展数据
+     */
     public void updateRate(ExtendValueDO data) {
         checkName(data);
         data.setExtendType(ExtendType.CHARACTER_EXTEND.getType());
@@ -165,6 +682,10 @@ public class CharacterService {
         character.setCouponRates();
     }
 
+    /**
+     * 重置单个倍率
+     * @param data 扩展数据
+     */
     public void resetRate(ExtendValueDO data) {
         checkName(data);
         extendValueMapper.deleteByQuery(QueryWrapper.create()
@@ -177,6 +698,10 @@ public class CharacterService {
         character.setCouponRates();
     }
 
+    /**
+     * 重置所有倍率（经验、掉落、金币）
+     * @param data 扩展数据
+     */
     public void resetRates(ExtendValueDO data) {
         check(data);
         extendValueMapper.deleteByQuery(QueryWrapper.create()
@@ -189,10 +714,18 @@ public class CharacterService {
         character.setCouponRates();
     }
 
+    /**
+     * 重置所有角色的雇佣商人状态
+     */
     public void resetMerchant() {
         charactersMapper.updateAllHasMerchant(0);
     }
 
+    /**
+     * 获取各世界排名前50的玩家
+     * @param worldSize 世界数量
+     * @return 排名列表
+     */
     public List<List<CharactersDO>> getWorldsRankPlayers(int worldSize) {
         boolean wholeServerRanking = GameConfig.getServerBoolean("use_whole_server_ranking");
         List<List<CharactersDO>> worldsRankingList = new ArrayList<>();
@@ -219,6 +752,11 @@ public class CharacterService {
         return worldsRankingList;
     }
 
+    /**
+     * 获取指定世界排名前50的玩家
+     * @param worldId 世界ID
+     * @return 排名列表
+     */
     public List<CharactersDO> getWorldRankPlayers(int worldId) {
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .select(CHARACTERS_D_O.NAME, CHARACTERS_D_O.LEVEL, CHARACTERS_D_O.WORLD)
@@ -232,25 +770,43 @@ public class CharacterService {
         return charactersMapper.selectListByQuery(queryWrapper);
     }
 
+    /**
+     * 根据名称查找角色
+     * @param name 角色名
+     * @return 角色实体
+     */
     public CharactersDO findByName(String name) {
         List<CharactersDO> charactersDOS = charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(name)));
         return charactersDOS.isEmpty() ? null : charactersDOS.getFirst();
     }
 
+    /**
+     * 移除技能
+     * @param skillsDO 技能实体
+     */
     public void removeSkill(SkillsDO skillsDO) {
         skillsMapper.deleteByQuery(QueryWrapper.create(skillsDO));
     }
 
+    /**
+     * 删除家族
+     * @param guildsDO 家族实体
+     */
     @Transactional(rollbackFor = Exception.class)
     public void deleteGuild(GuildsDO guildsDO) {
         charactersMapper.updateByQuery(CharactersDO.builder().guildid(0).guildrank(5).build(), QueryWrapper.create().where(CHARACTERS_D_O.GUILDID.eq(guildsDO.getGuildid().intValue())));
         guildsMapper.deleteById(guildsDO.getGuildid());
     }
 
+    /**
+     * 从数据库彻底删除角色
+     * @param player 角色对象
+     * @param senderAccId 发起请求的账号ID（用于安全校验）
+     */
     @Transactional(rollbackFor = Exception.class)
     public void deleteCharFromDB(Character player, int senderAccId) {
         int cid = player.getId();
-        if (!Server.getInstance().haveCharacterEntry(senderAccId, cid)) {    // thanks zera (EpiphanyMS) for pointing a critical exploit with non-authed character deletion request
+        if (!Server.getInstance().haveCharacterEntry(senderAccId, cid)) {    // thanks zera (EpiphanyMS) for pointing the critical exploit with non-authed character deletion request
             throw new BizException(I18nUtil.getExceptionMessage("UNKNOWN_CHARACTER"));
         }
         int world;
@@ -327,6 +883,11 @@ public class CharacterService {
         worldTransferService.cancelPendingWorldTransfer(player, false);
     }
 
+    /**
+     * 保存角色数据到数据库
+     * @param player 角色对象
+     * @param notAutosave 是否非自动保存（用于日志区分）
+     */
     @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_UNCOMMITTED)
     public void saveCharToDB(Character player, boolean notAutosave) {
         if (!player.isLoggedIn()) {
@@ -381,6 +942,13 @@ public class CharacterService {
         }
     }
 
+    /**
+     * 从数据库加载角色数据
+     * @param cid 角色ID
+     * @param client 客户端对象
+     * @param channelServer 是否为频道服务器加载
+     * @return 角色对象
+     */
     public Character loadCharFromDB(int cid, Client client, boolean channelServer) {
         CharactersDO charactersDO = findById(cid);
         RequireUtil.requireNotNull(charactersDO, I18nUtil.getExceptionMessage("UNKNOWN_CHARACTER"));
@@ -834,6 +1402,12 @@ public class CharacterService {
         }
     }
 
+    /**
+     * 插入新角色
+     * @param chr 角色对象
+     * @param recipe 创建配方
+     * @return 新角色ID
+     */
     @Transactional
     public int insertNewChar(Character chr, org.gms.client.creator.CharacterFactoryRecipe recipe) {
         // Character info
@@ -979,5 +1553,248 @@ public class CharacterService {
         if (!wishlists.isEmpty()) {
             wishlistsMapper.insertBatch(wishlists);
         }
+    }
+
+    /**
+     * 断开玩家连接
+     * @param request 断开请求
+     */
+    public void disconnect(DisconnectReqDTO request) {
+        List<Integer> ids = request.getIds();
+        if (request.isAll()) {
+            // 全服断开
+            for (World world : Server.getInstance().getWorlds()) {
+                for (Character chr : world.getPlayerStorage().getAllCharacters()) {
+                    if (chr != null && chr.getClient() != null) {
+                        chr.getClient().disconnect(false, false);
+                    }
+                }
+            }
+        } else if (ids != null && !ids.isEmpty()) {
+            // 批量断开
+            for (Integer id : ids) {
+                for (World world : Server.getInstance().getWorlds()) {
+                    Character chr = world.getPlayerStorage().getCharacterById(id);
+                    if (chr != null && chr.getClient() != null) {
+                        chr.getClient().disconnect(false, false);
+                        break; // 找到后跳出内层循环
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 封禁玩家
+     * @param request 封禁请求
+     */
+    public void ban(BanPlayerReqDTO request) {
+        List<Integer> ids = request.getIds();
+        String reason = request.getReason();
+        Integer duration = request.getDuration();
+        Long banUntil = request.getBanUntil();
+        boolean banIp = request.isBanIp();
+        boolean banMac = request.isBanMac();
+        boolean banHwid = request.isBanHwid();
+        boolean notify = request.isNotify();
+        String notifyContent = request.getNotifyContent();
+
+        // 计算封禁截止时间
+        Timestamp tempBan = null;
+        boolean isTempBan = false;
+        if (banUntil != null && banUntil > 0) {
+            tempBan = new Timestamp(banUntil);
+            isTempBan = true;
+        } else if (duration != null && duration > 0) {
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.MINUTE, duration);
+            tempBan = new Timestamp(cal.getTimeInMillis());
+            isTempBan = true;
+        } else {
+            // 永久封禁，使用默认的永久封禁时间（例如2099年）
+            Calendar cal = Calendar.getInstance();
+            cal.set(2099, Calendar.DECEMBER, 31, 0, 0, 0);
+            tempBan = new Timestamp(cal.getTimeInMillis());
+            isTempBan = false;
+        }
+
+        List<Integer> targetIds = new ArrayList<>();
+        if (request.isAll()) {
+            // 全服封禁
+            for (World world : Server.getInstance().getWorlds()) {
+                for (Character chr : world.getPlayerStorage().getAllCharacters()) {
+                    targetIds.add(chr.getId());
+                }
+            }
+        } else if (ids != null) {
+            targetIds.addAll(ids);
+        }
+
+        for (Integer charId : targetIds) {
+            // 1. 获取角色信息（在线或离线）
+            Pair<Character, CharactersDO> pair = getOnlineOrOfflineCharacter(charId);
+            Character onlineChr = pair.getLeft();
+            CharactersDO offlineChr = pair.getRight();
+
+            if (onlineChr == null && offlineChr == null) continue;
+
+            int accountId = (onlineChr != null) ? onlineChr.getAccountId() : offlineChr.getAccountid();
+            if (accountId == -1) continue;
+
+            // 2. 封禁账号
+            // 优化封号逻辑，仅临时封禁，则不能永久封禁账号 (banned = false)
+            AccountsDO accountUpdate = AccountsDO.builder()
+                    .id(accountId)
+                    .banned(!isTempBan) 
+                    .banreason(reason)
+                    .tempban(tempBan)
+                    .build();
+            accountService.update(accountUpdate);
+
+            // 3. 处理在线玩家的额外操作
+            if (onlineChr != null) {
+                onlineChr.setBanned(true); // Always set true in memory to indicate active ban
+                Client c = onlineChr.getClient();
+                
+                if (banIp) {
+                    accountService.banIp(c.getRemoteAddress(), accountId);
+                }
+                if (banMac) {
+                    accountService.banMacs(c.getMacs(), accountId);
+                }
+                if (banHwid) {
+                    if (c.getHwid() != null) {
+                        accountService.banHwid(c.getHwid().hwid());
+                    }
+                }
+                
+                c.disconnect(false, false);
+            } else {
+                // 离线玩家无法获取IP/MAC/HWID，只能封禁账号
+                // 如果需要支持离线封禁IP/MAC，需要从数据库读取历史记录（如果有的话）
+                // 目前仅支持在线封禁连带IP/MAC
+                if (banIp || banMac || banHwid) {
+                    AccountsDO account = accountService.findById(accountId);
+                    if (account != null) {
+                        if (banIp && account.getIp() != null && !account.getIp().isEmpty()) {
+                            String[] ips = account.getIp().split(",");
+                            for (String ip : ips) {
+                                if (!ip.trim().isEmpty()) {
+                                    accountService.banIp(ip.trim(), accountId);
+                                }
+                            }
+                        }
+                        if (banMac && account.getMacs() != null && !account.getMacs().isEmpty()) {
+                            String[] macs = account.getMacs().split(",");
+                            Set<String> macSet = new HashSet<>();
+                            for (String mac : macs) {
+                                if (!mac.trim().isEmpty()) {
+                                    macSet.add(mac.trim());
+                                }
+                            }
+                            if (!macSet.isEmpty()) {
+                                accountService.banMacs(macSet, accountId);
+                            }
+                        }
+                        if (banHwid && account.getHwid() != null && !account.getHwid().isEmpty()) {
+                            accountService.banHwid(account.getHwid());
+                        }
+                    }
+                }
+            }
+            
+            // 4. 全服通知 (单人)
+            if (notify) {
+                String name = (onlineChr != null) ? onlineChr.getName() : (offlineChr != null ? offlineChr.getName() : "未知");
+                String msg = notifyContent;
+                if (msg == null || msg.isEmpty()) {
+                    msg = I18nUtil.getMessage("Character.ban.notice", name, reason);
+                }
+                
+                int worldId = (onlineChr != null) ? onlineChr.getWorld() : (offlineChr != null ? offlineChr.getWorld() : 0);
+                Server.getInstance().broadcastMessage(worldId, PacketCreator.sendYellowTip(msg));
+            }
+        }
+    }
+
+    /**
+     * 获取封禁信息
+     * @param charId 角色ID
+     * @return 封禁信息DTO
+     */
+    public BanInfoRtnDTO getBanInfo(Integer charId) {
+        Pair<Character, CharactersDO> pair = getOnlineOrOfflineCharacter(charId);
+        Character onlineChr = pair.getLeft();
+        CharactersDO offlineChr = pair.getRight();
+
+        if (onlineChr == null && offlineChr == null) return BanInfoRtnDTO.builder().build();
+
+        int accountId = (onlineChr != null) ? onlineChr.getAccountId() : offlineChr.getAccountid();
+        if (accountId == -1) return BanInfoRtnDTO.builder().build();
+
+        AccountsDO account = accountService.findById(accountId);
+        if (account == null) return BanInfoRtnDTO.builder().build();
+
+        List<String> ips = new ArrayList<>();
+        if (account.getIp() != null && !account.getIp().isEmpty()) {
+            ips = Arrays.stream(account.getIp().split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toList());
+        }
+
+        List<String> macs = new ArrayList<>();
+        if (account.getMacs() != null && !account.getMacs().isEmpty()) {
+            macs = Arrays.stream(account.getMacs().split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toList());
+        }
+
+        return BanInfoRtnDTO.builder()
+                .ips(ips)
+                .macs(macs)
+                .hwid(account.getHwid())
+                .build();
+    }
+    
+    /**
+     * 解封玩家
+     * @param charId 角色ID
+     */
+    public void unban(Integer charId) {
+        Pair<Character, CharactersDO> pair = getOnlineOrOfflineCharacter(charId);
+        Character onlineChr = pair.getLeft();
+        CharactersDO offlineChr = pair.getRight();
+
+        if (onlineChr == null && offlineChr == null) return;
+
+        int accountId = (onlineChr != null) ? onlineChr.getAccountId() : offlineChr.getAccountid();
+        if (accountId == -1) return;
+        
+        accountService.unbanAccount(accountId);
+        
+        if (onlineChr != null) {
+            onlineChr.setBanned(false);
+        }
+    }
+
+    /**
+     * 根据ID查找角色（优先查找在线，其次查找数据库）
+     *
+     * @param charId 角色ID
+     * @return Pair: Left为在线角色对象，Right为数据库实体对象。两者互斥或Right为Left的数据库映射（视具体实现而定，这里设计为互斥，若在线则Right为null，若离线则Left为null）
+     */
+    private Pair<Character, CharactersDO> getOnlineOrOfflineCharacter(int charId) {
+        // 1. 尝试获取在线玩家
+        for (World world : Server.getInstance().getWorlds()) {
+            Character onlineChr = world.getPlayerStorage().getCharacterById(charId);
+            if (onlineChr != null) {
+                return new Pair<>(onlineChr, null);
+            }
+        }
+        // 2. 获取离线玩家
+        CharactersDO offlineChr = charactersMapper.selectOneById(charId);
+        return new Pair<>(null, offlineChr);
     }
 }

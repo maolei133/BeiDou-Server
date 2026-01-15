@@ -25,7 +25,7 @@ public class InventoryEquipRtnDTO {
     /**
      * 装备等级，对应level
      */
-    private Byte level;
+    private Short level;
     /**
      * 力量，对应str
      */
@@ -97,7 +97,7 @@ public class InventoryEquipRtnDTO {
     /**
      * 装备升级等级，对应itemlevel
      */
-    private Byte itemLevel;
+    private Short itemLevel;
     /**
      * 装备升级经验，对应itemexp
      */

@@ -81,7 +81,7 @@
                 >{{ record.conditionType }} {{ record.operator }}
                 {{ record.threshold }}</span
               >
-              <a-divider type="vertical" />
+              <a-divider direction="vertical" />
               <span>{{ record.duration }}s</span>
             </div>
           </template>
@@ -92,7 +92,7 @@
               <a-tag :color="getActionColor(record.actionType)">{{
                 record.actionType
               }}</a-tag>
-              <a-divider type="vertical" />
+              <a-divider direction="vertical" />
               <span class="action-target">{{ record.actionTarget }}</span>
             </div>
           </template>
@@ -116,11 +116,11 @@
               >
                 {{ $t('logsystem.alertRules.history') }}
               </a-button>
-              <a-divider type="vertical" />
+              <a-divider direction="vertical" />
               <a-button type="text" size="small" @click="editRule(record)">
                 {{ $t('common.edit') }}
               </a-button>
-              <a-divider type="vertical" />
+              <a-divider direction="vertical" />
               <a-popconfirm
                 :title="$t('common.deleteConfirm')"
                 @ok="deleteRule(record.id)"

@@ -334,9 +334,13 @@ public class GameConfig {
     }
 
     public static long getServerLong(String key) {
+        return getServerLong(key, 0L);
+    }
+    
+    public static long getServerLong(String key, long defaultValue) {
         JSONObject valueProp = getValueProp("server", key);
         if (valueProp == null) {
-            return 0L;
+            return defaultValue;
         }
         return valueProp.getLongValue("value");
     }

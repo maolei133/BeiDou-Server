@@ -52,6 +52,7 @@ import org.gms.exception.NotEnabledException;
 import org.gms.manager.ServerManager;
 import org.gms.model.dto.InventorySearchReqDTO;
 import org.gms.model.dto.InventorySearchRtnDTO;
+import org.gms.model.dto.UpdateCharacterReqDTO;
 import org.gms.model.pojo.NewYearCardRecord;
 import org.gms.model.pojo.SkillEntry;
 import org.gms.net.packet.Packet;
@@ -8912,16 +8913,33 @@ public class Character extends AbstractCharacterObject {
 
     private void equipPendantOfSpirit() {   //精灵吊坠装备时长经验计算
         if (pendantOfSpirit == null) {
-            pendantOfSpirit = TimerManager.getInstance().register(() -> {
+            // 在启动定时器前，先加载一次离线时长（如果开启了配置）
+            if (GameConfig.getServerBoolean("offline_pendant_of_spirit_enabled")) {
                 String type = "精灵吊坠时长";
                 ExtendValueDO extendValueDO = ExtendUtil.getExtendValue(String.valueOf(id), ExtendType.CHARACTER_EXTEND_DAILY.getType(), type);
-                // 检查是否需要加载离线保存的精灵吊坠时长（默认false）
-                if (GameConfig.getServerBoolean("offline_pendant_of_spirit_enabled") && extendValueDO != null && extendValueDO.getExtendValue() != null) {
-                    pendantExp = Byte.parseByte(extendValueDO.getExtendValue());
+                if (extendValueDO != null && extendValueDO.getExtendValue() != null) {
+                    try {
+                        byte savedExp = Byte.parseByte(extendValueDO.getExtendValue());
+                        // 只有当保存的值合法且大于当前内存值时才覆盖，防止回档
+                        if (savedExp > pendantExp && savedExp <= 3) {
+                            pendantExp = savedExp;
+                        }
+                    } catch (NumberFormatException e) {
+                        log.error("玩家 {} 解析精灵吊坠时长出错",getName(), e);
+                    }
                 }
+            }
+
+            pendantOfSpirit = TimerManager.getInstance().register(() -> {
                 if (pendantExp < 3) {
-                    ExtendUtil.saveOrUpdateExtendValue(String.valueOf(id),ExtendType.CHARACTER_EXTEND_DAILY.getType(), type,String.valueOf(pendantExp));//保存时长
                     pendantExp++;
+
+                    // 保存新时长
+                    if (GameConfig.getServerBoolean("offline_pendant_of_spirit_enabled")) {
+                        String type = "精灵吊坠时长";
+                        ExtendUtil.saveOrUpdateExtendValue(String.valueOf(id), ExtendType.CHARACTER_EXTEND_DAILY.getType(), type, String.valueOf(pendantExp));
+                    }
+
                     //用于准确提示装备1小时内还是装备经过几小时
                     message(I18nUtil.getMessage(pendantExp <= 2 ? "Character.equipPendantOfSpirit.message1" : "Character.equipPendantOfSpirit.message2", pendantExp == 3 ? 2 : pendantExp, pendantExp * 10));
                 } else {
@@ -9466,6 +9484,74 @@ public class Character extends AbstractCharacterObject {
         return InventoryManipulator.addFromDrop(getClient(), baseEquip, false);
     }
 
+    /**
+     * 发装备，支持自定义强化次数、道具等级和Flag
+     *
+     * @param itemId      装备id
+     * @param attStr      力量
+     * @param attDex      敏捷
+     * @param attInt      智力
+     * @param attLuk      运气
+     * @param attHp       血量
+     * @param attMp       蓝量
+     * @param pAtk        物理攻击
+     * @param mAtk        魔法攻击
+     * @param pDef        物理防御
+     * @param mDef        魔法防御
+     * @param acc         命中
+     * @param avoid       回避
+     * @param hands       攻击速度
+     * @param speed       移动速度
+     * @param jump        跳跃
+     * @param upgradeSlot 可升级次数
+     * @param level       已升级次数
+     * @param itemLevel   道具等级
+     * @param expireTime  失效时间
+     * @param flag        物品标记
+     */
+    public boolean gainEquip(int itemId, Short attStr, Short attDex, Short attInt, Short attLuk, Short attHp, Short attMp,
+                             Short pAtk, Short mAtk, Short pDef, Short mDef, Short acc, Short avoid, Short hands, Short speed,
+                             Short jump, Byte upgradeSlot, Short level, Short itemLevel, Long expireTime,String owner, Short flag) {
+        Equip baseEquip = (Equip) ItemInformationProvider.getInstance().getEquipById(itemId);
+        if (!ItemConstants.getInventoryType(itemId).equals(InventoryType.EQUIP) || baseEquip == null) {
+            message(I18nUtil.getMessage("AbstractPlayerInteraction.gainEquip.message1"));
+            return false;
+        }
+        baseEquip.setQuantity((short) 1);
+        if (!InventoryManipulator.checkSpace(getClient(), itemId, 1, baseEquip.getOwner())) {
+            message(I18nUtil.getMessage("AbstractPlayerInteraction.gainEquip.message2", InventoryType.EQUIP.getName()));
+            return false;
+        }
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attStr, Equip::setStr);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attDex, Equip::setDex);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attInt, Equip::setInt);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attLuk, Equip::setLuk);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attHp, Equip::setHp);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, attMp, Equip::setMp);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, pAtk, Equip::setWatk);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, mAtk, Equip::setMatk);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, pDef, Equip::setWdef);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, mDef, Equip::setMdef);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, acc, Equip::setAcc);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, avoid, Equip::setAvoid);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, hands, Equip::setHands);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, speed, Equip::setSpeed);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, jump, Equip::setJump);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, upgradeSlot, Equip::setUpgradeSlots);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, level, Equip::setLevel);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, itemLevel, Equip::setItemLevel);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, owner, Equip::setOwner);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, flag, Equip::setFlag);
+        RequireUtil.requireNotEmptyAndThen(baseEquip, expireTime, (eq, ep) -> {
+            if (ep > 0) {
+                eq.setExpiration(TimeUnit.MINUTES.toMillis(ep) + System.currentTimeMillis());
+            } else {
+                eq.setExpiration(-1);
+            }
+        });
+        return InventoryManipulator.addFromDrop(getClient(), baseEquip, false);
+    }
+
     public void setFamilyBuff(boolean type, float exp, float drop) {
         this.familyBuff = type;
         this.familyExp = exp;
@@ -9612,5 +9698,207 @@ public class Character extends AbstractCharacterObject {
      */
     public void saveOrUpdateCharacterExtendValue(int characterId, String extendType, String extendName, String extendValue) {
         saveOrUpdateExtendValue(String.valueOf(characterId), extendType, extendName, extendValue);
+    }
+    public void updateCharacterDetails(UpdateCharacterReqDTO request) {
+        effLock.lock();
+        statWlock.lock();
+        try {
+            List<Pair<Stat, Integer>> stats = new ArrayList<>();
+            boolean lookChanged = false;
+
+            if (request.getName() != null && !request.getName().equals(getName())) {
+                setName(request.getName());
+                // 名字变更通常需要重登或特殊处理，这里仅更新内存
+            }
+            if (request.getLevel() != null && request.getLevel() != getLevel()) {
+                setLevel(request.getLevel());
+                stats.add(new Pair<>(Stat.LEVEL, request.getLevel()));
+            }
+            if (request.getJob() != null && request.getJob() != getJob().getId()) {
+                setJob(Job.getById(request.getJob()));
+                stats.add(new Pair<>(Stat.JOB, request.getJob()));
+            }
+            if (request.getStr() != null && request.getStr() != getStr()) {
+                setStr(request.getStr());
+                stats.add(new Pair<>(Stat.STR, request.getStr()));
+            }
+            if (request.getDex() != null && request.getDex() != getDex()) {
+                setDex(request.getDex());
+                stats.add(new Pair<>(Stat.DEX, request.getDex()));
+            }
+            if (request.getIntAttr() != null && request.getIntAttr() != getInt()) {
+                setInt(request.getIntAttr());
+                stats.add(new Pair<>(Stat.INT, request.getIntAttr()));
+            }
+            if (request.getLuk() != null && request.getLuk() != getLuk()) {
+                setLuk(request.getLuk());
+                stats.add(new Pair<>(Stat.LUK, request.getLuk()));
+            }
+            if (request.getHp() != null && request.getHp() != getHp()) {
+                setHp(request.getHp());
+                stats.add(new Pair<>(Stat.HP, request.getHp()));
+            }
+            if (request.getMaxHp() != null && request.getMaxHp() != getMaxHp()) {
+                setMaxHp(request.getMaxHp());
+                stats.add(new Pair<>(Stat.MAXHP, request.getMaxHp()));
+            }
+            if (request.getMp() != null && request.getMp() != getMp()) {
+                setMp(request.getMp());
+                stats.add(new Pair<>(Stat.MP, request.getMp()));
+            }
+            if (request.getMaxMp() != null && request.getMaxMp() != getMaxMp()) {
+                setMaxMp(request.getMaxMp());
+                stats.add(new Pair<>(Stat.MAXMP, request.getMaxMp()));
+            }
+            if (request.getAp() != null && request.getAp() != getRemainingAp()) {
+                setRemainingAp(request.getAp());
+                stats.add(new Pair<>(Stat.AVAILABLEAP, request.getAp()));
+            }
+            if (request.getSp() != null) {
+                String[] sps = request.getSp().split(",");
+                int[] spInts = new int[sps.length];
+                boolean spChanged = false;
+                int[] currentSps = getRemainingSps();
+
+                if (spInts.length == currentSps.length) {
+                    for (int i = 0; i < sps.length; i++) {
+                        spInts[i] = Integer.parseInt(sps[i]);
+                        if (spInts[i] != currentSps[i]) {
+                            spChanged = true;
+                        }
+                    }
+                } else {
+                    // 长度不同，肯定变了（虽然理论上长度应该一致）
+                    for (int i = 0; i < sps.length; i++) {
+                        spInts[i] = Integer.parseInt(sps[i]);
+                    }
+                    spChanged = true;
+                }
+
+                if (spChanged) {
+                    setRemainingSp(spInts);
+                    // 发送当前职业技能书的SP更新
+                    stats.add(new Pair<>(Stat.AVAILABLESP, getRemainingSp(getJob().getId())));
+                }
+            }
+            if (request.getFame() != null && request.getFame() != getFame()) {
+                setFame(request.getFame());
+                stats.add(new Pair<>(Stat.FAME, request.getFame()));
+            }
+
+            if (request.getFace() != null && request.getFace() != getFace()) {
+                setFace(request.getFace());
+                stats.add(new Pair<>(Stat.FACE, request.getFace()));
+                lookChanged = true;
+            }
+            if (request.getHair() != null && request.getHair() != getHair()) {
+                setHair(request.getHair());
+                stats.add(new Pair<>(Stat.HAIR, request.getHair()));
+                lookChanged = true;
+            }
+            if (request.getSkinColor() != null && request.getSkinColor() != getSkinColor().getId()) {
+                setSkinColor(SkinColor.getById(request.getSkinColor()));
+                stats.add(new Pair<>(Stat.SKIN, request.getSkinColor()));
+                lookChanged = true;
+            }
+            if (request.getGender() != null && request.getGender() != getGender()) {
+                setGender(request.getGender());
+                lookChanged = true;
+            }
+            if (request.getExp() != null && request.getExp() != getExp()) {
+                setExp(request.getExp());
+                stats.add(new Pair<>(Stat.EXP, getExp()));
+            }
+            if (request.getMeso() != null && request.getMeso() != getMeso()) {
+                setMeso(request.getMeso());
+                stats.add(new Pair<>(Stat.MESO, getMeso()));
+            }
+            if (request.getGm() != null && request.getGm() != gmLevel()) {
+                setGMLevel(request.getGm());
+                // GM等级变更可能需要更复杂的处理，但目前仅设置等级
+            }
+            if (request.getEquipSlots() != null) {
+                gainSlots(InventoryType.EQUIP.getType(), request.getEquipSlots() - getSlots(InventoryType.EQUIP.getType()), true);
+            }
+            if (request.getUseSlots() != null) {
+                gainSlots(InventoryType.USE.getType(), request.getUseSlots() - getSlots(InventoryType.USE.getType()), true);
+            }
+            if (request.getSetupSlots() != null) {
+                gainSlots(InventoryType.SETUP.getType(), request.getSetupSlots() - getSlots(InventoryType.SETUP.getType()), true);
+            }
+            if (request.getEtcSlots() != null) {
+                gainSlots(InventoryType.ETC.getType(), request.getEtcSlots() - getSlots(InventoryType.ETC.getType()), true);
+            }
+            if (request.getBuddyCapacity() != null && request.getBuddyCapacity() != getBuddylist().getCapacity()) {
+                setBuddyCapacity(request.getBuddyCapacity());
+            }
+            if (request.getMerchantMesos() != null && request.getMerchantMesos() != getMerchantMeso()) {
+                setMerchantMeso(request.getMerchantMesos());
+            }
+            if (request.getGachaExp() != null && request.getGachaExp() != getGachaExp()) {
+                setGachaExp(request.getGachaExp());
+                stats.add(new Pair<>(Stat.GACHAEXP, getGachaExp()));
+            }
+            if (!getCashShop().isOpened()) {
+                if (request.getMap() != null && request.getMap() != getMapId()) {
+                    setInitialSpawnPoint(request.getSpawnPoint());
+                    changeMap(request.getMap(), request.getSpawnPoint());
+                }
+                if (request.getSpawnPoint() != null && request.getSpawnPoint() != getInitialSpawnPoint()) {
+                    setInitialSpawnPoint(request.getSpawnPoint());
+                    changeMap(request.getMap(), request.getSpawnPoint());
+                }
+            }
+            if (request.getMountLevel() != null || request.getMountExp() != null || request.getMountTiredness() != null) {
+                if (getMapleMount() != null) {
+                    if (request.getMountLevel() != null) getMapleMount().setLevel(request.getMountLevel());
+                    if (request.getMountExp() != null) getMapleMount().setExp(request.getMountExp());
+                    if (request.getMountTiredness() != null) getMapleMount().setTiredness(request.getMountTiredness());
+                    getMap().broadcastMessage(PacketCreator.updateMount(getId(), getMapleMount(), false));
+                }
+            }
+            // 处理货币变更
+            CashShop cs = getCashShop();
+            boolean cashChanged = false;
+            if (request.getNxCredit() != null && !request.getNxCredit().equals(cs.getCash(CashShop.NX_CREDIT))) {
+                cs.setNxCredit(request.getNxCredit());
+                cashChanged = true;
+            }
+            if (request.getMaplePoint() != null && !request.getMaplePoint().equals(cs.getCash(CashShop.MAPLE_POINT))) {
+                cs.setMaplePoint(request.getMaplePoint());
+                cashChanged = true;
+            }
+            if (request.getNxPrepaid() != null && !request.getNxPrepaid().equals(cs.getCash(CashShop.NX_PREPAID))) {
+                cs.setNxPrepaid(request.getNxPrepaid());
+                cashChanged = true;
+            }
+
+            if (cashChanged) {
+                // 更新货币后，需要通知客户端。通常这会在进入商城时自动同步，
+                // 但为了在游戏中实时看到（如果UI支持），可能需要一个特定的封包。
+                // 此处我们先更新内存中的值，并保存。
+                cs.save();
+            }
+            // 只有当属性确实发生变化时才重新计算和发送包
+            if (!stats.isEmpty() || lookChanged) {
+                recalcLocalStats();
+                // updateLocalStats(); // 移除这个调用，避免重复发送不完整的包
+
+                if (!stats.isEmpty()) {
+                    sendPacket(PacketCreator.updatePlayerStats(stats, true, this));
+                }
+
+                if (lookChanged) {
+                    equipChanged();
+                }
+
+//                saveCharToDB(); // 只有变化了才保存
+            }
+
+//            enableActions(); // 总是启用操作，防止客户端卡死
+        } finally {
+            statWlock.unlock();
+            effLock.unlock();
+        }
     }
 }

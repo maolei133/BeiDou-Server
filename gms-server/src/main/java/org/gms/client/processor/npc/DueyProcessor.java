@@ -58,40 +58,47 @@ import java.util.*;
  * 快递处理器
  * @author RonanLana - synchronization of Duey modules
  */
+@SuppressWarnings("unchecked")
 public class DueyProcessor {
     private static final Logger log = LoggerFactory.getLogger(DueyProcessor.class);
 
     public enum Actions {
-        TOSERVER_RECV_ITEM(0x00),
-        TOSERVER_SEND_ITEM(0x02),
-        TOSERVER_CLAIM_PACKAGE(0x04),
-        TOSERVER_REMOVE_PACKAGE(0x05),
-        TOSERVER_CLOSE_DUEY(0x07),
-        TOCLIENT_OPEN_DUEY(0x08),
-        TOCLIENT_SEND_ENABLE_ACTIONS(0x09),
-        TOCLIENT_SEND_NOT_ENOUGH_MESOS(0x0A),
-        TOCLIENT_SEND_INCORRECT_REQUEST(0x0B),
-        TOCLIENT_SEND_NAME_DOES_NOT_EXIST(0x0C),
-        TOCLIENT_SEND_SAMEACC_ERROR(0x0D),
-        TOCLIENT_SEND_RECEIVER_STORAGE_FULL(0x0E),
-        TOCLIENT_SEND_RECEIVER_UNABLE_TO_RECV(0x0F),
-        TOCLIENT_SEND_RECEIVER_STORAGE_WITH_UNIQUE(0x10),
-        TOCLIENT_SEND_MESO_LIMIT(0x11),
-        TOCLIENT_SEND_SUCCESSFULLY_SENT(0x12),
-        TOCLIENT_RECV_UNKNOWN_ERROR(0x13),
-        TOCLIENT_RECV_ENABLE_ACTIONS(0x14),
-        TOCLIENT_RECV_NO_FREE_SLOTS(0x15),
-        TOCLIENT_RECV_RECEIVER_WITH_UNIQUE(0x16),
-        TOCLIENT_RECV_SUCCESSFUL_MSG(0x17),
-        TOCLIENT_RECV_PACKAGE_MSG(0x1B);
+        TOSERVER_RECV_ITEM(0x00, "接收物品"),
+        TOSERVER_SEND_ITEM(0x02, "发送物品"),
+        TOSERVER_CLAIM_PACKAGE(0x04, "领取包裹"),
+        TOSERVER_REMOVE_PACKAGE(0x05, "删除包裹"),
+        TOSERVER_CLOSE_DUEY(0x07, "关闭快递"),
+        TOCLIENT_OPEN_DUEY(0x08, "打开快递"),
+        TOCLIENT_SEND_ENABLE_ACTIONS(0x09, "启用操作"),
+        TOCLIENT_SEND_NOT_ENOUGH_MESOS(0x0A, "金币不足"),
+        TOCLIENT_SEND_INCORRECT_REQUEST(0x0B, "请求错误"),
+        TOCLIENT_SEND_NAME_DOES_NOT_EXIST(0x0C, "角色名不存在"),
+        TOCLIENT_SEND_SAMEACC_ERROR(0x0D, "同账号错误"),
+        TOCLIENT_SEND_RECEIVER_STORAGE_FULL(0x0E, "收件人仓库已满"),
+        TOCLIENT_SEND_RECEIVER_UNABLE_TO_RECV(0x0F, "收件人无法接收"),
+        TOCLIENT_SEND_RECEIVER_STORAGE_WITH_UNIQUE(0x10, "收件人有唯一物品"),
+        TOCLIENT_SEND_MESO_LIMIT(0x11, "金币限制"),
+        TOCLIENT_SEND_SUCCESSFULLY_SENT(0x12, "发送成功"),
+        TOCLIENT_RECV_UNKNOWN_ERROR(0x13, "未知错误"),
+        TOCLIENT_RECV_ENABLE_ACTIONS(0x14, "接收启用操作"),
+        TOCLIENT_RECV_NO_FREE_SLOTS(0x15, "没有空闲槽位"),
+        TOCLIENT_RECV_RECEIVER_WITH_UNIQUE(0x16, "接收者有唯一物品"),
+        TOCLIENT_RECV_SUCCESSFUL_MSG(0x17, "接收成功消息"),
+        TOCLIENT_RECV_PACKAGE_MSG(0x1B, "接收包裹消息");
         final byte code;
+        final String desc;
 
-        Actions(int code) {
+        Actions(int code, String desc) {
             this.code = (byte) code;
+            this.desc = desc;
         }
 
         public byte getCode() {
             return code;
+        }
+
+        public String getDesc() {
+            return desc;
         }
     }
 
@@ -178,6 +185,10 @@ public class DueyProcessor {
         newPackage.setMessage(message);
         newPackage.setType(quick ? 1 : 0);
         newPackage.setChecked(1);
+        
+        // 设置默认过期时间
+        long expireDuration = GameConfig.getServerLong("duey_expire_time", 2592000000L);
+        newPackage.setExpireDate(new Timestamp(System.currentTimeMillis() + expireDuration));
 
         if (mapper.insert(newPackage, true) > 0) {
             return newPackage.getPackageid().intValue();
@@ -245,6 +256,24 @@ public class DueyProcessor {
                 if (c.getPlayer().isGM() && c.getPlayer().gmLevel() < GameConfig.getServerInt("minimum_gm_level_to_use_duey")) {
                     c.getPlayer().message("您当前的GM等级无法使用快递。");
                     log.info("GM {} 尝试发送一个包裹给 {}", c.getPlayer().getName(), recipient);
+                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                    return;
+                }
+
+                if (c.getPlayer().getLevel() < GameConfig.getServerInt("duey_min_level")) {
+                    c.getPlayer().message("您的等级不足，无法使用快递。");
+                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                    return;
+                }
+
+                if (quick && !GameConfig.getServerBoolean("enable_duey_quick_delivery")) {
+                    c.getPlayer().message("快速配送服务已禁用。");
+                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                    return;
+                }
+
+                if (!quick && !GameConfig.getServerBoolean("enable_duey_normal_delivery")) {
+                    c.getPlayer().message("普通配送服务已禁用。");
                     c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
                     return;
                 }
@@ -432,14 +461,30 @@ public class DueyProcessor {
 
     public static void runDueyExpireSchedule() {
         DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        
+        // 1. 清理旧逻辑的过期包裹 (timestamp + duey_expire_time < now)
+        // 兼容旧数据，如果 expire_date 为空，则使用 timestamp 计算
         Calendar c = Calendar.getInstance();
-        c.add(Calendar.DATE, -30);
+        c.setTimeInMillis(System.currentTimeMillis() - GameConfig.getServerLong("duey_expire_time"));
         final Timestamp ts = new Timestamp(c.getTime().getTime());
 
-        QueryWrapper query = QueryWrapper.create().select(DueypackagesDO::getPackageid).where(DueypackagesDO::getTimestamp).lt(ts);
-        List<DueypackagesDO> toRemove = mapper.selectListByQuery(query);
-
-        for (DueypackagesDO pkg : toRemove) {
+        QueryWrapper queryOld = QueryWrapper.create()
+                .select(DueypackagesDO::getPackageid)
+                .where(DueypackagesDO::getExpireDate).isNull()
+                .and(DueypackagesDO::getTimestamp).lt(ts);
+        
+        List<DueypackagesDO> toRemoveOld = mapper.selectListByQuery(queryOld);
+        for (DueypackagesDO pkg : toRemoveOld) {
+            removePackageFromDB(pkg.getPackageid().intValue());
+        }
+        
+        // 2. 清理新逻辑的过期包裹 (expire_date < now)
+        QueryWrapper queryNew = QueryWrapper.create()
+                .select(DueypackagesDO::getPackageid)
+                .where(DueypackagesDO::getExpireDate).le(new Timestamp(System.currentTimeMillis()));
+        
+        List<DueypackagesDO> toRemoveNew = mapper.selectListByQuery(queryNew);
+        for (DueypackagesDO pkg : toRemoveNew) {
             removePackageFromDB(pkg.getPackageid().intValue());
         }
     }

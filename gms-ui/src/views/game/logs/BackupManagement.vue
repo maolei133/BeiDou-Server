@@ -42,14 +42,25 @@
       <a-col :xs="24" :sm="12" :md="6">
         <a-statistic
           :title="$t('logsystem.backup.totalSize')"
-          :value="formatSize(statistics.totalBackupSize || 0)"
-        />
+          :value="statistics.totalBackupSize || 0"
+        >
+          <template #formatter="{ value }">
+            {{ formatSize(Number(value)) }}
+          </template>
+        </a-statistic>
       </a-col>
       <a-col :xs="24" :sm="12" :md="6">
         <a-statistic
           :title="$t('logsystem.backup.avgCompression')"
-          :value="statistics.averageCompressionRatio || 'N/A'"
-        />
+          :value="
+            statistics.averageCompressionRatio
+              ? parseFloat(statistics.averageCompressionRatio)
+              : 0
+          "
+          :precision="2"
+        >
+          <template #suffix>%</template>
+        </a-statistic>
       </a-col>
     </a-row>
 
@@ -108,7 +119,7 @@
               <a-button type="text" size="small" @click="viewDetail(record)">
                 {{ $t('common.detail') }}
               </a-button>
-              <a-divider type="vertical" />
+              <a-divider direction="vertical" />
               <a-popconfirm
                 :title="$t('logsystem.backup.restoreConfirm')"
                 @ok="restoreBackup(record.backupId)"
@@ -123,7 +134,7 @@
                   {{ $t('logsystem.backup.restore') }}
                 </a-button>
               </a-popconfirm>
-              <a-divider type="vertical" />
+              <a-divider direction="vertical" />
               <a-popconfirm
                 :title="$t('common.deleteConfirm')"
                 @ok="deleteBackup(record.backupId)"

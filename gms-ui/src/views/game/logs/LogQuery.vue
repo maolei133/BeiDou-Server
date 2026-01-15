@@ -171,7 +171,8 @@
           });
 
           if (response && response.data) {
-            const result = response.data;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = response.data as any;
             logData.value = result.records || [];
             pagination.total = result.totalCount || 0;
           }
@@ -208,7 +209,8 @@
           });
 
           if (response && response.data) {
-            const blob = new Blob([response.data], { type: 'text/csv' });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const blob = new Blob([response.data as any], { type: 'text/csv' });
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;

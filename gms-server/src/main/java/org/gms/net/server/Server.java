@@ -66,9 +66,12 @@ import org.gms.service.*;
 import org.gms.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.SpringApplication;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
@@ -141,6 +144,10 @@ public class Server {
     @Getter
     @Setter
     private boolean online = false;
+    @Getter
+    @Setter
+    private boolean shutdown = false;
+    private long shutdownTime = 0;
     public static long uptime = System.currentTimeMillis();
     private long nextTime;
 
@@ -1604,11 +1611,15 @@ public class Server {
         TimerManager.getInstance().register(this::disconnectIdlesOnLoginState, 300000);
     }
 
-    public final Runnable shutdown(final boolean restart) {//no player should be online when trying to shutdown!
-        return () -> shutdownInternal(restart);
+    public final Runnable shutdown(final boolean restart, final boolean exit) {//no player should be online when trying to shutdown!
+        return () -> shutdownInternal(restart, exit);
     }
 
     public synchronized void shutdownInternal(boolean restart) {
+        shutdownInternal(restart, false);
+    }
+
+    public synchronized void shutdownInternal(boolean restart, boolean exit) {
         log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info1"), restart ?
                 I18nUtil.getLogMessage("Server.shutdownInternal.info2") : I18nUtil.getLogMessage("Server.shutdownInternal.info3"));
         if (getWorlds() == null) {
@@ -1643,6 +1654,10 @@ public class Server {
             log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info5"));
             instance = null;
             getInstance().init();
+        } else if (exit) {
+            log.info("Server shutdown complete. Exiting application.");
+            SpringApplication.exit(ServerManager.getApplicationContext());
+            System.exit(0);
         }
     }
 
@@ -1664,57 +1679,201 @@ public class Server {
         return true;
     }
 
-    public synchronized void shutdownWithMsgAndInternal(ServerShutdownDTO serverShutdownDTO) {
-
-        int time = 60000;
-        // 原来就支持立即停止，不能忽视本地用户
-        if (serverShutdownDTO.getMinutes() >= 0) {
-            time *= serverShutdownDTO.getMinutes();
+    public long getShutdownRemainingTime() {
+        if (shutdownTime == 0) {
+            return -1;
         }
-
-        if (time > 1) {
-            int seconds = (time / (int) SECONDS.toMillis(1)) % 60;
-            int minutes = (time / (int) MINUTES.toMillis(1)) % 60;
-            int hours = (time / (int) HOURS.toMillis(1)) % 24;
-            int days = (time / (int) DAYS.toMillis(1));
-
-            String strTime = "";
-            if (days > 0) {
-                strTime += I18nUtil.getMessage("ShutdownCommand.message3", days);
-            }
-            if (hours > 0) {
-                strTime += I18nUtil.getMessage("ShutdownCommand.message4", hours);
-            }
-            strTime += I18nUtil.getMessage("ShutdownCommand.message5", minutes);
-            strTime += I18nUtil.getMessage("ShutdownCommand.message6", seconds);
-
-
-            String shutDownMsg = I18nUtil.getMessage("ShutdownCommand.message7", strTime);
-
-            if (serverShutdownDTO.getShutdownMsg() != null) {
-                shutDownMsg = serverShutdownDTO.getShutdownMsg();
-            }
-
-            for (World w : Server.getInstance().getWorlds()) {
-                for (Character chr : w.getPlayerStorage().getAllCharacters()) {
-                    if (serverShutdownDTO.getShowCenterMsg()) {
-                        // 屏幕中央提示消息 (火红玫瑰)
-                        chr.startMapEffect(shutDownMsg, 5121009);
-                    }
-                }
-                if (serverShutdownDTO.getShowServerMsg()) {
-                    // 添加滚动消息到顶部，因为是固定时间停服，所以短暂的通知部分玩家可能看不到。
-                    w.setServerMessage(shutDownMsg);
-                }
-                if (serverShutdownDTO.getShowChatMsg()) {
-                    // 玩家聊天框蓝色GM消息
-                    w.broadcastPacket(PacketCreator.serverNotice(6, shutDownMsg));
-                }
-
-            }
-        }
-        TimerManager.getInstance().schedule(Server.getInstance().shutdown(false), time);
+        long remaining = shutdownTime - System.currentTimeMillis();
+        return remaining > 0 ? remaining : 0;
     }
 
+    public synchronized void shutdownWithMsgAndInternal(ServerShutdownDTO serverShutdownDTO) {
+        shutdownWithMsgAndInternal(serverShutdownDTO, false);
+    }
 
+    /**
+     * 执行带消息通知的服务器关闭或重启流程。
+     * <p>
+     * 该方法会启动一个倒计时线程，在倒计时期间定期广播关服消息，并在倒计时结束后执行关服操作。
+     * 关服流程包括：断开所有玩家连接、等待数据保存、执行资源释放和关闭。
+     * </p>
+     *
+     * @param serverShutdownDTO 包含关服配置信息的DTO对象，如倒计时时间、提示消息内容、广播设置等。
+     * @param exit              标识关服后是否退出应用程序进程。true表示退出，false表示仅关闭服务（或重启）。
+     */
+    public synchronized void shutdownWithMsgAndInternal(ServerShutdownDTO serverShutdownDTO, boolean exit) {
+        int minutes = serverShutdownDTO.getMinutes();
+        long time = minutes * 60000L;
+        this.shutdownTime = System.currentTimeMillis() + time;
+
+        log.info("开始执行关服倒计时，预计关服时间: {}, 剩余时间: {} 分钟", new Date(this.shutdownTime), minutes);
+
+        // 启动一个独立的平台线程来执行关服倒计时，避免死锁
+        new Thread(() -> {
+            long remainingTime = time;
+            boolean firstNotice = true;
+
+            while (remainingTime > 0) {
+                // 剩余时间（毫秒）
+                long timeLeft = remainingTime;
+
+                // 1. 关服前5分钟禁止登录和切换频道
+                if (timeLeft <= 5 * 60 * 1000) {
+                    setShutdown(true); // 设置为关服状态，禁止登录和切换频道
+                }
+
+                // 2. 广播消息逻辑
+                if (firstNotice || timeLeft > 30 * 60 * 1000) {
+                    // 大于30分钟，每30分钟通知一次（这里简化为只在开始时通知，或者按需添加循环）
+                    if (firstNotice) {
+                        broadcastShutdownMessage(timeLeft, serverShutdownDTO, true, false);
+                        firstNotice = false;
+                    }
+                } else if (timeLeft <= 30 * 60 * 1000 && timeLeft > 5 * 60 * 1000) {
+                    // 30分钟内，每10分钟通知一次？或者只在30分、20分、10分通知
+                    if (timeLeft % (10 * 60 * 1000) == 0 || timeLeft == 30 * 60 * 1000) {
+                        broadcastShutdownMessage(timeLeft, serverShutdownDTO, false, false);
+                    }
+                } else if (timeLeft <= 5 * 60 * 1000 && timeLeft > 10 * 1000) {
+                    // 最后5分钟，每分钟通知一次
+                    if (timeLeft % (60 * 1000) == 0) {
+                        broadcastShutdownMessage(timeLeft, serverShutdownDTO, false, false); // 不弹窗
+                    }
+                } else if (timeLeft <= 10 * 1000) {
+                    // 最后10秒，每秒通知一次
+                    if (timeLeft % 1000 == 0) {
+                        broadcastShutdownMessage(timeLeft, serverShutdownDTO, false, false);
+                    }
+                }
+
+                try {
+                    Thread.sleep(1000); // 每秒检查一次
+                    remainingTime -= 1000;
+                } catch (InterruptedException e) {
+                    log.error("Shutdown countdown interrupted", e);
+                }
+            }
+
+            // 倒计时结束，执行关服流程
+            log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.finished"));
+
+            // 1. 断开所有玩家连接
+            log.info(I18nUtil.getLogMessage("Server.shutdown.disconnect.all"));
+            for (World w : getWorlds()) {
+                w.getPlayerStorage().disconnectAll();
+            }
+
+            // 2. 循环检查在线人数
+            long startCheckTime = System.currentTimeMillis();
+            while (System.currentTimeMillis() - startCheckTime < 30000) {
+                int onlineCount = 0;
+                for (World w : getWorlds()) {
+                    onlineCount += w.getPlayerStorage().getAllCharacters().size();
+                }
+
+                log.info(I18nUtil.getLogMessage("Server.shutdown.check.online"), onlineCount);
+                if (onlineCount == 0) {
+                    break;
+                }
+
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            // 3. 延时30秒确保数据保存
+            log.info(I18nUtil.getLogMessage("Server.shutdown.wait.save"));
+            try {
+                Thread.sleep(30000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            // 4. 执行关服
+            log.info(I18nUtil.getLogMessage("Server.shutdown.executing"));
+            Server.getInstance().shutdown(false, exit).run();
+            log.info(I18nUtil.getLogMessage("Server.shutdown.complete"));
+        }, "Shutdown-Countdown-Thread").start();
+    }
+
+    private void broadcastShutdownMessage(long timeLeft, ServerShutdownDTO dto, boolean firstNotice, boolean showPopup) {
+        String msg;
+        if (firstNotice) {
+            // 首次通知，使用特定格式
+            LocalDateTime shutdownTime = LocalDateTime.now().plus(Duration.ofMillis(timeLeft));
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+            String timeStr = shutdownTime.format(formatter);
+            String customMsg = dto.getShutdownMsg() != null ? dto.getShutdownMsg() : "";
+            msg = I18nUtil.getMessage("ShutdownCommand.message8", timeStr, customMsg);
+        } else {
+            // 间隔通知和倒计时通知
+            int seconds = (int) (timeLeft / 1000) % 60;
+            int minutes = (int) ((timeLeft / (1000 * 60)) % 60);
+            int hours = (int) ((timeLeft / (1000 * 60 * 60)) % 24);
+            int days = (int) (timeLeft / (1000 * 60 * 60 * 24));
+
+            StringBuilder strTime = new StringBuilder();
+            if (days > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message3", days));
+            if (hours > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message4", hours));
+            if (minutes > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message5", minutes));
+            if (seconds > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message6", seconds));
+
+            msg = I18nUtil.getMessage("ShutdownCommand.message7", strTime);
+        }
+
+        log.info("发送关服通知: 剩余时间={}ms, 消息={}", timeLeft, msg);
+
+        for (World w : Server.getInstance().getWorlds()) {
+            if (dto.getShowServerMsg()) {
+                w.setServerMessage(msg);
+            }
+            if (dto.getShowChatMsg()) {
+                w.broadcastPacket(PacketCreator.serverNotice(6, msg));
+            }
+            if (dto.getShowCenterMsg() || showPopup) {
+                 for (Character chr : w.getPlayerStorage().getAllCharacters()) {
+                    if (dto.getShowCenterMsg()) {
+                        chr.startMapEffect(msg, 5121009);
+                    }
+                    if (showPopup) {
+                        chr.dropMessage(1, msg); // 弹窗提示
+                    }
+                }
+            }
+        }
+    }
+
+    public void sendShutdownNotice(Client c) {
+        long shutdownRemaining = getShutdownRemainingTime();
+        if (shutdownRemaining > 0 && shutdownRemaining <= 30 * 60 * 1000) {
+            int seconds = (int) (shutdownRemaining / 1000) % 60;
+            int minutes = (int) ((shutdownRemaining / (1000 * 60)) % 60);
+            int hours = (int) ((shutdownRemaining / (1000 * 60 * 60)) % 24);
+            int days = (int) (shutdownRemaining / (1000 * 60 * 60 * 24));
+
+            StringBuilder strTime = new StringBuilder();
+            if (days > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message3", days));
+            if (hours > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message4", hours));
+            if (minutes > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message5", minutes));
+            if (seconds > 0) strTime.append(I18nUtil.getMessage("ShutdownCommand.message6", seconds));
+
+            if (strTime.length() == 0) {
+                strTime.append(I18nUtil.getMessage("ShutdownCommand.message6", 0));
+            }
+
+            String msg = I18nUtil.getMessage("ShutdownCommand.message7", strTime.toString());
+
+            // In-game players get a popup
+            if (c.getPlayer() != null) {
+                c.getPlayer().dropMessage(0,c.getChannelServer().getServerMessage()+msg);
+                c.getPlayer().dropMessage(1, msg);
+            }
+            // Players on login/char select screen get a notice packet
+            else {
+                c.sendPacket(PacketCreator.serverNotice(1, msg));
+            }
+        }
+    }
 }

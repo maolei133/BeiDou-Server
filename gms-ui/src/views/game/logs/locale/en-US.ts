@@ -7,7 +7,6 @@ export default {
   'menu.game.logs.alert': 'Alert Rules',
   'menu.game.logs.backup': 'Backup',
   'menu.game.logs.dashboard': 'Dashboard',
-  'menu.game.logs.config': 'Configuration',
 
   // Page Title
   'logs.page.title': 'Log Management System',
@@ -19,7 +18,6 @@ export default {
   'logs.tab.alert': 'Alert Rules',
   'logs.tab.backup': 'Backup',
   'logs.tab.dashboard': 'Dashboard',
-  'logs.tab.config': 'Configuration',
 
   // === Dashboard Page ===
   'logs.dashboard.title': 'Dashboard Overview',

@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.client.SkillFactory;
 import org.gms.client.command.Command;
 import org.gms.client.command.CommandsExecutor;
 
@@ -17,7 +18,12 @@ import org.gms.net.server.Server;
 import org.gms.net.server.channel.Channel;
 import org.gms.net.server.world.World;
 import org.gms.scripting.portal.PortalScriptManager;
+import org.gms.server.ShopFactory;
+import org.gms.server.life.LifeFactory;
+import org.gms.server.life.MonsterInformationProvider;
 import org.gms.server.maps.MapleMap;
+import org.gms.server.maps.ReactorFactory;
+import org.gms.server.quest.Quest;
 import org.gms.util.I18nUtil;
 import org.gms.util.Pair;
 import org.gms.util.RequireUtil;
@@ -249,8 +255,36 @@ public class CommandService {
             });
         });
         log.info(I18nUtil.getMessage("ReloadMapCommand.message1"));
-        }
-
     }
 
+    public void reloadDropsByGMCommand() {
+        MonsterInformationProvider.getInstance().clearDrops();
+        log.info(I18nUtil.getMessage("ReloadDropsCommand.message2"));
+    }
 
+    public void reloadShopsByGMCommand() {
+        ShopFactory.getInstance().reloadShops();
+        log.info(I18nUtil.getMessage("ReloadShopsCommand.message1"));
+    }
+
+    public void reloadQuestsByGMCommand() {
+        Quest.clearCache();
+        log.info(I18nUtil.getMessage("ClearQuestCacheCommand.message2"));
+    }
+
+    public void reloadSkillsByGMCommand() {
+        SkillFactory.loadAllSkills();
+        log.info(I18nUtil.getMessage("ReloadSkillsCommand.message2"));
+    }
+
+    public void reloadMonstersByGMCommand() {
+        LifeFactory.clearMonsterStatsCache();
+        log.info(I18nUtil.getMessage("ReloadMonstersCommand.message2"));
+    }
+
+    public void reloadReactorsByGMCommand() {
+        ReactorFactory.clearReactorStatsCache();
+        log.info(I18nUtil.getMessage("ReloadReactorsCommand.message2"));
+    }
+
+}

@@ -10,12 +10,16 @@ import account from '@/views/account/locale/en-US';
 import login from '@/views/login/locale/en-US';
 import inventory from '@/views/game/inventory/locale/en-US';
 import logs from '@/views/game/logs/locale/en-US';
+import duey from '@/views/game/duey/locale/en-US';
 import base from './en-US/base';
 
 export default {
   'menu.dashboard': 'Dashboard',
   'menu.dashboard.workplace': 'Workplace',
   'menu.dashboard.informationSearch': 'Information Search',
+  'menu.dashboard.duey': 'Duey Management',
+  'menu.dashboard.duey.list': 'Duey List',
+  'menu.dashboard.duey.config': 'Duey Config',
   'menu.game': 'Game',
   'menu.game.config': 'Config',
   'menu.game.npcShop': 'NPC Shop',
@@ -51,6 +55,7 @@ export default {
   'settings.userSettings': 'User Settings',
   'settings.logout': 'Logout',
   'settings.version': 'Version',
+  'playerSelector.title': 'Select Player',
   ...base,
   ...workplace,
   ...login,
@@ -64,4 +69,5 @@ export default {
   ...inventory,
   ...config,
   ...logs,
+  ...duey,
 };

@@ -25,6 +25,7 @@ import org.gms.client.inventory.Item;
 import org.gms.client.inventory.ItemFactory;
 import org.gms.dao.entity.StoragesDO;
 import org.gms.dao.mapper.StoragesMapper;
+import org.gms.service.StorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.provider.Data;
@@ -124,19 +125,20 @@ public class Storage {
     }
 
     public void saveToDB() {
-        StoragesMapper mapper = SpringContextUtil.getBean(StoragesMapper.class);
+        StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+
         StoragesDO storageToUpdate = new StoragesDO();
         storageToUpdate.setStorageid((long) this.id);
         storageToUpdate.setSlots((int) this.slots);
         storageToUpdate.setMeso(this.meso);
-        mapper.update(storageToUpdate);
 
         List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
         List<Item> list = getItems();
         for (Item item : list) {
             itemsWithType.add(new Pair<>(item, item.getInventoryType()));
         }
-        ItemFactory.STORAGE.saveItems(itemsWithType, id);
+
+        storageService.saveStorage(storageToUpdate, itemsWithType, id);
     }
 
     public Item getItem(byte slot) {

@@ -14,6 +14,8 @@ public class EquipmentInfoRtnDTO {
 //    private Integer id;
 //    private Integer quantity;
 //    private Integer rate;
+    private String name;
+    private String desc;
     private Short str;
     private Short dex;
     @JsonProperty("int")

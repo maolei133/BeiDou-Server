@@ -107,13 +107,15 @@
       usingDts = localDts;
     }
 
-    monaco.languages.typescript.javascriptDefaults.addExtraLib(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const languages = monaco.languages as any;
+    languages.typescript.javascriptDefaults.addExtraLib(
       usingDts,
       'beidoums-scripts-dts'
     );
-    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+    languages.typescript.javascriptDefaults.setCompilerOptions({
       allowJs: true,
-      target: monaco.languages.typescript.ScriptTarget.ES6,
+      target: languages.typescript.ScriptTarget.ES6,
       allowNonTsExtensions: true,
       noNonAsciiIdentifier: false,
       noLib: true,

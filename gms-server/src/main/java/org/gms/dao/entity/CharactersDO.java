@@ -6,6 +6,8 @@ import com.mybatisflex.annotation.KeyType;
 import com.mybatisflex.annotation.Table;
 import java.io.Serializable;
 import java.sql.Timestamp;
+import java.util.HashMap;
+import java.util.Map;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -202,4 +204,23 @@ public class CharactersDO implements Serializable {
 
     private Long jailexpire;
 
+    @Column(ignore = true)
+    private String accountName;
+
+    @Column(ignore = true)
+    private Integer banned;
+
+    @Column(ignore = true)
+    private Timestamp tempban;
+
+    @Column(ignore = true)
+    private Map<String, Object> extra = new HashMap<>();
+
+    public Map<String, Object> getExtra() {
+        return extra;
+    }
+
+    public void setExtra(Map<String, Object> extra) {
+        this.extra = extra;
+    }
 }

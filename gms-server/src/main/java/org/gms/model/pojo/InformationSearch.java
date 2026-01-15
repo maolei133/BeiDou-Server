@@ -26,4 +26,31 @@ public class InformationSearch {
      */
     private int filterType;
     private boolean fullMatch;
+
+    /**
+     * 分页参数
+     */
+    private Integer page;
+    private Integer pageSize;
+
+    /**
+     * 筛选参数
+     * gender: 0-男 1-女 2-通用
+     * color: 0-7 (对应发型/脸型颜色)
+     */
+    private Integer gender;
+    private Integer color;
+    
+    /**
+     * 装备分类筛选 (仅当 types 包含 eqp 时有效)
+     * 例如: Weapon, Cap, Coat, Pants, Shoes, Gloves, Cape, Shield, etc.
+     */
+    private String category;
+
+    /**
+     * 装备子分类筛选 (仅当 types 包含 eqp 时有效)
+     * 例如: One-Handed Sword, One-Handed Axe, etc.
+     * 对应 EquipType 枚举中的名称或自定义名称
+     */
+    private String subCategory;
 }

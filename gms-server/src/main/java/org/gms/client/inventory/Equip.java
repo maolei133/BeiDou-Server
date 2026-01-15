@@ -72,7 +72,7 @@ public class Equip extends Item {
 
     private byte upgradeSlots;
     @Getter
-    private byte level, itemLevel;
+    private short level, itemLevel;
     private short flag;
     private short str, dex, _int, luk, hp, mp, watk, matk, wdef, mdef, acc, avoid, hands, speed, jump, vicious;
     private float itemExp;
@@ -277,7 +277,7 @@ public class Equip extends Item {
         this.upgradeSlots = upgradeSlots;
     }
 
-    public void setLevel(byte level) {
+    public void setLevel(short level) {
         this.level = level;
     }
 
@@ -690,7 +690,7 @@ public class Equip extends Item {
             return;
         }
 
-        int equipMaxLevel = Math.min(30, Math.max(ii.getEquipLevel(this.getItemId(), true), GameConfig.getServerInt("use_equipment_level_up")));// 计算装备的最大等级
+        int equipMaxLevel = Math.min(255, Math.max(ii.getEquipLevel(this.getItemId(), true), GameConfig.getServerInt("use_equipment_level_up")));// 计算装备的最大等级
         if (itemLevel >= equipMaxLevel) {
             return;
         }
@@ -708,7 +708,7 @@ public class Equip extends Item {
 
         // 调试信息：显示经验值获取详情
         if (GameConfig.getServerBoolean("use_debug_show_eqp_exp")) {
-            log.info("{} -> EXP Gain: {}, Mastery: {}, Base gain: {}, exp: {} / {}, Kills TNL: {}", ii.getName(getItemId()),
+            log.info("[{}] -> 经验值获取: {}, 熟练度倍率: {}, 基础获取: {}, 经验: {} / {}, 升级还需击杀: {}", ii.getName(getItemId()),
                     gain, masteryModifier, baseExpGain, itemExp, expNeeded, expNeeded / (baseExpGain / c.getPlayer().getExpRate()));
         }
 
@@ -756,7 +756,7 @@ public class Equip extends Item {
         this.itemExp = exp;
     }
 
-    public void setItemLevel(byte level) {
+    public void setItemLevel(short level) {
         this.itemLevel = level;
     }
 

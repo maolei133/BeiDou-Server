@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class ChrOnlineListRtnDTO {
     private int world;
     private int accountId;
+    private String accountName;
     private int id;
     private String name;
     private int map;
@@ -28,4 +29,21 @@ public class ChrOnlineListRtnDTO {
     private int partyId;
     private int channel;
     private int fame;
+    private String loginTime;
+    private String lastLogoutTime;
+    private int str;
+    private int dex;
+    private int intAttr;
+    private int luk;
+    private int hp;
+    private int mp;
+    private int ap;
+    private String sp;
+    private int face;
+    private int hair;
+    private int skinColor;
+    private boolean banned;
+    private int banStatus; // 0: 未封禁, 1: 永久封禁, 2: 临时封禁
+    private String banReason;
+    private String tempBanTime;
 }

@@ -518,7 +518,7 @@
       async loadSystemConfig() {
         try {
           const response = await logsApi.getSystemConfig();
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.systemConfig = response.data;
             this.$message.success(
               `${this.$t('logs.config.system.loadSuccess')}`
@@ -534,7 +534,7 @@
       async saveSystemConfig() {
         try {
           const response = await logsApi.updateSystemConfig(this.systemConfig);
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.$message.success(
               `${this.$t('logs.config.system.saveSuccess')}`
             );
@@ -549,7 +549,7 @@
       async loadPerformanceConfig() {
         try {
           const response = await logsApi.getPerformanceConfig();
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.performanceConfig = response.data;
             this.$message.success(
               `${this.$t('logs.config.performance.loadSuccess')}`
@@ -573,7 +573,7 @@
             config.bufferSize,
             config.flushInterval
           );
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.$message.success(
               `${level} ${this.$t('logs.config.performance.saveSuccess')}`
             );
@@ -588,7 +588,7 @@
       async loadCategories() {
         try {
           const response = await logsApi.getAllCategoryConfig();
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.categories = response.data;
             this.$message.success(
               `${this.$t('logs.config.category.loadSuccess')}`
@@ -610,7 +610,7 @@
             category.consoleOutput,
             category.fileOutput
           );
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.$message.success(
               `${category.majorCategory}.${category.minorCategory} ${this.$t(
                 'logs.config.category.updateSuccess'
@@ -632,7 +632,7 @@
       async loadPacketConfig() {
         try {
           const response = await logsApi.getPacketConfig();
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.packetConfig = response.data;
             this.$message.success(
               `${this.$t('logs.config.packet.loadSuccess')}`
@@ -648,7 +648,7 @@
       async savePacketConfig() {
         try {
           const response = await logsApi.updatePacketConfig(this.packetConfig);
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.$message.success(
               `${this.$t('logs.config.packet.saveSuccess')}`
             );
@@ -671,7 +671,7 @@
           const response = await logsApi.addInPacketBlock(
             this.newInBlockOpcode
           );
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.packetConfig.inPacketBlocklist.push(this.newInBlockOpcode);
             this.newInBlockOpcode = null;
             this.$message.success(
@@ -688,7 +688,7 @@
       async removeInPacketBlock(opcode: number) {
         try {
           const response = await logsApi.removeInPacketBlock(opcode);
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.packetConfig.inPacketBlocklist =
               this.packetConfig.inPacketBlocklist.filter((o) => o !== opcode);
             this.$message.success(
@@ -713,7 +713,7 @@
           const response = await logsApi.addOutPacketBlock(
             this.newOutBlockOpcode
           );
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.packetConfig.outPacketBlocklist.push(this.newOutBlockOpcode);
             this.newOutBlockOpcode = null;
             this.$message.success(
@@ -730,7 +730,7 @@
       async removeOutPacketBlock(opcode: number) {
         try {
           const response = await logsApi.removeOutPacketBlock(opcode);
-          if (response.code === 20000) {
+          if (response && response.data) {
             this.packetConfig.outPacketBlocklist =
               this.packetConfig.outPacketBlocklist.filter((o) => o !== opcode);
             this.$message.success(
@@ -868,4 +868,3 @@
     }
   }
 </style>
-

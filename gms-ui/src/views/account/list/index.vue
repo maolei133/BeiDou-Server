@@ -4,33 +4,37 @@
     <a-card class="general-card" :title="$t('menu.account.list')">
       <a-form :model="filterForm" class="a-from-keyword">
         <a-form-item :label="$t('account.list.filter.id')">
-          <a-input-number v-model="filterForm.id" />
+          <a-input-number v-model="filterForm.id" allow-clear />
         </a-form-item>
         <a-form-item :label="$t('account.list.filter.name')">
-          <a-input v-model="filterForm.name" />
+          <a-input v-model="filterForm.name" allow-clear />
         </a-form-item>
         <a-form-item :label="$t('account.list.filter.lastLoginStart')">
           <a-date-picker
             v-model="filterForm.lastLoginStart"
             style="width: 100%"
+            allow-clear
           />
         </a-form-item>
         <a-form-item :label="$t('account.list.filter.lastLoginEnd')">
           <a-date-picker
             v-model="filterForm.lastLoginEnd"
             style="width: 100%"
+            allow-clear
           />
         </a-form-item>
         <a-form-item :label="$t('account.list.filter.createdAtStart')">
           <a-date-picker
             v-model="filterForm.createdAtStart"
             style="width: 100%"
+            allow-clear
           />
         </a-form-item>
         <a-form-item :label="$t('account.list.filter.createdAtEnd')">
           <a-date-picker
             v-model="filterForm.createdAtEnd"
             style="width: 100%"
+            allow-clear
           />
         </a-form-item>
       </a-form>
@@ -68,6 +72,7 @@
         column-resizable
         :pagination="false"
         :bordered="{ cell: true }"
+        :scroll="{ x: 1200, y: '55vh' }"
       >
         <template #columns>
           <a-table-column

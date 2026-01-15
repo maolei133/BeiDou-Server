@@ -35,5 +35,9 @@ public class GiveResourceReqDTO {
     private Short speed;
     private Short jump;
     private Byte upgradeSlot;
+    private Short level;
+    private Short itemLevel;
     private Long expire;
+    private String owner;
+    private Short flag;
 }

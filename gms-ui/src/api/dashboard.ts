@@ -24,8 +24,8 @@ export function restartServer() {
   return axios.get('/server/v1/restartServer');
 }
 
-export function shutdown() {
-  return axios.get('/server/v1/shutdown');
+export function shutdown(params?: StopServerParams) {
+  return axios.post('/server/v1/shutdown', params);
 }
 
 export function getVersion() {

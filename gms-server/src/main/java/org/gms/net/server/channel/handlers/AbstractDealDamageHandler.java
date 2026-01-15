@@ -553,6 +553,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 }
             }
 
+            List<Long> debugMaxDamages = new ArrayList<>();
             /** 遍历怪物的每段伤害 (j: 循环索引) */
             for (int j = 0; j < numDamageToRead; j++) {
                 /** 从包中读取的单段伤害值 */
@@ -564,11 +565,13 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     long hitDmgMax = currentCalcDmg;
                     // 处理影分身和特殊技能的伤害修正
                     hitDmgMax = applyDamageModifiers(ret, j, shadowPartner, hitDmgMax);
+                    if (ret.skill == Shadower.ASSASSINATE) hitDmgMax = 399999;  // 暂时放宽暗杀的上限
+                    long maxDamageToCheck = (long) (hitDmgMax * (canCrit ? totalCritMultiplier : 1));
+                    debugMaxDamages.add(maxDamageToCheck);
 
                     // 作弊检测：伤害值 (仅在怪物存在时检测)
                     if (monster != null && damage != 0) {//伤害为0则代表miss
-                        if (ret.skill == Shadower.ASSASSINATE) hitDmgMax = 199999;  // 暂时放宽暗杀的上限
-                        damage = chr.getAutoBanManager().checkDamageHack(damage, (long) (hitDmgMax * (canCrit ? totalCritMultiplier : 1)), ret.skill, ret.skilllevel, monster);
+                        damage = chr.getAutoBanManager().checkDamageHack(damage, maxDamageToCheck, ret.skill, ret.skilllevel, monster);
                         isCheat = !isCheat && damage <= 0 || damage == hitDmgMax;  //如果为篡改伤害则标记
                     }
                     if (ret.skill == Marksman.SNIPE || (canCrit && damage >= hitDmgMax)) {
@@ -591,20 +594,24 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 String damagePerHit = allDamageNumbers.stream()
                         .map(d -> String.valueOf(d < 0 ? d + Integer.MAX_VALUE : d))
                         .collect(Collectors.joining(", "));
+                String maxDamagePerHit = debugMaxDamages.stream()
+                        .map(String::valueOf)
+                        .collect(Collectors.joining(", "));
+
                 long totalDamage = allDamageNumbers.stream().mapToLong(d -> d < 0 ? d + Integer.MAX_VALUE : d).sum();
-                long totalMaxDamage = currentCalcDmg * ret.numDamage;
-                long totalCritMaxDamage = (long) (totalMaxDamage * (canCrit ? totalCritMultiplier : 1));
+                long totalMaxDamage = debugMaxDamages.stream().mapToLong(Long::longValue).sum();
 
                 debugMessages.add(String.format(
                         "\n    -> 怪物信息: %s(ID:%d, OID: %d, 防御:%d)\n" +
                                 "%s" +
                                 "    -> 各段伤害: [%s], 伤害汇总: %d\n" +
-                                "    -> 每段上限: %d, 暴击上限: %d 衰减系数: %.2f\n" +
-                                "    -> 汇总上限: %d, 暴击上限: %d 暴击系数: %.2f",
+                                "    -> 检测上限: [%s], 汇总上限: %d\n" +
+                                "    -> 基础伤害: %d, 暴击系数: %.2f, 衰减系数: %.2f",
                         monster.getStats().getName(), monster.getId(), monster.getObjectId(), mobDef,
                         elementalDebugString,
-                        damagePerHit, totalDamage, currentCalcDmg, (long) (currentCalcDmg * (canCrit ? totalCritMultiplier : 1)), damageAttenuation,
-                        totalMaxDamage, totalCritMaxDamage, totalCritMultiplier
+                        damagePerHit, totalDamage,
+                        maxDamagePerHit, totalMaxDamage,
+                        currentCalcDmg, totalCritMultiplier, damageAttenuation
                 ));
             }
         }

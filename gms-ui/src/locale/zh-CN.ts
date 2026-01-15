@@ -10,6 +10,7 @@ import account from '@/views/account/locale/zh-CN';
 import login from '@/views/login/locale/zh-CN';
 import inventory from '@/views/game/inventory/locale/zh-CN';
 import logs from '@/views/game/logs/locale/zh-CN';
+import duey from '@/views/game/duey/locale/zh-CN';
 import baseConfig from './zh-CN/base';
 
 export default {
@@ -17,6 +18,9 @@ export default {
   'menu.dashboard': '仪表盘',
   'menu.dashboard.workplace': '工作台',
   'menu.dashboard.informationSearch': '资料查询',
+  'menu.dashboard.duey': '快递管理',
+  'menu.dashboard.duey.list': '快递列表',
+  'menu.dashboard.duey.config': '快递配置',
   'menu.game': '游戏管理',
   'menu.game.config': '参数管理',
   'menu.game.npcShop': 'NPC商店',
@@ -54,6 +58,7 @@ export default {
   'settings.userSettings': '用户设置',
   'settings.logout': '退出登录',
   'settings.version': '版本',
+  'playerSelector.title': '选择玩家',
   ...baseConfig, // 基本配置（示范如何外部导入）
   ...workplace,
   ...login,
@@ -67,4 +72,5 @@ export default {
   ...inventory,
   ...config,
   ...logs,
+  ...duey,
 };

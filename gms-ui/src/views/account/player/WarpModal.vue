@@ -10,39 +10,82 @@
     <a-tabs default-active-key="search">
       <a-tab-pane key="search" :title="$t('account.player.warp.search')">
         <a-input-search
+          v-model="searchText"
           :placeholder="$t('account.player.warp.placeholder')"
           :loading="searchLoading"
+          :disabled="searchLoading"
           allow-clear
           @search="handleSearch"
+          @input="handleInput"
+          @press-enter="handleSearch"
         />
-        <div v-if="selectedMapInfo" style="margin-top: 10px">
-          <a-alert type="success" style="margin-bottom: 10px">
-            当前选中：{{ selectedMapInfo.name }} [{{ selectedMapInfo.id }}]
-          </a-alert>
-        </div>
-        <a-list
-          v-if="searchResults.length > 0"
-          style="margin-top: 10px; height: 300px; overflow-y: auto"
+
+        <div
+          v-if="searchLoading"
+          style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 0;
+          "
         >
-          <a-list-item
-            v-for="item in searchResults"
-            :key="item.id"
-            :class="{ 'selected-item': selectedMapId === item.id }"
-            @click="selectMap(item)"
+          <a-spin :size="40" />
+          <div
+            style="
+              margin-top: 20px;
+              font-size: 16px;
+              font-weight: 500;
+              color: var(--color-text-2);
+            "
           >
-            <a-list-item-meta
-              :title="`${item.name} [${item.id}]`"
-              :description="item.desc"
-            />
-          </a-list-item>
-        </a-list>
+            {{ $t('account.player.warp.loading.title') }}
+          </div>
+          <div
+            style="margin-top: 8px; font-size: 13px; color: var(--color-text-3)"
+          >
+            {{ $t('account.player.warp.loading.desc') }}
+          </div>
+        </div>
+
+        <template v-else>
+          <div v-if="selectedMapInfo" style="margin-top: 10px">
+            <a-alert type="success" style="margin-bottom: 10px">
+              {{ $t('account.player.warp.current') }}：{{
+                selectedMapInfo.name
+              }}
+              [{{ selectedMapInfo.id }}]
+            </a-alert>
+          </div>
+          <div v-if="searchResults.length > 0" class="list-container">
+            <a-list :scrollbar="true">
+              <a-list-item
+                v-for="item in searchResults"
+                :key="item.id"
+                :class="{ 'selected-item': selectedMapId === item.id }"
+                @click="selectMap(item)"
+              >
+                <a-list-item-meta
+                  :title="`${item.name} [${item.id}]`"
+                  :description="item.desc"
+                />
+              </a-list-item>
+            </a-list>
+          </div>
+          <div
+            v-else-if="searchText && !selectedMapInfo"
+            style="margin-top: 40px; text-align: center"
+          >
+            <a-empty :description="$t('account.player.warp.empty.desc')" />
+          </div>
+        </template>
       </a-tab-pane>
 
-      <a-tab-pane key="zone" title="按区域查找">
+      <a-tab-pane key="zone" :title="$t('account.player.warp.zone')">
         <div style="margin-bottom: 10px">
           <a-select
             v-model="selectedStreet"
-            placeholder="请选择区域 (Street Name)"
+            :placeholder="$t('account.player.warp.zone.street')"
             :loading="loadingStreetNames"
             :filter-option="filterOption"
             allow-search
@@ -60,7 +103,7 @@
         <div style="margin-bottom: 10px">
           <a-select
             v-model="selectedMapId"
-            placeholder="请选择地图 (Map Name)"
+            :placeholder="$t('account.player.warp.zone.map')"
             :disabled="!selectedStreet"
             :loading="loadingMapsInStreet"
             :filter-option="filterMapOption"
@@ -79,7 +122,10 @@
         </div>
         <div v-if="selectedMapInfo" style="margin-top: 10px">
           <a-alert type="success" style="margin-bottom: 10px">
-            当前选中：{{ selectedMapInfo.name }} [{{ selectedMapInfo.id }}]
+            {{ $t('account.player.warp.current') }}：{{
+              selectedMapInfo.name
+            }}
+            [{{ selectedMapInfo.id }}]
           </a-alert>
           <a-descriptions :column="1" bordered>
             <a-descriptions-item :label="$t('account.player.warp.mapName')">
@@ -108,76 +154,88 @@
       <a-tab-pane key="favorites" :title="$t('account.player.warp.favorites')">
         <div v-if="selectedMapInfo" style="margin-bottom: 10px">
           <a-alert type="success">
-            当前选中：{{ selectedMapInfo.name }} [{{ selectedMapInfo.id }}]
+            {{ $t('account.player.warp.current') }}：{{
+              selectedMapInfo.name
+            }}
+            [{{ selectedMapInfo.id }}]
           </a-alert>
         </div>
-        <a-list>
-          <a-list-item
-            v-for="map in favoriteMaps"
-            :key="map.id"
-            :class="{ 'selected-item': selectedMapId === map.id }"
-          >
-            <a-list-item-meta
-              :title="`${map.name} [${map.id}]`"
-              :description="map.desc"
-            />
-            <template #actions>
-              <a-button type="primary" size="small" @click="selectMap(map)">
-                {{ $t('account.player.warp.select') }}
-              </a-button>
-              <a-button
-                status="danger"
-                size="small"
-                @click="removeFromFavorites(map.id)"
-              >
-                <template #icon><icon-delete /></template>
-              </a-button>
+        <div class="list-container">
+          <a-list :scrollbar="true">
+            <a-list-item
+              v-for="map in favoriteMaps"
+              :key="map.id"
+              :class="{ 'selected-item': selectedMapId === map.id }"
+            >
+              <a-list-item-meta
+                :title="`${map.name} [${map.id}]`"
+                :description="map.desc"
+              />
+              <template #actions>
+                <a-button type="primary" size="small" @click="selectMap(map)">
+                  {{ $t('account.player.warp.select') }}
+                </a-button>
+                <a-button
+                  status="danger"
+                  size="small"
+                  @click="removeFromFavorites(map.id)"
+                >
+                  <template #icon><icon-delete /></template>
+                </a-button>
+              </template>
+            </a-list-item>
+            <template #empty>
+              <a-empty
+                :description="$t('account.player.warp.emptyFavorites')"
+              />
             </template>
-          </a-list-item>
-          <template #empty>
-            <a-empty :description="$t('account.player.warp.emptyFavorites')" />
-          </template>
-        </a-list>
+          </a-list>
+        </div>
       </a-tab-pane>
 
       <a-tab-pane key="history" :title="$t('account.player.warp.history')">
         <div style="text-align: right; margin-bottom: 10px">
           <a-button size="small" status="danger" @click="clearHistory">
-            清空历史
+            {{ $t('account.player.warp.clearHistory') }}
           </a-button>
         </div>
         <div v-if="selectedMapInfo" style="margin-bottom: 10px">
           <a-alert type="success">
-            当前选中：{{ selectedMapInfo.name }} [{{ selectedMapInfo.id }}]
+            {{ $t('account.player.warp.current') }}：{{
+              selectedMapInfo.name
+            }}
+            [{{ selectedMapInfo.id }}]
           </a-alert>
         </div>
-        <a-list>
-          <a-list-item
-            v-for="map in historyMaps"
-            :key="map.id"
-            :class="{ 'selected-item': selectedMapId === map.id }"
-          >
-            <a-list-item-meta
-              :title="`${map.name} [${map.id}]`"
-              :description="map.desc"
-            />
-            <template #actions>
-              <a-button type="primary" size="small" @click="selectMap(map)">
-                {{ $t('account.player.warp.select') }}
-              </a-button>
-              <a-button
-                status="danger"
-                size="small"
-                @click="removeFromHistory(map.id)"
-              >
-                <template #icon><icon-delete /></template>
-              </a-button>
+        <div class="list-container">
+          <a-list :scrollbar="true">
+            <a-list-item
+              v-for="map in historyMaps"
+              :key="map.id"
+              :class="{ 'selected-item': selectedMapId === map.id }"
+            >
+              <a-list-item-meta
+                :title="`${map.name} [${map.id}]`"
+                :description="map.desc"
+              />
+              <template #actions>
+                <a-button type="primary" size="small" @click="selectMap(map)">
+                  {{ $t('account.player.warp.select') }}
+                </a-button>
+                <a-button
+                  status="danger"
+                  size="small"
+                  @click="removeFromHistory(map.id)"
+                >
+                  <template #icon><icon-delete /></template>
+                </a-button>
+              </template>
+            </a-list-item>
+            <template #empty>
+              <a-empty :description="$t('account.player.warp.emptyHistory')" />
             </template>
-          </a-list-item>
-          <template #empty>
-            <a-empty :description="$t('account.player.warp.emptyHistory')" />
-          </template>
-        </a-list>
+          </a-list>
+        </div>
       </a-tab-pane>
     </a-tabs>
   </a-modal>
@@ -208,6 +266,8 @@
   const searchResults = ref<InformationResult[]>([]);
   const selectedMapId = ref<number | undefined>(undefined);
   const selectedMapInfo = ref<InformationResult | null>(null);
+  const searchText = ref('');
+  let searchTimer: any = null;
 
   const favoriteMaps = ref<InformationResult[]>([]);
   const historyMaps = ref<InformationResult[]>([]);
@@ -252,17 +312,52 @@
     }
   );
 
-  const handleSearch = async (value: string) => {
-    if (!value) return;
+  const handleSearch = async (value?: string | any) => {
+    // 如果是定时器触发的搜索，value可能为空，使用searchText.value
+    // 修复：如果是事件对象（如按回车触发），则使用 searchText.value
+    const query = typeof value === 'string' ? value : searchText.value;
+    if (!query) return;
+
+    // 清除之前的定时器，避免重复搜索
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+      searchTimer = null;
+    }
+
     searchLoading.value = true;
+    // 清空之前的结果
+    searchResults.value = [];
+    selectedMapId.value = undefined;
+    selectedMapInfo.value = null;
+
     try {
-      const params: SearchParams = { types: ['map'], filter: value };
+      const params: SearchParams = { types: ['map'], filter: query };
       const { data } = await informationSearch(params);
       // @ts-ignore
-      searchResults.value = data;
+      // 兼容分页返回结构
+      if (data.records) {
+        // @ts-ignore
+        searchResults.value = data.records;
+      } else {
+        // @ts-ignore
+        searchResults.value = data;
+      }
     } finally {
       searchLoading.value = false;
     }
+  };
+
+  const handleInput = (value: string) => {
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+    }
+    if (!value) {
+      searchResults.value = [];
+      return;
+    }
+    searchTimer = setTimeout(() => {
+      handleSearch(value);
+    }, 1500);
   };
 
   const handleStreetChange = async (value: any) => {
@@ -346,6 +441,11 @@
     searchResults.value = [];
     selectedStreet.value = undefined;
     mapsInStreet.value = [];
+    searchText.value = '';
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+      searchTimer = null;
+    }
   };
 
   const handleOk = () => {
@@ -364,5 +464,32 @@
 <style scoped>
   .selected-item {
     background-color: var(--color-primary-light-1);
+  }
+
+  .list-container {
+    margin-top: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  /* 自定义滚动条样式 */
+  .list-container::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+    display: none;
+  }
+
+  .list-container:hover::-webkit-scrollbar {
+    display: block;
+  }
+
+  .list-container::-webkit-scrollbar-thumb {
+    border-radius: 3px;
+    background-color: var(--color-text-4);
+  }
+
+  .list-container::-webkit-scrollbar-track {
+    background-color: transparent;
   }
 </style>

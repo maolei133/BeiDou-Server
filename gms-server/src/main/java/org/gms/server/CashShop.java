@@ -23,6 +23,7 @@ package org.gms.server;
 
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.Getter;
+import lombok.Setter;
 import net.jcip.annotations.GuardedBy;
 import org.gms.client.inventory.Equip;
 import org.gms.client.inventory.InventoryType;
@@ -73,8 +74,11 @@ public class CashShop {
 
     private final int accountId;
     private final int characterId;
+    @Setter
     private int nxCredit;
+    @Setter
     private int maplePoint;
+    @Setter
     private int nxPrepaid;
     private boolean opened;
     private ItemFactory factory;

@@ -228,6 +228,7 @@ public class AccountService {
         AccountsDO account = new AccountsDO();
         account.setId(accountId);
         account.setBanned(false);
+        account.setTempban(Timestamp.valueOf(DefaultDates.getTempban())); // Reset tempban
         accountsMapper.update(account);
         // 解封Mac
         macbansMapper.deleteByQuery(new QueryWrapper().eq(MacbansDO::getAid, accountId));
