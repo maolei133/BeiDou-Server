@@ -940,6 +940,11 @@ public class CharacterService {
         if (player.getQuickSlotKeyMapped() != null) {
             saveQuickSlotKeyMap(player.getAccountId(), player.getQuickSlotKeyMapped().GetKeybindings(), player.getQuickSlotLoaded());
         }
+
+        // 保存怪物图鉴
+        if (player.getMonsterBook() != null) {
+            player.getMonsterBook().saveCards(player.getId());
+        }
     }
 
     /**
