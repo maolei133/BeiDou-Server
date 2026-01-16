@@ -6,7 +6,7 @@
     :mask-closable="false"
     :esc-to-close="false"
     :ok-text="isEditMode ? $t('button.confirm') : $t('account.player.give')"
-    width="400px"
+    width="500px"
     @before-ok="submitClick"
     @cancel="handleCancel"
   >
@@ -57,11 +57,17 @@
             field="id"
             :label="$t('account.player.form.id')"
           >
-            <a-input-number
+            <a-input-search
               v-model="formData.id"
               style="width: 100%"
+              search-button
+              @search="openItemSelector"
               @blur="handleIdBlur"
-            />
+            >
+              <template #button-icon>
+                <icon-search />
+              </template>
+            </a-input-search>
           </a-form-item>
           <a-form-item
             v-if="
@@ -102,11 +108,17 @@
         <a-row :gutter="16">
           <a-col v-if="formData.type === 6" :span="24">
             <a-form-item field="id" :label="$t('account.player.form.equipId')">
-              <a-input-number
+              <a-input-search
                 v-model="formData.id"
                 style="width: 100%"
+                search-button
+                @search="openItemSelector"
                 @blur="handleIdBlur"
-              />
+              >
+                <template #button-icon>
+                  <icon-search />
+                </template>
+              </a-input-search>
             </a-form-item>
           </a-col>
 
@@ -343,10 +355,26 @@
                 />
               </a-form-item>
             </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="vicious"
+                :label="$t('account.player.form.vicious')"
+              >
+                <a-input-number
+                  v-model="formData.vicious"
+                  style="width: 100%"
+                />
+              </a-form-item>
+            </a-col>
           </template>
         </a-row>
       </template>
     </a-form>
+    <ItemSelector
+      v-model:visible="itemSelectorVisible"
+      :initial-id="formData.id"
+      @select="handleItemSelect"
+    />
   </a-modal>
 </template>
 
@@ -362,6 +390,7 @@
     getItemInitialInfo,
   } from '@/api/player';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
+  import ItemSelector from '@/components/ItemSelector/index.vue';
 
   const props = defineProps<{
     visible: boolean;
@@ -387,6 +416,7 @@
   });
   const itemIconUrl = ref('');
   const lastFetchedId = ref<number | undefined>(undefined);
+  const itemSelectorVisible = ref(false);
 
   const isFlaggedAsLock = computed(() => {
     return (
@@ -442,6 +472,7 @@
             formData.value.upgradeSlot = equipData.upgradeSlot || 0;
             formData.value.level = equipData.level || 0;
             formData.value.itemLevel = equipData.itemLevel || 1;
+            formData.value.vicious = equipData.vicious || 0;
           }
 
           if (!props.isEditMode) {
@@ -541,6 +572,7 @@
       formData.value.upgradeSlot = undefined;
       formData.value.level = undefined;
       formData.value.itemLevel = undefined;
+      formData.value.vicious = undefined;
     }
   };
 
@@ -581,6 +613,17 @@
 
   const handleCancel = () => {
     visibleModel.value = false;
+  };
+
+  const openItemSelector = () => {
+    itemSelectorVisible.value = true;
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleItemSelect = (item: any) => {
+    formData.value.id = item.id;
+    handleIdBlur();
+    itemSelectorVisible.value = false;
   };
 </script>
 

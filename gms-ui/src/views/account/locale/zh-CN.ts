@@ -166,6 +166,7 @@ export default {
   'account.player.form.upgradeSlot': '可升级次数',
   'account.player.form.level': '已升级次数',
   'account.player.form.itemLevel': '道具等级',
+  'account.player.form.vicious': '金锤子次数',
   'account.player.form.expire': '过期时间',
   'account.player.form.expire.lock': '封印至',
   'account.player.form.expire.type': '有效期类型',
