@@ -34,14 +34,19 @@ import org.gms.client.inventory.ItemFactory;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.dao.entity.CharactersDO;
 import org.gms.dao.entity.FredstorageDO;
+import org.gms.dao.entity.HiredMerchantItemsDO;
+import org.gms.dao.entity.HiredMerchantTransactionsDO;
+import org.gms.dao.entity.HiredMerchantsDO;
 import org.gms.dao.entity.InventoryitemsDO;
 import org.gms.dao.entity.NotesDO;
 import org.gms.dao.mapper.CharactersMapper;
 import org.gms.dao.mapper.FredstorageMapper;
 import org.gms.dao.mapper.InventoryitemsMapper;
 import org.gms.dao.mapper.NotesMapper;
+import org.gms.manager.ServerManager;
 import org.gms.net.server.Server;
 import org.gms.net.server.world.World;
+import org.gms.service.HiredMerchantService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.ItemInformationProvider;
@@ -70,6 +75,7 @@ public class FredrickProcessor {
     private static final int[] dailyReminders = new int[]{2, 5, 10, 15, 30, 60, 90, Integer.MAX_VALUE};
 
     private final NoteService noteService;
+    private static final HiredMerchantService hiredMerchantService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
 
     public FredrickProcessor(NoteService noteService) {
         this.noteService = noteService;
@@ -267,36 +273,100 @@ public class FredrickProcessor {
             try {
                 Character chr = c.getPlayer();
 
-                List<Pair<Item, InventoryType>> items;
-                items = ItemFactory.MERCHANT.loadItems(chr.getId(), false);
+                // 1. 检查并修复僵尸商店 (状态为 ACTIVE 但内存中不存在)
+                List<HiredMerchantsDO> zombieMerchants = hiredMerchantService.getZombieMerchants(chr.getId());
+                for (HiredMerchantsDO zombie : zombieMerchants) {
+                    World world = Server.getInstance().getWorld(zombie.getWorldId());
+                    // 如果世界不存在或者世界中没有该商店实例，则视为僵尸商店
+                    if (world == null || world.getHiredMerchant(chr.getId()) == null) {
+                        zombie.setStatus("CLOSED");
+                        zombie.setCloseTime(System.currentTimeMillis());
+                        hiredMerchantService.updateMerchant(zombie);
+                        log.info("修复了玩家 {} 的僵尸商店 (ID: {})", chr.getName(), zombie.getId());
+                    }
+                }
 
-                byte response = canRetrieveFromFredrick(chr, items);
-                if (response != 0) {
-                    chr.sendPacket(PacketCreator.fredrickMessage(response));
+                // 2. 从 hired_merchant_items 检索 (现在包括刚刚修复的商店)
+                List<HiredMerchantsDO> merchants = hiredMerchantService.getRetrieveableMerchants(chr.getId());
+                List<Pair<Item, InventoryType>> items = new ArrayList<>();
+                long totalMesos = 0;
+
+                for (HiredMerchantsDO merchant : merchants) {
+                    totalMesos += merchant.getMesos();
+                    List<HiredMerchantItemsDO> merchantItems = hiredMerchantService.getRetrieveableItems(merchant.getId());
+                    for (HiredMerchantItemsDO itemDO : merchantItems) {
+                        Item item = hiredMerchantService.deserializeItem(itemDO.getItemData());
+                        if (item != null) {
+                            int remaining = itemDO.getBundles() - itemDO.getSoldQuantity();
+                            if (remaining > 0) {
+                                item.setQuantity((short) (item.getQuantity() * remaining));
+                                items.add(new Pair<>(item, item.getInventoryType()));
+                            }
+                        }
+                    }
+                }
+                
+                // 同时检查旧系统以实现向后兼容
+                List<Pair<Item, InventoryType>> oldItems = ItemFactory.MERCHANT.loadItems(chr.getId(), false);
+                items.addAll(oldItems);
+                totalMesos += chr.getMerchantNetMeso();
+
+                // 检查玩家是否可以持有物品和金币
+                if (!Inventory.checkSpotsAndOwnership(chr, items)) {
+                    chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x20)); // 背包已满
+                    return;
+                }
+                
+                if (totalMesos > 0 && !chr.canHoldMeso((int) totalMesos)) {
+                    chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x1F)); // 金币限制
                     return;
                 }
 
-                chr.withdrawMerchantMesos();
-
-                if (deleteFredrickItems(chr.getId())) {
-                    HiredMerchant merchant = chr.getHiredMerchant();
-
-                    if (merchant != null) {
-                        merchant.clearItems();
-                    }
-
-                    for (Pair<Item, InventoryType> it : items) {
-                        Item item = it.getLeft();
-                        InventoryManipulator.addFromDrop(chr.getClient(), item, false);
-                        String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
-                        log.debug("角色 {} 获得了 {}x {} ({})", chr.getName(), item.getQuantity(), itemName, item.getItemId());
-                    }
-
-                    chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x1E));
-                    removeFredrickLog(chr.getId());
-                } else {
-                    chr.message("发生未知错误。");
+                // 发放金币
+                if (totalMesos > 0) {
+                    chr.gainMeso((int) totalMesos, false);
                 }
+                
+                // 发放物品
+                for (Pair<Item, InventoryType> it : items) {
+                    Item item = it.getLeft();
+                    InventoryManipulator.addFromDrop(chr.getClient(), item, false);
+                }
+
+                // 更新数据库状态
+                for (HiredMerchantsDO merchant : merchants) {
+                    merchant.setMesos(0L);
+                    hiredMerchantService.updateMerchant(merchant);
+                    
+                    List<HiredMerchantItemsDO> merchantItems = hiredMerchantService.getRetrieveableItems(merchant.getId());
+                    for (HiredMerchantItemsDO itemDO : merchantItems) {
+                        itemDO.setStatus("RETURNED");
+                        hiredMerchantService.updateItem(itemDO);
+                        
+                        HiredMerchantTransactionsDO transaction = HiredMerchantTransactionsDO.builder()
+                                .merchantId(merchant.getId())
+                                .itemId(itemDO.getItemId())
+                                .buyerId(chr.getId())
+                                .type("RETURN")
+                                .quantity(itemDO.getQuantity() * (itemDO.getBundles() - itemDO.getSoldQuantity()))
+                                .timestamp(System.currentTimeMillis())
+                                .build();
+                        hiredMerchantService.addTransaction(transaction);
+                    }
+                }
+                
+                // 清除旧系统数据
+                if (!oldItems.isEmpty()) {
+                    deleteFredrickItems(chr.getId());
+                }
+                chr.setMerchantMeso(0);
+                removeFredrickLog(chr.getId());
+
+                chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x1E)); // 成功
+
+            } catch (Exception e) {
+                log.error("从弗雷德里克处检索物品时发生错误", e);
+                c.getPlayer().message("发生未知错误。");
             } finally {
                 c.releaseClient();
             }

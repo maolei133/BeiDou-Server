@@ -735,6 +735,12 @@ public class Server {
             if (GameConfig.getServerBoolean("use_family_system")) {
                 familyService.loadAllFamilies();
             }
+            
+            // Load Active Hired Merchants
+            for (World w : getWorlds()) {
+                w.loadActiveHiredMerchants();
+            }
+            
         } catch (Exception e) {
             log.error(I18nUtil.getLogMessage("Server.init.error3"), e); //For those who get errors
             System.exit(0);
@@ -792,6 +798,7 @@ public class Server {
         ExpeditionBossLog.resetBossLogTable();
         tMan.register(new BossLogTask(), DAYS.toMillis(1), timeLeft);
         tMan.register(new ExtendValueTask(), DAYS.toMillis(1), timeLeft);
+        tMan.register(new HiredMerchantCleanupTask(), DAYS.toMillis(1), timeLeft); // Run once a day
     }
 
     public Alliance getAlliance(int id) {
@@ -1620,6 +1627,7 @@ public class Server {
     }
 
     public synchronized void shutdownInternal(boolean restart, boolean exit) {
+        this.shutdown = true;
         log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info1"), restart ?
                 I18nUtil.getLogMessage("Server.shutdownInternal.info2") : I18nUtil.getLogMessage("Server.shutdownInternal.info3"));
         if (getWorlds() == null) {

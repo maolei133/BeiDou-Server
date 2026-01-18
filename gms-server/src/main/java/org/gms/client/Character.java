@@ -5464,7 +5464,7 @@ public class Character extends AbstractCharacterObject {
             }
             try {
                 merchant.saveItems(false);
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 log.error(I18nUtil.getLogMessage("Character.closeHiredMerchant.error1") + "{}", name, e);
             }
         }
@@ -6522,7 +6522,7 @@ public class Character extends AbstractCharacterObject {
                     inv.addItemFromDB(item);
                 }
             }
-        } catch (SQLException sqle) {
+        } catch (Exception sqle) {
             sqle.printStackTrace();
         }
 

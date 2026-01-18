@@ -30,6 +30,7 @@ import org.gms.constants.id.MapId;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
+import org.gms.server.maps.HiredMerchant;
 import org.gms.util.I18nUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -179,6 +180,15 @@ public final class ChangeMapHandler extends AbstractPacketHandler {
             } else {
                 c.sendPacket(PacketCreator.enableActions());
             }
+            
+            // 检查并发送当前地图的雇佣商人信息
+            List<HiredMerchant> merchants = chr.getMap().getHiredMerchants();
+            for (HiredMerchant hm : merchants) {
+                if (hm.isOpen()) {
+                    c.sendPacket(PacketCreator.spawnHiredMerchantBox(hm));
+                }
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
