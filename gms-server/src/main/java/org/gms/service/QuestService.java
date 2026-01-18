@@ -57,6 +57,7 @@ public class QuestService {
             queststatusDO.setExpires(qs.getExpirationTime());
             queststatusDO.setForfeited(qs.getForfeited());
             queststatusDO.setCompleted(qs.getCompleted());
+            queststatusDO.setInfo(qs.getNpc());
             queststatusMapper.insert(queststatusDO); // Insert to get ID
 
             long questStatusId = queststatusDO.getQueststatusid();
@@ -103,6 +104,7 @@ public class QuestService {
             }
             questStatus.setForfeited(queststatusDO.getForfeited());
             questStatus.setCompleted(queststatusDO.getCompleted());
+            questStatus.setNpc(queststatusDO.getInfo());
             questprogressDOList.stream()
                     .filter(questprogressDO -> Objects.equals(queststatusDO.getQueststatusid(), questprogressDO.getQueststatusid()))
                     .forEach(questprogressDO -> questStatus.setProgress(questprogressDO.getProgressid(),  questprogressDO.getProgress()));
