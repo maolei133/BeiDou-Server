@@ -920,6 +920,18 @@ public class HiredMerchant extends AbstractMapObject {
         return channel;
     }
 
+    public int getRemainingDays() {
+        long now = System.currentTimeMillis();
+        long durationMillis = GameConfig.getServerInt("hired_merchant_duration", 1440) * 60 * 1000L;
+        long remainingMillis = (start + durationMillis) - now;
+
+        if (remainingMillis <= 0) {
+            return 0;
+        }
+
+        return (int) (remainingMillis / (24 * 60 * 60 * 1000L));
+    }
+
     public int getTimeOpen() {
         long now = System.currentTimeMillis();
         long durationMillis = GameConfig.getServerInt("hired_merchant_duration", 1440) * 60 * 1000L;

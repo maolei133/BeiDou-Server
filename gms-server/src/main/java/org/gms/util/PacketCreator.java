@@ -5237,8 +5237,13 @@ public class PacketCreator {
                 p.writeString(s.getBuyer());
             }
             p.writeInt(hm.getMesos());//:D?
+            // 为了在商店标题显示剩余天数
+            String description = hm.getDescription();
+            String days = "  |  剩余 " + hm.getRemainingDays() + " 天";
+            p.writeString(description + (hm.getRemainingDays() > 0 ? days : ""));
+        } else {
+            p.writeString(hm.getDescription());
         }
-        p.writeString(hm.getDescription());
         p.writeByte(hm.getOnSaleSlotMax()); //TODO SLOTS, which is 16 for most stores...slotMax // byte类型，最多应该支持255个位置，但是封包似乎不能超过2048字节？
         p.writeInt(hm.isOwner(chr) ? hm.getMesos() : chr.getMeso());
         p.writeByte(hm.getItems().size());
