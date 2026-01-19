@@ -79,3 +79,6 @@ VALUES
     ('en-US', 'game_config', 'hired_merchant_price_limit', 'Hired Merchant Item Price Limit', null),
     ('zh-CN', 'game_config', 'hired_merchant_meso_limit', '雇佣商店金币上限', null),
     ('en-US', 'game_config', 'hired_merchant_meso_limit', 'Hired Merchant Meso Limit', null);
+
+-- 修改 queststatus 表的 info 列类型为 INT，防止数值溢出
+ALTER TABLE `queststatus` MODIFY COLUMN `info` INT(11) NOT NULL DEFAULT 0;
