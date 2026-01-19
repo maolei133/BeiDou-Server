@@ -33,6 +33,7 @@ import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.dao.entity.HiredMerchantItemsDO;
 import org.gms.dao.entity.HiredMerchantsDO;
 import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
@@ -56,6 +57,7 @@ import org.gms.util.PacketCreator;
 
 import java.awt.*;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * @author Matze
@@ -274,12 +276,14 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                         c.getWorldServer().registerPlayerShop(shop);
                         //c.sendPacket(PacketCreator.getPlayerShopRemoveVisitor(1));
                     } else if (ItemConstants.isHiredMerchant(itemId)) {
+                        // 1. 检查是否有已开业的商店 (ACTIVE)
                         HiredMerchantsDO activeMerchant = hiredMerchantService.getActiveMerchantByOwnerId(chr.getId());
                         if (activeMerchant != null) {
                             // 检查内存中是否存在该商店
                             HiredMerchant memoryMerchant = c.getWorldServer().getHiredMerchant(chr.getId());
                             if (memoryMerchant == null) {
                                 // 僵尸商店检测：数据库显示 ACTIVE 但内存中不存在
+                                // 这种情况通常是服务器重启或异常关闭导致的，直接关闭
                                 activeMerchant.setStatus("CLOSED");
                                 activeMerchant.setCloseTime(System.currentTimeMillis());
                                 hiredMerchantService.updateMerchant(activeMerchant);
@@ -300,8 +304,105 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                             return;
                         }
 
+                        // 2. 检查是否有预开业的商店 (PREPARING) - 用于断线恢复
+                        HiredMerchantsDO preparingMerchant = hiredMerchantService.getPreparingMerchantByOwnerId(chr.getId());
+                        if (preparingMerchant != null) {
+                            // 尝试恢复商店
+                            
+                            // 1. 检查地图是否匹配
+                            if (chr.getMapId() != preparingMerchant.getMapId()) {
+                                // 地图不匹配，无法原地恢复，只能关闭
+                                preparingMerchant.setStatus("CLOSED");
+                                preparingMerchant.setCloseTime(System.currentTimeMillis());
+                                hiredMerchantService.updateMerchant(preparingMerchant);
+                                chr.dropMessage(1, "您在其他地图有未完成的商店，已自动关闭。请通过弗雷德里克取回物品。");
+                                return;
+                            }
+
+                            // ----------------------------------------------------------------
+                            // 关键修改：优先复用内存中的旧对象，而不是盲目重建
+                            // ----------------------------------------------------------------
+                            HiredMerchant oldMerchant = c.getWorldServer().getHiredMerchant(chr.getId());
+                            HiredMerchant restoredMerchant;
+
+                            if (oldMerchant != null) {
+                                // 如果内存中已有对象，直接复用它
+                                restoredMerchant = oldMerchant;
+                                
+                                // 确保它在当前地图（如果不在，可能需要迁移或者报错，但这里假设地图ID匹配）
+                                if (restoredMerchant.getMap() == null) {
+                                    restoredMerchant.setMap(chr.getMap());
+                                }
+                                
+                                // 更新坐标到当前玩家位置
+                                restoredMerchant.setPosition(chr.getPosition());
+                                
+                                // 如果它不在地图中显示（例如掉线被移除了），重新加入地图
+                                if (restoredMerchant.getMap().getMapObject(restoredMerchant.getObjectId()) == null) {
+                                    // 注意：这里不广播 spawnHiredMerchantBox，因为还没 open
+                                    // 但为了让 canPlaceStore 能检测到它（如果需要），或者为了后续逻辑
+                                    // 其实 PREPARING 状态的商店不应该显示给别人，所以不加到地图也没关系
+                                    // 只要它在 ChannelServer 的 hiredMerchants 列表里就行
+                                }
+                                
+                                log.info("复用已存在的 HiredMerchant 对象: {}", restoredMerchant.getMerchantId());
+                            } else {
+                                // 内存中没有，才重建
+                                restoredMerchant = new HiredMerchant(preparingMerchant, chr.getName());
+                                restoredMerchant.setMap(chr.getMap());
+                                restoredMerchant.setPosition(chr.getPosition());
+                                
+                                // 加载物品
+                                List<HiredMerchantItemsDO> items = hiredMerchantService.getMerchantItems(preparingMerchant.getId());
+                                restoredMerchant.loadItemsFromDb(items);
+                                
+                                // 注册到服务器内存
+                                boolean merchantAdded = chr.getClient().getChannelServer().addHiredMerchant(chr.getId(), restoredMerchant);
+                                if (merchantAdded) {
+                                    c.getWorldServer().registerHiredMerchant(restoredMerchant);
+                                } else {
+                                    // 注册失败（理论上不应该，因为我们已经检查了 oldMerchant 为 null）
+                                    preparingMerchant.setStatus("CLOSED");
+                                    preparingMerchant.setCloseTime(System.currentTimeMillis());
+                                    hiredMerchantService.updateMerchant(preparingMerchant);
+                                    chr.dropMessage(1, "无法恢复商店，已自动关闭。请通过弗雷德里克取回物品。");
+                                    return;
+                                }
+                            }
+
+                            // 更新商店信息
+                            preparingMerchant.setDescription(desc);
+                            // 更新数据库坐标
+                            preparingMerchant.setX(chr.getPosition().x);
+                            preparingMerchant.setY(chr.getPosition().y);
+                            hiredMerchantService.updateMerchant(preparingMerchant);
+
+                            // 绑定到当前角色
+                            chr.setHiredMerchant(restoredMerchant);
+                            
+                            // 发送恢复包
+                            chr.sendPacket(PacketCreator.getHiredMerchant(chr, restoredMerchant, true));
+                            chr.dropMessage(1, "已恢复您上次未完成的商店设置。");
+                            return;
+                        }
+
                         if (chr.hasMerchant() && c.getWorldServer().getHiredMerchant(chr.getId()) == null) {
                             chr.setHasMerchant(false);
+                        }
+
+                        // ----------------------------------------------------------------
+                        // 新开店流程：同样先检查内存清理
+                        // ----------------------------------------------------------------
+                        HiredMerchant ghostMerchant = c.getWorldServer().getHiredMerchant(chr.getId());
+                        if (ghostMerchant != null) {
+                            // 如果内存中有残留对象（但数据库没有 ACTIVE/PREPARING），说明是脏数据
+                            // 必须清理，否则新对象无法注册
+                            if (ghostMerchant.getMap() != null) {
+                                ghostMerchant.getMap().removeMapObject(ghostMerchant);
+                                ghostMerchant.getMap().broadcastMessage(PacketCreator.removeHiredMerchantBox(chr.getId()));
+                            }
+                            c.getChannelServer().removeHiredMerchant(chr.getId());
+                            c.getWorldServer().unregisterHiredMerchant(ghostMerchant);
                         }
 
                         HiredMerchant merchant = new HiredMerchant(chr, desc, itemId);
@@ -315,7 +416,7 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                                 .y(chr.getPosition().y)
                                 .description(desc)
                                 .itemId(itemId)
-                                .status("ACTIVE")
+                                .status("PREPARING") // 初始状态设为 PREPARING
                                 .startTime(System.currentTimeMillis())
                                 .mesos(0L)
                                 .build();
@@ -465,6 +566,15 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                     chr.getMap().addMapObject(merchant);
                     chr.setHiredMerchant(null);
                     chr.getMap().broadcastMessage(PacketCreator.spawnHiredMerchantBox(merchant));
+                    
+                    // 关键修改：正式开店时，将状态从 PREPARING 更新为 ACTIVE
+                    if (merchant.getMerchantId() > 0) {
+                        HiredMerchantsDO merchantDO = hiredMerchantService.getMerchantById(merchant.getMerchantId());
+                        if (merchantDO != null) {
+                            merchantDO.setStatus("ACTIVE");
+                            hiredMerchantService.updateMerchant(merchantDO);
+                        }
+                    }
                 }
             } else if (mode == Action.READY.getCode()) {
                 MiniGame game = chr.getMiniGame();
@@ -958,6 +1068,14 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                         chr.sendPacket(PacketCreator.getMiniRoomError(13));
                         return false;
                     }
+                } else if (mmo instanceof HiredMerchant hm) {
+                    // 新增：如果是玩家自己的商店，则忽略
+                    if (hm.getOwnerId() == chr.getId()) {
+                        continue;
+                    }
+
+                    chr.sendPacket(PacketCreator.getMiniRoomError(13));
+                    return false;
                 } else {
                     chr.sendPacket(PacketCreator.getMiniRoomError(13));
                     return false;

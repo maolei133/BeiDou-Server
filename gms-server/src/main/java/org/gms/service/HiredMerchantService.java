@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -37,6 +38,14 @@ public class HiredMerchantService {
                 .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
                 .and(HiredMerchantsDO::getStatus).eq("ACTIVE"));
+    }
+
+    public HiredMerchantsDO getPreparingMerchantByOwnerId(int ownerId) {
+        return hiredMerchantsMapper.selectOneByQuery(QueryWrapper.create()
+                .select()
+                .from(HiredMerchantsDO.class)
+                .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
+                .and(HiredMerchantsDO::getStatus).eq("PREPARING"));
     }
 
     public List<HiredMerchantsDO> getActiveMerchantsByWorldId(int worldId) {
@@ -238,7 +247,56 @@ public class HiredMerchantService {
 
     public String serializeItem(Item item) {
         try {
-            return objectMapper.writeValueAsString(item);
+            Map<String, Object> map = new HashMap<>();
+            map.put("itemId", item.getItemId());
+            map.put("position", item.getPosition());
+            map.put("quantity", item.getQuantity());
+
+            if (item.getPetId() > -1) {
+                map.put("petId", item.getPetId());
+            }
+            if (item.getOwner() != null && !item.getOwner().isEmpty()) {
+                map.put("owner", item.getOwner());
+            }
+            if (item.getFlag() != 0) {
+                map.put("flag", item.getFlag());
+            }
+            if (item.getExpiration() != -1) {
+                map.put("expiration", item.getExpiration());
+            }
+            if (item.getGiftFrom() != null && !item.getGiftFrom().isEmpty()) {
+                map.put("giftFrom", item.getGiftFrom());
+            }
+            if (item.getSN() > 0) {
+                map.put("sn", item.getSN());
+            }
+
+            if (item instanceof Equip) {
+                Equip equip = (Equip) item;
+                if (equip.getUpgradeSlots() != 0) map.put("upgradeSlots", equip.getUpgradeSlots());
+                if (equip.getLevel() != 0) map.put("level", equip.getLevel());
+                if (equip.getStr() != 0) map.put("str", equip.getStr());
+                if (equip.getDex() != 0) map.put("dex", equip.getDex());
+                if (equip.getInt() != 0) map.put("int", equip.getInt());
+                if (equip.getLuk() != 0) map.put("luk", equip.getLuk());
+                if (equip.getHp() != 0) map.put("hp", equip.getHp());
+                if (equip.getMp() != 0) map.put("mp", equip.getMp());
+                if (equip.getWatk() != 0) map.put("watk", equip.getWatk());
+                if (equip.getMatk() != 0) map.put("matk", equip.getMatk());
+                if (equip.getWdef() != 0) map.put("wdef", equip.getWdef());
+                if (equip.getMdef() != 0) map.put("mdef", equip.getMdef());
+                if (equip.getAcc() != 0) map.put("acc", equip.getAcc());
+                if (equip.getAvoid() != 0) map.put("avoid", equip.getAvoid());
+                if (equip.getHands() != 0) map.put("hands", equip.getHands());
+                if (equip.getSpeed() != 0) map.put("speed", equip.getSpeed());
+                if (equip.getJump() != 0) map.put("jump", equip.getJump());
+                if (equip.getVicious() != 0) map.put("vicious", equip.getVicious());
+                if (equip.getItemLevel() > 1) map.put("itemLevel", equip.getItemLevel());
+                if (equip.getItemExp() > 0) map.put("itemExp", equip.getItemExp());
+                if (equip.getRingId() > -1) map.put("ringId", equip.getRingId());
+            }
+
+            return objectMapper.writeValueAsString(map);
         } catch (JsonProcessingException e) {
             e.printStackTrace();
             return null;
@@ -264,6 +322,7 @@ public class HiredMerchantService {
             if (map.containsKey("flag")) item.setFlag(((Number) map.get("flag")).shortValue());
             if (map.containsKey("expiration")) item.setExpiration(((Number) map.get("expiration")).longValue());
             if (map.containsKey("giftFrom")) item.setGiftFrom((String) map.get("giftFrom"));
+            if (map.containsKey("sn")) item.setSN(((Number) map.get("sn")).intValue());
             
             if (item instanceof Equip equip) {
                 if (map.containsKey("upgradeSlots")) equip.setUpgradeSlots(((Number) map.get("upgradeSlots")).byteValue());
