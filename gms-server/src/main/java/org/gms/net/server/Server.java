@@ -1884,4 +1884,10 @@ public class Server {
             }
         }
     }
+
+    public void rescheduleHiredMerchants() {
+        for (World w : getWorlds()) {
+            w.rescheduleHiredMerchants();
+        }
+    }
 }

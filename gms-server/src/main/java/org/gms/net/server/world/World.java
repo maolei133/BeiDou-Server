@@ -1632,23 +1632,12 @@ public class World {
             merchantUpdate = Server.getInstance().getCurrentTime();
             deployedMerchants = new LinkedHashMap<>(activeMerchants);
 
-            long maxDurationMillis = GameConfig.getServerInt("hired_merchant_duration", 1440) * 60 * 1000L;
-            long now = System.currentTimeMillis();
-
             for (Map.Entry<Integer, HiredMerchant> dm : deployedMerchants.entrySet()) {
                 HiredMerchant hm = dm.getValue();
-
-                if (now - hm.getStartTime() <= maxDurationMillis) {
-                    try {
-                        hm.saveItems(false);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    hm.forceClose();
-                    this.getChannel(hm.getChannel()).removeHiredMerchant(hm.getOwnerId());
-
-                    activeMerchants.remove(dm.getKey());
+                try {
+                    hm.saveItems(false);
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
             }
         } finally {
@@ -2176,12 +2165,26 @@ public class World {
                 } finally {
                     activeMerchantsLock.unlock();
                 }
+                
+                // 启动定时关闭任务
+                hm.rescheduleClose();
 
 //                log.info("已加载雇佣商店: {} (店主: {})", merchantDO.getId(), ownerName);
             } catch (Exception e) {
                 log.error("加载雇佣商店失败 {}", merchantDO.getId(), e);
                 // 也许在数据库中关闭它？
             }
+        }
+    }
+
+    public void rescheduleHiredMerchants() {
+        activeMerchantsLock.lock();
+        try {
+            for (HiredMerchant hm : activeMerchants.values()) {
+                hm.rescheduleClose();
+            }
+        } finally {
+            activeMerchantsLock.unlock();
         }
     }
 }

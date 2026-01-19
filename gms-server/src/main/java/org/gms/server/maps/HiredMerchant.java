@@ -40,6 +40,7 @@ import org.gms.manager.ServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.Server;
 import org.gms.server.ItemInformationProvider;
+import org.gms.server.TimerManager;
 import org.gms.server.Trade;
 import org.gms.service.CharacterService;
 import org.gms.service.HiredMerchantService;
@@ -51,6 +52,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -86,6 +88,7 @@ public class HiredMerchant extends AbstractMapObject {
     private static final HiredMerchantService hiredMerchantService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
     
     private int merchantId;
+    private ScheduledFuture<?> closeSchedule = null;
 
     private record Visitor(Character chr, Instant enteredAt) {}
 
@@ -101,6 +104,7 @@ public class HiredMerchant extends AbstractMapObject {
         this.ownerName = owner.getName();
         this.description = desc;
         this.map = owner.getMap();
+        this.scheduleClose();
     }
 
     public HiredMerchant(HiredMerchantsDO dbInfo, String ownerName) {
@@ -115,6 +119,7 @@ public class HiredMerchant extends AbstractMapObject {
         this.mesos = dbInfo.getMesos() != null ? dbInfo.getMesos().intValue() : 0;
         this.setPosition(new java.awt.Point(dbInfo.getX(), dbInfo.getY()));
         // 地图未在此处设置，必须手动设置
+        // 注意：这里不调用 scheduleClose，因为在 World.loadActiveHiredMerchants 中会统一调用
     }
 
     public void loadItemsFromDb(List<HiredMerchantItemsDO> dbItems) {
@@ -498,10 +503,13 @@ public class HiredMerchant extends AbstractMapObject {
     }
 
     public void forceClose() {
-        forceClose(true);//不论何时由于什么原因关闭服务端，均不会取消雇佣商店
+        forceClose(Server.getInstance().isShutdown());
     }
 
     public void forceClose(boolean serverShutdown) {
+        if (Server.getInstance().isShutdown()) {
+            serverShutdown = true;
+        }
         //Server.getInstance().getChannel(world, channel).removeHiredMerchant(ownerId);
         if (map != null) {
             map.broadcastMessage(PacketCreator.removeHiredMerchantBox(getOwnerId()));
@@ -510,9 +518,10 @@ public class HiredMerchant extends AbstractMapObject {
 
         Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
 
-        log.info("强制关闭雇佣商店: ownerId={}, merchantId={}, serverShutdown={}", 
-                ownerId, merchantId, serverShutdown);
+//        log.info("强制关闭雇佣商店: ownerId={}, merchantId={}, ownerName={}, description={}, serverShutdown={}",
+//                ownerId, merchantId, ownerName, description, serverShutdown);
 
+        boolean closedByOwner = false;
         visitorLock.lock();
         try {
             setOpen(false);
@@ -523,16 +532,27 @@ public class HiredMerchant extends AbstractMapObject {
                     removeOwner(owner);
                 } else {
                     closeOwnerMerchant(owner);
+                    closedByOwner = true;
                 }
             }
         } finally {
             visitorLock.unlock();
         }
 
+        if (closeSchedule != null) {
+            closeSchedule.cancel(false);
+            closeSchedule = null;
+        }
+
+        if (closedByOwner) {
+            map = null;
+            return;
+        }
+
         Server.getInstance().getWorld(world).unregisterHiredMerchant(this);
 
         if (serverShutdown && merchantId > 0) {
-            log.info("雇佣商店 {} 因服务器关闭而从内存移除，数据库状态保持 ACTIVE。", merchantId);
+            log.info("雇佣商店 {} 因服务器关闭而从内存移除，数据库状态保持 ACTIVE。店主: {}, 店名: {}", merchantId, ownerName, description);
             map = null;
             return;
         }
@@ -551,6 +571,7 @@ public class HiredMerchant extends AbstractMapObject {
             Character player = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
             if (player != null) {
                 player.setHasMerchant(false);
+                player.dropMessage(5, "您的雇佣商店已关闭，请到弗雷德里克处取回物品。");
             } else {
                 characterService.update(CharactersDO.builder()
                         .id(ownerId)
@@ -567,7 +588,7 @@ public class HiredMerchant extends AbstractMapObject {
                     .closeTime(System.currentTimeMillis())
                     .build();
             hiredMerchantService.updateMerchant(merchantDO);
-            log.info("雇佣商店 {} 已在数据库中关闭。", merchantId);
+//            log.info("雇佣商店 {} 已在数据库中关闭。店主: {}, 店名: {}", merchantId, ownerName, description);
         }
 
         map = null;
@@ -581,12 +602,19 @@ public class HiredMerchant extends AbstractMapObject {
     }
 
     private void closeShop(Client c, boolean timeout) {
-        map.removeMapObject(this);
-        map.broadcastMessage(PacketCreator.removeHiredMerchantBox(ownerId));
+        if (map != null) {
+            map.removeMapObject(this);
+            map.broadcastMessage(PacketCreator.removeHiredMerchantBox(ownerId));
+        }
         c.getChannelServer().removeHiredMerchant(ownerId);
 
         this.removeAllVisitors();
         this.removeOwner(c.getPlayer());
+
+        if (closeSchedule != null) {
+            closeSchedule.cancel(false);
+            closeSchedule = null;
+        }
 
         try {
             List<PlayerShopItem> copyItems = getItems();
@@ -654,11 +682,17 @@ public class HiredMerchant extends AbstractMapObject {
         }
         
         if (merchantId > 0) {
+            long durationMillis = getDuration();
+            long remainingMillis = (start + durationMillis) - System.currentTimeMillis();
+            String remainingTimeStr = (remainingMillis > 0) ? (remainingMillis / 1000 / 60) + "分钟" : "已过期";
+
             // 关键修改：如果是服务器关闭期间，不要将状态设为 CLOSED
             if (Server.getInstance().isShutdown()) {
-                log.info("服务器正在关闭，保留雇佣商店 {} 的 ACTIVE 状态。", merchantId);
+                log.info("服务器正在关闭，保留雇佣商店 {} 的 ACTIVE 状态。店主: {}, 店名: {}, 剩余时间: {}", 
+                        merchantId, ownerName, description, remainingTimeStr);
             } else {
-                log.info("服务器正在关闭，雇佣商店 {} 已设为 CLOSED 状态。", merchantId);
+                log.info("雇佣商店 {} 已设为 CLOSED 状态。店主: {}, 店名: {}",
+                        merchantId, ownerName, description);
                 // 更新数据库中的商店状态
                 HiredMerchantsDO merchantDO = HiredMerchantsDO.builder()
                         .id(merchantId)
@@ -922,7 +956,7 @@ public class HiredMerchant extends AbstractMapObject {
 
     public int getRemainingDays() {
         long now = System.currentTimeMillis();
-        long durationMillis = GameConfig.getServerInt("hired_merchant_duration", 1440) * 60 * 1000L;
+        long durationMillis = getDuration();
         long remainingMillis = (start + durationMillis) - now;
 
         if (remainingMillis <= 0) {
@@ -934,7 +968,7 @@ public class HiredMerchant extends AbstractMapObject {
 
     public int getTimeOpen() {
         long now = System.currentTimeMillis();
-        long durationMillis = GameConfig.getServerInt("hired_merchant_duration", 1440) * 60 * 1000L;
+        long durationMillis = getDuration();
 
         double progress = (double)(now - start) / durationMillis;
 
@@ -1102,7 +1136,35 @@ public class HiredMerchant extends AbstractMapObject {
         }
     }
 
-    public byte getOnSaleSlotMax() {
-        return (byte) Math.max(GameConfig.getServerInt("hired_merchant_max_items", 16),255);
+    public int getOnSaleSlotMax() {
+        return Math.min(GameConfig.getServerInt("hired_merchant_max_items", 16),255);
+    }
+
+    private long getDuration() {
+        return GameConfig.getServerInt("hired_merchant_duration", 1440) * 60 * 1000L;
+    }
+
+    public void scheduleClose() {
+        if (closeSchedule != null) {
+            closeSchedule.cancel(false);
+        }
+        
+        long durationMillis = getDuration();
+        long timeLeft = (start + durationMillis) - System.currentTimeMillis();
+        
+        if (timeLeft <= 0) {
+            log.info("雇佣商店 {} 已过期，立即关闭。店主: {}, 店名: {}", merchantId, ownerName, description);
+            forceClose();
+            return;
+        }
+        
+        closeSchedule = TimerManager.getInstance().schedule(() -> {
+            log.info("雇佣商店 {} 定时关闭任务触发。店主: {}, 店名: {}", merchantId, ownerName, description);
+            forceClose();
+        }, timeLeft);
+    }
+    
+    public void rescheduleClose() {
+        scheduleClose();
     }
 }

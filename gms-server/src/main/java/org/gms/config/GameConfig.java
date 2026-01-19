@@ -102,6 +102,7 @@ public class GameConfig {
             case "allow_steal_quest_item" -> MonsterInformationProvider.getInstance().clearDrops();  //重载神通术
             case "use_supply_rate_coupons" -> CashShop.CashItemFactory.processRateCouponItems(Boolean.parseBoolean(gameConfigDO.getConfigValue())); //重载商城是否允许出售倍率卡
             case "use_pet_equip_permanent" -> CashShop.CashItemFactory.processPetEquipItems(Boolean.parseBoolean(gameConfigDO.getConfigValue()));  //重载宠物装备有效期
+            case "hired_merchant_duration" -> Server.getInstance().rescheduleHiredMerchants(); // 重载雇佣商店持续时间
         }
     }
     public static Object getObject(String key) {
