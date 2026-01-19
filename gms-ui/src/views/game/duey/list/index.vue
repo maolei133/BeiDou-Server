@@ -265,7 +265,7 @@
                           >
                             <img
                               :src="getIconUrl('item', i.itemId)"
-                              :title="i.name || i.itemId"
+                              :title="(i.name || i.itemId).toString()"
                             />
                             <span class="qty">x{{ i.quantity }}</span>
                           </div>

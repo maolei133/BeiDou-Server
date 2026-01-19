@@ -3,6 +3,7 @@ import axios from 'axios';
 export interface InformationSearch {
   types: string[];
   filter: string;
+  type?: string;
   filterType?: number;
   fullMatch?: boolean;
   page?: number;
