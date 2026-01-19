@@ -292,11 +292,15 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public void closeSession() {
-        ioChannel.close();
+        if (ioChannel != null) {
+            ioChannel.close();
+        }
     }
 
     public void disconnectSession() {
-        ioChannel.disconnect();
+        if (ioChannel != null) {
+            ioChannel.disconnect();
+        }
     }
 
     public Hwid getHwid() {
@@ -1368,7 +1372,9 @@ public class Client extends ChannelInboundHandlerAdapter {
     public void sendPacket(Packet packet) {
         announcerLock.lock();
         try {
-            ioChannel.writeAndFlush(packet);
+            if (ioChannel != null) {
+                ioChannel.writeAndFlush(packet);
+            }
         } finally {
             announcerLock.unlock();
         }
