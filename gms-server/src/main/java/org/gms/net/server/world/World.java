@@ -57,7 +57,6 @@ import org.gms.net.server.task.CharacterAutosaverTask;
 import org.gms.net.server.task.CharacterHpDecreaseTask;
 import org.gms.net.server.task.FamilyDailyResetTask;
 import org.gms.net.server.task.FishingTask;
-import org.gms.net.server.task.HiredMerchantTask;
 import org.gms.net.server.task.MapOwnershipTask;
 import org.gms.net.server.task.MountTirednessTask;
 import org.gms.net.server.task.PartySearchTask;
@@ -201,8 +200,8 @@ public class World {
 
     private final Lock activeMerchantsLock = new ReentrantLock(true);
     private final Map<Integer, HiredMerchant> activeMerchants = new LinkedHashMap<>();
-    private ScheduledFuture<?> merchantSchedule;
-    private long merchantUpdate;
+    //private ScheduledFuture<?> merchantSchedule;
+    //private long merchantUpdate;
 
     private final Map<Runnable, Long> registeredTimedMapObjects = new LinkedHashMap<>();
     private ScheduledFuture<?> timedMapObjectsSchedule;
@@ -256,8 +255,8 @@ public class World {
         petsSchedule = tman.register(new PetFullnessTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1)); // 注册宠物饱食度任务，每1分钟检查一次宠物饥饿状态
         srvMessagesSchedule = tman.register(new ServerMessageTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10)); // 注册服务器消息任务，每10秒广播一次服务器消息
         mountsSchedule = tman.register(new MountTirednessTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1)); // 注册坐骑疲劳度任务，每1分钟检查一次坐骑疲劳状态
-        long merchantSaveInterval = GameConfig.getServerInt("hired_merchant_save_interval", 10) * MINUTES.toMillis(1);
-        merchantSchedule = tman.register(new HiredMerchantTask(this), merchantSaveInterval, merchantSaveInterval); // 注册雇佣商人任务，根据配置间隔检查商人状态和过期时间
+        //long merchantSaveInterval = GameConfig.getServerInt("hired_merchant_save_interval", 10) * MINUTES.toMillis(1);
+        //merchantSchedule = tman.register(new HiredMerchantTask(this), merchantSaveInterval, merchantSaveInterval); // 注册雇佣商人任务，根据配置间隔检查商人状态和过期时间
         timedMapObjectsSchedule = tman.register(new TimedMapObjectTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1)); // 注册定时地图对象任务，每1分钟清理一次过期的地图对象
         charactersSchedule = tman.register(new CharacterAutosaverTask(this), MINUTES.toMillis(30), MINUTES.toMillis(30)); // 注册角色自动保存任务，每30分钟自动保存一次所有在线角色数据
         marriagesSchedule = tman.register(new WeddingReservationTask(this), MINUTES.toMillis(GameConfig.getServerLong("wedding_reservation_interval")), MINUTES.toMillis(GameConfig.getServerLong("wedding_reservation_interval"))); // 注册婚礼预约任务，根据配置间隔检查婚礼预约状态
@@ -1625,26 +1624,6 @@ public class World {
         }
     }
 
-    public void runHiredMerchantSchedule() {
-        Map<Integer, HiredMerchant> deployedMerchants;
-        activeMerchantsLock.lock();
-        try {
-            merchantUpdate = Server.getInstance().getCurrentTime();
-            deployedMerchants = new LinkedHashMap<>(activeMerchants);
-
-            for (Map.Entry<Integer, HiredMerchant> dm : deployedMerchants.entrySet()) {
-                HiredMerchant hm = dm.getValue();
-                try {
-                    hm.saveItems(false);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        } finally {
-            activeMerchantsLock.unlock();
-        }
-    }
-
     public List<HiredMerchant> getActiveMerchants() {
         List<HiredMerchant> hmList = new ArrayList<>();
         activeMerchantsLock.lock();
@@ -2023,11 +2002,6 @@ public class World {
         if (mountsSchedule != null) {
             mountsSchedule.cancel(false);
             mountsSchedule = null;
-        }
-
-        if (merchantSchedule != null) {
-            merchantSchedule.cancel(false);
-            merchantSchedule = null;
         }
 
         if (timedMapObjectsSchedule != null) {
