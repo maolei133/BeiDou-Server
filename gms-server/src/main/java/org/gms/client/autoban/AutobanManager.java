@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -581,10 +582,10 @@ public class AutobanManager {
             double consistencyThreshold = 0.95; // 默认相似率阈值
             
             // 根据移动类型设置参数：1=陆地，2=飞行，其它=未知
-            if (movetype == 0) { // 陆地类型
-                pixelRange = 125; // 采样范围100像素点
+            if (movetype == 1) { // 陆地类型
+                pixelRange = 125; // 采样范围125像素点
                 consistencyThreshold = 0.98; // 相似率98%
-            } else if (movetype == 1) { // 飞行类型
+            } else if (movetype == 2) { // 飞行类型
                 pixelRange = 50; // 采样范围50像素点
                 consistencyThreshold = 0.98; // 相似率98%
             } else { // 其它类型
@@ -602,8 +603,36 @@ public class AutobanManager {
             double consistencyRatio = consistentCount * 1.0 / currentSamples.size(); // 计算一致位置比例
             
             if (consistencyRatio >= consistencyThreshold) { // 使用动态计算的相似率阈值
+                // 二次校验：检查聚集的怪物占全图怪物的比例
+                List<Monster> mapMonsters = map.getAllMonsters();
+                int totalTypeMonsters = 0;
+                int nearbyTypeCount = 0;
+                
+                for (Monster m : mapMonsters) {
+                    // 只统计相同移动类型的怪物
+                    if (m.getStats().getMovetype() == movetype) {
+                        totalTypeMonsters++;
+                        // 检查该同类型怪物是否在样本点附近
+                        if (Math.abs(m.getPosition().x - s.x) <= pixelRange && 
+                            Math.abs(m.getPosition().y - s.y) <= pixelRange) {
+                            nearbyTypeCount++;
+                        }
+                    }
+                }
+                
+                // 防止除以零（虽然理论上当前怪物存在，总数至少为1）
+                if (totalTypeMonsters == 0) return false;
+                
+                double mapRatio = (double) nearbyTypeCount / totalTypeMonsters;
+                
+                // 如果该类型的怪物聚集比例低于 90%，则认为是误报（例如玩家拉怪）
+                if (mapRatio < 0.9) { 
+                     return false;
+                }
+
                 String reason = "坐标: (" + s.x + "," + s.y + ") 附近一致性检测 " + consistentCount + "/" + currentSamples.size() +
-                                " (移动类型: " + (movetype == 0 ? "陆地" : (movetype == 1 ? "飞行" : "未知")) + ")"; // 构建违规原因描述
+                                " 同类占比: " + nearbyTypeCount + "/" + totalTypeMonsters + " (" + String.format("%.2f", mapRatio*100) + "%)" +
+                                " (移动类型: " + (movetype == 1 ? "陆地" : (movetype == 2 ? "飞行" : "未知")) + ")"; // 构建违规原因描述
                 int ret = addPoint(AutobanFactory.MONSTER_VAC, reason); // 添加到反作弊积分系统
                 if (ret >= 1) { // 如果积分达到阈值，执行惩罚措施
                     map.killAllMonsters(); // 击杀所有怪物
