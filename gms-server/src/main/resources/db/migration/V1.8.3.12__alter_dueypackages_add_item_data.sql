@@ -1,0 +1,3 @@
+ALTER TABLE `dueypackages` ADD COLUMN `item_data` TEXT NULL DEFAULT NULL COMMENT '物品JSON数据';
+
+DROP TABLE IF EXISTS `dueyitems`;

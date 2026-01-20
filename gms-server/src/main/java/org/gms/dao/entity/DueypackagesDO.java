@@ -47,4 +47,6 @@ public class DueypackagesDO implements Serializable {
     
     private Timestamp expireDate;
 
+    private String itemData;
+
 }

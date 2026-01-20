@@ -70,6 +70,15 @@
                     <a-option :value="0">{{
                       $t('duey.list.status.read')
                     }}</a-option>
+                    <a-option :value="2">{{
+                      $t('duey.list.status.claimed')
+                    }}</a-option>
+                    <a-option :value="3">{{
+                      $t('duey.list.status.expired')
+                    }}</a-option>
+                    <a-option :value="4">{{
+                      $t('duey.list.status.deleted')
+                    }}</a-option>
                   </a-select>
                 </a-form-item>
               </a-col>
@@ -173,12 +182,20 @@
             </a-tag>
           </template>
           <template #checked="{ record }">
-            <a-tag :color="record.checked === 1 ? 'orange' : 'gray'">
-              {{
-                record.checked === 1
-                  ? $t('duey.list.status.unread')
-                  : $t('duey.list.status.read')
-              }}
+            <a-tag v-if="record.checked === 1" color="orange">
+              {{ $t('duey.list.status.unread') }}
+            </a-tag>
+            <a-tag v-else-if="record.checked === 0" color="gray">
+              {{ $t('duey.list.status.read') }}
+            </a-tag>
+            <a-tag v-else-if="record.checked === 2" color="blue">
+              {{ $t('duey.list.status.claimed') }}
+            </a-tag>
+            <a-tag v-else-if="record.checked === 3" color="red">
+              {{ $t('duey.list.status.expired') }}
+            </a-tag>
+            <a-tag v-else-if="record.checked === 4" color="magenta">
+              {{ $t('duey.list.status.deleted') }}
             </a-tag>
           </template>
           <template #timestamp="{ record }">
@@ -247,14 +264,39 @@
                             }}
                           </a-tag>
                           <a-tag
+                            v-if="item.checked === 1"
                             size="small"
-                            :color="item.checked === 1 ? 'orange' : 'gray'"
+                            color="orange"
                           >
-                            {{
-                              item.checked === 1
-                                ? $t('duey.list.status.unread')
-                                : $t('duey.list.status.read')
-                            }}
+                            {{ $t('duey.list.status.unread') }}
+                          </a-tag>
+                          <a-tag
+                            v-else-if="item.checked === 0"
+                            size="small"
+                            color="gray"
+                          >
+                            {{ $t('duey.list.status.read') }}
+                          </a-tag>
+                          <a-tag
+                            v-else-if="item.checked === 2"
+                            size="small"
+                            color="blue"
+                          >
+                            {{ $t('duey.list.status.claimed') }}
+                          </a-tag>
+                          <a-tag
+                            v-else-if="item.checked === 3"
+                            size="small"
+                            color="red"
+                          >
+                            {{ $t('duey.list.status.expired') }}
+                          </a-tag>
+                          <a-tag
+                            v-else-if="item.checked === 4"
+                            size="small"
+                            color="magenta"
+                          >
+                            {{ $t('duey.list.status.deleted') }}
                           </a-tag>
                         </div>
                         <div v-if="item.mesos > 0" class="card-info-row">
@@ -415,7 +457,7 @@
       width: 170,
     },
     {
-      title: t('duey.list.expireTime'),
+      title: t('duey.list.statusChangeTime'), // 修改标题为状态变更时间
       slotName: 'expireTime',
       width: 170,
     },
