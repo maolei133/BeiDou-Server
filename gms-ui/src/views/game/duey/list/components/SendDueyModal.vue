@@ -78,10 +78,27 @@
       </a-row>
 
       <a-form-item field="senderName" :label="$t('duey.send.sender')">
-        <a-input
+        <a-select
           v-model="form.senderName"
           :placeholder="$t('duey.send.sender.placeholder')"
-        />
+          allow-create
+          allow-clear
+        >
+          <a-option
+            v-for="name in senderHistory"
+            :key="name"
+            :value="name"
+            class="sender-option"
+          >
+            <div class="sender-option-content">
+              <span>{{ name }}</span>
+              <icon-close
+                class="delete-icon"
+                @click.stop="removeSenderHistory(name)"
+              />
+            </div>
+          </a-option>
+        </a-select>
       </a-form-item>
 
       <a-form-item :label="$t('duey.send.expire')">
@@ -147,6 +164,7 @@
             :placeholder="$t('duey.send.quantity')"
             :min="1"
             :max="32767"
+            hide-button
             style="width: 100px; margin-left: 8px"
           />
         </a-input-group>
@@ -211,9 +229,10 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref, reactive, watch, computed } from 'vue';
+  import { ref, reactive, watch, computed, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Message } from '@arco-design/web-vue';
+  import useLoading from '@/hooks/loading';
   import { sendDueyPackage, SendDueyReq } from '@/api/duey';
   import {
     getEquInitialInfo,
@@ -225,7 +244,12 @@
   import ItemSelector from '@/components/ItemSelector/index.vue';
   import PlayerSelector from '@/components/PlayerSelector/index.vue';
   import GiveItemModal from '@/views/account/player/components/GiveItemModal.vue';
-  import { IconSearch, IconUser, IconEdit } from '@arco-design/web-vue/es/icon';
+  import {
+    IconSearch,
+    IconUser,
+    IconEdit,
+    IconClose,
+  } from '@arco-design/web-vue/es/icon';
 
   const props = defineProps<{
     visible: boolean;
@@ -235,6 +259,7 @@
   const emit = defineEmits(['update:visible', 'success']);
 
   const { t } = useI18n();
+  const { setLoading } = useLoading(false);
 
   const visibleModel = computed({
     get: () => props.visible,
@@ -292,6 +317,8 @@
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerOptions = ref<any[]>([]);
 
+  const senderHistory = ref<string[]>([]);
+
   const rules = {
     // receiverIds: [{ required: true, message: t('duey.send.receiver.placeholder') }],
   };
@@ -301,6 +328,39 @@
     type: 6,
     expireType: 0,
   });
+
+  const loadSenderHistory = () => {
+    const history = localStorage.getItem('duey_sender_history');
+    if (history) {
+      try {
+        senderHistory.value = JSON.parse(history);
+      } catch (e) {
+        senderHistory.value = [];
+      }
+    }
+  };
+
+  const saveSenderHistory = (name: string) => {
+    if (!name) return;
+    let history = [...senderHistory.value];
+    // Remove if exists to move to top
+    history = history.filter((n) => n !== name);
+    history.unshift(name);
+    // Keep only last 10
+    if (history.length > 10) {
+      history = history.slice(0, 10);
+    }
+    senderHistory.value = history;
+    localStorage.setItem('duey_sender_history', JSON.stringify(history));
+  };
+
+  const removeSenderHistory = (name: string) => {
+    senderHistory.value = senderHistory.value.filter((n) => n !== name);
+    localStorage.setItem(
+      'duey_sender_history',
+      JSON.stringify(senderHistory.value)
+    );
+  };
 
   const handleSearchPlayers = async (value: string) => {
     loadingPlayers.value = true;
@@ -376,6 +436,8 @@
         lastFetchedId.value = undefined;
         isEquip.value = false;
 
+        loadSenderHistory();
+
         if (props.defaultReceiver) {
           // 如果有默认收件人，尝试搜索并选中
           handleSearchPlayers(props.defaultReceiver);
@@ -430,6 +492,7 @@
     }
     lastFetchedId.value = form.itemId;
 
+    setLoading(true);
     try {
       itemInfo.name = '';
       itemInfo.desc = '';
@@ -448,23 +511,24 @@
           isEquip.value = true;
 
           // 填充默认属性
-          form.str = equipData.str;
-          form.dex = equipData.dex;
-          form.int = equipData.int;
-          form.luk = equipData.luk;
-          form.hp = equipData.hp;
-          form.mp = equipData.mp;
-          form.watk = equipData.pad; // pad = watk
-          form.matk = equipData.mad; // mad = matk
-          form.wdef = equipData.pdd; // pdd = wdef
-          form.mdef = equipData.mdd; // mdd = mdef
-          form.acc = equipData.acc;
-          form.avoid = equipData.eva; // eva = avoid
-          form.hands = equipData.hands;
-          form.speed = equipData.speed;
-          form.jump = equipData.jump;
-          form.upgradeSlots = equipData.tuc; // tuc = upgradeSlots
+          form.str = equipData.str || 0;
+          form.dex = equipData.dex || 0;
+          form.int = equipData.int || 0;
+          form.luk = equipData.luk || 0;
+          form.hp = equipData.hp || 0;
+          form.mp = equipData.mp || 0;
+          form.watk = equipData.pAtk || equipData.pad || 0;
+          form.matk = equipData.mAtk || equipData.mad || 0;
+          form.wdef = equipData.pDef || equipData.pdd || 0;
+          form.mdef = equipData.mDef || equipData.mdd || 0;
+          form.acc = equipData.acc || 0;
+          form.avoid = equipData.avoid || equipData.eva || 0;
+          form.hands = equipData.hands || 0;
+          form.speed = equipData.speed || 0;
+          form.jump = equipData.jump || 0;
+          form.upgradeSlots = equipData.upgradeSlot || equipData.tuc || 0;
 
+          Message.success(t('account.player.equip.success'));
           return;
         }
       } catch (e) {
@@ -487,8 +551,15 @@
       }
 
       Message.warning('未找到该物品信息');
+      // 如果未找到物品信息，重置相关状态
+      itemInfo.name = '';
+      itemInfo.desc = '';
+      itemIconUrl.value = '';
+      isEquip.value = false;
     } catch (error) {
       // ignore
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -501,9 +572,76 @@
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleItemSelect = (item: any) => {
+  const handleItemSelect = async (item: any) => {
     form.itemId = item.id;
-    handleIdBlur();
+    // 如果是装备，直接使用返回的属性
+    if (item.type === 'Eqp' || item.type === 'eqp') {
+      // 尝试从后端获取详细属性，因为搜索列表可能不包含所有属性
+      try {
+        const { data } = await getEquInitialInfo(item.id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const equipData = data as any;
+        if (equipData) {
+          form.str = equipData.str || 0;
+          form.dex = equipData.dex || 0;
+          form.int = equipData.int || 0;
+          form.luk = equipData.luk || 0;
+          form.hp = equipData.hp || 0;
+          form.mp = equipData.mp || 0;
+          form.watk = equipData.pAtk || equipData.pad || 0;
+          form.matk = equipData.mAtk || equipData.mad || 0;
+          form.wdef = equipData.pDef || equipData.pdd || 0;
+          form.mdef = equipData.mDef || equipData.mdd || 0;
+          form.acc = equipData.acc || 0;
+          form.avoid = equipData.avoid || equipData.eva || 0;
+          form.hands = equipData.hands || 0;
+          form.speed = equipData.speed || 0;
+          form.jump = equipData.jump || 0;
+          form.upgradeSlots = equipData.upgradeSlot || equipData.tuc || 0;
+
+          itemInfo.name = equipData.name;
+          itemInfo.desc = equipData.desc;
+          itemIconUrl.value = getIconUrl('item', item.id);
+          isEquip.value = true;
+          lastFetchedId.value = item.id;
+          Message.success(t('account.player.equip.success'));
+          itemSelectorVisible.value = false;
+          return;
+        }
+      } catch (e) {
+        // 如果获取失败，尝试使用 item 中的属性（如果有）
+      }
+
+      // Fallback to item properties if API fails or returns empty
+      form.str = item.str || 0;
+      form.dex = item.dex || 0;
+      form.int = item.int || 0;
+      form.luk = item.luk || 0;
+      form.hp = item.hp || 0;
+      form.mp = item.mp || 0;
+      form.watk = item.watk || item.pAtk || item.pad || 0;
+      form.matk = item.matk || item.mAtk || item.mad || 0;
+      form.wdef = item.wdef || item.pDef || item.pdd || 0;
+      form.mdef = item.mdef || item.mDef || item.mdd || 0;
+      form.acc = item.acc || 0;
+      form.avoid = item.avoid || item.eva || 0;
+      form.hands = item.hands || 0;
+      form.speed = item.speed || 0;
+      form.jump = item.jump || 0;
+      form.upgradeSlots =
+        item.upgradeSlots || item.upgradeSlot || item.tuc || 0;
+
+      itemInfo.name = item.name;
+      itemInfo.desc = item.desc;
+      itemIconUrl.value = getIconUrl('item', item.id);
+      isEquip.value = true;
+      lastFetchedId.value = item.id;
+      // 这里不提示成功，因为没有从后端获取到详细属性，可能只是使用了列表中的基本信息
+      // Message.success(t('account.player.equip.success'));
+    } else {
+      handleIdBlur();
+    }
+    itemSelectorVisible.value = false;
   };
 
   const handleDropdownVisibleChange = (visible: boolean) => {
@@ -598,6 +736,7 @@
 
     try {
       await sendDueyPackage(form);
+      saveSenderHistory(form.senderName || '');
       Message.success(t('duey.send.success'));
       emit('success');
       done(true);
@@ -605,6 +744,10 @@
       done(false);
     }
   };
+
+  onMounted(() => {
+    loadSenderHistory();
+  });
 </script>
 
 <style scoped>
@@ -634,5 +777,22 @@
     position: absolute;
     right: 10px;
     top: 10px;
+  }
+  .sender-option-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+  .delete-icon {
+    color: var(--color-text-3);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 4px;
+  }
+  .delete-icon:hover {
+    color: rgb(var(--danger-6));
+    background-color: var(--color-fill-2);
+    border-radius: 50%;
   }
 </style>

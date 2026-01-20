@@ -22,7 +22,7 @@ export default {
   'duey.send.title': '发放快递',
   'duey.send.receiver': '收件人',
   'duey.send.receiver.placeholder': '请输入角色名搜索',
-  'duey.send.sender': '发件人名称',
+  'duey.send.sender': '发件人',
   'duey.send.sender.placeholder': '默认: 管理员',
   'duey.send.mesos': '金币',
   'duey.send.expire': '过期时间',

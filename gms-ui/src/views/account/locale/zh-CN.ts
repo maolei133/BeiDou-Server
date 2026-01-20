@@ -311,4 +311,5 @@ export default {
   'account.player.skin.error': '获取肤色列表失败',
   'account.player.detail.error': '获取角色详情失败',
   'account.player.tempBanTime': '解封时间',
+  'account.player.button.confirm': '确定',
 };

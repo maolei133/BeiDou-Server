@@ -316,4 +316,5 @@ export default {
   'account.player.skin.error': 'Failed to fetch skin list',
   'account.player.detail.error': 'Failed to fetch character detail',
   'account.player.tempBanTime': 'Unblocking time',
+  'account.player.button.confirm': 'Confirm',
 };

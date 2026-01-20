@@ -25,7 +25,7 @@ export default {
   'duey.send.target.all': 'All',
   'duey.send.receiver': 'Receiver',
   'duey.send.receiver.placeholder': 'Search character name',
-  'duey.send.sender': 'Sender Name',
+  'duey.send.sender': 'Sender',
   'duey.send.sender.placeholder': 'Default: Admin',
   'duey.send.mesos': 'Mesos',
   'duey.send.expire': 'Expire Time',
