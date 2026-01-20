@@ -181,6 +181,15 @@
               }}
             </a-tag>
           </template>
+          <template #timestamp="{ record }">
+            {{ formatDate(record.timestamp) }}
+          </template>
+          <template #deliveryTime="{ record }">
+            {{ formatDate(record.deliveryTime) }}
+          </template>
+          <template #expireTime="{ record }">
+            {{ formatDate(record.expireTime) }}
+          </template>
           <template #operations="{ record }">
             <a-popconfirm
               :content="$t('duey.list.delete.confirm')"
@@ -271,7 +280,7 @@
                           </div>
                         </div>
                         <div class="card-time">
-                          {{ item.timestamp }}
+                          {{ formatDate(item.timestamp) }}
                         </div>
                       </div>
                     </template>
@@ -300,6 +309,7 @@
 <script lang="ts" setup>
   import { computed, ref, reactive, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import dayjs from 'dayjs';
   import useLoading from '@/hooks/loading';
   import { Pagination } from '@/types/global';
   import {
@@ -345,11 +355,16 @@
   const sendVisible = ref(false);
   const viewMode = ref('list');
 
+  const formatDate = (date: string | number | Date) => {
+    if (!date) return '-';
+    return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
+  };
+
   const columns = computed<TableColumnData[]>(() => [
     {
       title: t('duey.list.packageId'),
       dataIndex: 'packageId',
-      width: 100,
+      width: 80,
     },
     {
       title: t('duey.list.receiverName'),
@@ -369,43 +384,45 @@
     {
       title: t('duey.list.items'),
       slotName: 'items',
-      width: 300, // 增加宽度
+      width: 180, // 增加宽度
     },
     {
       title: t('duey.list.message'),
       dataIndex: 'message',
       ellipsis: true,
       tooltip: true,
+      minWidth: 150,
+      wordBreak: 'break-all',
     },
     {
       title: t('duey.list.type'),
       slotName: 'type',
-      width: 80,
+      width: 60,
     },
     {
       title: t('duey.list.status'),
       slotName: 'checked',
-      width: 80,
+      width: 60,
     },
     {
       title: t('duey.list.timeRange'),
-      dataIndex: 'timestamp',
-      width: 180,
+      slotName: 'timestamp',
+      width: 170,
     },
     {
       title: t('duey.list.deliveryTime'),
-      dataIndex: 'deliveryTime',
-      width: 180,
+      slotName: 'deliveryTime',
+      width: 170,
     },
     {
       title: t('duey.list.expireTime'),
-      dataIndex: 'expireTime',
-      width: 180,
+      slotName: 'expireTime',
+      width: 170,
     },
     {
       title: t('duey.list.operation'),
       slotName: 'operations',
-      width: 100,
+      width: 80,
       fixed: 'right',
     },
   ]);
