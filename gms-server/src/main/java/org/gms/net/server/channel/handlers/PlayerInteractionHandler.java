@@ -284,7 +284,7 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                             if (memoryMerchant == null) {
                                 // 僵尸商店检测：数据库显示 ACTIVE 但内存中不存在
                                 // 这种情况通常是服务器重启或异常关闭导致的，直接关闭
-                                activeMerchant.setStatus("CLOSED");
+                                activeMerchant.setStatus(HiredMerchantsDO.STATUS_CLOSED);
                                 activeMerchant.setCloseTime(System.currentTimeMillis());
                                 hiredMerchantService.updateMerchant(activeMerchant);
                                 chr.dropMessage(1, "检测到异常关闭的商店，已自动将其关闭。请通过弗雷德里克取回物品。");
@@ -312,7 +312,7 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                             // 1. 检查地图是否匹配
                             if (chr.getMapId() != preparingMerchant.getMapId()) {
                                 // 地图不匹配，无法原地恢复，只能关闭
-                                preparingMerchant.setStatus("CLOSED");
+                                preparingMerchant.setStatus(HiredMerchantsDO.STATUS_CLOSED);
                                 preparingMerchant.setCloseTime(System.currentTimeMillis());
                                 hiredMerchantService.updateMerchant(preparingMerchant);
                                 chr.dropMessage(1, "您在其他地图有未完成的商店，已自动关闭。请通过弗雷德里克取回物品。");
@@ -345,7 +345,8 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                                     // 只要它在 ChannelServer 的 hiredMerchants 列表里就行
                                 }
                                 
-                                log.info("复用已存在的 HiredMerchant 对象: {}", restoredMerchant.getMerchantId());
+                                log.info("复用已存在的 HiredMerchant 对象: {}, 招牌: {} -> {}, 店主: {}",
+                                    restoredMerchant.getMerchantId(), restoredMerchant.getDescription(),desc, chr.getName());
                             } else {
                                 // 内存中没有，才重建
                                 restoredMerchant = new HiredMerchant(preparingMerchant, chr.getName());
@@ -362,7 +363,7 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                                     c.getWorldServer().registerHiredMerchant(restoredMerchant);
                                 } else {
                                     // 注册失败（理论上不应该，因为我们已经检查了 oldMerchant 为 null）
-                                    preparingMerchant.setStatus("CLOSED");
+                                    preparingMerchant.setStatus(HiredMerchantsDO.STATUS_CLOSED);
                                     preparingMerchant.setCloseTime(System.currentTimeMillis());
                                     hiredMerchantService.updateMerchant(preparingMerchant);
                                     chr.dropMessage(1, "无法恢复商店，已自动关闭。请通过弗雷德里克取回物品。");
@@ -416,7 +417,7 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                                 .y(chr.getPosition().y)
                                 .description(desc)
                                 .itemId(itemId)
-                                .status("PREPARING") // 初始状态设为 PREPARING
+                                .status(HiredMerchantsDO.STATUS_PREPARING) // 初始状态设为 PREPARING
                                 .startTime(System.currentTimeMillis())
                                 .mesos(0L)
                                 .build();
@@ -430,7 +431,7 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                             c.getWorldServer().registerHiredMerchant(merchant);
                             chr.sendPacket(PacketCreator.getHiredMerchant(chr, merchant, true));
                         } else {
-                            newMerchantDO.setStatus("CLOSED");
+                            newMerchantDO.setStatus(HiredMerchantsDO.STATUS_CLOSED);
                             newMerchantDO.setCloseTime(System.currentTimeMillis());
                             hiredMerchantService.updateMerchant(newMerchantDO);
                             chr.dropMessage(1, "无法开设商店，请稍后再试。");
@@ -571,7 +572,7 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                     if (merchant.getMerchantId() > 0) {
                         HiredMerchantsDO merchantDO = hiredMerchantService.getMerchantById(merchant.getMerchantId());
                         if (merchantDO != null) {
-                            merchantDO.setStatus("ACTIVE");
+                            merchantDO.setStatus(HiredMerchantsDO.STATUS_ACTIVE);
                             hiredMerchantService.updateMerchant(merchantDO);
                         }
                     }

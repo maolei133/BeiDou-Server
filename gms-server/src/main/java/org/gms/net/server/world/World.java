@@ -2066,7 +2066,7 @@ public class World {
         if (!GameConfig.getServerBoolean("hired_merchant_reload_on_restart")) {
             log.info("大区 {}: 发现 {} 个活跃商店，但重载配置已关闭。正在将其标记为 CLOSED。", this.id, merchants.size());
             for (HiredMerchantsDO merchantDO : merchants) {
-                merchantDO.setStatus("CLOSED");
+                merchantDO.setStatus(HiredMerchantsDO.STATUS_CLOSED);
                 merchantDO.setCloseTime(System.currentTimeMillis());
                 hmService.updateMerchant(merchantDO);
                 

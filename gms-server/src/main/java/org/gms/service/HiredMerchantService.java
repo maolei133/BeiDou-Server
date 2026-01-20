@@ -37,7 +37,7 @@ public class HiredMerchantService {
                 .select()
                 .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
-                .and(HiredMerchantsDO::getStatus).eq("ACTIVE"));
+                .and(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_ACTIVE));
     }
 
     public HiredMerchantsDO getPreparingMerchantByOwnerId(int ownerId) {
@@ -45,7 +45,7 @@ public class HiredMerchantService {
                 .select()
                 .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
-                .and(HiredMerchantsDO::getStatus).eq("PREPARING"));
+                .and(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_PREPARING));
     }
 
     public List<HiredMerchantsDO> getActiveMerchantsByWorldId(int worldId) {
@@ -53,7 +53,7 @@ public class HiredMerchantService {
                 .select()
                 .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getWorldId).eq(worldId)
-                .and(HiredMerchantsDO::getStatus).eq("ACTIVE"));
+                .and(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_ACTIVE));
     }
 
     public HiredMerchantsDO getMerchantById(int merchantId) {
@@ -87,7 +87,7 @@ public class HiredMerchantService {
     @Transactional
     public void removeItem(int itemId, HiredMerchantTransactionsDO transaction) {
         UpdateChain.of(HiredMerchantItemsDO.class)
-                .set(HiredMerchantItemsDO::getStatus, "RETURNED")
+                .set(HiredMerchantItemsDO::getStatus, HiredMerchantItemsDO.STATUS_RETURNED)
                 .where(HiredMerchantItemsDO::getId).eq(itemId)
                 .update();
         
@@ -124,7 +124,7 @@ public class HiredMerchantService {
                 .merchantId(merchantId)
                 .itemId(itemId)
                 .buyerId(buyerId)
-                .type("BUY")
+                .type(HiredMerchantTransactionsDO.TYPE_BUY)
                 .quantity(quantity)
                 .price(unitPrice)
                 .totalPrice(totalPrice)
@@ -136,7 +136,7 @@ public class HiredMerchantService {
         // 如果售罄，更新状态为 SOLD_OUT
         UpdateChain.of(HiredMerchantItemsDO.class)
                 .setRaw(HiredMerchantItemsDO::getSoldQuantity, "sold_quantity + " + quantity)
-                .setRaw(HiredMerchantItemsDO::getStatus, "CASE WHEN sold_quantity + " + quantity + " >= bundles THEN 'SOLD_OUT' ELSE status END")
+                .setRaw(HiredMerchantItemsDO::getStatus, "CASE WHEN sold_quantity + " + quantity + " >= bundles THEN '" + HiredMerchantItemsDO.STATUS_SOLD_OUT + "' ELSE status END")
                 .where(HiredMerchantItemsDO::getId).eq(itemDbId)
                 .update();
 
@@ -159,7 +159,7 @@ public class HiredMerchantService {
             UpdateChain.of(HiredMerchantItemsDO.class)
                     .set(HiredMerchantItemsDO::getSettledTime, System.currentTimeMillis())
                     .where(HiredMerchantItemsDO::getMerchantId).eq(merchantId)
-                    .and(HiredMerchantItemsDO::getStatus).eq("SOLD_OUT")
+                    .and(HiredMerchantItemsDO::getStatus).eq(HiredMerchantItemsDO.STATUS_SOLD_OUT)
                     .and(HiredMerchantItemsDO::getSettledTime).isNull()
                     .update();
             
@@ -174,8 +174,8 @@ public class HiredMerchantService {
                 .select()
                 .from(HiredMerchantItemsDO.class)
                 .where(HiredMerchantItemsDO::getMerchantId).eq(merchantId)
-                .and(HiredMerchantItemsDO::getStatus).ne("RETURNED")
-                .and("(status = 'ON_SALE' OR (status = 'SOLD_OUT' AND settled_time IS NULL))"));
+                .and(HiredMerchantItemsDO::getStatus).ne(HiredMerchantItemsDO.STATUS_RETURNED)
+                .and("(status = '" + HiredMerchantItemsDO.STATUS_ON_SALE + "' OR (status = '" + HiredMerchantItemsDO.STATUS_SOLD_OUT + "' AND settled_time IS NULL))"));
     }
 
     public List<HiredMerchantsDO> getRetrieveableMerchants(int ownerId) {
@@ -183,7 +183,7 @@ public class HiredMerchantService {
                 .select()
                 .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
-                .and(HiredMerchantsDO::getStatus).in("CLOSED", "EXPIRED"));
+                .and(HiredMerchantsDO::getStatus).in(HiredMerchantsDO.STATUS_CLOSED, HiredMerchantsDO.STATUS_EXPIRED));
     }
 
     public List<HiredMerchantsDO> getZombieMerchants(int ownerId) {
@@ -191,7 +191,7 @@ public class HiredMerchantService {
                 .select()
                 .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
-                .and(HiredMerchantsDO::getStatus).eq("ACTIVE"));
+                .and(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_ACTIVE));
     }
 
     public List<HiredMerchantItemsDO> getRetrieveableItems(int merchantId) {
@@ -199,7 +199,7 @@ public class HiredMerchantService {
                 .select()
                 .from(HiredMerchantItemsDO.class)
                 .where(HiredMerchantItemsDO::getMerchantId).eq(merchantId)
-                .and(HiredMerchantItemsDO::getStatus).ne("RETURNED")
+                .and(HiredMerchantItemsDO::getStatus).ne(HiredMerchantItemsDO.STATUS_RETURNED)
                 .and("bundles > sold_quantity")); // 使用原生 SQL 片段进行列比较
     }
 
@@ -207,7 +207,7 @@ public class HiredMerchantService {
         return hiredMerchantsMapper.selectListByQuery(QueryWrapper.create()
                 .select()
                 .from(HiredMerchantsDO.class)
-                .where(HiredMerchantsDO::getStatus).eq("ACTIVE"));
+                .where(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_ACTIVE));
     }
 
     @Transactional
@@ -222,7 +222,7 @@ public class HiredMerchantService {
         List<HiredMerchantsDO> candidates = hiredMerchantsMapper.selectListByQuery(QueryWrapper.create()
                 .select(HiredMerchantsDO::getId)
                 .from(HiredMerchantsDO.class)
-                .where(HiredMerchantsDO::getStatus).in("CLOSED", "EXPIRED")
+                .where(HiredMerchantsDO::getStatus).in(HiredMerchantsDO.STATUS_CLOSED, HiredMerchantsDO.STATUS_EXPIRED)
                 .and(HiredMerchantsDO::getCloseTime).lt(cutoffTime)
                 .and(HiredMerchantsDO::getMesos).eq(0));
 
@@ -230,7 +230,7 @@ public class HiredMerchantService {
             // 检查是否有物品未归还
             long count = hiredMerchantItemsMapper.selectCountByQuery(QueryWrapper.create()
                     .where(HiredMerchantItemsDO::getMerchantId).eq(merchant.getId())
-                    .and(HiredMerchantItemsDO::getStatus).ne("RETURNED"));
+                    .and(HiredMerchantItemsDO::getStatus).ne(HiredMerchantItemsDO.STATUS_RETURNED));
             
             // 如果所有物品都已归还或售罄，则可以删除
             // 这里简化逻辑：只要没有未归还的物品，就认为可以删除（假设售罄的物品不需要保留太久）
@@ -368,18 +368,18 @@ public class HiredMerchantService {
                 .select()
                 .from(HiredMerchantItemsDO.class)
                 .where(HiredMerchantItemsDO::getMerchantId).eq(merchantId)
-                .and(HiredMerchantItemsDO::getStatus).ne("RETURNED"));
+                .and(HiredMerchantItemsDO::getStatus).ne(HiredMerchantItemsDO.STATUS_RETURNED));
 
         // 3. 将物品状态重置为 ON_SALE
-        if ("ACTIVE".equals(merchant.getStatus())) {
-            merchant.setStatus("CLOSED");
+        if (HiredMerchantsDO.STATUS_ACTIVE.equals(merchant.getStatus())) {
+            merchant.setStatus(HiredMerchantsDO.STATUS_CLOSED);
             merchant.setCloseTime(System.currentTimeMillis());
             hiredMerchantsMapper.update(merchant);
         }
         
         for (HiredMerchantItemsDO item : items) {
-            if (item.getBundles() > item.getSoldQuantity() && "SOLD_OUT".equals(item.getStatus())) {
-                item.setStatus("ON_SALE");
+            if (item.getBundles() > item.getSoldQuantity() && HiredMerchantItemsDO.STATUS_SOLD_OUT.equals(item.getStatus())) {
+                item.setStatus(HiredMerchantItemsDO.STATUS_ON_SALE);
                 hiredMerchantItemsMapper.update(item);
             }
         }
@@ -403,7 +403,7 @@ public class HiredMerchantService {
                 .ownerId(ownerId)
                 .description(description != null ? description : "从备份恢复")
                 .itemId(itemId > 0 ? itemId : 5030000)
-                .status("CLOSED")
+                .status(HiredMerchantsDO.STATUS_CLOSED)
                 .startTime(System.currentTimeMillis())
                 .closeTime(System.currentTimeMillis())
                 .mesos(mesos)
@@ -421,7 +421,7 @@ public class HiredMerchantService {
                     .soldQuantity(0)
                     .price((int) itemData.get("price"))
                     .bundles((int) itemData.get("bundles"))
-                    .status("ON_SALE")
+                    .status(HiredMerchantItemsDO.STATUS_ON_SALE)
                     .itemData((String) itemData.get("itemData"))
                     .build();
             
@@ -436,6 +436,6 @@ public class HiredMerchantService {
                 .select()
                 .from(HiredMerchantTransactionsDO.class)
                 .where(HiredMerchantTransactionsDO::getMerchantId).eq(merchantId)
-                .and(HiredMerchantTransactionsDO::getType).eq("BUY"));
+                .and(HiredMerchantTransactionsDO::getType).eq(HiredMerchantTransactionsDO.TYPE_BUY));
     }
 }

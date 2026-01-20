@@ -279,7 +279,7 @@ public class FredrickProcessor {
                     World world = Server.getInstance().getWorld(zombie.getWorldId());
                     // 如果世界不存在或者世界中没有该商店实例，则视为僵尸商店
                     if (world == null || world.getHiredMerchant(chr.getId()) == null) {
-                        zombie.setStatus("CLOSED");
+                        zombie.setStatus(HiredMerchantsDO.STATUS_CLOSED);
                         zombie.setCloseTime(System.currentTimeMillis());
                         hiredMerchantService.updateMerchant(zombie);
                         log.info("修复了玩家 {} 的僵尸商店 (ID: {})", chr.getName(), zombie.getId());
@@ -340,14 +340,14 @@ public class FredrickProcessor {
                     
                     List<HiredMerchantItemsDO> merchantItems = hiredMerchantService.getRetrieveableItems(merchant.getId());
                     for (HiredMerchantItemsDO itemDO : merchantItems) {
-                        itemDO.setStatus("RETURNED");
+                        itemDO.setStatus(HiredMerchantItemsDO.STATUS_RETURNED);
                         hiredMerchantService.updateItem(itemDO);
                         
                         HiredMerchantTransactionsDO transaction = HiredMerchantTransactionsDO.builder()
                                 .merchantId(merchant.getId())
                                 .itemId(itemDO.getItemId())
                                 .buyerId(chr.getId())
-                                .type("RETURN")
+                                .type(HiredMerchantTransactionsDO.TYPE_RETURN)
                                 .quantity(itemDO.getQuantity() * (itemDO.getBundles() - itemDO.getSoldQuantity()))
                                 .timestamp(System.currentTimeMillis())
                                 .build();

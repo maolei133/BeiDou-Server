@@ -16,6 +16,10 @@ import java.io.Serializable;
 @AllArgsConstructor
 @Table("hired_merchant_items")
 public class HiredMerchantItemsDO implements Serializable {
+    public static final String STATUS_ON_SALE = "ON_SALE";
+    public static final String STATUS_SOLD_OUT = "SOLD_OUT";
+    public static final String STATUS_RETURNED = "RETURNED";
+
     @Id(keyType = KeyType.Auto)
     private Integer id;
     private Integer merchantId;

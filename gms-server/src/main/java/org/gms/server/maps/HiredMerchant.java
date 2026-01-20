@@ -126,7 +126,7 @@ public class HiredMerchant extends AbstractMapObject {
         synchronized (items) {
             items.clear();
             for (HiredMerchantItemsDO itemDO : dbItems) {
-                if ("RETURNED".equals(itemDO.getStatus())) {
+                if (HiredMerchantItemsDO.STATUS_RETURNED.equals(itemDO.getStatus())) {
                     continue;
                 }
                 Item item = hiredMerchantService.deserializeItem(itemDO.getItemData());
@@ -355,7 +355,7 @@ public class HiredMerchant extends AbstractMapObject {
                             .merchantId(merchantId)
                             .itemId(shopItem.getItem().getItemId())
                             .buyerId(ownerId)
-                            .type("REMOVE")
+                            .type(HiredMerchantTransactionsDO.TYPE_REMOVE)
                             .quantity((int) (shopItem.getItem().getQuantity() * shopItem.getBundles()))
                             .timestamp(System.currentTimeMillis())
                             .build();
@@ -584,7 +584,7 @@ public class HiredMerchant extends AbstractMapObject {
             // 更新数据库中的商店状态
             HiredMerchantsDO merchantDO = HiredMerchantsDO.builder()
                     .id(merchantId)
-                    .status("CLOSED")
+                    .status(HiredMerchantsDO.STATUS_CLOSED)
                     .closeTime(System.currentTimeMillis())
                     .build();
             hiredMerchantService.updateMerchant(merchantDO);
@@ -633,7 +633,7 @@ public class HiredMerchant extends AbstractMapObject {
                                     .merchantId(merchantId)
                                     .itemId(mpsi.getItem().getItemId())
                                     .buyerId(ownerId)
-                                    .type("RETURN")
+                                    .type(HiredMerchantTransactionsDO.TYPE_RETURN)
                                     .quantity((int) (mpsi.getItem().getQuantity() * mpsi.getBundles()))
                                     .timestamp(System.currentTimeMillis())
                                     .build();
@@ -696,7 +696,7 @@ public class HiredMerchant extends AbstractMapObject {
                 // 更新数据库中的商店状态
                 HiredMerchantsDO merchantDO = HiredMerchantsDO.builder()
                         .id(merchantId)
-                        .status("CLOSED")
+                        .status(HiredMerchantsDO.STATUS_CLOSED)
                         .closeTime(System.currentTimeMillis())
                         .build();
                 hiredMerchantService.updateMerchant(merchantDO);
@@ -800,14 +800,14 @@ public class HiredMerchant extends AbstractMapObject {
                         .soldQuantity(0)
                         .price(item.getPrice())
                         .bundles((int) item.getBundles())
-                        .status("ON_SALE")
+                        .status(HiredMerchantItemsDO.STATUS_ON_SALE)
                         .itemData(hiredMerchantService.serializeItem(item.getItem()))
                         .build();
                 
                 HiredMerchantTransactionsDO transactionDO = HiredMerchantTransactionsDO.builder()
                         .merchantId(merchantId)
                         .buyerId(ownerId)
-                        .type("ADD")
+                        .type(HiredMerchantTransactionsDO.TYPE_ADD)
                         .quantity((int) item.getItem().getQuantity())
                         .timestamp(System.currentTimeMillis())
                         .build();

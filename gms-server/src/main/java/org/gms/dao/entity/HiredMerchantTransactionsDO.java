@@ -16,6 +16,11 @@ import java.io.Serializable;
 @AllArgsConstructor
 @Table("hired_merchant_transactions")
 public class HiredMerchantTransactionsDO implements Serializable {
+    public static final String TYPE_ADD = "ADD";
+    public static final String TYPE_BUY = "BUY";
+    public static final String TYPE_REMOVE = "REMOVE";
+    public static final String TYPE_RETURN = "RETURN";
+
     @Id(keyType = KeyType.Auto)
     private Integer id;
     private Integer merchantId;
