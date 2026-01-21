@@ -34,4 +34,13 @@ public class EquipmentInfoRtnDTO {
     private Short jump;
     private Byte upgradeSlot;
     private Long expire;
+    
+    // 穿戴要求
+    private Integer reqLevel;
+    private Integer reqJob;
+    private Integer reqStr;
+    private Integer reqDex;
+    private Integer reqInt;
+    private Integer reqLuk;
+    private Integer reqPop;
 }

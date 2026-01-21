@@ -164,7 +164,29 @@
                 :key="item.itemId"
                 class="item-cell"
               >
-                <img :src="getIconUrl('item', item.itemId)" class="item-icon" />
+                <a-popover
+                  position="right"
+                  :content-style="{
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    boxShadow: 'none',
+                  }"
+                  :arrow-style="{ display: 'none' }"
+                >
+                  <img
+                    :src="getIconUrl('item', item.itemId)"
+                    class="item-icon"
+                  />
+                  <template #content>
+                    <keep-alive>
+                      <component
+                        :is="getTooltipComponent(item.itemId)"
+                        :item="item"
+                      />
+                    </keep-alive>
+                  </template>
+                </a-popover>
                 <div class="item-info">
                   <div class="item-name">{{ item.name || item.itemId }}</div>
                   <div class="item-quantity">x {{ item.quantity }}</div>
@@ -314,10 +336,29 @@
                             :key="i.itemId"
                             class="mini-item"
                           >
-                            <img
-                              :src="getIconUrl('item', i.itemId)"
-                              :title="(i.name || i.itemId).toString()"
-                            />
+                            <a-popover
+                              position="right"
+                              :content-style="{
+                                padding: 0,
+                                border: 'none',
+                                background: 'transparent',
+                                boxShadow: 'none',
+                              }"
+                              :arrow-style="{ display: 'none' }"
+                            >
+                              <img
+                                :src="getIconUrl('item', i.itemId)"
+                                :title="(i.name || i.itemId).toString()"
+                              />
+                              <template #content>
+                                <keep-alive>
+                                  <component
+                                    :is="getTooltipComponent(i.itemId)"
+                                    :item="i"
+                                  />
+                                </keep-alive>
+                              </template>
+                            </a-popover>
                             <span class="qty">x{{ i.quantity }}</span>
                           </div>
                         </div>
@@ -349,7 +390,13 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, reactive, onMounted } from 'vue';
+  import {
+    computed,
+    ref,
+    reactive,
+    onMounted,
+    defineAsyncComponent,
+  } from 'vue';
   import { useI18n } from 'vue-i18n';
   import dayjs from 'dayjs';
   import useLoading from '@/hooks/loading';
@@ -371,7 +418,16 @@
     IconDelete,
   } from '@arco-design/web-vue/es/icon';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
+  import { isEquip } from '@/utils/mapleStoryItem';
   import SendDueyModal from './components/SendDueyModal.vue';
+
+  // 异步加载 Tooltip 组件
+  const EquipTooltip = defineAsyncComponent(
+    () => import('@/components/ToolTip/EquipTooltip.vue')
+  );
+  const ItemTooltip = defineAsyncComponent(
+    () => import('@/components/ToolTip/ItemTooltip.vue')
+  );
 
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(true);
@@ -400,6 +456,10 @@
   const formatDate = (date: string | number | Date) => {
     if (!date) return '-';
     return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
+  };
+
+  const getTooltipComponent = (itemId: number) => {
+    return isEquip(itemId) ? EquipTooltip : ItemTooltip;
   };
 
   const columns = computed<TableColumnData[]>(() => [

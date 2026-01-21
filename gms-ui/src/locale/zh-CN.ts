@@ -11,6 +11,7 @@ import login from '@/views/login/locale/zh-CN';
 import inventory from '@/views/game/inventory/locale/zh-CN';
 import logs from '@/views/game/logs/locale/zh-CN';
 import duey from '@/views/game/duey/locale/zh-CN';
+import tooltip from '@/components/ToolTip/locale/zh-CN';
 import baseConfig from './zh-CN/base';
 
 export default {
@@ -73,4 +74,5 @@ export default {
   ...config,
   ...logs,
   ...duey,
+  ...tooltip,
 };

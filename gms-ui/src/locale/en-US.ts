@@ -11,6 +11,7 @@ import login from '@/views/login/locale/en-US';
 import inventory from '@/views/game/inventory/locale/en-US';
 import logs from '@/views/game/logs/locale/en-US';
 import duey from '@/views/game/duey/locale/en-US';
+import tooltip from '@/components/ToolTip/locale/en-US';
 import base from './en-US/base';
 
 export default {
@@ -70,4 +71,5 @@ export default {
   ...config,
   ...logs,
   ...duey,
+  ...tooltip,
 };
