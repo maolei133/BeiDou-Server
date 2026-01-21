@@ -182,7 +182,8 @@ public class DueyService {
             itemDTO.setUpgradeSlots(equip.getUpgradeSlots());
             itemDTO.setLevel((byte) equip.getLevel());
             itemDTO.setItemLevel((byte) equip.getItemLevel());
-            itemDTO.setFlag((byte) equip.getFlag());
+            itemDTO.setFlag(equip.getFlag());
+            itemDTO.setVicious(equip.getVicious());
         }
         return itemDTO;
     }
@@ -278,30 +279,39 @@ public class DueyService {
             if (type == InventoryType.EQUIP) {
                 Equip equip = new Equip(req.getItemId(), (byte) 0, -1);
                 equip.setQuantity((short) 1);
-                // 设置自定义属性
-                if (req.getStr() != null) equip.setStr(req.getStr());
-                if (req.getDex() != null) equip.setDex(req.getDex());
-                if (req.getInt_() != null) equip.setInt(req.getInt_());
-                if (req.getLuk() != null) equip.setLuk(req.getLuk());
-                if (req.getHp() != null) equip.setHp(req.getHp());
-                if (req.getMp() != null) equip.setMp(req.getMp());
-                if (req.getWatk() != null) equip.setWatk(req.getWatk());
-                if (req.getMatk() != null) equip.setMatk(req.getMatk());
-                if (req.getWdef() != null) equip.setWdef(req.getWdef());
-                if (req.getMdef() != null) equip.setMdef(req.getMdef());
-                if (req.getAcc() != null) equip.setAcc(req.getAcc());
-                if (req.getAvoid() != null) equip.setAvoid(req.getAvoid());
-                if (req.getHands() != null) equip.setHands(req.getHands());
-                if (req.getSpeed() != null) equip.setSpeed(req.getSpeed());
-                if (req.getJump() != null) equip.setJump(req.getJump());
-                if (req.getUpgradeSlots() != null) equip.setUpgradeSlots(req.getUpgradeSlots());
-                if (req.getLevel() != null) equip.setLevel(req.getLevel());
-                if (req.getItemLevel() != null) equip.setItemLevel(req.getItemLevel());
-                if (req.getFlag() != null) equip.setFlag(req.getFlag().byteValue());
+                // 设置自定义属性，并进行范围限制
+                if (req.getStr() != null) equip.setStr(limitShort(req.getStr()));
+                if (req.getDex() != null) equip.setDex(limitShort(req.getDex()));
+                if (req.getInt_() != null) equip.setInt(limitShort(req.getInt_()));
+                if (req.getLuk() != null) equip.setLuk(limitShort(req.getLuk()));
+                if (req.getHp() != null) equip.setHp(limitShort(req.getHp()));
+                if (req.getMp() != null) equip.setMp(limitShort(req.getMp()));
+                if (req.getWatk() != null) equip.setWatk(limitShort(req.getWatk()));
+                if (req.getMatk() != null) equip.setMatk(limitShort(req.getMatk()));
+                if (req.getWdef() != null) equip.setWdef(limitShort(req.getWdef()));
+                if (req.getMdef() != null) equip.setMdef(limitShort(req.getMdef()));
+                if (req.getAcc() != null) equip.setAcc(limitShort(req.getAcc()));
+                if (req.getAvoid() != null) equip.setAvoid(limitShort(req.getAvoid()));
+                if (req.getHands() != null) equip.setHands(limitShort(req.getHands()));
+                if (req.getSpeed() != null) equip.setSpeed(limitShort(req.getSpeed()));
+                if (req.getJump() != null) equip.setJump(limitShort(req.getJump()));
+                if (req.getUpgradeSlots() != null) equip.setUpgradeSlots(limitByte(req.getUpgradeSlots()));
+                if (req.getLevel() != null) equip.setLevel(limitShort(req.getLevel()));
+                if (req.getItemLevel() != null) equip.setItemLevel(limitShort(req.getItemLevel()));
+                if (req.getFlag() != null) equip.setFlag(limitShort(req.getFlag()));
+                if (req.getVicious() != null) equip.setVicious(limitShort(req.getVicious()));
                 
                 item = equip;
             } else {
                 item = new Item(req.getItemId(), (byte) 0, req.getQuantity().shortValue(), -1);
+            }
+
+            // 设置通用属性
+            if (req.getOwner() != null) {
+                item.setOwner(req.getOwner());
+            }
+            if (req.getItemExpiration() != null) {
+                item.setExpiration(req.getItemExpiration());
             }
             
             // 生成 ItemInfoRtnDTO 用于 JSON 存储
@@ -360,5 +370,19 @@ public class DueyService {
         } else {
             throw new RuntimeException("Failed to create duey package");
         }
+    }
+    
+    private short limitShort(Integer val) {
+        if (val == null) return 0;
+        if (val > Short.MAX_VALUE) return Short.MAX_VALUE;
+        if (val < Short.MIN_VALUE) return Short.MIN_VALUE;
+        return val.shortValue();
+    }
+    
+    private byte limitByte(Integer val) {
+        if (val == null) return 0;
+        if (val > Byte.MAX_VALUE) return Byte.MAX_VALUE;
+        if (val < Byte.MIN_VALUE) return Byte.MIN_VALUE;
+        return val.byteValue();
     }
 }

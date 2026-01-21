@@ -247,57 +247,112 @@
           <template v-if="formData.type === 6">
             <a-col :span="12">
               <a-form-item field="str" :label="$t('account.player.form.str')">
-                <a-input-number v-model="formData.str" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.str"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="dex" :label="$t('account.player.form.dex')">
-                <a-input-number v-model="formData.dex" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.dex"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="int" :label="$t('account.player.form.int')">
-                <a-input-number v-model="formData.int" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.int"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="luk" :label="$t('account.player.form.luk')">
-                <a-input-number v-model="formData.luk" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.luk"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="hp" :label="$t('account.player.form.hp')">
-                <a-input-number v-model="formData.hp" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.hp"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="mp" :label="$t('account.player.form.mp')">
-                <a-input-number v-model="formData.mp" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.mp"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="pAtk" :label="$t('account.player.form.pAtk')">
-                <a-input-number v-model="formData.pAtk" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.pAtk"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="mAtk" :label="$t('account.player.form.mAtk')">
-                <a-input-number v-model="formData.mAtk" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.mAtk"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="pDef" :label="$t('account.player.form.pDef')">
-                <a-input-number v-model="formData.pDef" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.pDef"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="mDef" :label="$t('account.player.form.mDef')">
-                <a-input-number v-model="formData.mDef" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.mDef"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="acc" :label="$t('account.player.form.acc')">
-                <a-input-number v-model="formData.acc" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.acc"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
@@ -305,7 +360,12 @@
                 field="avoid"
                 :label="$t('account.player.form.avoid')"
               >
-                <a-input-number v-model="formData.avoid" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.avoid"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
@@ -313,7 +373,12 @@
                 field="hands"
                 :label="$t('account.player.form.hands')"
               >
-                <a-input-number v-model="formData.hands" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.hands"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
@@ -321,12 +386,22 @@
                 field="speed"
                 :label="$t('account.player.form.speed')"
               >
-                <a-input-number v-model="formData.speed" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.speed"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item field="jump" :label="$t('account.player.form.jump')">
-                <a-input-number v-model="formData.jump" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.jump"
+                  style="width: 100%"
+                  :min="-32768"
+                  :max="32767"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
@@ -334,7 +409,12 @@
                 field="level"
                 :label="$t('account.player.form.level')"
               >
-                <a-input-number v-model="formData.level" style="width: 100%" />
+                <a-input-number
+                  v-model="formData.level"
+                  style="width: 100%"
+                  :min="0"
+                  :max="255"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
@@ -345,6 +425,8 @@
                 <a-input-number
                   v-model="formData.itemLevel"
                   style="width: 100%"
+                  :min="0"
+                  :max="255"
                 />
               </a-form-item>
             </a-col>
@@ -356,6 +438,8 @@
                 <a-input-number
                   v-model="formData.upgradeSlot"
                   style="width: 100%"
+                  :min="0"
+                  :max="255"
                 />
               </a-form-item>
             </a-col>
@@ -367,6 +451,8 @@
                 <a-input-number
                   v-model="formData.vicious"
                   style="width: 100%"
+                  :min="0"
+                  :max="255"
                 />
               </a-form-item>
             </a-col>

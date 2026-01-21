@@ -50,11 +50,14 @@ export interface SendDueyReq {
   expireTime?: number;
   expireDays?: number;
   deliveryTime?: number;
+  // 物品属性
+  owner?: string;
+  itemExpiration?: number;
 
   // 装备属性
   str?: number;
   dex?: number;
-  int?: number;
+  intel?: number;
   luk?: number;
   hp?: number;
   mp?: number;
@@ -71,6 +74,7 @@ export interface SendDueyReq {
   level?: number;
   itemLevel?: number;
   flag?: number;
+  vicious?: number;
 }
 
 export function getDueyList(params: DueyListParams) {
@@ -84,5 +88,10 @@ export function deleteDueyPackage(id: number) {
 }
 
 export function sendDueyPackage(data: SendDueyReq) {
-  return axios.post<ResultBody<void>>('/duey/v1/send', data);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { intel, ...rest } = data;
+  return axios.post<ResultBody<void>>('/duey/v1/send', {
+    ...rest,
+    int: intel,
+  });
 }

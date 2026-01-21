@@ -233,6 +233,7 @@
   import { useI18n } from 'vue-i18n';
   import { Message } from '@arco-design/web-vue';
   import useLoading from '@/hooks/loading';
+  import dayjs from 'dayjs';
   import { sendDueyPackage, SendDueyReq } from '@/api/duey';
   import {
     getEquInitialInfo,
@@ -282,7 +283,7 @@
     // 装备属性
     str: undefined,
     dex: undefined,
-    int: undefined,
+    intel: undefined,
     luk: undefined,
     hp: undefined,
     mp: undefined,
@@ -296,6 +297,12 @@
     speed: undefined,
     jump: undefined,
     upgradeSlots: undefined,
+    level: undefined,
+    itemLevel: undefined,
+    flag: undefined,
+    vicious: undefined,
+    owner: undefined,
+    itemExpiration: undefined,
   });
 
   const expireType = ref('days');
@@ -391,7 +398,7 @@
   const resetEquipStats = () => {
     form.str = undefined;
     form.dex = undefined;
-    form.int = undefined;
+    form.intel = undefined;
     form.luk = undefined;
     form.hp = undefined;
     form.mp = undefined;
@@ -405,6 +412,12 @@
     form.speed = undefined;
     form.jump = undefined;
     form.upgradeSlots = undefined;
+    form.level = undefined;
+    form.itemLevel = undefined;
+    form.flag = undefined;
+    form.vicious = undefined;
+    form.owner = undefined;
+    form.itemExpiration = undefined;
   };
 
   watch(
@@ -513,7 +526,7 @@
           // 填充默认属性
           form.str = equipData.str || 0;
           form.dex = equipData.dex || 0;
-          form.int = equipData.int || 0;
+          form.intel = equipData.int || 0;
           form.luk = equipData.luk || 0;
           form.hp = equipData.hp || 0;
           form.mp = equipData.mp || 0;
@@ -527,6 +540,10 @@
           form.speed = equipData.speed || 0;
           form.jump = equipData.jump || 0;
           form.upgradeSlots = equipData.upgradeSlot || equipData.tuc || 0;
+          form.level = equipData.level || 0;
+          form.itemLevel = equipData.itemLevel || 1;
+          form.vicious = equipData.vicious || 0;
+          form.flag = equipData.flag || 0;
 
           Message.success(t('account.player.equip.success'));
           return;
@@ -584,7 +601,7 @@
         if (equipData) {
           form.str = equipData.str || 0;
           form.dex = equipData.dex || 0;
-          form.int = equipData.int || 0;
+          form.intel = equipData.int || 0;
           form.luk = equipData.luk || 0;
           form.hp = equipData.hp || 0;
           form.mp = equipData.mp || 0;
@@ -598,6 +615,10 @@
           form.speed = equipData.speed || 0;
           form.jump = equipData.jump || 0;
           form.upgradeSlots = equipData.upgradeSlot || equipData.tuc || 0;
+          form.level = equipData.level || 0;
+          form.itemLevel = equipData.itemLevel || 1;
+          form.vicious = equipData.vicious || 0;
+          form.flag = equipData.flag || 0;
 
           itemInfo.name = equipData.name;
           itemInfo.desc = equipData.desc;
@@ -615,7 +636,7 @@
       // Fallback to item properties if API fails or returns empty
       form.str = item.str || 0;
       form.dex = item.dex || 0;
-      form.int = item.int || 0;
+      form.intel = item.int || 0;
       form.luk = item.luk || 0;
       form.hp = item.hp || 0;
       form.mp = item.mp || 0;
@@ -630,6 +651,10 @@
       form.jump = item.jump || 0;
       form.upgradeSlots =
         item.upgradeSlots || item.upgradeSlot || item.tuc || 0;
+      form.level = item.level || 0;
+      form.itemLevel = item.itemLevel || 1;
+      form.vicious = item.vicious || 0;
+      form.flag = item.flag || 0;
 
       itemInfo.name = item.name;
       itemInfo.desc = item.desc;
@@ -639,7 +664,7 @@
       // 这里不提示成功，因为没有从后端获取到详细属性，可能只是使用了列表中的基本信息
       // Message.success(t('account.player.equip.success'));
     } else {
-      handleIdBlur();
+      await handleIdBlur();
     }
     itemSelectorVisible.value = false;
   };
@@ -669,6 +694,12 @@
     });
   };
 
+  const bitmaskToArray = (mask: number | undefined): number[] => {
+    if (!mask) return [];
+    const flags = [0x01, 0x02, 0x04, 0x08, 0x10, 0x80, 0x100, 0x200];
+    return flags.filter((f) => (mask & f) === f);
+  };
+
   const openEquipEditor = () => {
     if (!isEquip.value) return;
 
@@ -678,7 +709,7 @@
       id: form.itemId,
       str: form.str,
       dex: form.dex,
-      int: form.int,
+      int: form.intel,
       luk: form.luk,
       hp: form.hp,
       mp: form.mp,
@@ -692,7 +723,16 @@
       speed: form.speed,
       jump: form.jump,
       upgradeSlot: form.upgradeSlots,
-      expireType: 0, // 默认永久，或者根据需要传递
+      level: form.level,
+      itemLevel: form.itemLevel,
+      flag: bitmaskToArray(form.flag),
+      vicious: form.vicious,
+      owner: form.owner,
+      expire: form.itemExpiration,
+      expireType: form.itemExpiration ? 2 : 0, // 默认永久，或者根据需要传递
+      expireDate: form.itemExpiration
+        ? dayjs(form.itemExpiration).format('YYYY-MM-DD HH:mm:ss')
+        : undefined,
     };
     equipEditorVisible.value = true;
   };
@@ -701,7 +741,7 @@
     // 将编辑后的属性回填到 form
     form.str = data.str;
     form.dex = data.dex;
-    form.int = data.int;
+    form.intel = data.int;
     form.luk = data.luk;
     form.hp = data.hp;
     form.mp = data.mp;
@@ -715,6 +755,24 @@
     form.speed = data.speed;
     form.jump = data.jump;
     form.upgradeSlots = data.upgradeSlot;
+    form.level = data.level;
+    form.itemLevel = data.itemLevel;
+    form.flag = Array.isArray(data.flag)
+      ? data.flag.reduce((acc, cur) => acc | cur, 0)
+      : data.flag;
+    form.vicious = data.vicious;
+    form.owner = data.owner;
+
+    // 处理过期时间
+    if (data.expireType === 0) {
+      form.itemExpiration = undefined;
+    } else if (data.expireType === 1 && data.expire) {
+      // 分钟
+      form.itemExpiration = new Date().getTime() + data.expire * 60 * 1000;
+    } else if (data.expireType === 2 && data.expireDate) {
+      // 日期
+      form.itemExpiration = new Date(data.expireDate).getTime();
+    }
 
     equipEditorVisible.value = false;
     Message.success('装备属性已更新');

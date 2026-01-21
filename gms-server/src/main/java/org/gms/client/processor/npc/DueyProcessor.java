@@ -247,7 +247,8 @@ public class DueyProcessor {
             itemDTO.setUpgradeSlots(equip.getUpgradeSlots());
             itemDTO.setLevel((byte) equip.getLevel());
             itemDTO.setItemLevel((byte) equip.getItemLevel());
-            itemDTO.setFlag((byte) equip.getFlag());
+            itemDTO.setFlag(equip.getFlag());
+            itemDTO.setVicious(equip.getVicious());
         }
         return itemDTO;
     }
@@ -584,7 +585,7 @@ public class DueyProcessor {
                 .where(DueypackagesDO::getExpireDate).le(new Timestamp(System.currentTimeMillis()))
                 .and(DueypackagesDO::getChecked).ne(2) // 已领取的(2)不处理，保持原状
                 .and(DueypackagesDO::getChecked).ne(3); // 已经是过期的(3)不处理
-        
+
         List<DueypackagesDO> toRemoveNew = mapper.selectListByQuery(queryNew);
         for (DueypackagesDO pkg : toRemoveNew) {
             // 标记为过期 (状态 3) 而不是直接删除
