@@ -514,12 +514,33 @@
     );
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getAttr = (data: any, keys: string[]) => {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const key of keys) {
+      if (data[key] !== undefined && data[key] !== null) return data[key];
+    }
+    return 0;
+  };
+
   const handleIdBlur = async () => {
     if (!formData.value.id) {
       itemInfo.name = '';
       itemInfo.desc = '';
       itemIconUrl.value = '';
       lastFetchedId.value = undefined;
+      return;
+    }
+
+    // 如果是编辑模式，且ID没有变化，则不重新查询
+    // 这样可以避免覆盖用户已经编辑的属性
+    // 注意：这里我们假设如果ID没变，那么属性也不需要重新加载
+    // 如果用户想重置属性，可以重新输入ID或者清空ID再输入
+    if (
+      props.isEditMode &&
+      formData.value.id === props.initialData.id &&
+      lastFetchedId.value === formData.value.id
+    ) {
       return;
     }
 
@@ -551,29 +572,84 @@
           // 这里的逻辑是：如果 props.isEditMode 为 true，且 formData.id 与 props.initialData.id 相同，则不覆盖
           // 否则（ID变了），覆盖
 
+          const hasAttributes =
+            formData.value.str !== undefined ||
+            formData.value.dex !== undefined ||
+            formData.value.int !== undefined ||
+            formData.value.luk !== undefined ||
+            formData.value.hp !== undefined ||
+            formData.value.mp !== undefined ||
+            formData.value.pAtk !== undefined ||
+            formData.value.mAtk !== undefined ||
+            formData.value.pDef !== undefined ||
+            formData.value.mDef !== undefined ||
+            formData.value.acc !== undefined ||
+            formData.value.avoid !== undefined ||
+            formData.value.hands !== undefined ||
+            formData.value.speed !== undefined ||
+            formData.value.jump !== undefined ||
+            formData.value.upgradeSlot !== undefined ||
+            formData.value.level !== undefined ||
+            formData.value.itemLevel !== undefined ||
+            formData.value.vicious !== undefined;
+
           const isSameIdAsInitial =
             props.isEditMode && formData.value.id === props.initialData.id;
 
-          if (!isSameIdAsInitial) {
-            formData.value.str = equipData.str || 0;
-            formData.value.dex = equipData.dex || 0;
-            formData.value.int = equipData.int || 0;
-            formData.value.luk = equipData.luk || 0;
-            formData.value.hp = equipData.hp || 0;
-            formData.value.mp = equipData.mp || 0;
-            formData.value.pAtk = equipData.pAtk || 0;
-            formData.value.mAtk = equipData.mAtk || 0;
-            formData.value.pDef = equipData.pDef || 0;
-            formData.value.mDef = equipData.mDef || 0;
-            formData.value.acc = equipData.acc || 0;
-            formData.value.avoid = equipData.avoid || 0;
-            formData.value.hands = equipData.hands || 0;
-            formData.value.speed = equipData.speed || 0;
-            formData.value.jump = equipData.jump || 0;
-            formData.value.upgradeSlot = equipData.upgradeSlot || 0;
-            formData.value.level = equipData.level || 0;
-            formData.value.itemLevel = equipData.itemLevel || 1;
-            formData.value.vicious = equipData.vicious || 0;
+          if (!isSameIdAsInitial || !hasAttributes) {
+            formData.value.str = getAttr(equipData, ['str', 'Str']);
+            formData.value.dex = getAttr(equipData, ['dex', 'Dex']);
+            formData.value.int = getAttr(equipData, [
+              'int',
+              'Int',
+              'intel',
+              'Intel',
+            ]);
+            formData.value.luk = getAttr(equipData, ['luk', 'Luk']);
+            formData.value.hp = getAttr(equipData, ['hp', 'Hp', 'HP']);
+            formData.value.mp = getAttr(equipData, ['mp', 'Mp', 'MP']);
+            formData.value.pAtk = getAttr(equipData, [
+              'pAtk',
+              'pad',
+              'watk',
+              'Watk',
+            ]);
+            formData.value.mAtk = getAttr(equipData, [
+              'mAtk',
+              'mad',
+              'matk',
+              'Matk',
+            ]);
+            formData.value.pDef = getAttr(equipData, [
+              'pDef',
+              'pdd',
+              'wdef',
+              'Wdef',
+            ]);
+            formData.value.mDef = getAttr(equipData, [
+              'mDef',
+              'mdd',
+              'mdef',
+              'Mdef',
+            ]);
+            formData.value.acc = getAttr(equipData, ['acc', 'Acc']);
+            formData.value.avoid = getAttr(equipData, [
+              'avoid',
+              'eva',
+              'Avoid',
+            ]);
+            formData.value.hands = getAttr(equipData, ['hands', 'Hands']);
+            formData.value.speed = getAttr(equipData, ['speed', 'Speed']);
+            formData.value.jump = getAttr(equipData, ['jump', 'Jump']);
+            formData.value.upgradeSlot = getAttr(equipData, [
+              'upgradeSlot',
+              'tuc',
+              'upgradeSlots',
+            ]);
+            formData.value.level = getAttr(equipData, ['level', 'Level']);
+            formData.value.itemLevel =
+              getAttr(equipData, ['itemLevel', 'ItemLevel']) || 1;
+            formData.value.vicious = getAttr(equipData, ['vicious', 'Vicious']);
           }
 
           if (!props.isEditMode) {
@@ -641,7 +717,18 @@
           // 简单的方法是：在 handleIdBlur 中判断，如果是编辑模式且ID没变，就不覆盖属性
           // 但这里有个问题：lastFetchedId 是 undefined，所以 handleIdBlur 会执行
           // 我们可以在 handleIdBlur 中增加判断
-          handleIdBlur();
+
+          // 初始化时，如果已经有ID，设置 lastFetchedId，避免重复查询
+          if (props.isEditMode) {
+            lastFetchedId.value = formData.value.id;
+            // 仅加载图标和名称，不覆盖属性
+            // 这里可以手动调用一个只加载信息的函数，或者复用 handleIdBlur 但通过标志位控制
+            // 由于 handleIdBlur 内部已经有 isEditMode 的判断，我们可以直接调用
+            // 但为了保险，我们可以在 handleIdBlur 开头加一个判断
+            handleIdBlur();
+          } else {
+            handleIdBlur();
+          }
         }
       }
     }

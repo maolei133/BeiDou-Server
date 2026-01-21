@@ -490,6 +490,15 @@
     }
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getAttr = (data: any, keys: string[]) => {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const key of keys) {
+      if (data[key] !== undefined && data[key] !== null) return data[key];
+    }
+    return 0;
+  };
+
   const handleIdBlur = async () => {
     if (!form.itemId) {
       itemInfo.name = '';
@@ -523,27 +532,31 @@
           itemIconUrl.value = getIconUrl('item', form.itemId);
           isEquip.value = true;
 
-          // 填充默认属性
-          form.str = equipData.str || 0;
-          form.dex = equipData.dex || 0;
-          form.intel = equipData.int || 0;
-          form.luk = equipData.luk || 0;
-          form.hp = equipData.hp || 0;
-          form.mp = equipData.mp || 0;
-          form.watk = equipData.pAtk || equipData.pad || 0;
-          form.matk = equipData.mAtk || equipData.mad || 0;
-          form.wdef = equipData.pDef || equipData.pdd || 0;
-          form.mdef = equipData.mDef || equipData.mdd || 0;
-          form.acc = equipData.acc || 0;
-          form.avoid = equipData.avoid || equipData.eva || 0;
-          form.hands = equipData.hands || 0;
-          form.speed = equipData.speed || 0;
-          form.jump = equipData.jump || 0;
-          form.upgradeSlots = equipData.upgradeSlot || equipData.tuc || 0;
-          form.level = equipData.level || 0;
-          form.itemLevel = equipData.itemLevel || 1;
-          form.vicious = equipData.vicious || 0;
-          form.flag = equipData.flag || 0;
+          // 填充默认属性，尝试多种字段名以兼容不同后端返回格式
+          form.str = getAttr(equipData, ['str', 'Str']);
+          form.dex = getAttr(equipData, ['dex', 'Dex']);
+          form.intel = getAttr(equipData, ['int', 'Int', 'intel', 'Intel']);
+          form.luk = getAttr(equipData, ['luk', 'Luk']);
+          form.hp = getAttr(equipData, ['hp', 'Hp', 'HP']);
+          form.mp = getAttr(equipData, ['mp', 'Mp', 'MP']);
+          form.watk = getAttr(equipData, ['pAtk', 'pad', 'watk', 'Watk']);
+          form.matk = getAttr(equipData, ['mAtk', 'mad', 'matk', 'Matk']);
+          form.wdef = getAttr(equipData, ['pDef', 'pdd', 'wdef', 'Wdef']);
+          form.mdef = getAttr(equipData, ['mDef', 'mdd', 'mdef', 'Mdef']);
+          form.acc = getAttr(equipData, ['acc', 'Acc']);
+          form.avoid = getAttr(equipData, ['avoid', 'eva', 'Avoid']);
+          form.hands = getAttr(equipData, ['hands', 'Hands']);
+          form.speed = getAttr(equipData, ['speed', 'Speed']);
+          form.jump = getAttr(equipData, ['jump', 'Jump']);
+          form.upgradeSlots = getAttr(equipData, [
+            'upgradeSlot',
+            'tuc',
+            'upgradeSlots',
+          ]);
+          form.level = getAttr(equipData, ['level', 'Level']);
+          form.itemLevel = getAttr(equipData, ['itemLevel', 'ItemLevel']) || 1;
+          form.vicious = getAttr(equipData, ['vicious', 'Vicious']);
+          form.flag = getAttr(equipData, ['flag', 'Flag']);
 
           Message.success(t('account.player.equip.success'));
           return;
@@ -591,81 +604,9 @@
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleItemSelect = async (item: any) => {
     form.itemId = item.id;
-    // 如果是装备，直接使用返回的属性
-    if (item.type === 'Eqp' || item.type === 'eqp') {
-      // 尝试从后端获取详细属性，因为搜索列表可能不包含所有属性
-      try {
-        const { data } = await getEquInitialInfo(item.id);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const equipData = data as any;
-        if (equipData) {
-          form.str = equipData.str || 0;
-          form.dex = equipData.dex || 0;
-          form.intel = equipData.int || 0;
-          form.luk = equipData.luk || 0;
-          form.hp = equipData.hp || 0;
-          form.mp = equipData.mp || 0;
-          form.watk = equipData.pAtk || equipData.pad || 0;
-          form.matk = equipData.mAtk || equipData.mad || 0;
-          form.wdef = equipData.pDef || equipData.pdd || 0;
-          form.mdef = equipData.mDef || equipData.mdd || 0;
-          form.acc = equipData.acc || 0;
-          form.avoid = equipData.avoid || equipData.eva || 0;
-          form.hands = equipData.hands || 0;
-          form.speed = equipData.speed || 0;
-          form.jump = equipData.jump || 0;
-          form.upgradeSlots = equipData.upgradeSlot || equipData.tuc || 0;
-          form.level = equipData.level || 0;
-          form.itemLevel = equipData.itemLevel || 1;
-          form.vicious = equipData.vicious || 0;
-          form.flag = equipData.flag || 0;
-
-          itemInfo.name = equipData.name;
-          itemInfo.desc = equipData.desc;
-          itemIconUrl.value = getIconUrl('item', item.id);
-          isEquip.value = true;
-          lastFetchedId.value = item.id;
-          Message.success(t('account.player.equip.success'));
-          itemSelectorVisible.value = false;
-          return;
-        }
-      } catch (e) {
-        // 如果获取失败，尝试使用 item 中的属性（如果有）
-      }
-
-      // Fallback to item properties if API fails or returns empty
-      form.str = item.str || 0;
-      form.dex = item.dex || 0;
-      form.intel = item.int || 0;
-      form.luk = item.luk || 0;
-      form.hp = item.hp || 0;
-      form.mp = item.mp || 0;
-      form.watk = item.watk || item.pAtk || item.pad || 0;
-      form.matk = item.matk || item.mAtk || item.mad || 0;
-      form.wdef = item.wdef || item.pDef || item.pdd || 0;
-      form.mdef = item.mdef || item.mDef || item.mdd || 0;
-      form.acc = item.acc || 0;
-      form.avoid = item.avoid || item.eva || 0;
-      form.hands = item.hands || 0;
-      form.speed = item.speed || 0;
-      form.jump = item.jump || 0;
-      form.upgradeSlots =
-        item.upgradeSlots || item.upgradeSlot || item.tuc || 0;
-      form.level = item.level || 0;
-      form.itemLevel = item.itemLevel || 1;
-      form.vicious = item.vicious || 0;
-      form.flag = item.flag || 0;
-
-      itemInfo.name = item.name;
-      itemInfo.desc = item.desc;
-      itemIconUrl.value = getIconUrl('item', item.id);
-      isEquip.value = true;
-      lastFetchedId.value = item.id;
-      // 这里不提示成功，因为没有从后端获取到详细属性，可能只是使用了列表中的基本信息
-      // Message.success(t('account.player.equip.success'));
-    } else {
-      await handleIdBlur();
-    }
+    // 强制触发 handleIdBlur 的查询逻辑，确保获取完整属性
+    lastFetchedId.value = undefined;
+    await handleIdBlur();
     itemSelectorVisible.value = false;
   };
 
