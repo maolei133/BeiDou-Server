@@ -10,12 +10,25 @@
 
         <!-- 名称居左，Level 在右侧 -->
         <div class="item-name-row">
-          <span class="item-name">
+          <span
+            class="item-name clickable-text"
+            @click="copyText(item.name)"
+            :title="$t('common.copy')"
+          >
             {{ item.name || $t('tooltip.unknownItem') }}
           </span>
           <span v-if="item.level && item.level > 0" class="item-upgrade-level"
             >(+{{ item.level }})</span
           >
+        </div>
+
+        <!-- ID 显示 -->
+        <div
+          class="item-id-row clickable-text"
+          @click="copyText(String(item.itemId))"
+          :title="$t('common.copy')"
+        >
+          ID: {{ item.itemId }}
         </div>
 
         <!-- Flag 居中显示 -->
@@ -195,6 +208,7 @@
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { Message } from '@arco-design/web-vue';
   import dayjs from 'dayjs';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import {
@@ -401,6 +415,16 @@
     return (reqJob.value & jobFlag) !== 0;
   };
 
+  const copyText = async (text: string | undefined) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      Message.success(`${t('common.copy')} ${t('common.success')}: ${text}`);
+    } catch (err) {
+      Message.error(t('common.copy') + t('common.fail'));
+    }
+  };
+
   watch(
     () => props.item,
     () => {
@@ -462,6 +486,12 @@
         }
       }
 
+      .item-id-row {
+        text-align: left;
+        margin-bottom: 4px;
+        font-size: 12px;
+      }
+
       .item-flag {
         color: #ff9900; /* 橙黄色 */
         font-size: 12px;
@@ -492,7 +522,7 @@
       .item-icon {
         max-width: 64px;
         max-height: 64px;
-        transform: scale(1.1); /* 放大图标 */
+        transform: scale(1.5); /* 放大图标 */
         transform-origin: center top; /* 调整放大基点 */
       }
     }
@@ -605,5 +635,16 @@
         color: #ff9900;
       }
     }
+  }
+
+  /* 可点击文本的样式 */
+  .clickable-text {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .clickable-text:hover {
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+    color: #e6f7ff;
   }
 </style>
