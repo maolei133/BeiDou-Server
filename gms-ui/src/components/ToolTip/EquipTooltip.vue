@@ -444,7 +444,11 @@
 
 <style scoped lang="less">
   .tooltip-container {
-    width: 250px;
+    display: flex;
+    flex-direction: column;
+    min-width: 270px;
+    width: fit-content; /* 适应内容宽度 */
+    max-width: none;
     background-color: rgba(0, 0, 0, 0.85);
     border-radius: 6px;
     padding: 10px;
@@ -457,11 +461,22 @@
     user-select: none;
   }
 
+  /*
+    关键布局逻辑：
+    1. .job-reqs 保持 nowrap，作为撑开宽度的基准。
+    2. 其他所有直接子元素 (.tooltip-header, .tooltip-info-section, .tooltip-stats, .tooltip-desc, .tooltip-footer)
+       设置 width: 0 (或极小值) 和 min-width: 100%。
+       这使得它们不会主动撑开父容器，而是跟随父容器的宽度（由 job-reqs 和 min-width 决定）。
+       同时 min-width: 100% 保证它们占满当前宽度。
+  */
+
   .tooltip-header {
     display: flex;
     flex-direction: column;
-    align-items: center; /* 整体居中 */
+    align-items: center;
     margin-bottom: 2px;
+    width: 0;
+    min-width: 100%;
 
     .item-title {
       width: 100%;
@@ -473,8 +488,10 @@
       }
 
       .item-name-row {
-        text-align: left; /* 名称居左 */
+        text-align: left;
         margin-bottom: 4px;
+        white-space: normal; /* 允许换行 */
+        word-break: break-word; /* 允许长单词换行 */
 
         .item-name {
           font-weight: bold;
@@ -483,6 +500,7 @@
 
         .item-upgrade-level {
           margin-left: 4px;
+          white-space: nowrap;
         }
       }
 
@@ -493,7 +511,7 @@
       }
 
       .item-flag {
-        color: #ff9900; /* 橙黄色 */
+        color: #ff9900;
         font-size: 12px;
         margin-bottom: 2px;
         text-align: center;
@@ -511,6 +529,8 @@
     display: flex;
     flex-direction: row;
     padding: 4px 0;
+    width: 0;
+    min-width: 100%;
 
     .item-icon-box {
       width: 80px;
@@ -518,12 +538,13 @@
       align-items: flex-start;
       justify-content: center;
       padding-top: 6px;
+      flex-shrink: 0; /* 图标不压缩 */
 
       .item-icon {
         max-width: 64px;
         max-height: 64px;
-        transform: scale(1.5); /* 放大图标 */
-        transform-origin: center top; /* 调整放大基点 */
+        transform: scale(1.5);
+        transform-origin: center top;
       }
     }
 
@@ -535,12 +556,12 @@
       padding-left: 10px;
 
       .req-row {
-        width: 100%; /* 单列布局 */
-        margin-bottom: 0; /* 紧凑行间距 */
-        line-height: 1.2; /* 降低行高 */
+        width: 100%;
+        margin-bottom: 0;
+        line-height: 1.2;
         font-size: 11px;
         display: flex;
-        justify-content: flex-start; /* 整体左对齐 */
+        justify-content: flex-start;
 
         &.full-width {
           width: 100%;
@@ -549,8 +570,8 @@
         .req-label {
           color: #fff;
           margin-right: 4px;
-          text-align: right; /* 标签文字居右 */
-          min-width: 40px; /* 固定标签宽度以对齐 */
+          text-align: right;
+          min-width: 40px;
         }
 
         .req-val {
@@ -560,7 +581,7 @@
         }
 
         .req-spacer {
-          width: 15px; /* 缩小列间距 */
+          width: 15px;
         }
       }
     }
@@ -572,12 +593,14 @@
     gap: 8px;
     margin-bottom: 6px;
     font-size: 11px;
+    white-space: nowrap; /* 强制不换行，撑开宽度 */
+    flex-wrap: nowrap;
 
     span {
-      color: #ff4d4f; /* 默认红色 (不可用) */
+      color: #ff4d4f;
 
       &.active {
-        color: #fff; /* 可用白色 */
+        color: #fff;
       }
     }
   }
@@ -590,21 +613,26 @@
 
   .tooltip-stats {
     padding: 0 4px;
+    width: 0;
+    min-width: 100%;
 
     .stat-row {
-      margin-bottom: 0; /* 紧凑行间距 */
-      line-height: 1.2; /* 降低行高 */
+      margin-bottom: 0;
+      line-height: 1.2;
       color: #fff;
       display: flex;
 
       .stat-label {
-        width: 100px; /* 标签固定宽度 */
+        width: 100px;
         text-align: right;
         margin-right: 8px;
+        flex-shrink: 0; /* 标签不压缩 */
       }
 
       .stat-val {
         text-align: left;
+        white-space: normal;
+        word-break: break-all;
       }
 
       &.karma {
@@ -618,15 +646,20 @@
     padding: 4px;
     color: #fff;
     line-height: 1.4;
+    width: 0; /* 关键：不撑开父容器 */
+    min-width: 100%; /* 关键：占满父容器 */
 
     .desc-text {
       white-space: pre-wrap;
+      word-break: break-word;
     }
   }
 
   .tooltip-footer {
     padding: 0 4px;
     text-align: center;
+    width: 0;
+    min-width: 100%;
 
     .footer-row {
       margin-top: 4px;

@@ -191,7 +191,8 @@
 
 <style scoped lang="less">
   .tooltip-container {
-    width: 250px;
+    min-width: 260px;
+    max-width: 320px;
     background-color: rgba(0, 0, 0, 0.85);
     border-radius: 6px;
     padding: 10px;
