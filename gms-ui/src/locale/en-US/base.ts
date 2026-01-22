@@ -16,8 +16,4 @@ export default {
   'button.export': 'Export',
   'button.upload': 'Upload',
   'button.download': 'Download',
-
-  'common.copy': 'Copy',
-  'common.success': 'Success',
-  'common.fail': 'Failed',
 };

@@ -9,6 +9,7 @@ import com.mybatisflex.core.row.Db;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.gms.config.GameConfig;
+import org.gms.property.ServiceProperty;
 import org.gms.dao.entity.GameConfigDO;
 import org.gms.dao.entity.LangResourcesDO;
 import org.gms.dao.mapper.GameConfigMapper;
@@ -16,7 +17,6 @@ import org.gms.exception.BizException;
 import org.gms.model.dto.ConfigTypeDTO;
 import org.gms.model.dto.GameConfigReqDTO;
 import org.gms.net.server.Server;
-import org.gms.property.ServiceProperty;
 import org.gms.util.I18nUtil;
 import org.gms.util.RequireUtil;
 import org.springframework.core.io.ByteArrayResource;
@@ -33,7 +33,6 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.sql.Date;
 import java.text.DecimalFormat;
 import java.util.*;
 import java.util.stream.Collector;
@@ -130,6 +129,14 @@ public class ConfigService {
                 .build());
         gameConfigDO.setConfigValue(condition.getConfigValue());
         GameConfig.update(gameConfigDO);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void batchUpdateConfig(List<GameConfigDO> configList) {
+        RequireUtil.requireNotEmpty(configList, I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configList"));
+        for (GameConfigDO config : configList) {
+            updateConfig(config);
+        }
     }
 
     @Transactional(rollbackFor = Exception.class)

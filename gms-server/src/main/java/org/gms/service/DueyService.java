@@ -107,7 +107,8 @@ public class DueyService {
              dto.setExpireTime((Timestamp) expireDateObj);
         } else if (timestamp != null) {
             // Fallback to default calculation if expire_date is null
-            long expireDuration = GameConfig.getServerLong("duey_expire_time", 2592000000L);
+            // 配置单位为分钟
+            long expireDuration = GameConfig.getServerInt("duey_expire_time", 43200) * 60 * 1000L;
             dto.setExpireTime(new Timestamp(timestamp.getTime() + expireDuration));
         }
 
@@ -117,7 +118,8 @@ public class DueyService {
                 dto.setDeliveryTime(timestamp);
             } else {
                 // Normal delivery: timestamp + duey_normal_delivery_time (default 1 day)
-                long deliveryDuration = GameConfig.getServerLong("duey_normal_delivery_time", 86400000L);
+                // 配置单位为分钟
+                long deliveryDuration = GameConfig.getServerInt("duey_normal_delivery_time", 1440) * 60 * 1000L;
                 dto.setDeliveryTime(new Timestamp(timestamp.getTime() + deliveryDuration));
             }
         }
@@ -330,7 +332,8 @@ public class DueyService {
             timestamp = req.getDeliveryTime();
         } else if (Boolean.FALSE.equals(req.getQuick())) {
              // 普通快递默认1天后
-             long deliveryDuration = GameConfig.getServerLong("duey_normal_delivery_time", 86400000L);
+             // 配置单位为分钟
+             long deliveryDuration = GameConfig.getServerInt("duey_normal_delivery_time", 1440) * 60 * 1000L;
              timestamp += deliveryDuration;
         }
         
@@ -347,7 +350,8 @@ public class DueyService {
              newPackage.setExpireDate(new Timestamp(expireTime));
         } else {
              // 默认过期时间
-             long expireDuration = GameConfig.getServerLong("duey_expire_time", 2592000000L);
+             // 配置单位为分钟
+             long expireDuration = GameConfig.getServerInt("duey_expire_time", 43200) * 60 * 1000L;
              newPackage.setExpireDate(new Timestamp(System.currentTimeMillis() + expireDuration));
         }
         

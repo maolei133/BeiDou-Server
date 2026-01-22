@@ -56,6 +56,14 @@ public class ConfigController {
     }
 
     @Tag(name = "/config/" + ApiConstant.LATEST)
+    @Operation(summary = "批量修改参数")
+    @PostMapping("/" + ApiConstant.LATEST + "/batchUpdateConfig")
+    public ResultBody<Object> batchUpdateConfig(@RequestBody SubmitBody<List<GameConfigDO>> request) {
+        configService.batchUpdateConfig(request.getData());
+        return ResultBody.success(request, null);
+    }
+
+    @Tag(name = "/config/" + ApiConstant.LATEST)
     @Operation(summary = "删除参数")
     @DeleteMapping("/" + ApiConstant.LATEST + "/deleteConfig/{id}")
     public ResultBody<Object> deleteConfig(@PathVariable("id") Long id) {

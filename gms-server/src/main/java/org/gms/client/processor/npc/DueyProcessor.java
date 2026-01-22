@@ -194,8 +194,8 @@ public class DueyProcessor {
         newPackage.setType(quick ? 1 : 0);
         newPackage.setChecked(1);
         
-        // 设置默认过期时间
-        long expireDuration = GameConfig.getServerLong("duey_expire_time", 2592000000L);
+        // 设置默认过期时间 (配置单位为分钟)
+        long expireDuration = GameConfig.getServerInt("duey_expire_time", 43200) * 60 * 1000L; // 默认30天
         newPackage.setExpireDate(new Timestamp(System.currentTimeMillis() + expireDuration));
         
         // 序列化 itemData
@@ -302,7 +302,7 @@ public class DueyProcessor {
                         .where(DueypackagesDO::getPackageid).eq(packageId)
                         .update();
             } catch (JsonProcessingException e) {
-                log.error("Failed to update item data for duey package", e);
+                log.error("更新快递包裹物品数据失败", e);
             }
 
             if (!insertPackageItem(packageId, item)) {
@@ -316,22 +316,30 @@ public class DueyProcessor {
     public static void dueySendItem(Client c, byte invTypeId, short itemPos, short amount, int sendMesos, String sendMessage, String recipient, boolean quick) {
         if (c.tryacquireClient()) {
             try {
-                if (!GameConfig.getServerBoolean("use_duey")) {
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOSERVER_CLOSE_DUEY.getCode()));
-                    c.getPlayer().dropMessage(1,"快递服务已经倒闭了，无法继续使用。");
-                    return;
-                }
-                if (c.getPlayer().isGM() && c.getPlayer().gmLevel() < GameConfig.getServerInt("minimum_gm_level_to_use_duey")) {
-                    c.getPlayer().message("您当前的GM等级无法使用快递。");
-                    log.info("GM {} 尝试发送一个包裹给 {}", c.getPlayer().getName(), recipient);
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
-                    return;
-                }
+                // 优化流程：GM不受use_duey参数控制，仅受minimum_gm_level_to_use_duey参数控制
+                boolean isGM = c.getPlayer().isGM();
+                int gmLevel = c.getPlayer().gmLevel();
+                int minGmLevel = GameConfig.getServerInt("minimum_gm_level_to_use_duey");
 
-                if (c.getPlayer().getLevel() < GameConfig.getServerInt("duey_min_level")) {
-                    c.getPlayer().message("您的等级不足，无法使用快递。");
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
-                    return;
+                if (isGM) {
+                    if (gmLevel < minGmLevel) {
+                        c.getPlayer().message("您当前的GM等级无法使用快递。");
+                        log.info("GM {} 尝试发送一个包裹给 {}", c.getPlayer().getName(), recipient);
+                        c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                        return;
+                    }
+                } else {
+                    if (!GameConfig.getServerBoolean("use_duey")) {
+                        c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOSERVER_CLOSE_DUEY.getCode()));
+                        c.getPlayer().dropMessage(1,"快递服务已经倒闭了，无法继续使用。");
+                        return;
+                    }
+                    
+                    if (c.getPlayer().getLevel() < GameConfig.getServerInt("duey_min_level")) {
+                        c.getPlayer().message("您的等级不足，无法使用快递。");
+                        c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                        return;
+                    }
                 }
 
                 if (quick && !GameConfig.getServerBoolean("enable_duey_quick_delivery")) {
@@ -360,7 +368,7 @@ public class DueyProcessor {
                     return;
                 }
                 if (!quick) {
-                    fee += 5000;
+                    fee += GameConfig.getServerInt("duey_normal_fee", 5000);
                 } else if (!c.getPlayer().haveItem(ItemId.QUICK_DELIVERY_TICKET)) {
                     AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " 尝试在没有快速配送券的情况下使用快速配送。");
                     log.warn("角色 {} 尝试在没有快速配送券的情况下使用快速配送，金币 {}，数量 {}", c.getPlayer().getName(), sendMesos, amount);
@@ -560,7 +568,8 @@ public class DueyProcessor {
         // 1. 清理旧逻辑的过期包裹 (timestamp + duey_expire_time < now)
         // 兼容旧数据，如果 expire_date 为空，则使用 timestamp 计算
         Calendar c = Calendar.getInstance();
-        c.setTimeInMillis(System.currentTimeMillis() - GameConfig.getServerLong("duey_expire_time"));
+        // 配置单位为分钟
+        c.setTimeInMillis(System.currentTimeMillis() - (GameConfig.getServerLong("duey_expire_time", 43200L) * 60 * 1000L));
         final Timestamp ts = new Timestamp(c.getTime().getTime());
 
         QueryWrapper queryOld = QueryWrapper.create()
@@ -594,6 +603,22 @@ public class DueyProcessor {
                     .where(DueypackagesDO::getPackageid).eq(pkg.getPackageid())
                     .update();
             // 恢复：清理物品数据，因为我们已经有了 JSON 备份
+            deletePackageFromInventoryDB(pkg.getPackageid().intValue());
+        }
+        
+        // 3. 物理删除已过期、已领取、已删除 N天以上的包裹记录
+        long retentionTime = GameConfig.getServerLong("duey_retention_days", 30L) * 24 * 60 * 60 * 1000L;
+        Timestamp retentionTs = new Timestamp(System.currentTimeMillis() - retentionTime);
+        
+        QueryWrapper queryDelete = QueryWrapper.create()
+                .select(DueypackagesDO::getPackageid)
+                .where(DueypackagesDO::getExpireDate).le(retentionTs)
+                .and(DueypackagesDO::getChecked).in(2, 3, 4); // 2:已领取, 3:已过期, 4:已删除
+        
+        List<DueypackagesDO> toDelete = mapper.selectListByQuery(queryDelete);
+        for (DueypackagesDO pkg : toDelete) {
+            mapper.deleteById(pkg.getPackageid());
+            // 再次确保物品数据被清理
             deletePackageFromInventoryDB(pkg.getPackageid().intValue());
         }
     }

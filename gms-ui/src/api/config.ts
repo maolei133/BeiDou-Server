@@ -2,9 +2,9 @@ import axios from 'axios';
 import { RequestOption } from '@arco-design/web-vue';
 
 export interface ConfigSearch {
-  type: string;
-  subType: string;
-  filter: string;
+  type?: string;
+  subType?: string;
+  filter?: string;
   pageNo: number;
   pageSize: number;
 }
@@ -33,6 +33,10 @@ export function addConfig(data: ConfigResult) {
 
 export function updateConfig(data: ConfigResult) {
   return axios.post('/config/v1/updateConfig', data);
+}
+
+export function batchUpdateConfig(configs: ConfigResult[]) {
+  return axios.post('/config/v1/batchUpdateConfig', configs);
 }
 
 export function deleteConfig(id: number) {
