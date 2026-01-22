@@ -539,9 +539,9 @@ public class AutobanManager {
         
         // 根据移动类型选择对应的采样集合
         ConcurrentLinkedQueue<MonsterVacSample> currentSamples;
-        if (movetype == 1) { // 陆地类型
+        if (movetype == 0) { // 陆地类型
             currentSamples = landMonsterVacSamples;
-        } else if (movetype == 2) { // 飞行类型
+        } else if (movetype == 1) { // 飞行类型
             currentSamples = flyMonsterVacSamples;
         } else { // 其它类型
             currentSamples = otherMonsterVacSamples;
@@ -584,7 +584,7 @@ public class AutobanManager {
             // 根据移动类型设置参数：1=陆地，2=飞行，其它=未知
             if (movetype == 1) { // 陆地类型
                 pixelRange = 125; // 采样范围125像素点
-                consistencyThreshold = 0.98; // 相似率98%
+                consistencyThreshold = 0.95; // 相似率98%
             } else if (movetype == 2) { // 飞行类型
                 pixelRange = 50; // 采样范围50像素点
                 consistencyThreshold = 0.98; // 相似率98%
@@ -626,13 +626,13 @@ public class AutobanManager {
                 double mapRatio = (double) nearbyTypeCount / totalTypeMonsters;
                 
                 // 如果该类型的怪物聚集比例低于 90%，则认为是误报（例如玩家拉怪）
-                if (mapRatio < 0.9) { 
+                if (mapRatio < 0.85) {
                      return false;
                 }
 
                 String reason = "坐标: (" + s.x + "," + s.y + ") 附近一致性检测 " + consistentCount + "/" + currentSamples.size() +
                                 " 同类占比: " + nearbyTypeCount + "/" + totalTypeMonsters + " (" + String.format("%.2f", mapRatio*100) + "%)" +
-                                " (移动类型: " + (movetype == 1 ? "陆地" : (movetype == 2 ? "飞行" : "未知")) + ")"; // 构建违规原因描述
+                                " (移动类型: " + (movetype == 0 ? "陆地" : (movetype == 1 ? "飞行" : "未知")) + ")"; // 构建违规原因描述
                 int ret = addPoint(AutobanFactory.MONSTER_VAC, reason); // 添加到反作弊积分系统
                 if (ret >= 1) { // 如果积分达到阈值，执行惩罚措施
                     map.killAllMonsters(); // 击杀所有怪物
@@ -805,11 +805,11 @@ public class AutobanManager {
         }
 
         // 如果伤害超过我们计算值的2.00倍，则添加一个自动封禁点数，并将伤害调整为上限值。
-        if (damage < 0 || damage > maxWithCrit * 2.0) {
+        if (damage < 0 || damage > maxWithCrit * 1.6) {
             int tmpretban = addPoint(AutobanFactory.DAMAGE_HACK,
                     (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
                     " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
-                    " 伤害: " + damage + " 预警: " + (long) (maxWithCrit * 2.0) + " 已打折： " + (long) (maxWithCrit * 0.5)
+                    " 伤害: " + damage + " 预警: " + maxWithCrit * 1.6 + " 已取消"
             );
             if (tmpretban == 0) {
                 int tmpdamge = (int) Math.min(damage - maxWithCrit, Integer.MAX_VALUE);
@@ -819,13 +819,13 @@ public class AutobanManager {
         }
 
         // 如果伤害超过我们计算值的1.5倍，则发出警告。
-        if (damage > maxWithCrit * 1.5) {
+        if (damage > maxWithCrit * 1.3) {
             AutobanFactory.DAMAGE_HACK.alert(chr,
                     (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
                     " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
                     " 伤害: " + damage + " 上限: " + maxWithCrit + " 已纠正: " + maxWithCrit
             );
-            damage =  (long) maxWithCrit;
+            damage =  maxWithCrit;
         }
         return damage;
     }
