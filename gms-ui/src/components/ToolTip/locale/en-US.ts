@@ -39,6 +39,8 @@ export default {
   'tooltip.lockUntil': 'Lock until',
   'tooltip.timeAvailable': 'Time Available',
   'tooltip.karma': 'Use Karma Scissors to enable trade once',
+  'tooltip.spikes': 'Add Spikes',
+  'tooltip.cold': 'Add Cold Protection',
 
   // Categories
   'tooltip.category.Cap': 'Cap',

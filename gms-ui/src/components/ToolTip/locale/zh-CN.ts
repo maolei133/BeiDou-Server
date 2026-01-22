@@ -39,6 +39,8 @@ export default {
   'tooltip.lockUntil': '封印至',
   'tooltip.timeAvailable': '使用期限到',
   'tooltip.karma': '使用宿命剪刀，可以使物品交易1次',
+  'tooltip.spikes': '添加防滑',
+  'tooltip.cold': '添加防寒',
 
   // Categories
   'tooltip.category.Cap': '帽子',

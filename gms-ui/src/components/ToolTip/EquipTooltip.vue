@@ -175,6 +175,16 @@
         <span class="stat-val">+{{ item.jump }}</span>
       </div>
 
+      <!-- 防滑/防寒 -->
+      <div v-if="isSpikes" class="stat-row">
+        <span class="stat-label">{{ $t('tooltip.spikes') }}</span>
+        <span class="stat-val"></span>
+      </div>
+      <div v-if="isCold" class="stat-row">
+        <span class="stat-label">{{ $t('tooltip.cold') }}</span>
+        <span class="stat-val"></span>
+      </div>
+
       <!-- 升级次数 -->
       <div v-if="item.upgradeSlots > 0" class="stat-row">
         <span class="stat-label">{{ $t('tooltip.upgradeSlots') }} :</span>
@@ -283,6 +293,8 @@
   const isAccountSharing = computed(() =>
     hasFlag(flag.value, ItemFlags.ACCOUNT_SHARING)
   );
+  const isSpikes = computed(() => hasFlag(flag.value, ItemFlags.SPIKES));
+  const isCold = computed(() => hasFlag(flag.value, ItemFlags.COLD));
   const isUnique = computed(() => false); // 暂无 Unique 逻辑
 
   // Flag 文本生成
