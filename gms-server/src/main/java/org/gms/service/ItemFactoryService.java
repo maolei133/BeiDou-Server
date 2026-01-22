@@ -14,6 +14,7 @@ import org.gms.dao.mapper.InventoryitemsMapper;
 import org.gms.dao.mapper.InventorymerchantMapper;
 import org.gms.util.Pair;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -113,7 +114,7 @@ public class ItemFactoryService {
      * @param items     要保存的物品列表，包含物品对象和库存类型
      * @param id        账号ID或角色ID (取决于 isAccount)
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveItems(int typeValue, boolean isAccount, List<Pair<Item, InventoryType>> items, int id) {
         QueryWrapper selectQuery = QueryWrapper.create()
                 .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
@@ -129,14 +130,8 @@ public class ItemFactoryService {
         if (!itemIdsToDelete.isEmpty()) {
             inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
             
-            QueryWrapper deleteQuery = QueryWrapper.create()
-                    .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue));
-            if (isAccount) {
-                deleteQuery.and(INVENTORYITEMS_D_O.ACCOUNTID.eq(id));
-            } else {
-                deleteQuery.and(INVENTORYITEMS_D_O.CHARACTERID.eq(id));
-            }
-            inventoryitemsMapper.deleteByQuery(deleteQuery);
+            // 修复死锁问题：使用ID进行删除，避免范围锁/间隙锁导致的死锁
+            inventoryitemsMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYITEMS_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
         }
 
         if (items == null || items.isEmpty()) {
@@ -199,7 +194,7 @@ public class ItemFactoryService {
         }
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveItemsMerchant(int typeValue, List<Pair<Item, InventoryType>> items, List<Short> bundlesList, int id) {
         // 1. 先查询出该角色下所有雇佣商人的物品ID
         QueryWrapper selectMerchantItemsQuery = QueryWrapper.create()

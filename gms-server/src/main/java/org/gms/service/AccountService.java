@@ -214,14 +214,17 @@ public class AccountService {
             // c.banHWID(); // 封禁客户端 操作不可逆？
             // 封禁IP
             String ip = c.getRemoteAddress();
-            IpbansDO ipban = IpbansDO.builder().ip(ip).aid(String.valueOf(accountId)).build();
-            ipbansMapper.insertSelective(ipban);
+            banIp(ip, accountId);
             // 强制离线，这个方法只是中断了连接不会造成客户端退出，但是实际跟掉线没什么区别
             c.disconnect(false, false);
         }
     }
 
     public void unbanAccount(int accountId) {
+        unbanAccount(accountId, false, false, false, null, null);
+    }
+
+    public void unbanAccount(int accountId, boolean unbanIp, boolean unbanMac, boolean unbanHwid, List<String> ips, List<String> macs) {
         RequireUtil.requireNotNull(findById(accountId), I18nUtil.getExceptionMessage("AccountService.id.NotExist"));
 
         // 解封账号
@@ -230,10 +233,46 @@ public class AccountService {
         account.setBanned(false);
         account.setTempban(Timestamp.valueOf(DefaultDates.getTempban())); // Reset tempban
         accountsMapper.update(account);
+        
+        String aidStr = String.valueOf(accountId);
+
         // 解封Mac
-        macbansMapper.deleteByQuery(new QueryWrapper().eq(MacbansDO::getAid, accountId));
+        if (unbanMac) {
+            // 1. 如果提供了具体的 MAC 列表，则只删除这些 MAC
+            if (macs != null && !macs.isEmpty()) {
+                for (String mac : macs) {
+                    if (mac != null && !mac.trim().isEmpty()) {
+                        macbansMapper.deleteByQuery(QueryWrapper.create().where(MACBANS_D_O.MAC.eq(mac.trim())));
+                    }
+                }
+            } else {
+                // 2. 如果没有提供列表（兼容旧逻辑），则删除该账号关联的所有 MAC
+                macbansMapper.deleteByQuery(QueryWrapper.create().where(MACBANS_D_O.AID.eq(aidStr)));
+            }
+        }
+        
         // 解封Ip
-        ipbansMapper.deleteByQuery(new QueryWrapper().eq(IpbansDO::getAid, accountId));
+        if (unbanIp) {
+            // 1. 如果提供了具体的 IP 列表，则只删除这些 IP
+            if (ips != null && !ips.isEmpty()) {
+                for (String ip : ips) {
+                    if (ip != null && !ip.trim().isEmpty()) {
+                        ipbansMapper.deleteByQuery(QueryWrapper.create().where(IPBANS_D_O.IP.eq(ip.trim())));
+                    }
+                }
+            } else {
+                // 2. 如果没有提供列表（兼容旧逻辑），则删除该账号关联的所有 IP
+                ipbansMapper.deleteByQuery(QueryWrapper.create().where(IPBANS_D_O.AID.eq(aidStr)));
+            }
+        }
+
+        // 解封Hwid
+        if (unbanHwid) {
+            AccountsDO acc = accountsMapper.selectOneById(accountId);
+            if (acc != null && acc.getHwid() != null) {
+                hwidbansMapper.deleteByQuery(QueryWrapper.create().where(HWIDBANS_D_O.HWID.eq(acc.getHwid())));
+            }
+        }
     }
 
     public void resetAllLoggedIn() {
@@ -333,16 +372,22 @@ public class AccountService {
     }
 
     public void banHwid(String hwid) {
-        hwidbansMapper.insert(HwidbansDO.builder().hwid(hwid).build());
+        if (hwidbansMapper.selectCountByQuery(QueryWrapper.create().where(HWIDBANS_D_O.HWID.eq(hwid))) == 0) {
+            hwidbansMapper.insert(HwidbansDO.builder().hwid(hwid).build());
+        }
     }
 
     public void banIp(String ip, int accountId) {
-        ipbansMapper.insert(IpbansDO.builder().ip(ip).aid(String.valueOf(accountId)).build());
+        if (ipbansMapper.selectCountByQuery(QueryWrapper.create().where(IPBANS_D_O.IP.eq(ip))) == 0) {
+            ipbansMapper.insert(IpbansDO.builder().ip(ip).aid(String.valueOf(accountId)).build());
+        }
     }
 
     public void banMacs(Set<String> macs, int accountId) {
         for (String mac : macs) {
-            macbansMapper.insert(MacbansDO.builder().mac(mac).aid(String.valueOf(accountId)).build());
+            if (macbansMapper.selectCountByQuery(QueryWrapper.create().where(MACBANS_D_O.MAC.eq(mac))) == 0) {
+                macbansMapper.insert(MacbansDO.builder().mac(mac).aid(String.valueOf(accountId)).build());
+            }
         }
     }
 

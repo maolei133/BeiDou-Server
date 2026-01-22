@@ -661,6 +661,12 @@
       :default-receiver="dueyTargetName"
       @success="loadData"
     />
+    <UnbanPlayerModal
+      v-model:visible="unbanFormVisible"
+      :player="unbanTarget"
+      :loading="loading"
+      @success="loadData"
+    />
   </div>
 </template>
 
@@ -675,7 +681,6 @@
     givePlayerSrc,
     OnlinePlayer,
     disconnectPlayer,
-    unbanPlayer,
   } from '@/api/player';
   import { getJobs, getGuilds, InformationResult } from '@/api/information';
   import SendDueyModal from '@/views/game/duey/list/components/SendDueyModal.vue';
@@ -683,6 +688,7 @@
   import EditPlayerModal from './EditPlayerModal.vue';
   import BanPlayerModal from './BanPlayerModal.vue';
   import GiveItemModal from './components/GiveItemModal.vue';
+  import UnbanPlayerModal from './UnbanPlayerModal.vue';
 
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(false);
@@ -735,6 +741,8 @@
   const banAll = ref(false);
   const dueyFormVisible = ref(false);
   const dueyTargetName = ref('');
+  const unbanFormVisible = ref(false);
+  const unbanTarget = ref<OnlinePlayer | null>(null);
 
   const formData = ref<GiveForm>({
     type: 5,
@@ -1022,20 +1030,8 @@
   };
 
   const handleUnban = (record: OnlinePlayer) => {
-    Modal.confirm({
-      title: t('account.player.unban.confirm.title'),
-      content: t('account.player.unban.confirm.content', { name: record.name }),
-      onOk: async () => {
-        setLoading(true);
-        try {
-          await unbanPlayer(record.id);
-          Message.success(t('message.success'));
-          loadData();
-        } finally {
-          setLoading(false);
-        }
-      },
-    });
+    unbanTarget.value = record;
+    unbanFormVisible.value = true;
   };
 
   const handleDuey = (record: OnlinePlayer) => {

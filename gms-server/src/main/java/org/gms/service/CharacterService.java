@@ -1620,10 +1620,8 @@ public class CharacterService {
             tempBan = new Timestamp(cal.getTimeInMillis());
             isTempBan = true;
         } else {
-            // 永久封禁，使用默认的永久封禁时间（例如2099年）
-            Calendar cal = Calendar.getInstance();
-            cal.set(2099, Calendar.DECEMBER, 31, 0, 0, 0);
-            tempBan = new Timestamp(cal.getTimeInMillis());
+            // 永久封禁，tempban设置为null，避免解封后因tempban未过期导致无法登录
+            tempBan = null;
             isTempBan = false;
         }
 
@@ -1715,11 +1713,11 @@ public class CharacterService {
             // 4. 全服通知 (单人)
             if (notify) {
                 String name = (onlineChr != null) ? onlineChr.getName() : (offlineChr != null ? offlineChr.getName() : "未知");
-                String msg = notifyContent;
-                if (msg == null || msg.isEmpty()) {
-                    msg = I18nUtil.getMessage("Character.ban.notice", name, reason);
+                String msg;
+                if (notifyContent != null && !notifyContent.isEmpty()) {
+                    reason = notifyContent;
                 }
-                
+                msg = I18nUtil.getMessage("Character.ban.notice", name, reason);
                 int worldId = (onlineChr != null) ? onlineChr.getWorld() : (offlineChr != null ? offlineChr.getWorld() : 0);
                 Server.getInstance().broadcastMessage(worldId, PacketCreator.sendYellowTip(msg));
             }
@@ -1769,9 +1767,10 @@ public class CharacterService {
     
     /**
      * 解封玩家
-     * @param charId 角色ID
+     * @param request 解封请求
      */
-    public void unban(Integer charId) {
+    public void unban(ChrIdDTO request) {
+        Integer charId = request.getId();
         Pair<Character, CharactersDO> pair = getOnlineOrOfflineCharacter(charId);
         Character onlineChr = pair.getLeft();
         CharactersDO offlineChr = pair.getRight();
@@ -1781,7 +1780,7 @@ public class CharacterService {
         int accountId = (onlineChr != null) ? onlineChr.getAccountId() : offlineChr.getAccountid();
         if (accountId == -1) return;
         
-        accountService.unbanAccount(accountId);
+        accountService.unbanAccount(accountId, request.isUnbanIp(), request.isUnbanMac(), request.isUnbanHwid(), request.getIps(), request.getMacs());
         
         if (onlineChr != null) {
             onlineChr.setBanned(false);

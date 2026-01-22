@@ -306,6 +306,10 @@ export default {
   'account.player.unban.confirm.title': 'Unban',
   'account.player.unban.confirm.content':
     'Are you sure to unban player {name}?',
+  'account.player.unban.options': 'Unban Options',
+  'account.player.unban.options.ip': 'Unban IP',
+  'account.player.unban.options.mac': 'Unban MAC',
+  'account.player.unban.options.hwid': 'Unban HWID',
   'account.player.give.title': 'Give Resource',
   'account.player.give.title.global': 'Global Give Resource',
   'account.player.equip.success': 'Equip info loaded successfully',
