@@ -8,6 +8,27 @@ export interface DueyItem {
   owner: string;
   expiration: number;
   name?: string;
+  // 装备属性
+  str?: number;
+  dex?: number;
+  inte?: number; // 统一为 inte
+  luk?: number;
+  hp?: number;
+  mp?: number;
+  watk?: number;
+  matk?: number;
+  wdef?: number;
+  mdef?: number;
+  acc?: number;
+  avoid?: number;
+  hands?: number;
+  speed?: number;
+  jump?: number;
+  upgradeSlots?: number;
+  level?: number;
+  itemLevel?: number;
+  flag?: number;
+  vicious?: number;
 }
 
 export interface DueyPackage {
@@ -57,7 +78,7 @@ export interface SendDueyReq {
   // 装备属性
   str?: number;
   dex?: number;
-  intel?: number;
+  inte?: number; // 统一为 inte
   luk?: number;
   hp?: number;
   mp?: number;
@@ -89,9 +110,9 @@ export function deleteDueyPackage(id: number) {
 
 export function sendDueyPackage(data: SendDueyReq) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { intel, ...rest } = data;
+  const { inte, ...rest } = data;
   return axios.post<ResultBody<void>>('/duey/v1/send', {
     ...rest,
-    int: intel,
+    int: inte, // 映射回后端期望的 'int'
   });
 }

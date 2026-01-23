@@ -283,7 +283,7 @@
     // 装备属性
     str: undefined,
     dex: undefined,
-    intel: undefined,
+    inte: undefined, // 统一为 inte
     luk: undefined,
     hp: undefined,
     mp: undefined,
@@ -398,7 +398,7 @@
   const resetEquipStats = () => {
     form.str = undefined;
     form.dex = undefined;
-    form.intel = undefined;
+    form.inte = undefined;
     form.luk = undefined;
     form.hp = undefined;
     form.mp = undefined;
@@ -535,7 +535,7 @@
           // 填充默认属性，尝试多种字段名以兼容不同后端返回格式
           form.str = getAttr(equipData, ['str', 'Str']);
           form.dex = getAttr(equipData, ['dex', 'Dex']);
-          form.intel = getAttr(equipData, ['int', 'Int', 'intel', 'Intel']);
+          form.inte = getAttr(equipData, ['int', 'Int', 'intel', 'Intel']);
           form.luk = getAttr(equipData, ['luk', 'Luk']);
           form.hp = getAttr(equipData, ['hp', 'Hp', 'HP']);
           form.mp = getAttr(equipData, ['mp', 'Mp', 'MP']);
@@ -650,7 +650,7 @@
       id: form.itemId,
       str: form.str,
       dex: form.dex,
-      int: form.intel,
+      int: form.inte,
       luk: form.luk,
       hp: form.hp,
       mp: form.mp,
@@ -682,7 +682,7 @@
     // 将编辑后的属性回填到 form
     form.str = data.str;
     form.dex = data.dex;
-    form.intel = data.int;
+    form.inte = data.int;
     form.luk = data.luk;
     form.hp = data.hp;
     form.mp = data.mp;

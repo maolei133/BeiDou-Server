@@ -12,8 +12,8 @@
         <div class="item-name-row">
           <span
             class="item-name clickable-text"
-            @click="copyText(item.name)"
             :title="$t('common.copy')"
+            @click="copyText(item.name)"
           >
             {{ item.name || $t('tooltip.unknownItem') }}
           </span>
@@ -25,8 +25,8 @@
         <!-- ID 显示 -->
         <div
           class="item-id-row clickable-text"
-          @click="copyText(String(item.itemId))"
           :title="$t('common.copy')"
+          @click="copyText(String(item.itemId))"
         >
           ID: {{ item.itemId }}
         </div>
@@ -122,9 +122,9 @@
         <span class="stat-label">{{ $t('tooltip.dex') }} :</span>
         <span class="stat-val">+{{ item.dex }}</span>
       </div>
-      <div v-if="item.int_ > 0" class="stat-row">
+      <div v-if="itemInt > 0" class="stat-row">
         <span class="stat-label">{{ $t('tooltip.int') }} :</span>
-        <span class="stat-val">+{{ item.int_ }}</span>
+        <span class="stat-val">+{{ itemInt }}</span>
       </div>
       <div v-if="item.luk > 0" class="stat-row">
         <span class="stat-label">{{ $t('tooltip.luk') }} :</span>
@@ -244,7 +244,10 @@
       sn?: number;
       str?: number;
       dex?: number;
-      int_?: number;
+      int?: number; // 兼容 int
+      // eslint-disable-next-line camelcase, no-underscore-dangle
+      int_?: number; // 兼容 int_
+      inte?: number; // 统一为 inte
       luk?: number;
       hp?: number;
       mp?: number;
@@ -273,6 +276,15 @@
       reqPop?: number;
     };
   }>();
+
+  // 计算属性：获取智力值，优先取 inte，其次 int，最后 int_
+  const itemInt = computed(() => {
+    if (props.item.inte !== undefined) return props.item.inte;
+    if (props.item.int !== undefined) return props.item.int;
+    // eslint-disable-next-line camelcase, no-underscore-dangle
+    if (props.item.int_ !== undefined) return props.item.int_;
+    return 0;
+  });
 
   // 图标 URL
   const iconUrl = computed(() => getIconUrl('item', props.item.itemId));
