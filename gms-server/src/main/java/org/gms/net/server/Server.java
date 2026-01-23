@@ -148,6 +148,7 @@ public class Server {
     @Setter
     private boolean shutdown = false;
     private long shutdownTime = 0;
+    private volatile Thread shutdownThread = null;
     public static long uptime = System.currentTimeMillis();
     private long nextTime;
 
@@ -1710,18 +1711,32 @@ public class Server {
      * @param exit              标识关服后是否退出应用程序进程。true表示退出，false表示仅关闭服务（或重启）。
      */
     public synchronized void shutdownWithMsgAndInternal(ServerShutdownDTO serverShutdownDTO, boolean exit) {
+        // Stop existing thread if any
+        if (shutdownThread != null && shutdownThread.isAlive()) {
+            log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.stopping"));
+            shutdownThread.interrupt();
+            setShutdown(false); // Reset shutdown state
+            shutdownThread = null;
+        }
+
         int minutes = serverShutdownDTO.getMinutes();
         long time = minutes * 60000L;
         this.shutdownTime = System.currentTimeMillis() + time;
 
-        log.info("开始执行关服倒计时，预计关服时间: {}, 剩余时间: {} 分钟", new Date(this.shutdownTime), minutes);
+        log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.start"), new Date(this.shutdownTime), minutes);
 
         // 启动一个独立的平台线程来执行关服倒计时，避免死锁
-        new Thread(() -> {
+        shutdownThread = new Thread(() -> {
             long remainingTime = time;
             boolean firstNotice = true;
 
             while (remainingTime > 0) {
+                // Check if interrupted
+                if (Thread.currentThread().isInterrupted()) {
+                    log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.cancelled"));
+                    return;
+                }
+
                 // 剩余时间（毫秒）
                 long timeLeft = remainingTime;
 
@@ -1758,7 +1773,8 @@ public class Server {
                     Thread.sleep(1000); // 每秒检查一次
                     remainingTime -= 1000;
                 } catch (InterruptedException e) {
-                    log.error("Shutdown countdown interrupted", e);
+                    log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.interrupted"));
+                    return;
                 }
             }
 
@@ -1803,7 +1819,9 @@ public class Server {
             log.info(I18nUtil.getLogMessage("Server.shutdown.executing"));
             Server.getInstance().shutdown(false, exit).run();
             log.info(I18nUtil.getLogMessage("Server.shutdown.complete"));
-        }, "Shutdown-Countdown-Thread").start();
+            shutdownThread = null;
+        }, "Shutdown-Countdown-Thread");
+        shutdownThread.start();
     }
 
     private void broadcastShutdownMessage(long timeLeft, ServerShutdownDTO dto, boolean firstNotice, boolean showPopup) {
@@ -1831,7 +1849,7 @@ public class Server {
             msg = I18nUtil.getMessage("ShutdownCommand.message7", strTime);
         }
 
-        log.info("发送关服通知: 剩余时间={}ms, 消息={}", timeLeft, msg);
+        log.info(I18nUtil.getLogMessage("Server.shutdown.notice.msg"), timeLeft, msg);
 
         for (World w : Server.getInstance().getWorlds()) {
             if (dto.getShowServerMsg()) {
