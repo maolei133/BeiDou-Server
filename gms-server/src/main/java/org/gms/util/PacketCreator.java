@@ -5236,7 +5236,7 @@ public class PacketCreator {
                 p.writeInt(s.getMesos());
                 p.writeString(s.getBuyer());
             }
-            p.writeInt(hm.getMesos());//:D?
+            p.writeInt((int) hm.getTotalRevenue());// 本次开店的累计税后收入
             // 为了在商店标题显示剩余天数
             String description = hm.getDescription();
             String days = "  |  剩余 " + hm.getRemainingDays() + " 天";

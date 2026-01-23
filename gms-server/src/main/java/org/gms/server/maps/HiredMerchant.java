@@ -58,40 +58,77 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
+ * 雇佣商店（Hired Merchant）
+ * <p>
+ * 代表游戏地图中的一个雇佣商店实例。
+ * 负责处理商店的开张、关闭、物品买卖、访客管理以及与数据库的交互。
+ * </p>
+ *
  * @author XoticStory
- * @author Ronan - concurrency protection
+ * @author Ronan - 并发保护
  */
 public class HiredMerchant extends AbstractMapObject {
     private static final Logger log = LoggerFactory.getLogger(HiredMerchant.class);
+    /** 访客历史记录最大数量 */
     private static final int VISITOR_HISTORY_LIMIT = 10;
+    /** 黑名单最大数量 */
     private static final int BLACKLIST_LIMIT = 20;
 
+    /** 店主角色ID */
     private final int ownerId;
+    /** 商店外观道具ID */
     private final int itemId;
+    /** 当前商店内的金币（未取回） */
     private int mesos = 0;
+    /** 所在频道 */
     private final int channel;
+    /** 所在世界 */
     private final int world;
+    /** 开店时间戳 */
     private final long start;
+    /** 店主名称 */
     private String ownerName = "";
+    /** 商店描述/名称 */
     private String description = "";
+    /** 商店内的物品列表 */
     private final List<PlayerShopItem> items = new LinkedList<>();
+    /** 聊天消息记录 */
     private final List<Pair<String, Byte>> messages = new LinkedList<>();
+    /** 已售出物品记录 */
     private final List<SoldItem> sold = new LinkedList<>();
+    /** 商店是否开启状态 */
     private final AtomicBoolean open = new AtomicBoolean();
+    /** 商店是否已发布（正式营业） */
     private boolean published = false;
+    /** 所在地图对象 */
     private MapleMap map;
+    /** 当前访客列表（最多3人） */
     private final Visitor[] visitors = new Visitor[3];
+    /** 访客历史记录 */
     private final LinkedList<PastVisitor> visitorHistory = new LinkedList<>();
-    private final LinkedHashSet<String> blacklist = new LinkedHashSet<>(); // 区分大小写的角色名
+    /** 黑名单列表（角色名） */
+    private final LinkedHashSet<String> blacklist = new LinkedHashSet<>();
+    /** 访客操作锁 */
     private final Lock visitorLock = new ReentrantLock(true);
+    /** 角色服务 */
     private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
+    /** 雇佣商店服务 */
     private static final HiredMerchantService hiredMerchantService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
     
+    /** 数据库中的商店ID */
     private int merchantId;
+    /** 定时关闭任务 */
     private ScheduledFuture<?> closeSchedule = null;
+    
+    /** 总销售额（税前） */
+    private long totalSales = 0;
+    /** 总收入（税后） */
+    private long totalRevenue = 0;
 
+    /** 访客记录内部类 */
     private record Visitor(Character chr, Instant enteredAt) {}
 
+    /** 历史访客记录内部类 */
     public record PastVisitor(String chrName, Duration visitDuration) {}
 
     public HiredMerchant(final Character owner, String desc, int itemId) {
@@ -157,11 +194,20 @@ public class HiredMerchant extends AbstractMapObject {
     public void loadSoldItems(List<HiredMerchantTransactionsDO> transactions) {
         synchronized (sold) {
             sold.clear();
+            totalSales = 0;
+            totalRevenue = 0;
             for (HiredMerchantTransactionsDO tx : transactions) {
                 String buyerName = Character.getNameById(tx.getBuyerId());
                 if (buyerName == null) buyerName = "未知买家";
                 
                 sold.add(new SoldItem(buyerName, tx.getItemId(), tx.getQuantity().shortValue(), tx.getTotalPrice().intValue()));
+                
+                long txPrice = tx.getPrice() != null ? tx.getPrice() : 0;
+                long txQty = tx.getQuantity() != null ? tx.getQuantity() : 0;
+                long txTotal = tx.getTotalPrice() != null ? tx.getTotalPrice() : 0;
+                
+                totalSales += txPrice * txQty;
+                totalRevenue += txTotal;
             }
         }
     }
@@ -412,10 +458,11 @@ public class HiredMerchant extends AbstractMapObject {
                 return;
             }
             int price = (int) priceLong;
+            Character chr = c.getPlayer();
 
-            if (c.getPlayer().getMeso() >= price) {
+            if (chr.getMeso() >= price) {
                 if (canBuy(c, newItem)) {
-                    c.getPlayer().gainMeso(-price, false);
+                    chr.gainMeso(-price, false);
                     
                     // 使用配置的税率
                     int taxRate = GameConfig.getServerInt("hired_merchant_tax_rate", 0);
@@ -426,15 +473,18 @@ public class HiredMerchant extends AbstractMapObject {
                     // 检查金币上限
                     long mesoLimit = GameConfig.getServerLong("hired_merchant_meso_limit", 2147483647L);
                     if (this.mesos + price > mesoLimit) {
-                        c.getPlayer().dropMessage(1, "店主金币已达上限，无法购买。");
-                        c.getPlayer().gainMeso(price + fee, false); // 退还金币
+                        chr.dropMessage(1, "店主金币已达上限，无法购买。");
+                        chr.gainMeso(price + fee, false); // 退还金币
                         c.sendPacket(PacketCreator.enableActions());
                         return;
                     }
 
                     synchronized (sold) {
-                        sold.add(new SoldItem(c.getPlayer().getName(), pItem.getItem().getItemId(), newItem.getQuantity(), price));
+                        sold.add(new SoldItem(chr.getName(), pItem.getItem().getItemId(), newItem.getQuantity(), (int) priceLong));
                     }
+                    
+                    this.totalSales += priceLong;
+                    this.totalRevenue += price;
 
                     pItem.setBundles((short) (pItem.getBundles() - quantity));
                     if (pItem.getBundles() < 1) {
@@ -442,7 +492,7 @@ public class HiredMerchant extends AbstractMapObject {
                     }
 
                     if (GameConfig.getServerBoolean("use_announce_shop_item_sold")) {   // 创意来自 Vcoc
-                        announceItemSold(newItem, price, getQuantityLeft(pItem.getItem().getItemId()));
+                        announceItemSold(newItem, price, priceLong, chr.getName(), getQuantityLeft(pItem.getItem().getItemId()));
                     }
 
                     if (merchantId > 0) {
@@ -454,7 +504,7 @@ public class HiredMerchant extends AbstractMapObject {
                                 quantity,
                                 pItem.getPrice(),
                                 price,
-                                c.getPlayer().getId()
+                                chr.getId()
                         );
                         
                         this.mesos += price;
@@ -476,12 +526,12 @@ public class HiredMerchant extends AbstractMapObject {
                     }
 
                 } else {
-                    c.getPlayer().dropMessage(1, "你的背包已满。请在购买此物品前清理一个空位。");
+                    chr.dropMessage(1, "你的背包已满。请在购买此物品前清理一个空位。");
                     c.sendPacket(PacketCreator.enableActions());
                     return;
                 }
             } else {
-                c.getPlayer().dropMessage(1, "你没有足够的金币购买此物品。");
+                chr.dropMessage(1, "你没有足够的金币购买此物品。");
                 c.sendPacket(PacketCreator.enableActions());
                 return;
             }
@@ -493,12 +543,14 @@ public class HiredMerchant extends AbstractMapObject {
         }
     }
 
-    private void announceItemSold(Item item, int mesos, int inStore) {
+    private void announceItemSold(Item item, int mesos, long totalSales, String buyerName, int inStore) {
         String qtyStr = (item.getQuantity() > 1) ? " x " + item.getQuantity() : "";
+        String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
+        String remainStr = (inStore > 0) ? "剩余 " + inStore + " 件" : "已售罄";
 
         Character player = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
         if (player != null && player.isLoggedInWorld()) {
-            player.dropMessage(6, "[雇佣商人] 物品 '" + ItemInformationProvider.getInstance().getName(item.getItemId()) + "'" + qtyStr + " 已以 " + mesos + " 金币售出。 (剩余 " + inStore + ")");
+            player.dropMessage(6, "[雇佣商店] " + ownerName + "：您的物品 " + itemName + " 已被 " + buyerName + " 买走了 " + item.getQuantity() + "件 ，售价 " + totalSales + "金币，税后收入 " + mesos + "金币 ，【" + remainStr + "】");
         }
     }
 
@@ -1166,5 +1218,13 @@ public class HiredMerchant extends AbstractMapObject {
     
     public void rescheduleClose() {
         scheduleClose();
+    }
+    
+    public long getTotalSales() {
+        return totalSales;
+    }
+    
+    public long getTotalRevenue() {
+        return totalRevenue;
     }
 }
