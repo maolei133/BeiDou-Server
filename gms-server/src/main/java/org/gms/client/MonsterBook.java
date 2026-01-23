@@ -91,6 +91,41 @@ public final class MonsterBook {
         }
     }
 
+    public void modifyCard(final Client c, final int cardid, final int level) {
+        lock.lock();
+        try {
+            if (level <= 0) {
+                if (cards.containsKey(cardid)) {
+                    cards.remove(cardid);
+                    if (cardid / 1000 >= 2388) {
+                        specialCard--;
+                    } else {
+                        normalCard--;
+                    }
+                }
+            } else {
+                Integer oldLevel = cards.get(cardid);
+                if (oldLevel == null) {
+                    if (cardid / 1000 >= 2388) {
+                        specialCard++;
+                    } else {
+                        normalCard++;
+                    }
+                }
+                cards.put(cardid, Math.min(level, 5));
+            }
+            calculateLevel();
+        } finally {
+            lock.unlock();
+        }
+
+        if (c != null) {
+            if (level > 0) {
+                c.sendPacket(PacketCreator.addCard(false, cardid, Math.min(level, 5)));
+            }
+        }
+    }
+
     private void calculateLevel() {
         lock.lock();
         try {

@@ -16,6 +16,7 @@ public enum InformationType {
     SKILL("skill"),
     HAIR("hair"),
     FACE("face"),
+    MONSTER_CARD("monster_card"), // 新增怪物卡片类型
     ;
 
     private final String type;

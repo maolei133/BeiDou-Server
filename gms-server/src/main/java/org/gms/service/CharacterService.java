@@ -314,7 +314,25 @@ public class CharacterService {
             String jobName = (job != null) ? job.getName() : I18nUtil.getMessage("Character.job.unknown");
             
             // 检查角色是否在线，如果在线，则使用内存中的实时数据
-            Character onlineChr = Server.getInstance().getWorld(request.getWorld()).getPlayerStorage().getCharacterById(charactersDO.getId());
+            Character onlineChr = null;
+            try {
+                // 优先从请求的 World 查找
+                World world = Server.getInstance().getWorld(request.getWorld());
+                if (world != null) {
+                    onlineChr = world.getPlayerStorage().getCharacterById(charactersDO.getId());
+                }
+                
+                // 如果没找到，尝试遍历所有 World (防止跨服操作导致的数据不一致)
+                if (onlineChr == null) {
+                    for (World w : Server.getInstance().getWorlds()) {
+                        onlineChr = w.getPlayerStorage().getCharacterById(charactersDO.getId());
+                        if (onlineChr != null) break;
+                    }
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+
             if (onlineChr != null) {
                 // 再次过滤内存数据，因为数据库查询可能包含在线玩家，但内存数据更准确
                 if (request.getChannel() != null && onlineChr.getClient().getChannel() != request.getChannel()) return null;
