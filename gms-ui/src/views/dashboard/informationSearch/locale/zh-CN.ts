@@ -76,4 +76,9 @@ export default {
   'informationSearch.column.desc': '描述',
 
   'informationSearch.check.filter': '搜索文本不能为空',
+
+  'itemSelector.title': '物品选择',
+  'itemSelector.pagination.total': '共 {total} 条',
+  'itemSelector.pagination.page': '{count} / 页',
+  'itemSelector.pagination.goto': '前往',
 };

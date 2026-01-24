@@ -2,156 +2,160 @@
   <a-modal
     v-model:visible="visibleModel"
     :title="$t('itemSelector.title')"
-    width="600px"
+    width="800px"
+    :body-style="{
+      height: '600px',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+    }"
     @cancel="handleCancel"
     @ok="handleOk"
   >
-    <a-row :gutter="16" style="margin-bottom: 16px">
-      <a-col :span="8">
-        <a-select
-          v-model="condition.type"
-          :placeholder="$t('informationSearch.placeholder.type')"
-          @change="handleTypeChange"
-        >
-          <a-option value="eqp">{{
-            $t('informationSearch.type.eqp')
-          }}</a-option>
-          <a-option value="consume">{{
-            $t('informationSearch.type.consume')
-          }}</a-option>
-          <a-option value="ins">{{
-            $t('informationSearch.type.ins')
-          }}</a-option>
-          <a-option value="etc">{{
-            $t('informationSearch.type.etc')
-          }}</a-option>
-          <a-option value="cash">{{
-            $t('informationSearch.type.cash')
-          }}</a-option>
-        </a-select>
-      </a-col>
-      <a-col v-if="showEquipCategory" :span="8">
-        <a-select
-          v-model="condition.category"
-          :placeholder="$t('informationSearch.placeholder.category')"
-          allow-clear
-          allow-search
-          @change="handleCategoryChange"
-        >
-          <a-opt-group :label="$t('informationSearch.group.character')">
-            <a-option
-              v-for="option in characterCategoryOptions"
-              :key="option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </a-option>
-          </a-opt-group>
-          <a-opt-group :label="$t('informationSearch.group.pet')">
-            <a-option
-              v-for="option in petCategoryOptions"
-              :key="option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </a-option>
-          </a-opt-group>
-        </a-select>
-      </a-col>
-      <a-col v-if="showEquipSubCategory" :span="8">
-        <a-select
-          v-model="condition.subCategory"
-          :placeholder="$t('informationSearch.placeholder.subCategory')"
-          allow-clear
-          allow-search
-          @change="handleSubCategoryChange"
-        >
+    <div class="filter-container">
+      <a-select
+        v-model="selectedType"
+        :placeholder="$t('informationSearch.placeholder.type')"
+        allow-clear
+        style="width: 120px"
+        @change="handleTypeChange"
+        @clear="handleTypeClear"
+      >
+        <a-option value="eqp">{{ $t('informationSearch.type.eqp') }}</a-option>
+        <a-option value="consume">{{
+          $t('informationSearch.type.consume')
+        }}</a-option>
+        <a-option value="ins">{{ $t('informationSearch.type.ins') }}</a-option>
+        <a-option value="etc">{{ $t('informationSearch.type.etc') }}</a-option>
+        <a-option value="cash">{{
+          $t('informationSearch.type.cash')
+        }}</a-option>
+      </a-select>
+
+      <a-select
+        v-if="showEquipCategory"
+        v-model="condition.category"
+        :placeholder="$t('informationSearch.placeholder.category')"
+        allow-clear
+        allow-search
+        style="width: 120px"
+        @change="handleCategoryChange"
+      >
+        <a-opt-group :label="$t('informationSearch.group.character')">
           <a-option
-            v-for="option in subCategoryOptions"
+            v-for="option in characterCategoryOptions"
             :key="option.value"
             :value="option.value"
           >
             {{ option.label }}
           </a-option>
-        </a-select>
-      </a-col>
-      <a-col :span="8">
-        <a-input-search
-          v-model="condition.filter"
-          :placeholder="$t('informationSearch.placeholder.filter')"
-          @search="searchData"
-          @press-enter="searchData"
-        />
-      </a-col>
-    </a-row>
+        </a-opt-group>
+        <a-opt-group :label="$t('informationSearch.group.pet')">
+          <a-option
+            v-for="option in petCategoryOptions"
+            :key="option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </a-option>
+        </a-opt-group>
+      </a-select>
 
-    <a-table
-      row-key="id"
-      :loading="loading"
-      :data="informationList"
-      :pagination="false"
-      :scroll="{ y: 400 }"
-      @row-click="handleRowClick"
-    >
-      <template #columns>
-        <a-table-column title="ID" data-index="id" :width="100" />
-        <a-table-column title="图标" :width="60" align="center">
-          <template #cell="{ record }">
-            <img :src="getImg(record.type, record.id)" width="32" height="32" />
-          </template>
-        </a-table-column>
-        <a-table-column title="名称" data-index="name" />
-      </template>
-    </a-table>
+      <a-select
+        v-if="showEquipSubCategory"
+        v-model="condition.subCategory"
+        :placeholder="$t('informationSearch.placeholder.subCategory')"
+        allow-clear
+        allow-search
+        style="width: 120px"
+        @change="handleSubCategoryChange"
+      >
+        <a-option
+          v-for="option in subCategoryOptions"
+          :key="option.value"
+          :value="option.value"
+        >
+          {{ option.label }}
+        </a-option>
+      </a-select>
 
-    <div
-      style="
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        margin-top: 16px;
-      "
-    >
+      <a-input-search
+        v-model="condition.filter"
+        :placeholder="$t('informationSearch.placeholder.filter')"
+        style="flex: 1; min-width: 200px"
+        @search="searchData"
+        @press-enter="searchData"
+      />
+    </div>
+
+    <div style="flex: 1; overflow: hidden; position: relative">
+      <a-table
+        row-key="id"
+        :loading="loading"
+        :data="informationList"
+        :pagination="false"
+        :scroll="{ y: '100%' }"
+        style="height: 100%"
+        @row-click="handleRowClick"
+      >
+        <template #columns>
+          <a-table-column title="ID" data-index="id" :width="100" />
+          <a-table-column title="图标" :width="60" align="center">
+            <template #cell="{ record }">
+              <img
+                :src="getImg(record.type, record.id)"
+                width="32"
+                height="32"
+              />
+            </template>
+          </a-table-column>
+          <a-table-column title="名称" data-index="name" />
+        </template>
+      </a-table>
+    </div>
+
+    <div class="pagination-container">
       <a-pagination
         :total="pagination.total"
         :current="pagination.current"
         :page-size="pagination.pageSize"
-        :page-size-options="pagination.pageSizeOptions"
         show-total
-        show-page-size
-        show-jumper
         @change="onPageChange"
-        @page-size-change="onPageSizeChange"
       >
-        <template #page-item="{ page, active }">
-          <span
-            v-if="
-              page === 1 ||
-              page === pagination.totalPage ||
-              (page >= pagination.current - 1 && page <= pagination.current + 1)
-            "
-            :style="active ? { color: 'rgb(var(--primary-6))' } : {}"
-          >
-            {{ page }}
-          </span>
-          <span
-            v-else-if="
-              page === pagination.current - 2 || page === pagination.current + 2
-            "
-          >
-            ...
-          </span>
-        </template>
         <template #total>
-          <!-- 隐藏默认的 total 显示，因为我们要把它移到下面 -->
+          <!-- Hide default total -->
         </template>
       </a-pagination>
-      <div style="margin-top: 8px; color: var(--color-text-3); font-size: 12px">
-        {{
-          $t('component.pagination.total', {
-            total: pagination.total,
-          })
-        }}
+
+      <div class="pagination-controls">
+        <span class="total-text">
+          {{ $t('itemSelector.pagination.total', { total: pagination.total }) }}
+        </span>
+        <div class="controls-right">
+          <a-select
+            v-model="pagination.pageSize"
+            style="width: 120px"
+            @change="onPageSizeChange"
+          >
+            <a-option :value="10">{{
+              $t('itemSelector.pagination.page', { count: 10 })
+            }}</a-option>
+            <a-option :value="20">{{
+              $t('itemSelector.pagination.page', { count: 20 })
+            }}</a-option>
+            <a-option :value="50">{{
+              $t('itemSelector.pagination.page', { count: 50 })
+            }}</a-option>
+          </a-select>
+          <span style="margin: 0 8px">{{
+            $t('itemSelector.pagination.goto')
+          }}</span>
+          <a-input-number
+            v-model="jumpPage"
+            style="width: 60px"
+            @press-enter="handleJumpPage"
+          />
+        </div>
       </div>
     </div>
 
@@ -186,11 +190,12 @@
 
   const props = defineProps<{
     visible: boolean;
-    initialId?: number; // 新增：传入的初始ID
+    initialId?: number;
   }>();
 
   const emit = defineEmits(['update:visible', 'select']);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(false);
   const { categoryOptions, getSubCategoryOptions, loadCategories } =
@@ -203,7 +208,7 @@
 
   const informationList = ref<InformationResult[]>([]);
   const condition = ref<InformationSearch>({
-    types: [], // 默认不选中任何类型，首次打开不加载数据
+    types: [],
     filter: '',
     category: undefined,
     subCategory: undefined,
@@ -211,12 +216,15 @@
     pageSize: 10,
   });
 
+  const selectedType = ref<string | undefined>(undefined);
+  const jumpPage = ref(1);
+
   const pagination = reactive({
     current: 1,
     pageSize: 10,
     total: 0,
     totalPage: 0,
-    showTotal: false, // 关闭默认的 total 显示，手动控制
+    showTotal: false,
     showPageSize: true,
     pageSizeOptions: [10, 20, 50],
   });
@@ -303,21 +311,20 @@
   };
 
   const fetchData = async () => {
-    // 如果没有选择类型，不加载数据
-    if (!condition.value.types || condition.value.types.length === 0) {
-      informationList.value = [];
-      pagination.total = 0;
-      pagination.totalPage = 0;
-      return;
-    }
-
     setLoading(true);
     try {
-      const { data } = await informationSearch({
+      const searchCondition = {
         ...condition.value,
         page: pagination.current,
         pageSize: pagination.pageSize,
-      });
+      };
+
+      // 如果没有选择类型，默认搜索所有类型
+      if (!searchCondition.types || searchCondition.types.length === 0) {
+        searchCondition.types = ['eqp', 'consume', 'ins', 'etc', 'cash'];
+      }
+
+      const { data } = await informationSearch(searchCondition);
       if (data && Array.isArray(data.records)) {
         informationList.value = data.records;
         pagination.total = data.totalRow;
@@ -342,16 +349,25 @@
   };
 
   const handleTypeChange = (val: any) => {
-    // val is string here because a-select v-model is string for single select
-    // but condition.types is string[]
-    condition.value.types = [val];
-    if (val === 'eqp') {
-      loadCategories();
+    selectedType.value = val;
+    if (val) {
+      condition.value.types = [val];
+      if (val === 'eqp') {
+        loadCategories();
+      } else {
+        condition.value.category = undefined;
+        condition.value.subCategory = undefined;
+      }
     } else {
+      condition.value.types = [];
       condition.value.category = undefined;
       condition.value.subCategory = undefined;
     }
     searchData();
+  };
+
+  const handleTypeClear = () => {
+    handleTypeChange(undefined);
   };
 
   const handleCategoryChange = () => {
@@ -365,20 +381,28 @@
 
   const onPageChange = (current: number) => {
     pagination.current = current;
+    jumpPage.value = current;
     fetchData();
   };
 
   const onPageSizeChange = (pageSize: number) => {
     pagination.pageSize = pageSize;
     pagination.current = 1;
+    jumpPage.value = 1;
     fetchData();
+  };
+
+  const handleJumpPage = () => {
+    if (jumpPage.value > 0 && jumpPage.value <= pagination.totalPage) {
+      pagination.current = jumpPage.value;
+      fetchData();
+    }
   };
 
   const handleRowClick = async (record: InformationResult) => {
     selectedRecord.value = record;
 
     if (record.type === 'Eqp') {
-      // 如果是装备，弹出编辑框
       try {
         const { data } = await getEquInitialInfo(record.id);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -407,24 +431,19 @@
         };
         equipEditorVisible.value = true;
       } catch (e) {
-        // 如果获取失败，直接选中
         emit('select', record);
         visibleModel.value = false;
       }
     } else {
-      // 其他物品直接选中
       emit('select', record);
       visibleModel.value = false;
     }
   };
 
   const handleEquipEditorSubmit = (data: GiveForm) => {
-    // 将编辑后的属性合并到 selectedRecord 中返回
-    // 注意：InformationResult 没有这些属性，所以接收方需要处理
     const result = {
       ...selectedRecord.value,
       ...data,
-      // 映射回 SendDueyModal 需要的字段名
       watk: data.pAtk,
       matk: data.mAtk,
       wdef: data.pDef,
@@ -441,8 +460,6 @@
   };
 
   const handleOk = () => {
-    // 移除 OK 按钮的逻辑，改为点击行即选中
-    // 但为了兼容性，如果用户没点行直接点 OK（虽然现在没选中行），可以关闭
     visibleModel.value = false;
   };
 
@@ -450,8 +467,8 @@
     () => props.visible,
     (val) => {
       if (val) {
-        // 首次打开不加载数据，清空条件
         condition.value.types = [];
+        selectedType.value = undefined;
         condition.value.category = undefined;
         condition.value.subCategory = undefined;
         condition.value.filter = '';
@@ -459,20 +476,45 @@
         pagination.total = 0;
         pagination.totalPage = 0;
         selectedRecord.value = null;
+        jumpPage.value = 1;
 
-        // 如果传入了 initialId，尝试自动定位（这里简化为搜索该ID）
         if (props.initialId) {
           condition.value.filter = props.initialId.toString();
-          // 尝试推断类型，或者默认全搜（如果后端支持不传类型搜ID）
-          // 由于后端接口似乎需要类型，这里我们可能需要先尝试几个类型，或者让用户自己选
-          // 但根据需求“根据ID自动定位”，我们可以尝试默认选中 'eqp' 或其他，或者后端支持不传类型
-          // 假设我们先不传类型，看后端是否支持。如果不支持，可能需要前端逻辑去判断ID范围（复杂）
-          // 这里简单处理：如果传入ID，默认选中 'eqp' 并搜索，或者留空类型让用户选
-          // 为了更好的体验，我们可以尝试搜索所有类型（如果后端支持 types 传多个）
-          condition.value.types = ['eqp', 'consume', 'ins', 'etc', 'cash'];
+          // 搜索所有类型
+          condition.value.types = [];
           searchData();
         }
       }
     }
   );
 </script>
+
+<style scoped>
+  .filter-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .pagination-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 16px;
+  }
+  .pagination-controls {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    margin-top: 8px;
+    align-items: center;
+  }
+  .controls-right {
+    display: flex;
+    align-items: center;
+  }
+  .total-text {
+    color: var(--color-text-3);
+    font-size: 12px;
+  }
+</style>

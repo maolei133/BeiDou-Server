@@ -209,6 +209,7 @@
 
     <ItemSelector
       v-model:visible="itemSelectorVisible"
+      :initial-id="form.itemId"
       @select="handleItemSelect"
     />
 
