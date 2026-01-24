@@ -40,5 +40,12 @@ export default {
   'duey.send.quantity': 'Quantity',
   'duey.send.message': 'Message',
   'duey.send.success': 'Sent successfully',
+  'duey.send.isAll': 'Send to All',
+  'duey.send.deliveryTime': 'Delivery Time',
+  'duey.send.equipStats': 'Equip Stats',
+  'duey.send.upgradeSlots': 'Upgrade Slots',
+  'duey.send.item.notFound': 'Item information not found',
+  'duey.send.item.autoMatched': 'Auto matched item: {name}',
+  'duey.send.equip.updateSuccess': 'Equipment stats updated',
   'itemSelector.title': 'Select Item',
 };

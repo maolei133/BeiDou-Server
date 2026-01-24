@@ -147,25 +147,37 @@
       <!-- 物品选择和数量并列 -->
       <a-form-item field="itemId" :label="$t('duey.send.itemId')">
         <a-input-group style="width: 100%">
-          <a-input-search
+          <a-select
             v-model="form.itemId"
             :placeholder="$t('duey.send.itemId')"
-            search-button
+            allow-search
+            allow-create
+            :loading="loadingItems"
             style="flex: 1"
-            @search="openItemSelector"
-            @blur="handleIdBlur"
+            @search="handleSearchItems"
+            @change="handleItemChange"
+            @popup-visible-change="handleItemPopupVisibleChange"
           >
-            <template #button-icon>
+            <a-option
+              v-for="item in itemOptions"
+              :key="item.id"
+              :value="item.id"
+            >
+              {{ item.name }} ({{ item.id }})
+            </a-option>
+          </a-select>
+          <a-button @click="openItemSelector">
+            <template #icon>
               <icon-search />
             </template>
-          </a-input-search>
+          </a-button>
           <a-input-number
             v-model="form.quantity"
             :placeholder="$t('duey.send.quantity')"
             :min="1"
             :max="32767"
             hide-button
-            style="width: 100px; margin-left: 8px"
+            style="width: 70px; margin-left: 8px"
           />
         </a-input-group>
       </a-form-item>
@@ -242,6 +254,7 @@
     getPlayerList,
     GiveForm,
   } from '@/api/player';
+  import { informationSearch } from '@/api/information';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import ItemSelector from '@/components/ItemSelector/index.vue';
   import PlayerSelector from '@/components/PlayerSelector/index.vue';
@@ -326,6 +339,10 @@
   const playerOptions = ref<any[]>([]);
 
   const senderHistory = ref<string[]>([]);
+
+  const loadingItems = ref(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itemOptions = ref<any[]>([]);
 
   const rules = {
     // receiverIds: [{ required: true, message: t('duey.send.receiver.placeholder') }],
@@ -451,6 +468,7 @@
         isEquip.value = false;
 
         loadSenderHistory();
+        itemOptions.value = [];
 
         if (props.defaultReceiver) {
           // 如果有默认收件人，尝试搜索并选中
@@ -581,7 +599,7 @@
         // ignore
       }
 
-      Message.warning('未找到该物品信息');
+      Message.warning(t('duey.send.item.notFound'));
       // 如果未找到物品信息，重置相关状态
       itemInfo.name = '';
       itemInfo.desc = '';
@@ -717,7 +735,7 @@
     }
 
     equipEditorVisible.value = false;
-    Message.success('装备属性已更新');
+    Message.success(t('duey.send.equip.updateSuccess'));
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -748,6 +766,105 @@
   onMounted(() => {
     loadSenderHistory();
   });
+
+  const handleSearchItems = async (value: string) => {
+    // 如果输入的是数字，且长度较短，可能是ID，也可能是名字的一部分
+    // 但如果用户输入非数字，肯定是搜索名字
+    // 这里我们简单处理：只要输入了内容，就去搜索
+    if (!value) {
+      itemOptions.value = [];
+      return;
+    }
+
+    // 如果是纯数字，且我们想优先当做ID处理，可以在这里判断
+    // 但需求是“输入内容非ID，则转为搜索”，这意味着如果输入的是数字，可能还是优先当ID？
+    // 或者说，输入框本身是 allow-create，用户输入数字回车，v-model 会变成该数字
+    // 这里的 handleSearchItems 是在用户输入过程中触发的搜索建议
+
+    loadingItems.value = true;
+    try {
+      const { data } = await informationSearch({
+        filter: value,
+        page: 1,
+        pageSize: 20,
+        types: ['eqp', 'consume', 'ins', 'etc', 'cash'], // 搜索所有类型
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const records = (data as any).records || [];
+      itemOptions.value = records;
+
+      // 如果只找到1条记录，且用户输入的内容不是纯数字ID（或者即便是纯数字，但完全匹配了名字？）
+      // 需求说：如果只找到1条记录，则转为ID填充到输入框里并执行后续的功能
+      // 这里是在搜索回调中，直接修改 form.itemId 可能会打断用户输入
+      // 通常这种“自动填充”是在用户停止输入（blur）或者回车时触发比较好
+      // 但既然需求如此，我们可以尝试在搜索结果返回时判断
+      if (records.length === 1) {
+        // 只有当用户输入的内容不是该物品的ID时，才自动替换？
+        // 或者直接替换
+        // 为了避免用户正在输入时突然变了，我们可能需要谨慎一点
+        // 但根据需求描述，似乎是希望自动完成
+        // 这里我们先只做展示，真正的“转为ID填充”逻辑放在 handleItemChange 或 blur 中可能更好
+        // 不过，如果是 allow-create 的 select，选中 option 会触发 change
+        // 如果我们在这里直接改 form.itemId，用户体验可能会比较怪（输入一半突然变了）
+        // 让我们在 handleItemPopupVisibleChange 或 blur 中处理“只找到1条”的逻辑？
+        // 或者，需求的意思是：用户输入 -> 搜索 -> 只有1条 -> 自动选中
+        // 这在 UI 上表现为：下拉框只有一个选项，用户可以直接回车选中，或者我们帮他选中
+      }
+    } finally {
+      loadingItems.value = false;
+    }
+  };
+
+  const handleItemChange = (value: any) => {
+    // 当用户选中下拉项，或者输入自定义值回车后触发
+    // value 可能是 ID (number) 或 输入的字符串 (string)
+    if (typeof value === 'string') {
+      // 用户输入了字符串（非ID，或者ID但没选中下拉项）
+      // 尝试解析为数字
+      const id = Number(value);
+      if (!Number.isNaN(id)) {
+        form.itemId = id;
+      } else if (itemOptions.value.length === 1) {
+        // 输入的不是数字，可能是名字，且没有选中下拉项（或者下拉项里没有）
+        // 此时 itemOptions 可能已经加载了搜索结果
+        form.itemId = itemOptions.value[0].id;
+        Message.info(
+          t('duey.send.item.autoMatched', { name: itemOptions.value[0].name })
+        );
+      } else if (itemOptions.value.length > 1) {
+        // 多条结果，提示用户选择
+        // form.itemId 此时是字符串，可能会导致后续逻辑报错，需要清空或保持
+        // 但由于 allow-create，v-model 绑定的值可以是 string
+        // 我们需要确保最终提交或查询详情时是 ID
+        // 这里可以不做处理，等待 blur 时校验
+      } else {
+        // 没有结果
+      }
+    } else {
+      form.itemId = value;
+    }
+    // 触发详情查询
+    if (typeof form.itemId === 'number') {
+      lastFetchedId.value = undefined;
+      handleIdBlur();
+    }
+  };
+
+  const handleItemPopupVisibleChange = (visible: boolean) => {
+    if (!visible) {
+      // 下拉框关闭时，检查当前值
+      // 如果 itemOptions 只有1条，且当前 form.itemId 不是数字，可以尝试自动填充
+      if (
+        itemOptions.value.length === 1 &&
+        typeof form.itemId !== 'number' &&
+        form.itemId
+      ) {
+        form.itemId = itemOptions.value[0].id;
+        lastFetchedId.value = undefined;
+        handleIdBlur();
+      }
+    }
+  };
 </script>
 
 <style scoped>
