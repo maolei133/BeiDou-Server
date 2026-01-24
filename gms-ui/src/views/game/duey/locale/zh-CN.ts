@@ -48,5 +48,9 @@ export default {
   'duey.send.item.autoMatched': '已自动匹配物品: {name}',
   'duey.send.equip.updateSuccess': '装备属性已更新',
   'duey.send.error.claimed': '该包裹已被领取，无法编辑',
+  'duey.send.items': '物品列表',
+  'duey.send.addItem': '添加物品',
+  'duey.send.item': '物品',
+  'duey.send.editStats': '编辑属性',
   'itemSelector.title': '选择物品',
 };

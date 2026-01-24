@@ -49,5 +49,9 @@ export default {
   'duey.send.equip.updateSuccess': 'Equipment stats updated',
   'duey.send.error.claimed':
     'This package has been claimed and cannot be edited',
+  'duey.send.items': 'Items',
+  'duey.send.addItem': 'Add Item',
+  'duey.send.item': 'Item',
+  'duey.send.editStats': 'Edit Stats',
   'itemSelector.title': 'Select Item',
 };

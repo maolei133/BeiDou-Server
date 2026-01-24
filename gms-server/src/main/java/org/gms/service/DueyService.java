@@ -16,6 +16,7 @@ import org.gms.dao.entity.CharactersDO;
 import org.gms.dao.entity.DueypackagesDO;
 import org.gms.dao.mapper.CharactersMapper;
 import org.gms.dao.mapper.DueypackagesMapper;
+import org.gms.model.dto.DueyItemReqDTO;
 import org.gms.model.dto.DueyPackageRtnDTO;
 import org.gms.model.dto.DueySearchReqDTO;
 import org.gms.model.dto.ItemInfoRtnDTO;
@@ -128,10 +129,17 @@ public class DueyService {
         String itemDataJson = getString(row, "item_data");
         if (itemDataJson != null && !itemDataJson.isEmpty()) {
             try {
-                ItemInfoRtnDTO itemDTO = objectMapper.readValue(itemDataJson, ItemInfoRtnDTO.class);
-                List<ItemInfoRtnDTO> itemDTOs = new ArrayList<>();
-                itemDTOs.add(itemDTO);
-                dto.setItems(itemDTOs);
+                // 尝试解析为 List<ItemInfoRtnDTO>
+                try {
+                    List<ItemInfoRtnDTO> itemDTOs = objectMapper.readValue(itemDataJson, objectMapper.getTypeFactory().constructCollectionType(List.class, ItemInfoRtnDTO.class));
+                    dto.setItems(itemDTOs);
+                } catch (Exception e) {
+                    // 兼容旧数据，可能是单个对象
+                    ItemInfoRtnDTO itemDTO = objectMapper.readValue(itemDataJson, ItemInfoRtnDTO.class);
+                    List<ItemInfoRtnDTO> itemDTOs = new ArrayList<>();
+                    itemDTOs.add(itemDTO);
+                    dto.setItems(itemDTOs);
+                }
             } catch (JsonProcessingException e) {
                 // JSON 解析失败，降级处理或记录日志
                 dto.setItems(new ArrayList<>());
@@ -253,18 +261,18 @@ public class DueyService {
                 QueryWrapper query = QueryWrapper.create().select(CHARACTERS_D_O.ID);
                 List<Integer> allCharIds = charactersMapper.selectListByQueryAs(query, Integer.class);
                 for (Integer cid : allCharIds) {
-                    sendSinglePackage(req, cid);
+                    sendPackageToReceiver(req, cid);
                 }
             } else if (req.getReceiverIds() != null && !req.getReceiverIds().isEmpty()) {
                 for (Integer cid : req.getReceiverIds()) {
-                    sendSinglePackage(req, cid);
+                    sendPackageToReceiver(req, cid);
                 }
             } else {
                 // 兼容旧逻辑，如果 receiverIds 为空，尝试使用 receiverId 或 receiverName
                 if (req.getReceiverName() != null) {
                     CharactersDO chr = charactersMapper.selectOneByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(req.getReceiverName())));
                     if (chr != null) {
-                        sendSinglePackage(req, chr.getId());
+                        sendPackageToReceiver(req, chr.getId());
                     } else {
                         throw new RuntimeException("未找到收件人: " + req.getReceiverName());
                     }
@@ -298,15 +306,6 @@ public class DueyService {
         }
 
         // 更新时间相关
-        long timestamp = existingPackage.getTimestamp().getTime();
-        if (Boolean.FALSE.equals(req.getQuick()) && req.getDeliveryTime() != null) {
-            // 如果是普通快递且指定了送达时间，更新发送时间为送达时间减去配送时长（反推）
-            // 或者直接更新 timestamp 为新的发送时间，这里简化处理，假设 timestamp 不变，只改过期时间
-            // 实际上 deliveryTime 只是前端传来的展示值，后端逻辑是 timestamp + duration
-            // 这里我们允许修改 timestamp
-            // 但为了简单，我们假设 timestamp 不变，只改过期时间
-        }
-        
         if (req.getExpireTime() != null) {
             existingPackage.setExpireDate(new Timestamp(req.getExpireTime()));
         } else if (req.getExpireDays() != null && req.getExpireDays() > 0) {
@@ -314,48 +313,58 @@ public class DueyService {
              existingPackage.setExpireDate(new Timestamp(expireTime));
         }
 
-        // 构建物品对象
-        Item item = null;
-        ItemInfoRtnDTO itemDTO = null;
-        if (req.getItemId() != null && req.getQuantity() != null && req.getQuantity() > 0) {
-            InventoryType type = ItemInformationProvider.getInstance().getInventoryType(req.getItemId());
-            if (type == InventoryType.EQUIP) {
-                Equip equip = new Equip(req.getItemId(), (byte) 0, -1);
-                equip.setQuantity((short) 1);
-                if (req.getStr() != null) equip.setStr(limitShort(req.getStr()));
-                if (req.getDex() != null) equip.setDex(limitShort(req.getDex()));
-                if (req.getInt_() != null) equip.setInt(limitShort(req.getInt_()));
-                if (req.getLuk() != null) equip.setLuk(limitShort(req.getLuk()));
-                if (req.getHp() != null) equip.setHp(limitShort(req.getHp()));
-                if (req.getMp() != null) equip.setMp(limitShort(req.getMp()));
-                if (req.getWatk() != null) equip.setWatk(limitShort(req.getWatk()));
-                if (req.getMatk() != null) equip.setMatk(limitShort(req.getMatk()));
-                if (req.getWdef() != null) equip.setWdef(limitShort(req.getWdef()));
-                if (req.getMdef() != null) equip.setMdef(limitShort(req.getMdef()));
-                if (req.getAcc() != null) equip.setAcc(limitShort(req.getAcc()));
-                if (req.getAvoid() != null) equip.setAvoid(limitShort(req.getAvoid()));
-                if (req.getHands() != null) equip.setHands(limitShort(req.getHands()));
-                if (req.getSpeed() != null) equip.setSpeed(limitShort(req.getSpeed()));
-                if (req.getJump() != null) equip.setJump(limitShort(req.getJump()));
-                if (req.getUpgradeSlots() != null) equip.setUpgradeSlots(limitByte(req.getUpgradeSlots()));
-                if (req.getLevel() != null) equip.setLevel(limitShort(req.getLevel()));
-                if (req.getItemLevel() != null) equip.setItemLevel(limitShort(req.getItemLevel()));
-                if (req.getFlag() != null) equip.setFlag(limitShort(req.getFlag()));
-                if (req.getVicious() != null) equip.setVicious(limitShort(req.getVicious()));
-                item = equip;
-            } else {
-                item = new Item(req.getItemId(), (byte) 0, req.getQuantity().shortValue(), -1);
+        // 构建物品列表
+        List<Item> items = new ArrayList<>();
+        List<ItemInfoRtnDTO> itemDTOs = new ArrayList<>();
+
+        // 优先处理 items 列表
+        if (req.getItems() != null && !req.getItems().isEmpty()) {
+            for (DueyItemReqDTO itemReq : req.getItems()) {
+                Item item = createItemFromReq(itemReq);
+                if (item != null) {
+                    items.add(item);
+                    itemDTOs.add(convertItemToDTO(item));
+                }
             }
-            if (req.getOwner() != null) item.setOwner(req.getOwner());
-            if (req.getItemExpiration() != null) item.setExpiration(req.getItemExpiration());
+        } else if (req.getItemId() != null && req.getQuantity() != null && req.getQuantity() > 0) {
+            // 兼容旧的单个物品逻辑
+            DueyItemReqDTO singleItemReq = new DueyItemReqDTO();
+            singleItemReq.setItemId(req.getItemId());
+            singleItemReq.setQuantity(req.getQuantity());
+            singleItemReq.setOwner(req.getOwner());
+            singleItemReq.setExpiration(req.getItemExpiration());
+            singleItemReq.setStr(req.getStr());
+            singleItemReq.setDex(req.getDex());
+            singleItemReq.setInt_(req.getInt_());
+            singleItemReq.setLuk(req.getLuk());
+            singleItemReq.setHp(req.getHp());
+            singleItemReq.setMp(req.getMp());
+            singleItemReq.setWatk(req.getWatk());
+            singleItemReq.setMatk(req.getMatk());
+            singleItemReq.setWdef(req.getWdef());
+            singleItemReq.setMdef(req.getMdef());
+            singleItemReq.setAcc(req.getAcc());
+            singleItemReq.setAvoid(req.getAvoid());
+            singleItemReq.setHands(req.getHands());
+            singleItemReq.setSpeed(req.getSpeed());
+            singleItemReq.setJump(req.getJump());
+            singleItemReq.setUpgradeSlots(req.getUpgradeSlots());
+            singleItemReq.setLevel(req.getLevel());
+            singleItemReq.setItemLevel(req.getItemLevel());
+            singleItemReq.setFlag(req.getFlag());
+            singleItemReq.setVicious(req.getVicious());
             
-            itemDTO = convertItemToDTO(item);
+            Item item = createItemFromReq(singleItemReq);
+            if (item != null) {
+                items.add(item);
+                itemDTOs.add(convertItemToDTO(item));
+            }
         }
 
         // 更新 item_data JSON
-        if (itemDTO != null) {
+        if (!itemDTOs.isEmpty()) {
             try {
-                existingPackage.setItemData(objectMapper.writeValueAsString(itemDTO));
+                existingPackage.setItemData(objectMapper.writeValueAsString(itemDTOs));
             } catch (JsonProcessingException e) {
                 throw new RuntimeException("序列化物品数据失败", e);
             }
@@ -367,90 +376,103 @@ public class DueyService {
 
         // 更新 inventoryitems 表
         // 只有当包裹未被领取时，才更新 inventoryitems 表
-        // checked: 1(未通知), 0(已通知), 2(已领取), 3(已过期), 4(已删除)
-        // 如果已领取(2)，则物品已经进入玩家背包，inventoryitems 表中对应的 type=9 记录可能已被删除或不再有效
-        // 但根据需求“道具被领取了也不能不显示对应的道具”，我们主要依赖 item_data JSON 来显示
-        // 这里只处理未领取状态下的 inventoryitems 更新，防止数据不一致
         if (existingPackage.getChecked() != 2) {
             // 先删除旧物品
             itemFactoryService.saveItems(ItemFactory.DUEY.getValue(), false, new ArrayList<>(), req.getPackageId().intValue());
             // 再插入新物品
-            if (item != null) {
+            if (!items.isEmpty()) {
                 List<Pair<Item, InventoryType>> dueyItems = new ArrayList<>();
-                dueyItems.add(new Pair<>(item, InventoryType.getByType(item.getItemType())));
+                for (Item item : items) {
+                    dueyItems.add(new Pair<>(item, InventoryType.getByType(item.getItemType())));
+                }
                 itemFactoryService.saveItems(ItemFactory.DUEY.getValue(), false, dueyItems, req.getPackageId().intValue());
             }
         }
     }
 
-    private void sendSinglePackage(SendDueyReqDTO req, Integer receiverId) {
-        Item item = null;
-        ItemInfoRtnDTO itemDTO = null;
+    private void sendPackageToReceiver(SendDueyReqDTO req, Integer receiverId) {
+        // 1. 如果有金币或留言，先发送一个包裹（可能包含第一个物品，或者不包含物品）
+        // 2. 如果有多个物品，每个物品单独发送一个包裹
         
-        if (req.getItemId() != null && req.getQuantity() != null && req.getQuantity() > 0) {
-            // 判断是否为装备
-            InventoryType type = ItemInformationProvider.getInstance().getInventoryType(req.getItemId());
-            if (type == InventoryType.EQUIP) {
-                Equip equip = new Equip(req.getItemId(), (byte) 0, -1);
-                equip.setQuantity((short) 1);
-                // 设置自定义属性，并进行范围限制
-                if (req.getStr() != null) equip.setStr(limitShort(req.getStr()));
-                if (req.getDex() != null) equip.setDex(limitShort(req.getDex()));
-                if (req.getInt_() != null) equip.setInt(limitShort(req.getInt_()));
-                if (req.getLuk() != null) equip.setLuk(limitShort(req.getLuk()));
-                if (req.getHp() != null) equip.setHp(limitShort(req.getHp()));
-                if (req.getMp() != null) equip.setMp(limitShort(req.getMp()));
-                if (req.getWatk() != null) equip.setWatk(limitShort(req.getWatk()));
-                if (req.getMatk() != null) equip.setMatk(limitShort(req.getMatk()));
-                if (req.getWdef() != null) equip.setWdef(limitShort(req.getWdef()));
-                if (req.getMdef() != null) equip.setMdef(limitShort(req.getMdef()));
-                if (req.getAcc() != null) equip.setAcc(limitShort(req.getAcc()));
-                if (req.getAvoid() != null) equip.setAvoid(limitShort(req.getAvoid()));
-                if (req.getHands() != null) equip.setHands(limitShort(req.getHands()));
-                if (req.getSpeed() != null) equip.setSpeed(limitShort(req.getSpeed()));
-                if (req.getJump() != null) equip.setJump(limitShort(req.getJump()));
-                if (req.getUpgradeSlots() != null) equip.setUpgradeSlots(limitByte(req.getUpgradeSlots()));
-                if (req.getLevel() != null) equip.setLevel(limitShort(req.getLevel()));
-                if (req.getItemLevel() != null) equip.setItemLevel(limitShort(req.getItemLevel()));
-                if (req.getFlag() != null) equip.setFlag(limitShort(req.getFlag()));
-                if (req.getVicious() != null) equip.setVicious(limitShort(req.getVicious()));
-                
-                item = equip;
-            } else {
-                item = new Item(req.getItemId(), (byte) 0, req.getQuantity().shortValue(), -1);
-            }
-
-            // 设置通用属性
-            if (req.getOwner() != null) {
-                item.setOwner(req.getOwner());
-            }
-            if (req.getItemExpiration() != null) {
-                item.setExpiration(req.getItemExpiration());
-            }
-            
-            // 生成 ItemInfoRtnDTO 用于 JSON 存储
-            itemDTO = convertItemToDTO(item);
+        // 策略：
+        // 如果没有物品，只发金币/留言包裹。
+        // 如果有物品：
+        //   第一个物品 + 金币 + 留言 -> 包裹1
+        //   后续物品 -> 包裹2, 包裹3... (无金币无留言)
+        
+        List<DueyItemReqDTO> itemsToSend = new ArrayList<>();
+        if (req.getItems() != null && !req.getItems().isEmpty()) {
+            itemsToSend.addAll(req.getItems());
+        } else if (req.getItemId() != null && req.getQuantity() != null && req.getQuantity() > 0) {
+            // 兼容旧逻辑
+            DueyItemReqDTO singleItem = new DueyItemReqDTO();
+            singleItem.setItemId(req.getItemId());
+            singleItem.setQuantity(req.getQuantity());
+            // ... copy other properties ...
+            // 为简化，这里假设 createItemFromReq 会处理 SendDueyReqDTO 中的字段，或者我们在上层已经转换好了
+            // 但为了代码复用，我们这里手动构建一个 DueyItemReqDTO
+            singleItem.setOwner(req.getOwner());
+            singleItem.setExpiration(req.getItemExpiration());
+            singleItem.setStr(req.getStr());
+            singleItem.setDex(req.getDex());
+            singleItem.setInt_(req.getInt_());
+            singleItem.setLuk(req.getLuk());
+            singleItem.setHp(req.getHp());
+            singleItem.setMp(req.getMp());
+            singleItem.setWatk(req.getWatk());
+            singleItem.setMatk(req.getMatk());
+            singleItem.setWdef(req.getWdef());
+            singleItem.setMdef(req.getMdef());
+            singleItem.setAcc(req.getAcc());
+            singleItem.setAvoid(req.getAvoid());
+            singleItem.setHands(req.getHands());
+            singleItem.setSpeed(req.getSpeed());
+            singleItem.setJump(req.getJump());
+            singleItem.setUpgradeSlots(req.getUpgradeSlots());
+            singleItem.setLevel(req.getLevel());
+            singleItem.setItemLevel(req.getItemLevel());
+            singleItem.setFlag(req.getFlag());
+            singleItem.setVicious(req.getVicious());
+            itemsToSend.add(singleItem);
         }
-        
+
+        if (itemsToSend.isEmpty()) {
+            // 仅发送金币或留言
+            createAndInsertPackage(req, receiverId, null, req.getMesos(), req.getMessage());
+        } else {
+            // 发送物品
+            for (int i = 0; i < itemsToSend.size(); i++) {
+                DueyItemReqDTO itemReq = itemsToSend.get(i);
+                Item item = createItemFromReq(itemReq);
+                if (item != null) {
+                    // 只有第一个包裹携带金币和留言
+                    Long mesos = (i == 0) ? (req.getMesos() != null ? req.getMesos().longValue() : 0L) : 0L;
+                    String message = (i == 0) ? req.getMessage() : "";
+                    createAndInsertPackage(req, receiverId, item, mesos.intValue(), message);
+                }
+            }
+        }
+    }
+
+    private void createAndInsertPackage(SendDueyReqDTO req, Integer receiverId, Item item, Integer mesos, String message) {
         String sender = req.getSenderName() != null && !req.getSenderName().isEmpty() ? req.getSenderName() : "管理员";
 
         DueypackagesDO newPackage = new DueypackagesDO();
         newPackage.setReceiverid(receiverId.longValue());
         newPackage.setSendername(sender);
-        newPackage.setMesos(req.getMesos() != null ? req.getMesos().longValue() : 0L);
+        newPackage.setMesos(mesos != null ? mesos.longValue() : 0L);
         
         long timestamp = System.currentTimeMillis();
         if (Boolean.FALSE.equals(req.getQuick()) && req.getDeliveryTime() != null) {
             timestamp = req.getDeliveryTime();
         } else if (Boolean.FALSE.equals(req.getQuick())) {
              // 普通快递默认1天后
-             // 配置单位为分钟
              long deliveryDuration = GameConfig.getServerInt("duey_normal_delivery_time", 1440) * 60 * 1000L;
              timestamp += deliveryDuration;
         }
         
         newPackage.setTimestamp(new Timestamp(timestamp));
-        newPackage.setMessage(req.getMessage());
+        newPackage.setMessage(message);
         newPackage.setType(Boolean.TRUE.equals(req.getQuick()) ? 1 : 0);
         newPackage.setChecked(1);
         
@@ -461,16 +483,23 @@ public class DueyService {
              long expireTime = System.currentTimeMillis() + (req.getExpireDays() * 24 * 60 * 60 * 1000L);
              newPackage.setExpireDate(new Timestamp(expireTime));
         } else {
-             // 默认过期时间
-             // 配置单位为分钟
              long expireDuration = GameConfig.getServerInt("duey_expire_time", 43200) * 60 * 1000L;
              newPackage.setExpireDate(new Timestamp(System.currentTimeMillis() + expireDuration));
         }
         
         // 序列化 itemData
-        if (itemDTO != null) {
+        if (item != null) {
+            ItemInfoRtnDTO itemDTO = convertItemToDTO(item);
+            // 即使是单个物品，为了统一格式，也可以考虑用 List 包装，或者保持单个对象
+            // 为了兼容性，如果只有一个物品，我们存单个对象，或者存 List 但只含一个
+            // 前面的 convertRowToDTO 已经做了兼容处理
+            // 这里我们存 List 以便未来扩展，或者为了保持与 update 逻辑一致
+            // 但 update 逻辑中如果是多物品会存 List
+            // 这里拆包后每个包裹只有一个物品
+            List<ItemInfoRtnDTO> itemDTOs = new ArrayList<>();
+            itemDTOs.add(itemDTO);
             try {
-                newPackage.setItemData(objectMapper.writeValueAsString(itemDTO));
+                newPackage.setItemData(objectMapper.writeValueAsString(itemDTOs));
             } catch (JsonProcessingException e) {
                 throw new RuntimeException("Failed to serialize item data", e);
             }
@@ -486,6 +515,47 @@ public class DueyService {
         } else {
             throw new RuntimeException("Failed to create duey package");
         }
+    }
+    
+    private Item createItemFromReq(DueyItemReqDTO req) {
+        if (req.getItemId() == null || req.getQuantity() == null || req.getQuantity() <= 0) {
+            return null;
+        }
+        
+        Item item;
+        InventoryType type = ItemInformationProvider.getInstance().getInventoryType(req.getItemId());
+        if (type == InventoryType.EQUIP) {
+            Equip equip = new Equip(req.getItemId(), (byte) 0, -1);
+            equip.setQuantity((short) 1);
+            if (req.getStr() != null) equip.setStr(limitShort(req.getStr()));
+            if (req.getDex() != null) equip.setDex(limitShort(req.getDex()));
+            if (req.getInt_() != null) equip.setInt(limitShort(req.getInt_()));
+            if (req.getLuk() != null) equip.setLuk(limitShort(req.getLuk()));
+            if (req.getHp() != null) equip.setHp(limitShort(req.getHp()));
+            if (req.getMp() != null) equip.setMp(limitShort(req.getMp()));
+            if (req.getWatk() != null) equip.setWatk(limitShort(req.getWatk()));
+            if (req.getMatk() != null) equip.setMatk(limitShort(req.getMatk()));
+            if (req.getWdef() != null) equip.setWdef(limitShort(req.getWdef()));
+            if (req.getMdef() != null) equip.setMdef(limitShort(req.getMdef()));
+            if (req.getAcc() != null) equip.setAcc(limitShort(req.getAcc()));
+            if (req.getAvoid() != null) equip.setAvoid(limitShort(req.getAvoid()));
+            if (req.getHands() != null) equip.setHands(limitShort(req.getHands()));
+            if (req.getSpeed() != null) equip.setSpeed(limitShort(req.getSpeed()));
+            if (req.getJump() != null) equip.setJump(limitShort(req.getJump()));
+            if (req.getUpgradeSlots() != null) equip.setUpgradeSlots(limitByte(req.getUpgradeSlots()));
+            if (req.getLevel() != null) equip.setLevel(limitShort(req.getLevel()));
+            if (req.getItemLevel() != null) equip.setItemLevel(limitShort(req.getItemLevel()));
+            if (req.getFlag() != null) equip.setFlag(limitShort(req.getFlag()));
+            if (req.getVicious() != null) equip.setVicious(limitShort(req.getVicious()));
+            item = equip;
+        } else {
+            item = new Item(req.getItemId(), (byte) 0, req.getQuantity().shortValue(), -1);
+        }
+
+        if (req.getOwner() != null) item.setOwner(req.getOwner());
+        if (req.getExpiration() != null) item.setExpiration(req.getExpiration());
+        
+        return item;
     }
     
     private short limitShort(Integer val) {

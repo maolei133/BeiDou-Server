@@ -1,31 +1,19 @@
 package org.gms.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
-import java.util.List;
 
 @Data
-public class SendDueyReqDTO {
-    private Long packageId; // 新增：用于更新包裹
-    private List<Integer> receiverIds; // 支持多选角色ID
-    private String receiverName; // 兼容旧逻辑，支持按名称发送
-    private Boolean isAll; // 保留全服选项，作为特殊的多选情况
-    private Integer mesos;
-    private String message;
-    private Boolean quick;
-    private String senderName;
-    private Long expireTime;
-    private Integer expireDays;
-    private Long deliveryTime;
-
-    // 批量物品列表
-    private List<DueyItemReqDTO> items;
-
-    // 兼容旧字段（单个物品发送）
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class DueyItemReqDTO {
     private Integer itemId;
     private Integer quantity;
     private String owner;
-    private Long itemExpiration;
+    private Long expiration;
+    private String name; // 前端可能传名称，虽然后端逻辑主要靠ID，但接收一下避免报错
+
+    // Equipment attributes
     private Integer str;
     private Integer dex;
     @JsonProperty("int")

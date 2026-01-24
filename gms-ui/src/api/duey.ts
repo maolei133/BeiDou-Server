@@ -5,8 +5,8 @@ import { ResultBody } from '@/types/global';
 export interface DueyItem {
   itemId: number;
   quantity: number;
-  owner: string;
-  expiration: number;
+  owner?: string;
+  expiration?: number;
   name?: string;
   // 装备属性
   str?: number;
@@ -65,18 +65,20 @@ export interface SendDueyReq {
   isAll?: boolean;
   mesos?: number;
   message?: string;
-  itemId?: number;
-  quantity?: number;
   quick?: boolean;
   senderName?: string;
   expireTime?: number;
   expireDays?: number;
   deliveryTime?: number;
-  // 物品属性
+
+  // 批量物品
+  items?: DueyItem[];
+
+  // 兼容旧字段（单个物品）
+  itemId?: number;
+  quantity?: number;
   owner?: string;
   itemExpiration?: number;
-
-  // 装备属性
   str?: number;
   dex?: number;
   int?: number;

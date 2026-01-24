@@ -2,7 +2,7 @@
   <a-modal
     v-model:visible="visibleModel"
     :title="$t('duey.send.title')"
-    width="400px"
+    width="600px"
     @cancel="handleCancel"
     @before-ok="handleBeforeOk"
   >
@@ -144,70 +144,101 @@
         />
       </a-form-item>
 
-      <!-- 物品选择和数量并列 -->
-      <a-form-item field="itemId" :label="$t('duey.send.itemId')">
-        <a-input-group style="width: 100%">
-          <a-select
-            v-model="form.itemId"
-            :placeholder="$t('duey.send.itemId')"
-            allow-search
-            allow-create
-            :loading="loadingItems"
-            style="flex: 1"
-            @search="handleSearchItems"
-            @change="handleItemChange"
-            @popup-visible-change="handleItemPopupVisibleChange"
-          >
-            <a-option
-              v-for="item in itemOptions"
-              :key="item.id"
-              :value="item.id"
-            >
-              {{ item.name }} ({{ item.id }})
-            </a-option>
-          </a-select>
-          <a-button @click="openItemSelector">
+      <!-- 物品列表 -->
+      <a-form-item :label="$t('duey.send.items')">
+        <div style="width: 100%">
+          <a-button type="outline" size="small" @click="addItem">
             <template #icon>
-              <icon-search />
+              <icon-plus />
             </template>
+            {{ $t('duey.send.addItem') }}
           </a-button>
-          <a-input-number
-            v-model="form.quantity"
-            :placeholder="$t('duey.send.quantity')"
-            :min="1"
-            :max="32767"
-            hide-button
-            style="width: 100px; margin-left: 8px"
-          />
-        </a-input-group>
-      </a-form-item>
 
-      <!-- 物品信息展示 -->
-      <a-row v-if="itemInfo.name" style="margin-bottom: 20px">
-        <a-col :span="18" :offset="6">
-          <div class="item-info-container">
-            <div class="item-icon-wrapper">
-              <img :src="itemIconUrl" alt="Item Icon" class="item-icon" />
-            </div>
-            <div class="item-details">
-              <a-input v-model="itemInfo.name" readonly> </a-input>
-              <a-textarea
-                v-model="itemInfo.desc"
-                readonly
-                auto-size
-                style="margin-top: 8px"
-              />
-            </div>
-            <div v-if="isEquip" class="item-actions">
-              <a-button type="primary" size="small" @click="openEquipEditor">
+          <div
+            v-for="(item, index) in form.items"
+            :key="index"
+            class="item-row"
+          >
+            <div class="item-row-header">
+              <span>{{ $t('duey.send.item') }} {{ index + 1 }}</span>
+              <a-button
+                type="text"
+                status="danger"
+                size="mini"
+                @click="removeItem(index)"
+              >
                 <template #icon>
-                  <icon-edit />
+                  <icon-delete />
                 </template>
               </a-button>
             </div>
+            <a-input-group style="width: 100%">
+              <a-select
+                v-model="item.itemId"
+                :placeholder="$t('duey.send.itemId')"
+                allow-search
+                allow-create
+                allow-clear
+                :loading="loadingItems"
+                style="flex: 1"
+                @search="handleSearchItems"
+                @change="(val) => handleItemChange(val, index)"
+                @clear="() => handleItemClear(index)"
+                @popup-visible-change="
+                  (visible) => handleItemPopupVisibleChange(visible, index)
+                "
+              >
+                <a-option
+                  v-for="opt in itemOptions"
+                  :key="opt.id"
+                  :value="opt.id"
+                >
+                  {{ opt.name }} ({{ opt.id }})
+                </a-option>
+              </a-select>
+              <a-button @click="openItemSelector(index)">
+                <template #icon>
+                  <icon-search />
+                </template>
+              </a-button>
+              <a-input-number
+                v-model="item.quantity"
+                :placeholder="$t('duey.send.quantity')"
+                :min="1"
+                :max="32767"
+                hide-button
+                style="width: 100px; margin-left: 8px"
+              />
+            </a-input-group>
+
+            <!-- 物品信息展示 -->
+            <div v-if="item.name" class="item-info-container">
+              <div class="item-icon-wrapper">
+                <img
+                  :src="getIconUrl('item', item.itemId)"
+                  alt="Item Icon"
+                  class="item-icon"
+                />
+              </div>
+              <div class="item-details">
+                <div class="item-name">{{ item.name }}</div>
+                <div v-if="isEquipItem(item.itemId)" class="item-actions">
+                  <a-button
+                    type="primary"
+                    size="mini"
+                    @click="openEquipEditor(index)"
+                  >
+                    <template #icon>
+                      <icon-edit />
+                    </template>
+                    {{ $t('duey.send.editStats') }}
+                  </a-button>
+                </div>
+              </div>
+            </div>
           </div>
-        </a-col>
-      </a-row>
+        </div>
+      </a-form-item>
 
       <a-form-item field="message" :label="$t('duey.send.message')">
         <a-textarea
@@ -221,7 +252,7 @@
 
     <ItemSelector
       v-model:visible="itemSelectorVisible"
-      :initial-id="form.itemId"
+      :initial-id="currentItemId"
       @select="handleItemSelect"
     />
 
@@ -264,6 +295,8 @@
     IconUser,
     IconEdit,
     IconClose,
+    IconPlus,
+    IconDelete,
   } from '@arco-design/web-vue/es/icon';
 
   const props = defineProps<{
@@ -288,37 +321,13 @@
     isAll: false,
     receiverIds: [],
     mesos: 0,
-    itemId: undefined,
-    quantity: 1,
     message: '',
     quick: true,
     senderName: '',
     expireDays: 30,
     expireTime: undefined,
     deliveryTime: undefined,
-    // 装备属性
-    str: undefined,
-    dex: undefined,
-    int: undefined, // 统一为 int
-    luk: undefined,
-    hp: undefined,
-    mp: undefined,
-    watk: undefined,
-    matk: undefined,
-    wdef: undefined,
-    mdef: undefined,
-    acc: undefined,
-    avoid: undefined,
-    hands: undefined,
-    speed: undefined,
-    jump: undefined,
-    upgradeSlots: undefined,
-    level: undefined,
-    itemLevel: undefined,
-    flag: undefined,
-    vicious: undefined,
-    owner: undefined,
-    itemExpiration: undefined,
+    items: [], // 物品列表
   });
 
   const expireType = ref('days');
@@ -327,14 +336,8 @@
   const itemSelectorVisible = ref(false);
   const playerSelectorVisible = ref(false);
   const equipEditorVisible = ref(false);
-
-  const itemInfo = reactive({
-    name: '',
-    desc: '',
-  });
-  const itemIconUrl = ref('');
-  const lastFetchedId = ref<number | undefined>(undefined);
-  const isEquip = ref(false);
+  const currentItemIndex = ref<number>(-1);
+  const currentItemId = ref<number | undefined>(undefined);
 
   const loadingPlayers = ref(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -415,31 +418,6 @@
     }
   };
 
-  const resetEquipStats = () => {
-    form.str = undefined;
-    form.dex = undefined;
-    form.int = undefined;
-    form.luk = undefined;
-    form.hp = undefined;
-    form.mp = undefined;
-    form.watk = undefined;
-    form.matk = undefined;
-    form.wdef = undefined;
-    form.mdef = undefined;
-    form.acc = undefined;
-    form.avoid = undefined;
-    form.hands = undefined;
-    form.speed = undefined;
-    form.jump = undefined;
-    form.upgradeSlots = undefined;
-    form.level = undefined;
-    form.itemLevel = undefined;
-    form.flag = undefined;
-    form.vicious = undefined;
-    form.owner = undefined;
-    form.itemExpiration = undefined;
-  };
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getAttr = (data: any, keys: string[]) => {
     // eslint-disable-next-line no-restricted-syntax
@@ -449,71 +427,20 @@
     return 0;
   };
 
-  const handleIdBlur = async () => {
-    if (!form.itemId) {
-      itemInfo.name = '';
-      itemInfo.desc = '';
-      itemIconUrl.value = '';
-      lastFetchedId.value = undefined;
-      isEquip.value = false;
-      return;
-    }
-
-    if (form.itemId === lastFetchedId.value) {
-      return;
-    }
-    lastFetchedId.value = form.itemId;
-
-    setLoading(true);
+  const fetchItemInfo = async (itemId: number) => {
     try {
-      itemInfo.name = '';
-      itemInfo.desc = '';
-      itemIconUrl.value = '';
-      isEquip.value = false;
-
       // 尝试作为装备查询
       try {
-        const { data } = await getEquInitialInfo(form.itemId);
+        const { data } = await getEquInitialInfo(itemId);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const equipData = data as any;
         if (equipData) {
-          itemInfo.name = equipData.name;
-          itemInfo.desc = equipData.desc;
-          itemIconUrl.value = getIconUrl('item', form.itemId);
-          isEquip.value = true;
-
-          // 如果是回显模式（initialData存在），不要覆盖已有的属性
-          if (!props.initialData) {
-            // 填充默认属性，尝试多种字段名以兼容不同后端返回格式
-            form.str = getAttr(equipData, ['str', 'Str']);
-            form.dex = getAttr(equipData, ['dex', 'Dex']);
-            form.int = getAttr(equipData, ['int', 'Int', 'intel', 'Intel']);
-            form.luk = getAttr(equipData, ['luk', 'Luk']);
-            form.hp = getAttr(equipData, ['hp', 'Hp', 'HP']);
-            form.mp = getAttr(equipData, ['mp', 'Mp', 'MP']);
-            form.watk = getAttr(equipData, ['pAtk', 'pad', 'watk', 'Watk']);
-            form.matk = getAttr(equipData, ['mAtk', 'mad', 'matk', 'Matk']);
-            form.wdef = getAttr(equipData, ['pDef', 'pdd', 'wdef', 'Wdef']);
-            form.mdef = getAttr(equipData, ['mDef', 'mdd', 'mdef', 'Mdef']);
-            form.acc = getAttr(equipData, ['acc', 'Acc']);
-            form.avoid = getAttr(equipData, ['avoid', 'eva', 'Avoid']);
-            form.hands = getAttr(equipData, ['hands', 'Hands']);
-            form.speed = getAttr(equipData, ['speed', 'Speed']);
-            form.jump = getAttr(equipData, ['jump', 'Jump']);
-            form.upgradeSlots = getAttr(equipData, [
-              'upgradeSlot',
-              'tuc',
-              'upgradeSlots',
-            ]);
-            form.level = getAttr(equipData, ['level', 'Level']);
-            form.itemLevel =
-              getAttr(equipData, ['itemLevel', 'ItemLevel']) || 1;
-            form.vicious = getAttr(equipData, ['vicious', 'Vicious']);
-            form.flag = getAttr(equipData, ['flag', 'Flag']);
-
-            Message.success(t('account.player.equip.success'));
-          }
-          return;
+          return {
+            name: equipData.name,
+            desc: equipData.desc,
+            isEquip: true,
+            data: equipData,
+          };
         }
       } catch (e) {
         // ignore
@@ -521,30 +448,82 @@
 
       // 尝试作为道具查询
       try {
-        const { data } = await getItemInitialInfo(form.itemId);
+        const { data } = await getItemInitialInfo(itemId);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const itemData = data as any;
         if (itemData) {
-          itemInfo.name = itemData.name;
-          itemInfo.desc = itemData.desc;
-          itemIconUrl.value = getIconUrl('item', form.itemId);
-          return;
+          return {
+            name: itemData.name,
+            desc: itemData.desc,
+            isEquip: false,
+            data: itemData,
+          };
         }
       } catch (e) {
         // ignore
       }
-
-      Message.warning(t('duey.send.item.notFound'));
-      // 如果未找到物品信息，重置相关状态
-      itemInfo.name = '';
-      itemInfo.desc = '';
-      itemIconUrl.value = '';
-      isEquip.value = false;
     } catch (error) {
       // ignore
+    }
+    return null;
+  };
+
+  const handleIdBlur = async (index: number) => {
+    if (!form.items || !form.items[index]) return;
+    const item = form.items[index];
+    if (!item.itemId) {
+      item.name = undefined;
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const info = await fetchItemInfo(item.itemId);
+      if (info) {
+        item.name = info.name;
+        if (info.isEquip) {
+          // 填充默认属性
+          const equipData = info.data;
+          item.str = getAttr(equipData, ['str', 'Str']);
+          item.dex = getAttr(equipData, ['dex', 'Dex']);
+          item.int = getAttr(equipData, ['int', 'Int', 'intel', 'Intel']);
+          item.luk = getAttr(equipData, ['luk', 'Luk']);
+          item.hp = getAttr(equipData, ['hp', 'Hp', 'HP']);
+          item.mp = getAttr(equipData, ['mp', 'Mp', 'MP']);
+          item.watk = getAttr(equipData, ['pAtk', 'pad', 'watk', 'Watk']);
+          item.matk = getAttr(equipData, ['mAtk', 'mad', 'matk', 'Matk']);
+          item.wdef = getAttr(equipData, ['pDef', 'pdd', 'wdef', 'Wdef']);
+          item.mdef = getAttr(equipData, ['mDef', 'mdd', 'mdef', 'Mdef']);
+          item.acc = getAttr(equipData, ['acc', 'Acc']);
+          item.avoid = getAttr(equipData, ['avoid', 'eva', 'Avoid']);
+          item.hands = getAttr(equipData, ['hands', 'Hands']);
+          item.speed = getAttr(equipData, ['speed', 'Speed']);
+          item.jump = getAttr(equipData, ['jump', 'Jump']);
+          item.upgradeSlots = getAttr(equipData, [
+            'upgradeSlot',
+            'tuc',
+            'upgradeSlots',
+          ]);
+          item.level = getAttr(equipData, ['level', 'Level']);
+          item.itemLevel = getAttr(equipData, ['itemLevel', 'ItemLevel']) || 1;
+          item.vicious = getAttr(equipData, ['vicious', 'Vicious']);
+          item.flag = getAttr(equipData, ['flag', 'Flag']);
+        }
+      } else {
+        Message.warning(t('duey.send.item.notFound'));
+        item.name = undefined;
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const addItem = () => {
+    if (!form.items) form.items = [];
+    form.items.push({
+      itemId: undefined as unknown as number, // 初始为空
+      quantity: 1,
+    });
   };
 
   watch(
@@ -557,25 +536,17 @@
         form.isAll = false;
         form.receiverIds = [];
         form.mesos = 0;
-        form.itemId = undefined;
-        form.quantity = 1;
         form.message = '';
         form.quick = true;
         form.senderName = '';
         form.expireDays = 30;
         form.expireTime = undefined;
         form.deliveryTime = undefined;
-        // Reset equip stats
-        resetEquipStats();
+        form.items = [];
 
         expireType.value = 'days';
         expireDateStr.value = undefined;
         deliveryDateStr.value = undefined;
-        itemInfo.name = '';
-        itemInfo.desc = '';
-        itemIconUrl.value = '';
-        lastFetchedId.value = undefined;
-        isEquip.value = false;
 
         loadSenderHistory();
         itemOptions.value = [];
@@ -604,35 +575,7 @@
 
           // 处理物品
           if (data.items && data.items.length > 0) {
-            const item = data.items[0];
-            form.itemId = item.itemId;
-            form.quantity = item.quantity;
-            // 填充装备属性
-            form.str = item.str;
-            form.dex = item.dex;
-            form.int = item.int;
-            form.luk = item.luk;
-            form.hp = item.hp;
-            form.mp = item.mp;
-            form.watk = item.watk;
-            form.matk = item.matk;
-            form.wdef = item.wdef;
-            form.mdef = item.mdef;
-            form.acc = item.acc;
-            form.avoid = item.avoid;
-            form.hands = item.hands;
-            form.speed = item.speed;
-            form.jump = item.jump;
-            form.upgradeSlots = item.upgradeSlots;
-            form.level = item.level;
-            form.itemLevel = item.itemLevel;
-            form.flag = item.flag;
-            form.vicious = item.vicious;
-            form.owner = item.owner;
-            form.itemExpiration = item.expiration;
-
-            // 触发物品详情查询以显示图标和名称
-            handleIdBlur();
+            form.items = data.items.map((item) => ({ ...item }));
           }
 
           // 处理过期时间
@@ -651,6 +594,9 @@
             );
             form.deliveryTime = new Date(data.deliveryTime).getTime();
           }
+        } else {
+          // 默认添加一个空物品行
+          addItem();
         }
       }
     }
@@ -687,7 +633,19 @@
     }
   });
 
-  const openItemSelector = () => {
+  const removeItem = (index: number) => {
+    if (form.items) {
+      form.items.splice(index, 1);
+    }
+  };
+
+  const openItemSelector = (index: number) => {
+    currentItemIndex.value = index;
+    if (form.items && form.items[index]) {
+      currentItemId.value = form.items[index].itemId;
+    } else {
+      currentItemId.value = undefined;
+    }
     itemSelectorVisible.value = true;
   };
 
@@ -697,10 +655,12 @@
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleItemSelect = async (item: any) => {
-    form.itemId = item.id;
-    // 强制触发 handleIdBlur 的查询逻辑，确保获取完整属性
-    lastFetchedId.value = undefined;
-    await handleIdBlur();
+    if (currentItemIndex.value !== -1 && form.items) {
+      const targetItem = form.items[currentItemIndex.value];
+      targetItem.itemId = item.id;
+      // 强制触发 handleIdBlur 的查询逻辑，确保获取完整属性
+      await handleIdBlur(currentItemIndex.value);
+    }
     itemSelectorVisible.value = false;
   };
 
@@ -718,8 +678,7 @@
     // players is array of OnlinePlayer
     const ids = players.map((p) => p.id);
     // Merge with existing ids, avoid duplicates
-    const newIds = [...new Set([...(form.receiverIds || []), ...ids])];
-    form.receiverIds = newIds;
+    form.receiverIds = [...new Set([...(form.receiverIds || []), ...ids])];
 
     // Update options to ensure selected players are visible
     players.forEach((p) => {
@@ -735,78 +694,89 @@
     return flags.filter((f) => (mask & f) === f);
   };
 
-  const openEquipEditor = () => {
-    if (!isEquip.value) return;
+  const isEquipItem = (itemId: number) => {
+    return Math.floor(itemId / 1000000) === 1;
+  };
 
-    // 将当前 form 的属性映射到 equipFormData
+  const openEquipEditor = (index: number) => {
+    if (!form.items || !form.items[index]) return;
+    const item = form.items[index];
+    if (!isEquipItem(item.itemId)) return;
+
+    currentItemIndex.value = index;
+
+    // 将当前 item 的属性映射到 equipFormData
     equipFormData.value = {
       type: 6,
-      id: form.itemId,
-      str: form.str,
-      dex: form.dex,
-      int: form.int,
-      luk: form.luk,
-      hp: form.hp,
-      mp: form.mp,
-      pAtk: form.watk,
-      mAtk: form.matk,
-      pDef: form.wdef,
-      mDef: form.mdef,
-      acc: form.acc,
-      avoid: form.avoid,
-      hands: form.hands,
-      speed: form.speed,
-      jump: form.jump,
-      upgradeSlot: form.upgradeSlots,
-      level: form.level,
-      itemLevel: form.itemLevel,
-      flag: bitmaskToArray(form.flag),
-      vicious: form.vicious,
-      owner: form.owner,
-      expire: form.itemExpiration,
-      expireType: form.itemExpiration ? 2 : 0, // 默认永久，或者根据需要传递
-      expireDate: form.itemExpiration
-        ? dayjs(form.itemExpiration).format('YYYY-MM-DD HH:mm:ss')
+      id: item.itemId,
+      str: item.str,
+      dex: item.dex,
+      int: item.int,
+      luk: item.luk,
+      hp: item.hp,
+      mp: item.mp,
+      pAtk: item.watk,
+      mAtk: item.matk,
+      pDef: item.wdef,
+      mDef: item.mdef,
+      acc: item.acc,
+      avoid: item.avoid,
+      hands: item.hands,
+      speed: item.speed,
+      jump: item.jump,
+      upgradeSlot: item.upgradeSlots,
+      level: item.level,
+      itemLevel: item.itemLevel,
+      flag: bitmaskToArray(item.flag),
+      vicious: item.vicious,
+      owner: item.owner,
+      expire: item.expiration,
+      expireType: item.expiration ? 2 : 0, // 默认永久，或者根据需要传递
+      expireDate: item.expiration
+        ? dayjs(item.expiration).format('YYYY-MM-DD HH:mm:ss')
         : undefined,
     };
     equipEditorVisible.value = true;
   };
 
   const handleEquipEditorSubmit = (data: GiveForm) => {
-    // 将编辑后的属性回填到 form
-    form.str = data.str;
-    form.dex = data.dex;
-    form.int = data.int;
-    form.luk = data.luk;
-    form.hp = data.hp;
-    form.mp = data.mp;
-    form.watk = data.pAtk;
-    form.matk = data.mAtk;
-    form.wdef = data.pDef;
-    form.mdef = data.mDef;
-    form.acc = data.acc;
-    form.avoid = data.avoid;
-    form.hands = data.hands;
-    form.speed = data.speed;
-    form.jump = data.jump;
-    form.upgradeSlots = data.upgradeSlot;
-    form.level = data.level;
-    form.itemLevel = data.itemLevel;
-    form.flag = Array.isArray(data.flag)
+    if (currentItemIndex.value === -1 || !form.items) return;
+    const item = form.items[currentItemIndex.value];
+
+    // 将编辑后的属性回填到 item
+    item.str = data.str;
+    item.dex = data.dex;
+    item.int = data.int;
+    item.luk = data.luk;
+    item.hp = data.hp;
+    item.mp = data.mp;
+    item.watk = data.pAtk;
+    item.matk = data.mAtk;
+    item.wdef = data.pDef;
+    item.mdef = data.mDef;
+    item.acc = data.acc;
+    item.avoid = data.avoid;
+    item.hands = data.hands;
+    item.speed = data.speed;
+    item.jump = data.jump;
+    item.upgradeSlots = data.upgradeSlot;
+    item.level = data.level;
+    item.itemLevel = data.itemLevel;
+    item.flag = Array.isArray(data.flag)
       ? data.flag.reduce((acc, cur) => acc | cur, 0)
       : data.flag;
-    form.vicious = data.vicious;
-    form.owner = data.owner;
+    item.vicious = data.vicious;
+    item.owner = data.owner;
 
     // 处理过期时间
     if (data.expireType === 0) {
-      form.itemExpiration = undefined;
+      item.expiration = undefined;
     } else if (data.expireType === 1 && data.expire) {
       // 分钟
-      form.itemExpiration = new Date().getTime() + data.expire * 60 * 1000;
+      item.expiration = new Date().getTime() + data.expire * 60 * 1000;
     } else if (data.expireType === 2 && data.expireDate) {
       // 日期
-      form.itemExpiration = new Date(data.expireDate).getTime();
+      item.expiration = new Date(data.expireDate).getTime();
     }
 
     equipEditorVisible.value = false;
@@ -827,6 +797,11 @@
       return;
     }
 
+    // 过滤掉无效物品
+    if (form.items) {
+      form.items = form.items.filter((item) => item.itemId && item.itemId > 0);
+    }
+
     try {
       await sendDueyPackage(form);
       saveSenderHistory(form.senderName || '');
@@ -843,18 +818,10 @@
   });
 
   const handleSearchItems = async (value: string) => {
-    // 如果输入的是数字，且长度较短，可能是ID，也可能是名字的一部分
-    // 但如果用户输入非数字，肯定是搜索名字
-    // 这里我们简单处理：只要输入了内容，就去搜索
     if (!value) {
       itemOptions.value = [];
       return;
     }
-
-    // 如果是纯数字，且我们想优先当做ID处理，可以在这里判断
-    // 但需求是“输入内容非ID，则转为搜索”，这意味着如果输入的是数字，可能还是优先当ID？
-    // 或者说，输入框本身是 allow-create，用户输入数字回车，v-model 会变成该数字
-    // 这里的 handleSearchItems 是在用户输入过程中触发的搜索建议
 
     loadingItems.value = true;
     try {
@@ -867,95 +834,88 @@
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const records = (data as any).records || [];
       itemOptions.value = records;
-
-      // 如果只找到1条记录，且用户输入的内容不是纯数字ID（或者即便是纯数字，但完全匹配了名字？）
-      // 需求说：如果只找到1条记录，则转为ID填充到输入框里并执行后续的功能
-      // 这里是在搜索回调中，直接修改 form.itemId 可能会打断用户输入
-      // 通常这种“自动填充”是在用户停止输入（blur）或者回车时触发比较好
-      // 但既然需求如此，我们可以尝试在搜索结果返回时判断
-      if (records.length === 1) {
-        // 只有当用户输入的内容不是该物品的ID时，才自动替换？
-        // 或者直接替换
-        // 为了避免用户正在输入时突然变了，我们可能需要谨慎一点
-        // 但根据需求描述，似乎是希望自动完成
-        // 这里我们先只做展示，真正的“转为ID填充”逻辑放在 handleItemChange 或 blur 中可能更好
-        // 不过，如果是 allow-create 的 select，选中 option 会触发 change
-        // 如果我们在这里直接改 form.itemId，用户体验可能会比较怪（输入一半突然变了）
-        // 让我们在 handleItemPopupVisibleChange 或 blur 中处理“只找到1条”的逻辑？
-        // 或者，需求的意思是：用户输入 -> 搜索 -> 只有1条 -> 自动选中
-        // 这在 UI 上表现为：下拉框只有一个选项，用户可以直接回车选中，或者我们帮他选中
-      }
     } finally {
       loadingItems.value = false;
     }
   };
 
-  const handleItemChange = (value: any) => {
-    // 当用户选中下拉项，或者输入自定义值回车后触发
-    // value 可能是 ID (number) 或 输入的字符串 (string)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleItemChange = (value: any, index: number) => {
+    if (!form.items || !form.items[index]) return;
+    const item = form.items[index];
+
     if (typeof value === 'string') {
-      // 用户输入了字符串（非ID，或者ID但没选中下拉项）
-      // 尝试解析为数字
       const id = Number(value);
       if (!Number.isNaN(id)) {
-        form.itemId = id;
+        item.itemId = id;
       } else if (itemOptions.value.length === 1) {
-        // 输入的不是数字，可能是名字，且没有选中下拉项（或者下拉项里没有）
-        // 此时 itemOptions 可能已经加载了搜索结果
-        form.itemId = itemOptions.value[0].id;
+        item.itemId = itemOptions.value[0].id;
         Message.info(
           t('duey.send.item.autoMatched', { name: itemOptions.value[0].name })
         );
-      } else if (itemOptions.value.length > 1) {
-        // 多条结果，提示用户选择
-        // form.itemId 此时是字符串，可能会导致后续逻辑报错，需要清空或保持
-        // 但由于 allow-create，v-model 绑定的值可以是 string
-        // 我们需要确保最终提交或查询详情时是 ID
-        // 这里可以不做处理，等待 blur 时校验
-      } else {
-        // 没有结果
       }
     } else {
-      form.itemId = value;
+      item.itemId = value;
     }
     // 触发详情查询
-    if (typeof form.itemId === 'number') {
-      lastFetchedId.value = undefined;
-      handleIdBlur();
+    if (typeof item.itemId === 'number') {
+      handleIdBlur(index);
     }
   };
 
-  const handleItemPopupVisibleChange = (visible: boolean) => {
-    if (!visible) {
-      // 下拉框关闭时，检查当前值
-      // 如果 itemOptions 只有1条，且当前 form.itemId 不是数字，可以尝试自动填充
+  const handleItemClear = (index: number) => {
+    if (!form.items || !form.items[index]) return;
+    const item = form.items[index];
+    item.itemId = undefined as unknown as number;
+    item.name = undefined;
+  };
+
+  const handleItemPopupVisibleChange = (visible: boolean, index: number) => {
+    if (!visible && form.items && form.items[index]) {
+      const item = form.items[index];
       if (
         itemOptions.value.length === 1 &&
-        typeof form.itemId !== 'number' &&
-        form.itemId
+        typeof item.itemId !== 'number' &&
+        item.itemId
       ) {
-        form.itemId = itemOptions.value[0].id;
-        lastFetchedId.value = undefined;
-        handleIdBlur();
+        item.itemId = itemOptions.value[0].id;
+        handleIdBlur(index);
       }
     }
   };
 </script>
 
 <style scoped>
-  .item-info-container {
-    display: flex;
+  .item-row {
     border: 1px solid var(--color-neutral-3);
     padding: 10px;
     border-radius: 4px;
-    position: relative;
+    margin-bottom: 10px;
+  }
+  .item-row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: var(--color-text-2);
+  }
+  .item-info-container {
+    display: flex;
+    margin-top: 10px;
+    background-color: var(--color-fill-2);
+    padding: 8px;
+    border-radius: 4px;
   }
   .item-icon-wrapper {
-    margin-right: 16px;
+    margin-right: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 60px;
+    width: 40px;
+    height: 40px;
+    background-color: var(--color-bg-1);
+    border-radius: 4px;
   }
   .item-icon {
     max-width: 100%;
@@ -963,12 +923,13 @@
   }
   .item-details {
     flex: 1;
-    margin-right: 40px; /* 留出按钮空间 */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
-  .item-actions {
-    position: absolute;
-    right: 10px;
-    top: 10px;
+  .item-name {
+    font-weight: bold;
+    margin-bottom: 4px;
   }
   .sender-option-content {
     display: flex;
