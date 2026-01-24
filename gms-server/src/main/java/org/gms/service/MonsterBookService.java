@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -67,7 +68,7 @@ public class MonsterBookService {
         return tierSizes;
     }
 
-    public Page<MonsterBookRtnDTO> search(MonsterBookSearchReqDTO req) {
+    public Page<MonsterBookDTO.Rtn> search(MonsterBookDTO.SearchReq req) {
         // 1. 尝试从在线玩家中获取数据
         if (req.getCharIds() != null && req.getCharIds().size() == 1) {
             int charId = req.getCharIds().get(0);
@@ -80,9 +81,9 @@ public class MonsterBookService {
             if (onlineChr != null) {
                 // 构造内存数据分页
                 Map<Integer, Integer> cards = onlineChr.getMonsterBook().getCards();
-                List<MonsterBookRtnDTO> list = new ArrayList<>();
+                List<MonsterBookDTO.Rtn> list = new ArrayList<>();
                 for (Map.Entry<Integer, Integer> entry : cards.entrySet()) {
-                    MonsterBookRtnDTO dto = new MonsterBookRtnDTO();
+                    MonsterBookDTO.Rtn dto = new MonsterBookDTO.Rtn();
                     dto.setCharid(charId);
                     dto.setCardid(entry.getKey());
                     dto.setLevel(entry.getValue());
@@ -96,7 +97,7 @@ public class MonsterBookService {
                 int fromIndex = (pageNo - 1) * pageSize;
                 int toIndex = Math.min(fromIndex + pageSize, total);
                 
-                List<MonsterBookRtnDTO> pageList = new ArrayList<>();
+                List<MonsterBookDTO.Rtn> pageList = new ArrayList<>();
                 if (fromIndex < total) {
                     pageList = list.subList(fromIndex, toIndex);
                 }
@@ -118,7 +119,7 @@ public class MonsterBookService {
         int pageNo = req.getPageNo() != null ? req.getPageNo() : 1;
         int pageSize = req.getPageSize() != null ? req.getPageSize() : 10;
         
-        Page<MonsterBookRtnDTO> page = monsterbookMapper.paginateAs(Page.of(pageNo, pageSize), query, MonsterBookRtnDTO.class);
+        Page<MonsterBookDTO.Rtn> page = monsterbookMapper.paginateAs(Page.of(pageNo, pageSize), query, MonsterBookDTO.Rtn.class);
         
         if (page.getRecords() != null) {
             fillCardNames(page.getRecords());
@@ -127,8 +128,8 @@ public class MonsterBookService {
         return page;
     }
     
-    private void fillCardNames(List<MonsterBookRtnDTO> list) {
-        for (MonsterBookRtnDTO record : list) {
+    private void fillCardNames(List<MonsterBookDTO.Rtn> list) {
+        for (MonsterBookDTO.Rtn record : list) {
             int cardId = record.getCardid();
             Integer mobId = MonsterInformationProvider.getInstance().getMobByCardId(cardId);
             if (mobId != null && mobId > 0) {
@@ -141,7 +142,7 @@ public class MonsterBookService {
     }
 
     @Transactional
-    public void batchDelete(MonsterBookBatchDeleteReqDTO req) {
+    public void batchDelete(MonsterBookDTO.BatchDeleteReq req) {
         if (req.getItems() == null || req.getItems().isEmpty()) {
             return;
         }
@@ -163,7 +164,7 @@ public class MonsterBookService {
     }
 
     @Transactional
-    public void batchAdd(MonsterBookBatchAddReqDTO req) {
+    public void batchAdd(MonsterBookDTO.BatchAddReq req) {
         if (req.getItems() == null || req.getItems().isEmpty()) {
             return;
         }
@@ -193,11 +194,11 @@ public class MonsterBookService {
     }
 
     @Transactional
-    public void batchUpdate(MonsterBookBatchUpdateReqDTO req) {
+    public void batchUpdate(MonsterBookDTO.BatchUpdateReq req) {
         if (req.getItems() == null || req.getItems().isEmpty()) {
             return;
         }
-        for (MonsterBookUpdateItemDTO item : req.getItems()) {
+        for (MonsterBookDTO.UpdateItem item : req.getItems()) {
             Character chr = null;
             for (World world : Server.getInstance().getWorlds()) {
                 chr = world.getPlayerStorage().getCharacterById(item.getOldCharId());
@@ -239,7 +240,7 @@ public class MonsterBookService {
     }
 
     @Transactional
-    public void transfer(MonsterBookTransferReqDTO req) {
+    public void transfer(MonsterBookDTO.TransferReq req) {
         if (req.getItems() == null || req.getItems().isEmpty() || req.getNewCharId() == null) {
             return;
         }
@@ -286,5 +287,23 @@ public class MonsterBookService {
                 }
             }
         }
+    }
+
+    public Map<Integer, String> getCardNames(MonsterBookDTO.SearchReq req) {
+        Map<Integer, String> result = new HashMap<>();
+        if (req.getCardIds() == null || req.getCardIds().isEmpty()) {
+            return result;
+        }
+
+        for (Integer cardId : req.getCardIds()) {
+            Integer mobId = MonsterInformationProvider.getInstance().getMobByCardId(cardId);
+            if (mobId != null && mobId > 0) {
+                String mobName = MonsterInformationProvider.getInstance().getMobNameFromId(mobId);
+                result.put(cardId, mobName);
+            } else {
+                result.put(cardId, "Unknown Card (" + cardId + ")");
+            }
+        }
+        return result;
     }
 }

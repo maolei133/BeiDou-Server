@@ -119,7 +119,31 @@
                   field="startId"
                   :label="$t('account.monsterbook.add.range.start')"
                 >
-                  <a-input-number v-model="rangeForm.startId" :min="0" />
+                  <a-select
+                    v-model="rangeForm.startId"
+                    :loading="loadingCards"
+                    :placeholder="$t('account.monsterbook.search.placeholder')"
+                    allow-search
+                    :filter-option="false"
+                    @search="handleSearchCards"
+                    @popup-visible-change="handlePopupVisibleChange"
+                    @dropdown-scroll="handlePopupScroll"
+                  >
+                    <a-option
+                      v-for="item in cardOptions"
+                      :key="item.id"
+                      :value="item.id"
+                      :label="`${item.name} (${item.id})`"
+                    />
+                    <template #footer>
+                      <div
+                        v-if="loadingCards"
+                        style="text-align: center; padding: 10px 0"
+                      >
+                        <a-spin />
+                      </div>
+                    </template>
+                  </a-select>
                 </a-form-item>
               </a-col>
               <a-col :span="12">
@@ -127,7 +151,31 @@
                   field="endId"
                   :label="$t('account.monsterbook.add.range.end')"
                 >
-                  <a-input-number v-model="rangeForm.endId" :min="0" />
+                  <a-select
+                    v-model="rangeForm.endId"
+                    :loading="loadingCards"
+                    :placeholder="$t('account.monsterbook.search.placeholder')"
+                    allow-search
+                    :filter-option="false"
+                    @search="handleSearchCards"
+                    @popup-visible-change="handlePopupVisibleChange"
+                    @dropdown-scroll="handlePopupScroll"
+                  >
+                    <a-option
+                      v-for="item in cardOptions"
+                      :key="item.id"
+                      :value="item.id"
+                      :label="`${item.name} (${item.id})`"
+                    />
+                    <template #footer>
+                      <div
+                        v-if="loadingCards"
+                        style="text-align: center; padding: 10px 0"
+                      >
+                        <a-spin />
+                      </div>
+                    </template>
+                  </a-select>
                 </a-form-item>
               </a-col>
             </a-row>
@@ -240,6 +288,7 @@
     batchAddMonsterBook,
     batchUpdateMonsterBook,
     transferMonsterBook,
+    getMonsterCardNames,
     MonsterBookItem,
     MonsterBookUpdateItem,
   } from '@/api/monsterbook';
@@ -261,6 +310,9 @@
     current: 1,
     pageSize: 10,
     total: 0,
+    showTotal: true,
+    showJumper: true,
+    showPageSize: true,
   });
 
   const rowSelection = reactive({
@@ -303,8 +355,8 @@
     level: 1,
   });
   const rangeForm = reactive({
-    startId: 0,
-    endId: 0,
+    startId: undefined as number | undefined,
+    endId: undefined as number | undefined,
     level: 1,
   });
   const pasteForm = reactive({
@@ -314,6 +366,9 @@
   const loadingCards = ref(false);
   const cardOptions = ref<InformationResult[]>([]);
   const previewLoading = ref(false);
+
+  // 缓存所有已加载的卡片信息，用于区间生成
+  const allLoadedCards = ref<Map<number, InformationResult>>(new Map());
 
   // 分页加载相关状态
   const cardPage = ref(1);
@@ -337,6 +392,11 @@
       } else {
         cardOptions.value = res.records;
       }
+
+      // 缓存新加载的卡片
+      res.records.forEach((card) => {
+        allLoadedCards.value.set(card.id, card);
+      });
 
       cardTotal.value = res.totalRow;
       hasMoreCards.value = cardOptions.value.length < cardTotal.value;
@@ -372,8 +432,8 @@
   const handleAdd = () => {
     addForm.cardids = [];
     addForm.level = 1;
-    rangeForm.startId = 0;
-    rangeForm.endId = 0;
+    rangeForm.startId = undefined;
+    rangeForm.endId = undefined;
     rangeForm.level = 1;
     pasteForm.content = '';
     previewData.value = [];
@@ -382,59 +442,65 @@
     handleSearchCards('');
   };
 
-  // 获取卡片名称
-  const getCardName = async (id: number) => {
-    try {
-      const { data: res } = await informationSearch({
-        types: ['monster_card'],
-        filter: String(id),
-        filterType: 1, // ID匹配
-        fullMatch: true,
-      });
-      if (res.records.length > 0) {
-        return res.records[0].name;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return `Card ${id}`;
-  };
-
   const previewRange = async () => {
-    if (rangeForm.startId > rangeForm.endId) {
+    if (
+      rangeForm.startId === undefined ||
+      rangeForm.endId === undefined ||
+      rangeForm.startId > rangeForm.endId
+    ) {
       Message.error(t('account.monsterbook.add.range.error'));
       return;
     }
     previewLoading.value = true;
     const items: MonsterBookItem[] = [];
-    const maxPreview = 100;
-    let count = 0;
 
     try {
-      for (let i = rangeForm.startId; i <= rangeForm.endId; i += 1) {
-        if (count >= maxPreview) break;
-        // eslint-disable-next-line no-await-in-loop
-        const name = await getCardName(i);
-        // 过滤掉不存在的卡片（名称为 Card {id} 的视为未找到，或者根据业务需求调整）
-        // 这里假设如果后端返回了名称，则说明卡片存在。
-        // 如果后端返回的是 "Unknown" 或者默认值，可能需要进一步判断。
-        // 根据 CommonInformation.java 的逻辑，如果找不到 mobId，name 会是 "Unknown"。
-        if (name && name !== 'Unknown' && !name.startsWith('Card ')) {
-          items.push({
-            charid: props.charId,
-            cardid: i,
-            level: rangeForm.level,
-            cardName: name,
-          });
-        }
-        count += 1;
+      // 获取当前已有的卡片ID
+      const existingCardIds = new Set(data.value.map((item) => item.cardid));
+
+      // 从缓存中获取所有卡片ID，并排序
+      const sortedCardIds = Array.from(allLoadedCards.value.keys()).sort(
+        (a, b) => a - b
+      );
+
+      // 找到起始和结束ID在排序列表中的索引
+      const startIndex = sortedCardIds.indexOf(rangeForm.startId);
+      const endIndex = sortedCardIds.indexOf(rangeForm.endId);
+
+      if (startIndex === -1 || endIndex === -1) {
+        // 理论上不应该发生，因为 startId 和 endId 必须是选中的
+        Message.error('Selected cards not found in cache');
+        return;
       }
+
+      // 截取范围内的ID
+      const rangeIds = sortedCardIds.slice(startIndex, endIndex + 1);
+
+      // 遍历范围内的ID生成预览项
+      for (let i = 0; i < rangeIds.length; i += 1) {
+        const id = rangeIds[i];
+        // 过滤已有的卡片
+        if (!existingCardIds.has(id)) {
+          const cardInfo = allLoadedCards.value.get(id);
+          if (cardInfo) {
+            items.push({
+              charid: props.charId,
+              cardid: id,
+              level: rangeForm.level,
+              cardName: cardInfo.name,
+            });
+          }
+        }
+      }
+
       previewData.value = items;
-      if (rangeForm.endId - rangeForm.startId + 1 > maxPreview) {
+      if (items.length > 100) {
         Message.warning(
-          t('account.monsterbook.add.preview.limit', { max: maxPreview })
+          t('account.monsterbook.add.preview.limit', { max: 100 })
         );
       }
+    } catch (e) {
+      Message.error(t('message.error'));
     } finally {
       previewLoading.value = false;
     }
@@ -444,39 +510,61 @@
     previewLoading.value = true;
     const lines = pasteForm.content.split(/\r?\n/);
     const separatorRegex = /[,，\t\s|=]+/;
+    const cardIdsToQuery: number[] = [];
+    const parsedItems: { id: number; level: number }[] = [];
 
-    try {
-      const promises = lines.map(async (line) => {
-        const parts = line.trim().split(separatorRegex);
-        if (parts.length >= 1) {
-          const id = parseInt(parts[0], 10);
-          if (!Number.isNaN(id)) {
-            let level = 1;
-            if (parts.length >= 2) {
-              const lvl = parseInt(parts[1], 10);
-              if (!Number.isNaN(lvl)) {
-                level = Math.min(Math.max(lvl, 1), 5);
-              }
-            }
-            const name = await getCardName(id);
-            // 同样过滤不存在的卡片
-            if (name && name !== 'Unknown' && !name.startsWith('Card ')) {
-              return {
-                charid: props.charId,
-                cardid: id,
-                level,
-                cardName: name,
-              } as MonsterBookItem;
+    // 解析输入
+    lines.forEach((line) => {
+      const parts = line.trim().split(separatorRegex);
+      if (parts.length >= 1) {
+        const id = parseInt(parts[0], 10);
+        if (!Number.isNaN(id)) {
+          let level = 1;
+          if (parts.length >= 2) {
+            const lvl = parseInt(parts[1], 10);
+            if (!Number.isNaN(lvl)) {
+              level = Math.min(Math.max(lvl, 1), 5);
             }
           }
+          cardIdsToQuery.push(id);
+          parsedItems.push({ id, level });
         }
-        return null;
+      }
+    });
+
+    if (cardIdsToQuery.length === 0) {
+      previewLoading.value = false;
+      return;
+    }
+
+    try {
+      // 批量获取名称
+      const { data: namesMap } = await getMonsterCardNames(cardIdsToQuery);
+
+      // 获取当前已有的卡片ID
+      const existingCardIds = new Set(data.value.map((item) => item.cardid));
+
+      const results: MonsterBookItem[] = [];
+      parsedItems.forEach((item) => {
+        const name = namesMap[item.id];
+        if (
+          name &&
+          name !== 'Unknown' &&
+          !name.startsWith('Card ') &&
+          !existingCardIds.has(item.id)
+        ) {
+          results.push({
+            charid: props.charId,
+            cardid: item.id,
+            level: item.level,
+            cardName: name,
+          });
+        }
       });
 
-      const results = await Promise.all(promises);
-      previewData.value = results.filter(
-        (item): item is MonsterBookItem => item !== null
-      );
+      previewData.value = results;
+    } catch (e) {
+      Message.error(t('message.error'));
     } finally {
       previewLoading.value = false;
     }

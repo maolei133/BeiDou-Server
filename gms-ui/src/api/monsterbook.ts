@@ -54,3 +54,12 @@ export function batchUpdateMonsterBook(items: MonsterBookUpdateItem[]) {
 export function transferMonsterBook(params: MonsterBookTransferParams) {
   return axios.post<ResultBody<any>>('/monsterbook/v1/transfer', params);
 }
+
+export function getMonsterCardNames(cardIds: number[]) {
+  return axios.post<ResultBody<Record<number, string>>>(
+    '/monsterbook/v1/getCardNames',
+    {
+      cardIds,
+    }
+  );
+}
