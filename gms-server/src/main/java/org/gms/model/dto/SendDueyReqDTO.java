@@ -6,6 +6,7 @@ import java.util.List;
 
 @Data
 public class SendDueyReqDTO {
+    private Long packageId; // 新增：用于更新包裹
     private List<Integer> receiverIds; // 支持多选角色ID
     private String receiverName; // 兼容旧逻辑，支持按名称发送
     private Boolean isAll; // 保留全服选项，作为特殊的多选情况

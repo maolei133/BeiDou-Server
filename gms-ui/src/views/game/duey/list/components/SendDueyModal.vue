@@ -177,7 +177,7 @@
             :min="1"
             :max="32767"
             hide-button
-            style="width: 70px; margin-left: 8px"
+            style="width: 100px; margin-left: 8px"
           />
         </a-input-group>
       </a-form-item>
@@ -247,7 +247,7 @@
   import { Message } from '@arco-design/web-vue';
   import useLoading from '@/hooks/loading';
   import dayjs from 'dayjs';
-  import { sendDueyPackage, SendDueyReq } from '@/api/duey';
+  import { sendDueyPackage, SendDueyReq, DueyPackage } from '@/api/duey';
   import {
     getEquInitialInfo,
     getItemInitialInfo,
@@ -269,6 +269,7 @@
   const props = defineProps<{
     visible: boolean;
     defaultReceiver?: string;
+    initialData?: DueyPackage; // 新增：传入初始数据用于编辑
   }>();
 
   const emit = defineEmits(['update:visible', 'success']);
@@ -283,6 +284,7 @@
 
   const formRef = ref();
   const form = reactive<SendDueyReq>({
+    packageId: undefined, // 新增：用于更新
     isAll: false,
     receiverIds: [],
     mesos: 0,
@@ -297,7 +299,7 @@
     // 装备属性
     str: undefined,
     dex: undefined,
-    inte: undefined, // 统一为 inte
+    int: undefined, // 统一为 int
     luk: undefined,
     hp: undefined,
     mp: undefined,
@@ -416,7 +418,7 @@
   const resetEquipStats = () => {
     form.str = undefined;
     form.dex = undefined;
-    form.inte = undefined;
+    form.int = undefined;
     form.luk = undefined;
     form.hp = undefined;
     form.mp = undefined;
@@ -437,77 +439,6 @@
     form.owner = undefined;
     form.itemExpiration = undefined;
   };
-
-  watch(
-    () => props.visible,
-    (val) => {
-      if (val) {
-        // Reset form
-        formRef.value?.resetFields();
-        form.isAll = false;
-        form.receiverIds = [];
-        form.mesos = 0;
-        form.itemId = undefined;
-        form.quantity = 1;
-        form.message = '';
-        form.quick = true;
-        form.senderName = '';
-        form.expireDays = 30;
-        form.expireTime = undefined;
-        form.deliveryTime = undefined;
-        // Reset equip stats
-        resetEquipStats();
-
-        expireType.value = 'days';
-        expireDateStr.value = undefined;
-        deliveryDateStr.value = undefined;
-        itemInfo.name = '';
-        itemInfo.desc = '';
-        itemIconUrl.value = '';
-        lastFetchedId.value = undefined;
-        isEquip.value = false;
-
-        loadSenderHistory();
-        itemOptions.value = [];
-
-        if (props.defaultReceiver) {
-          // 如果有默认收件人，尝试搜索并选中
-          handleSearchPlayers(props.defaultReceiver);
-        }
-      }
-    }
-  );
-
-  const handleCancel = () => {
-    emit('update:visible', false);
-  };
-
-  const handleDateChange = (dateString: string | undefined) => {
-    if (dateString) {
-      form.expireTime = new Date(dateString).getTime();
-      form.expireDays = undefined;
-    } else {
-      form.expireTime = undefined;
-    }
-  };
-
-  const handleDeliveryDateChange = (dateString: string | undefined) => {
-    if (dateString) {
-      form.deliveryTime = new Date(dateString).getTime();
-    } else {
-      form.deliveryTime = undefined;
-    }
-  };
-
-  watch(expireType, (val) => {
-    if (val === 'days') {
-      form.expireTime = undefined;
-      expireDateStr.value = undefined;
-      form.expireDays = 30;
-    } else {
-      form.expireDays = undefined;
-    }
-  });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getAttr = (data: any, keys: string[]) => {
@@ -551,33 +482,37 @@
           itemIconUrl.value = getIconUrl('item', form.itemId);
           isEquip.value = true;
 
-          // 填充默认属性，尝试多种字段名以兼容不同后端返回格式
-          form.str = getAttr(equipData, ['str', 'Str']);
-          form.dex = getAttr(equipData, ['dex', 'Dex']);
-          form.inte = getAttr(equipData, ['int', 'Int', 'intel', 'Intel']);
-          form.luk = getAttr(equipData, ['luk', 'Luk']);
-          form.hp = getAttr(equipData, ['hp', 'Hp', 'HP']);
-          form.mp = getAttr(equipData, ['mp', 'Mp', 'MP']);
-          form.watk = getAttr(equipData, ['pAtk', 'pad', 'watk', 'Watk']);
-          form.matk = getAttr(equipData, ['mAtk', 'mad', 'matk', 'Matk']);
-          form.wdef = getAttr(equipData, ['pDef', 'pdd', 'wdef', 'Wdef']);
-          form.mdef = getAttr(equipData, ['mDef', 'mdd', 'mdef', 'Mdef']);
-          form.acc = getAttr(equipData, ['acc', 'Acc']);
-          form.avoid = getAttr(equipData, ['avoid', 'eva', 'Avoid']);
-          form.hands = getAttr(equipData, ['hands', 'Hands']);
-          form.speed = getAttr(equipData, ['speed', 'Speed']);
-          form.jump = getAttr(equipData, ['jump', 'Jump']);
-          form.upgradeSlots = getAttr(equipData, [
-            'upgradeSlot',
-            'tuc',
-            'upgradeSlots',
-          ]);
-          form.level = getAttr(equipData, ['level', 'Level']);
-          form.itemLevel = getAttr(equipData, ['itemLevel', 'ItemLevel']) || 1;
-          form.vicious = getAttr(equipData, ['vicious', 'Vicious']);
-          form.flag = getAttr(equipData, ['flag', 'Flag']);
+          // 如果是回显模式（initialData存在），不要覆盖已有的属性
+          if (!props.initialData) {
+            // 填充默认属性，尝试多种字段名以兼容不同后端返回格式
+            form.str = getAttr(equipData, ['str', 'Str']);
+            form.dex = getAttr(equipData, ['dex', 'Dex']);
+            form.int = getAttr(equipData, ['int', 'Int', 'intel', 'Intel']);
+            form.luk = getAttr(equipData, ['luk', 'Luk']);
+            form.hp = getAttr(equipData, ['hp', 'Hp', 'HP']);
+            form.mp = getAttr(equipData, ['mp', 'Mp', 'MP']);
+            form.watk = getAttr(equipData, ['pAtk', 'pad', 'watk', 'Watk']);
+            form.matk = getAttr(equipData, ['mAtk', 'mad', 'matk', 'Matk']);
+            form.wdef = getAttr(equipData, ['pDef', 'pdd', 'wdef', 'Wdef']);
+            form.mdef = getAttr(equipData, ['mDef', 'mdd', 'mdef', 'Mdef']);
+            form.acc = getAttr(equipData, ['acc', 'Acc']);
+            form.avoid = getAttr(equipData, ['avoid', 'eva', 'Avoid']);
+            form.hands = getAttr(equipData, ['hands', 'Hands']);
+            form.speed = getAttr(equipData, ['speed', 'Speed']);
+            form.jump = getAttr(equipData, ['jump', 'Jump']);
+            form.upgradeSlots = getAttr(equipData, [
+              'upgradeSlot',
+              'tuc',
+              'upgradeSlots',
+            ]);
+            form.level = getAttr(equipData, ['level', 'Level']);
+            form.itemLevel =
+              getAttr(equipData, ['itemLevel', 'ItemLevel']) || 1;
+            form.vicious = getAttr(equipData, ['vicious', 'Vicious']);
+            form.flag = getAttr(equipData, ['flag', 'Flag']);
 
-          Message.success(t('account.player.equip.success'));
+            Message.success(t('account.player.equip.success'));
+          }
           return;
         }
       } catch (e) {
@@ -611,6 +546,146 @@
       setLoading(false);
     }
   };
+
+  watch(
+    () => props.visible,
+    (val) => {
+      if (val) {
+        // Reset form
+        formRef.value?.resetFields();
+        form.packageId = undefined; // 重置 packageId
+        form.isAll = false;
+        form.receiverIds = [];
+        form.mesos = 0;
+        form.itemId = undefined;
+        form.quantity = 1;
+        form.message = '';
+        form.quick = true;
+        form.senderName = '';
+        form.expireDays = 30;
+        form.expireTime = undefined;
+        form.deliveryTime = undefined;
+        // Reset equip stats
+        resetEquipStats();
+
+        expireType.value = 'days';
+        expireDateStr.value = undefined;
+        deliveryDateStr.value = undefined;
+        itemInfo.name = '';
+        itemInfo.desc = '';
+        itemIconUrl.value = '';
+        lastFetchedId.value = undefined;
+        isEquip.value = false;
+
+        loadSenderHistory();
+        itemOptions.value = [];
+
+        if (props.defaultReceiver) {
+          // 如果有默认收件人，尝试搜索并选中
+          handleSearchPlayers(props.defaultReceiver);
+        }
+
+        // 如果传入了 initialData，进行回显
+        if (props.initialData) {
+          const data = props.initialData;
+          form.packageId = data.packageId; // 设置 packageId
+          form.receiverIds = [data.receiverId];
+          // 预加载收件人信息以显示名字
+          if (data.receiverName) {
+            playerOptions.value = [
+              { id: data.receiverId, name: data.receiverName },
+            ];
+          }
+
+          form.senderName = data.senderName;
+          form.mesos = data.mesos;
+          form.message = data.message;
+          form.quick = data.type === 1;
+
+          // 处理物品
+          if (data.items && data.items.length > 0) {
+            const item = data.items[0];
+            form.itemId = item.itemId;
+            form.quantity = item.quantity;
+            // 填充装备属性
+            form.str = item.str;
+            form.dex = item.dex;
+            form.int = item.int;
+            form.luk = item.luk;
+            form.hp = item.hp;
+            form.mp = item.mp;
+            form.watk = item.watk;
+            form.matk = item.matk;
+            form.wdef = item.wdef;
+            form.mdef = item.mdef;
+            form.acc = item.acc;
+            form.avoid = item.avoid;
+            form.hands = item.hands;
+            form.speed = item.speed;
+            form.jump = item.jump;
+            form.upgradeSlots = item.upgradeSlots;
+            form.level = item.level;
+            form.itemLevel = item.itemLevel;
+            form.flag = item.flag;
+            form.vicious = item.vicious;
+            form.owner = item.owner;
+            form.itemExpiration = item.expiration;
+
+            // 触发物品详情查询以显示图标和名称
+            handleIdBlur();
+          }
+
+          // 处理过期时间
+          if (data.expireTime) {
+            expireType.value = 'date';
+            expireDateStr.value = dayjs(data.expireTime).format(
+              'YYYY-MM-DD HH:mm:ss'
+            );
+            form.expireTime = new Date(data.expireTime).getTime();
+          }
+
+          // 处理配送时间
+          if (data.deliveryTime) {
+            deliveryDateStr.value = dayjs(data.deliveryTime).format(
+              'YYYY-MM-DD HH:mm:ss'
+            );
+            form.deliveryTime = new Date(data.deliveryTime).getTime();
+          }
+        }
+      }
+    }
+  );
+
+  const handleCancel = () => {
+    emit('update:visible', false);
+  };
+
+  const handleDateChange = (dateString: string | undefined) => {
+    if (dateString) {
+      form.expireTime = new Date(dateString).getTime();
+      form.expireDays = undefined;
+    } else {
+      form.expireTime = undefined;
+    }
+  };
+
+  const handleDeliveryDateChange = (dateString: string | undefined) => {
+    if (dateString) {
+      form.deliveryTime = new Date(dateString).getTime();
+    } else {
+      form.deliveryTime = undefined;
+    }
+  };
+
+  watch(expireType, (val) => {
+    if (val === 'days') {
+      form.expireTime = undefined;
+      expireDateStr.value = undefined;
+      form.expireDays = 30;
+    } else {
+      form.expireDays = undefined;
+    }
+  });
 
   const openItemSelector = () => {
     itemSelectorVisible.value = true;
@@ -669,7 +744,7 @@
       id: form.itemId,
       str: form.str,
       dex: form.dex,
-      int: form.inte,
+      int: form.int,
       luk: form.luk,
       hp: form.hp,
       mp: form.mp,
@@ -701,7 +776,7 @@
     // 将编辑后的属性回填到 form
     form.str = data.str;
     form.dex = data.dex;
-    form.inte = data.int;
+    form.int = data.int;
     form.luk = data.luk;
     form.hp = data.hp;
     form.mp = data.mp;

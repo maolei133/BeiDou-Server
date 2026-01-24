@@ -47,5 +47,7 @@ export default {
   'duey.send.item.notFound': 'Item information not found',
   'duey.send.item.autoMatched': 'Auto matched item: {name}',
   'duey.send.equip.updateSuccess': 'Equipment stats updated',
+  'duey.send.error.claimed':
+    'This package has been claimed and cannot be edited',
   'itemSelector.title': 'Select Item',
 };

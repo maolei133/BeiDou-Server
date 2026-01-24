@@ -277,10 +277,10 @@
     };
   }>();
 
-  // 计算属性：获取智力值，优先取 inte，其次 int，最后 int_
+  // 计算属性：获取智力值，优先取 int，其次 inte，最后 int_
   const itemInt = computed(() => {
-    if (props.item.inte !== undefined) return props.item.inte;
     if (props.item.int !== undefined) return props.item.int;
+    if (props.item.inte !== undefined) return props.item.inte;
     // eslint-disable-next-line camelcase, no-underscore-dangle
     if (props.item.int_ !== undefined) return props.item.int_;
     return 0;

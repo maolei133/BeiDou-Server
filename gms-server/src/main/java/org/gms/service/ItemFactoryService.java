@@ -314,7 +314,7 @@ public class ItemFactoryService {
         equip.setDex(getShort(row, "dex"));
         equip.setHands(getShort(row, "hands"));
         equip.setHp(getShort(row, "hp"));
-        equip.setInt(getShort(row, "int")); // <-- 修改这里，从 "int" 列读取
+        equip.setInt(getShort(row, "int")); // <-- 改回从 "int" 列读取
         equip.setJump(getShort(row, "jump"));
         equip.setVicious(getShort(row, "vicious"));
         equip.setFlag(getShort(row, "flag"));

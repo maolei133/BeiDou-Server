@@ -37,7 +37,7 @@ export default {
   'duey.send.expire.days': '天数',
   'duey.send.expire.date': '日期',
   'duey.send.itemId': '物品ID',
-  'duey.send.quantity': '物数量',
+  'duey.send.quantity': '数量',
   'duey.send.message': '留言',
   'duey.send.success': '发送成功',
   'duey.send.isAll': '全服发送',
@@ -47,5 +47,6 @@ export default {
   'duey.send.item.notFound': '未找到该物品信息',
   'duey.send.item.autoMatched': '已自动匹配物品: {name}',
   'duey.send.equip.updateSuccess': '装备属性已更新',
+  'duey.send.error.claimed': '该包裹已被领取，无法编辑',
   'itemSelector.title': '选择物品',
 };

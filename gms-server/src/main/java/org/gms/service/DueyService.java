@@ -27,7 +27,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -243,30 +242,143 @@ public class DueyService {
         itemFactoryService.saveItems(ItemFactory.DUEY.getValue(), false, new ArrayList<>(), id.intValue());
     }
 
+    @Transactional
     public void sendDueyPackage(SendDueyReqDTO req) {
-        if (Boolean.TRUE.equals(req.getIsAll())) {
-            QueryWrapper query = QueryWrapper.create().select(CHARACTERS_D_O.ID);
-            List<Integer> allCharIds = charactersMapper.selectListByQueryAs(query, Integer.class);
-            for (Integer cid : allCharIds) {
-                sendSinglePackage(req, cid);
-            }
-        } else if (req.getReceiverIds() != null && !req.getReceiverIds().isEmpty()) {
-            for (Integer cid : req.getReceiverIds()) {
-                sendSinglePackage(req, cid);
-            }
+        if (req.getPackageId() != null) {
+            // 更新逻辑
+            updateDueyPackage(req);
         } else {
-            // 兼容旧逻辑，如果 receiverIds 为空，尝试使用 receiverId 或 receiverName
-            // 但由于 SendDueyReqDTO 中已经移除了 receiverId 字段，这里只能尝试 receiverName
-            // 如果前端传递了 receiverName 但没有 receiverIds，我们需要在这里处理
-            if (req.getReceiverName() != null) {
-                CharactersDO chr = charactersMapper.selectOneByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(req.getReceiverName())));
-                if (chr != null) {
-                    sendSinglePackage(req, chr.getId());
-                } else {
-                    throw new RuntimeException("Receiver not found: " + req.getReceiverName());
+            // 发送逻辑
+            if (Boolean.TRUE.equals(req.getIsAll())) {
+                QueryWrapper query = QueryWrapper.create().select(CHARACTERS_D_O.ID);
+                List<Integer> allCharIds = charactersMapper.selectListByQueryAs(query, Integer.class);
+                for (Integer cid : allCharIds) {
+                    sendSinglePackage(req, cid);
+                }
+            } else if (req.getReceiverIds() != null && !req.getReceiverIds().isEmpty()) {
+                for (Integer cid : req.getReceiverIds()) {
+                    sendSinglePackage(req, cid);
                 }
             } else {
-                throw new RuntimeException("No receiver specified");
+                // 兼容旧逻辑，如果 receiverIds 为空，尝试使用 receiverId 或 receiverName
+                if (req.getReceiverName() != null) {
+                    CharactersDO chr = charactersMapper.selectOneByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(req.getReceiverName())));
+                    if (chr != null) {
+                        sendSinglePackage(req, chr.getId());
+                    } else {
+                        throw new RuntimeException("未找到收件人: " + req.getReceiverName());
+                    }
+                } else {
+                    throw new RuntimeException("未指定收件人");
+                }
+            }
+        }
+    }
+
+    private void updateDueyPackage(SendDueyReqDTO req) {
+        DueypackagesDO existingPackage = dueypackagesMapper.selectOneById(req.getPackageId());
+        if (existingPackage == null) {
+            throw new RuntimeException("未找到包裹: " + req.getPackageId());
+        }
+
+        // 更新基本信息
+        if (req.getMesos() != null) existingPackage.setMesos(req.getMesos().longValue());
+        if (req.getMessage() != null) existingPackage.setMessage(req.getMessage());
+        if (req.getSenderName() != null) existingPackage.setSendername(req.getSenderName());
+        if (req.getQuick() != null) existingPackage.setType(req.getQuick() ? 1 : 0);
+        
+        // 更新收件人 (如果提供了)
+        if (req.getReceiverIds() != null && !req.getReceiverIds().isEmpty()) {
+            existingPackage.setReceiverid(req.getReceiverIds().get(0).longValue());
+        } else if (req.getReceiverName() != null) {
+            CharactersDO chr = charactersMapper.selectOneByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(req.getReceiverName())));
+            if (chr != null) {
+                existingPackage.setReceiverid(chr.getId().longValue());
+            }
+        }
+
+        // 更新时间相关
+        long timestamp = existingPackage.getTimestamp().getTime();
+        if (Boolean.FALSE.equals(req.getQuick()) && req.getDeliveryTime() != null) {
+            // 如果是普通快递且指定了送达时间，更新发送时间为送达时间减去配送时长（反推）
+            // 或者直接更新 timestamp 为新的发送时间，这里简化处理，假设 timestamp 不变，只改过期时间
+            // 实际上 deliveryTime 只是前端传来的展示值，后端逻辑是 timestamp + duration
+            // 这里我们允许修改 timestamp
+            // 但为了简单，我们假设 timestamp 不变，只改过期时间
+        }
+        
+        if (req.getExpireTime() != null) {
+            existingPackage.setExpireDate(new Timestamp(req.getExpireTime()));
+        } else if (req.getExpireDays() != null && req.getExpireDays() > 0) {
+             long expireTime = System.currentTimeMillis() + (req.getExpireDays() * 24 * 60 * 60 * 1000L);
+             existingPackage.setExpireDate(new Timestamp(expireTime));
+        }
+
+        // 构建物品对象
+        Item item = null;
+        ItemInfoRtnDTO itemDTO = null;
+        if (req.getItemId() != null && req.getQuantity() != null && req.getQuantity() > 0) {
+            InventoryType type = ItemInformationProvider.getInstance().getInventoryType(req.getItemId());
+            if (type == InventoryType.EQUIP) {
+                Equip equip = new Equip(req.getItemId(), (byte) 0, -1);
+                equip.setQuantity((short) 1);
+                if (req.getStr() != null) equip.setStr(limitShort(req.getStr()));
+                if (req.getDex() != null) equip.setDex(limitShort(req.getDex()));
+                if (req.getInt_() != null) equip.setInt(limitShort(req.getInt_()));
+                if (req.getLuk() != null) equip.setLuk(limitShort(req.getLuk()));
+                if (req.getHp() != null) equip.setHp(limitShort(req.getHp()));
+                if (req.getMp() != null) equip.setMp(limitShort(req.getMp()));
+                if (req.getWatk() != null) equip.setWatk(limitShort(req.getWatk()));
+                if (req.getMatk() != null) equip.setMatk(limitShort(req.getMatk()));
+                if (req.getWdef() != null) equip.setWdef(limitShort(req.getWdef()));
+                if (req.getMdef() != null) equip.setMdef(limitShort(req.getMdef()));
+                if (req.getAcc() != null) equip.setAcc(limitShort(req.getAcc()));
+                if (req.getAvoid() != null) equip.setAvoid(limitShort(req.getAvoid()));
+                if (req.getHands() != null) equip.setHands(limitShort(req.getHands()));
+                if (req.getSpeed() != null) equip.setSpeed(limitShort(req.getSpeed()));
+                if (req.getJump() != null) equip.setJump(limitShort(req.getJump()));
+                if (req.getUpgradeSlots() != null) equip.setUpgradeSlots(limitByte(req.getUpgradeSlots()));
+                if (req.getLevel() != null) equip.setLevel(limitShort(req.getLevel()));
+                if (req.getItemLevel() != null) equip.setItemLevel(limitShort(req.getItemLevel()));
+                if (req.getFlag() != null) equip.setFlag(limitShort(req.getFlag()));
+                if (req.getVicious() != null) equip.setVicious(limitShort(req.getVicious()));
+                item = equip;
+            } else {
+                item = new Item(req.getItemId(), (byte) 0, req.getQuantity().shortValue(), -1);
+            }
+            if (req.getOwner() != null) item.setOwner(req.getOwner());
+            if (req.getItemExpiration() != null) item.setExpiration(req.getItemExpiration());
+            
+            itemDTO = convertItemToDTO(item);
+        }
+
+        // 更新 item_data JSON
+        if (itemDTO != null) {
+            try {
+                existingPackage.setItemData(objectMapper.writeValueAsString(itemDTO));
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("序列化物品数据失败", e);
+            }
+        } else {
+            existingPackage.setItemData(null); // 清空物品
+        }
+
+        dueypackagesMapper.update(existingPackage);
+
+        // 更新 inventoryitems 表
+        // 只有当包裹未被领取时，才更新 inventoryitems 表
+        // checked: 1(未通知), 0(已通知), 2(已领取), 3(已过期), 4(已删除)
+        // 如果已领取(2)，则物品已经进入玩家背包，inventoryitems 表中对应的 type=9 记录可能已被删除或不再有效
+        // 但根据需求“道具被领取了也不能不显示对应的道具”，我们主要依赖 item_data JSON 来显示
+        // 这里只处理未领取状态下的 inventoryitems 更新，防止数据不一致
+        if (existingPackage.getChecked() != 2) {
+            // 先删除旧物品
+            itemFactoryService.saveItems(ItemFactory.DUEY.getValue(), false, new ArrayList<>(), req.getPackageId().intValue());
+            // 再插入新物品
+            if (item != null) {
+                List<Pair<Item, InventoryType>> dueyItems = new ArrayList<>();
+                dueyItems.add(new Pair<>(item, InventoryType.getByType(item.getItemType())));
+                itemFactoryService.saveItems(ItemFactory.DUEY.getValue(), false, dueyItems, req.getPackageId().intValue());
             }
         }
     }

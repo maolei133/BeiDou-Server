@@ -604,6 +604,7 @@
               'Int',
               'intel',
               'Intel',
+              'inte', // 增加 inte 兼容
             ]);
             formData.value.luk = getAttr(equipData, ['luk', 'Luk']);
             formData.value.hp = getAttr(equipData, ['hp', 'Hp', 'HP']);

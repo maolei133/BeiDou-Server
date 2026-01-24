@@ -11,7 +11,7 @@ export interface DueyItem {
   // 装备属性
   str?: number;
   dex?: number;
-  inte?: number; // 统一为 inte
+  int?: number;
   luk?: number;
   hp?: number;
   mp?: number;
@@ -60,6 +60,7 @@ export interface DueyListParams {
 }
 
 export interface SendDueyReq {
+  packageId?: number; // 新增：用于更新
   receiverIds?: number[];
   isAll?: boolean;
   mesos?: number;
@@ -78,7 +79,7 @@ export interface SendDueyReq {
   // 装备属性
   str?: number;
   dex?: number;
-  inte?: number; // 统一为 inte
+  int?: number;
   luk?: number;
   hp?: number;
   mp?: number;
@@ -109,10 +110,5 @@ export function deleteDueyPackage(id: number) {
 }
 
 export function sendDueyPackage(data: SendDueyReq) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { inte, ...rest } = data;
-  return axios.post<ResultBody<void>>('/duey/v1/send', {
-    ...rest,
-    int: inte, // 映射回后端期望的 'int'
-  });
+  return axios.post<ResultBody<void>>('/duey/v1/send', data);
 }

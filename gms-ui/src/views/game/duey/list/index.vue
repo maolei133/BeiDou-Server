@@ -230,14 +230,19 @@
             {{ formatDate(record.expireTime) }}
           </template>
           <template #operations="{ record }">
-            <a-popconfirm
-              :content="$t('duey.list.delete.confirm')"
-              @ok="handleDelete(record)"
-            >
-              <a-button type="text" status="danger" size="small">
-                {{ $t('button.delete') }}
+            <a-space>
+              <a-button type="text" size="small" @click="handleEdit(record)">
+                {{ $t('button.edit') }}
               </a-button>
-            </a-popconfirm>
+              <a-popconfirm
+                :content="$t('duey.list.delete.confirm')"
+                @ok="handleDelete(record)"
+              >
+                <a-button type="text" status="danger" size="small">
+                  {{ $t('button.delete') }}
+                </a-button>
+              </a-popconfirm>
+            </a-space>
           </template>
         </a-table>
       </template>
@@ -253,14 +258,19 @@
               <a-grid-item v-for="item in renderData" :key="item.packageId">
                 <a-card class="duey-card" hoverable>
                   <template #actions>
-                    <a-popconfirm
-                      :content="$t('duey.list.delete.confirm')"
-                      @ok="handleDelete(item)"
-                    >
-                      <span class="action-button delete">
-                        <icon-delete /> {{ $t('button.delete') }}
+                    <a-space>
+                      <span class="action-button" @click="handleEdit(item)">
+                        <icon-edit /> {{ $t('button.edit') }}
                       </span>
-                    </a-popconfirm>
+                      <a-popconfirm
+                        :content="$t('duey.list.delete.confirm')"
+                        @ok="handleDelete(item)"
+                      >
+                        <span class="action-button delete">
+                          <icon-delete /> {{ $t('button.delete') }}
+                        </span>
+                      </a-popconfirm>
+                    </a-space>
                   </template>
                   <a-card-meta>
                     <template #title>
@@ -386,6 +396,11 @@
     </a-card>
 
     <SendDueyModal v-model:visible="sendVisible" @success="search" />
+    <SendDueyModal
+      v-model:visible="editVisible"
+      :initial-data="currentEditPackage"
+      @success="search"
+    />
   </div>
 </template>
 
@@ -416,6 +431,7 @@
     IconApps,
     IconRight,
     IconDelete,
+    IconEdit,
   } from '@arco-design/web-vue/es/icon';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import { isEquip } from '@/utils/mapleStoryItem';
@@ -451,6 +467,8 @@
   });
 
   const sendVisible = ref(false);
+  const editVisible = ref(false);
+  const currentEditPackage = ref<DueyPackage | undefined>(undefined);
   const viewMode = ref('list');
 
   const formatDate = (date: string | number | Date) => {
@@ -524,7 +542,7 @@
     {
       title: t('duey.list.operation'),
       slotName: 'operations',
-      width: 80,
+      width: 120,
       fixed: 'right',
     },
   ]);
@@ -583,6 +601,15 @@
     sendVisible.value = true;
   };
 
+  const handleEdit = (record: DueyPackage) => {
+    if (record.checked === 2) {
+      Message.warning(t('duey.send.error.claimed'));
+      return;
+    }
+    currentEditPackage.value = record;
+    editVisible.value = true;
+  };
+
   const handleDelete = async (record: DueyPackage) => {
     try {
       await deleteDueyPackage(record.packageId);
@@ -637,6 +664,12 @@
     margin-right: 4px;
     margin-bottom: 4px;
     white-space: nowrap; /* 防止换行 */
+    cursor: pointer; /* 添加手型光标 */
+    transition: background-color 0.2s;
+
+    &:hover {
+      background-color: var(--color-fill-2);
+    }
 
     .item-icon {
       width: 32px;
@@ -725,6 +758,10 @@
       align-items: center;
       justify-content: center;
       background-color: var(--color-bg-2);
+      cursor: pointer;
+      &:hover {
+        background-color: var(--color-fill-2);
+      }
       img {
         max-width: 100%;
         max-height: 100%;
