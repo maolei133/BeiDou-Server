@@ -290,6 +290,10 @@ public class AccountService {
             if (isBanned(str)) {
                 return;
             }
+            // 白名单：本地回环地址不进行封禁
+            if ("127.0.0.1".equals(str) || "0:0:0:0:0:0:0:1".equals(str)) {
+                return;
+            }
             ipbansMapper.insertSelective(IpbansDO.builder().ip(str).build());
             return;
         }
@@ -316,6 +320,10 @@ public class AccountService {
     }
 
     public boolean isBanned(String ip) {
+        // 白名单：本地回环地址不视为封禁
+        if ("127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip)) {
+            return false;
+        }
         return ipbansMapper.selectCountByQuery(QueryWrapper.create().where(IPBANS_D_O.IP.eq(ip))) > 0;
     }
 

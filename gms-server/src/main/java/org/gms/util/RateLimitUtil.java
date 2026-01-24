@@ -32,6 +32,10 @@ public class RateLimitUtil {
         if (!rateLimitProperty.isEnabled()) {
             return true;
         }
+        // 白名单：本地回环地址不进行限流检查
+        if ("127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip)) {
+            return true;
+        }
         try {
             RateLimitContext rateLimitContext = contextMap.get(ip);
             if (rateLimitContext == null) {
