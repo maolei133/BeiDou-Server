@@ -53,8 +53,6 @@ public final class DueyHandler extends AbstractPacketHandler {
             int packageid = p.readInt();
 
             DueyProcessor.dueyClaimPackage(c, packageid);
-        } else if (operation == DueyProcessor.Actions.TOSERVER_CLAIM_PACKAGE.getCode()) {
-            DueyProcessor.dueySendTalk(c, false);
         }
     }
 }

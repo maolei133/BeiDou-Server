@@ -168,6 +168,7 @@ export default {
   'account.player.form.upgradeSlot': 'Upgrade Slot',
   'account.player.form.level': 'Level',
   'account.player.form.itemLevel': 'Item Level',
+  'account.player.form.vicious': 'Vicious Hammer',
   'account.player.form.expire': 'Expire',
   'account.player.form.expire.lock': 'Lock Until',
   'account.player.form.expire.type': 'Expire Type',
@@ -315,4 +316,5 @@ export default {
   'account.player.skin.error': 'Failed to fetch skin list',
   'account.player.detail.error': 'Failed to fetch character detail',
   'account.player.tempBanTime': 'Unblocking time',
+  'account.player.button.confirm': 'Confirm',
 };

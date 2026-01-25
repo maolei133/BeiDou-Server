@@ -90,6 +90,7 @@ export interface GiveForm {
   expireDate?: string;
   owner?: string;
   flag?: number | number[];
+  vicious?: number;
 }
 
 export interface UpdatePlayerForm {

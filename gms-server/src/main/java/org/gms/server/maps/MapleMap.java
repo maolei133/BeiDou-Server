@@ -106,7 +106,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class MapleMap {
     private static final Logger log = LoggerFactory.getLogger(MapleMap.class);
-    private static final List<MapObjectType> rangedMapobjectTypes = Arrays.asList(MapObjectType.SHOP, MapObjectType.ITEM, MapObjectType.NPC, MapObjectType.MONSTER, MapObjectType.DOOR, MapObjectType.SUMMON, MapObjectType.REACTOR);
+    private static final List<MapObjectType> rangedMapobjectTypes = Arrays.asList(MapObjectType.SHOP, MapObjectType.ITEM, MapObjectType.NPC, MapObjectType.MONSTER, MapObjectType.DOOR, MapObjectType.SUMMON, MapObjectType.REACTOR, MapObjectType.HIRED_MERCHANT);
     private static final Map<Integer, Pair<Integer, Integer>> dropBoundsCache = new HashMap<>(100);
 
     private final Map<Integer, MapObject> mapobjects = new LinkedHashMap<>();
@@ -4725,6 +4725,21 @@ public class MapleMap {
 
     public void setTimeExpand(int timeExpand) {
         this.timeExpand = timeExpand;
+    }
+
+    public List<HiredMerchant> getHiredMerchants() {
+        List<HiredMerchant> list = new LinkedList<>();
+        objectRLock.lock();
+        try {
+            for (MapObject obj : mapobjects.values()) {
+                if (obj.getType() == MapObjectType.HIRED_MERCHANT) {
+                    list.add((HiredMerchant) obj);
+                }
+            }
+        } finally {
+            objectRLock.unlock();
+        }
+        return list;
     }
 
 }

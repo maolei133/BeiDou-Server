@@ -30,6 +30,7 @@ import org.gms.net.server.guild.GuildCharacter;
 import org.gms.net.server.world.Messenger;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
+import org.gms.net.server.world.PartyOperation;
 import org.gms.net.server.world.World;
 import org.gms.server.CashShop;
 import org.gms.server.Storage;
@@ -940,6 +941,14 @@ public class CharacterService {
         if (player.getQuickSlotKeyMapped() != null) {
             saveQuickSlotKeyMap(player.getAccountId(), player.getQuickSlotKeyMapped().GetKeybindings(), player.getQuickSlotLoaded());
         }
+
+        // 保存怪物图鉴
+        if (player.getMonsterBook() != null) {
+            player.getMonsterBook().saveCards(player.getId());
+        }
+
+        // 保存任务
+        questService.saveQuestStatus(player.getId(), new ArrayList<>(player.getQuests().values()));
     }
 
     /**

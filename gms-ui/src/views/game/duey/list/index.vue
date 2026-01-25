@@ -70,6 +70,15 @@
                     <a-option :value="0">{{
                       $t('duey.list.status.read')
                     }}</a-option>
+                    <a-option :value="2">{{
+                      $t('duey.list.status.claimed')
+                    }}</a-option>
+                    <a-option :value="3">{{
+                      $t('duey.list.status.expired')
+                    }}</a-option>
+                    <a-option :value="4">{{
+                      $t('duey.list.status.deleted')
+                    }}</a-option>
                   </a-select>
                 </a-form-item>
               </a-col>
@@ -155,7 +164,29 @@
                 :key="item.itemId"
                 class="item-cell"
               >
-                <img :src="getIconUrl('item', item.itemId)" class="item-icon" />
+                <a-popover
+                  position="right"
+                  :content-style="{
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    boxShadow: 'none',
+                  }"
+                  :arrow-style="{ display: 'none' }"
+                >
+                  <img
+                    :src="getIconUrl('item', item.itemId)"
+                    class="item-icon"
+                  />
+                  <template #content>
+                    <keep-alive>
+                      <component
+                        :is="getTooltipComponent(item.itemId)"
+                        :item="item"
+                      />
+                    </keep-alive>
+                  </template>
+                </a-popover>
                 <div class="item-info">
                   <div class="item-name">{{ item.name || item.itemId }}</div>
                   <div class="item-quantity">x {{ item.quantity }}</div>
@@ -173,13 +204,30 @@
             </a-tag>
           </template>
           <template #checked="{ record }">
-            <a-tag :color="record.checked === 1 ? 'orange' : 'gray'">
-              {{
-                record.checked === 1
-                  ? $t('duey.list.status.unread')
-                  : $t('duey.list.status.read')
-              }}
+            <a-tag v-if="record.checked === 1" color="orange">
+              {{ $t('duey.list.status.unread') }}
             </a-tag>
+            <a-tag v-else-if="record.checked === 0" color="gray">
+              {{ $t('duey.list.status.read') }}
+            </a-tag>
+            <a-tag v-else-if="record.checked === 2" color="blue">
+              {{ $t('duey.list.status.claimed') }}
+            </a-tag>
+            <a-tag v-else-if="record.checked === 3" color="red">
+              {{ $t('duey.list.status.expired') }}
+            </a-tag>
+            <a-tag v-else-if="record.checked === 4" color="magenta">
+              {{ $t('duey.list.status.deleted') }}
+            </a-tag>
+          </template>
+          <template #timestamp="{ record }">
+            {{ formatDate(record.timestamp) }}
+          </template>
+          <template #deliveryTime="{ record }">
+            {{ formatDate(record.deliveryTime) }}
+          </template>
+          <template #expireTime="{ record }">
+            {{ formatDate(record.expireTime) }}
           </template>
           <template #operations="{ record }">
             <a-popconfirm
@@ -238,14 +286,39 @@
                             }}
                           </a-tag>
                           <a-tag
+                            v-if="item.checked === 1"
                             size="small"
-                            :color="item.checked === 1 ? 'orange' : 'gray'"
+                            color="orange"
                           >
-                            {{
-                              item.checked === 1
-                                ? $t('duey.list.status.unread')
-                                : $t('duey.list.status.read')
-                            }}
+                            {{ $t('duey.list.status.unread') }}
+                          </a-tag>
+                          <a-tag
+                            v-else-if="item.checked === 0"
+                            size="small"
+                            color="gray"
+                          >
+                            {{ $t('duey.list.status.read') }}
+                          </a-tag>
+                          <a-tag
+                            v-else-if="item.checked === 2"
+                            size="small"
+                            color="blue"
+                          >
+                            {{ $t('duey.list.status.claimed') }}
+                          </a-tag>
+                          <a-tag
+                            v-else-if="item.checked === 3"
+                            size="small"
+                            color="red"
+                          >
+                            {{ $t('duey.list.status.expired') }}
+                          </a-tag>
+                          <a-tag
+                            v-else-if="item.checked === 4"
+                            size="small"
+                            color="magenta"
+                          >
+                            {{ $t('duey.list.status.deleted') }}
                           </a-tag>
                         </div>
                         <div v-if="item.mesos > 0" class="card-info-row">
@@ -263,15 +336,34 @@
                             :key="i.itemId"
                             class="mini-item"
                           >
-                            <img
-                              :src="getIconUrl('item', i.itemId)"
-                              :title="i.name || i.itemId"
-                            />
+                            <a-popover
+                              position="right"
+                              :content-style="{
+                                padding: 0,
+                                border: 'none',
+                                background: 'transparent',
+                                boxShadow: 'none',
+                              }"
+                              :arrow-style="{ display: 'none' }"
+                            >
+                              <img
+                                :src="getIconUrl('item', i.itemId)"
+                                :title="(i.name || i.itemId).toString()"
+                              />
+                              <template #content>
+                                <keep-alive>
+                                  <component
+                                    :is="getTooltipComponent(i.itemId)"
+                                    :item="i"
+                                  />
+                                </keep-alive>
+                              </template>
+                            </a-popover>
                             <span class="qty">x{{ i.quantity }}</span>
                           </div>
                         </div>
                         <div class="card-time">
-                          {{ item.timestamp }}
+                          {{ formatDate(item.timestamp) }}
                         </div>
                       </div>
                     </template>
@@ -298,8 +390,15 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, reactive, onMounted } from 'vue';
+  import {
+    computed,
+    ref,
+    reactive,
+    onMounted,
+    defineAsyncComponent,
+  } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import dayjs from 'dayjs';
   import useLoading from '@/hooks/loading';
   import { Pagination } from '@/types/global';
   import {
@@ -319,7 +418,16 @@
     IconDelete,
   } from '@arco-design/web-vue/es/icon';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
+  import { isEquip } from '@/utils/mapleStoryItem';
   import SendDueyModal from './components/SendDueyModal.vue';
+
+  // 异步加载 Tooltip 组件
+  const EquipTooltip = defineAsyncComponent(
+    () => import('@/components/ToolTip/EquipTooltip.vue')
+  );
+  const ItemTooltip = defineAsyncComponent(
+    () => import('@/components/ToolTip/ItemTooltip.vue')
+  );
 
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(true);
@@ -345,11 +453,20 @@
   const sendVisible = ref(false);
   const viewMode = ref('list');
 
+  const formatDate = (date: string | number | Date) => {
+    if (!date) return '-';
+    return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
+  };
+
+  const getTooltipComponent = (itemId: number) => {
+    return isEquip(itemId) ? EquipTooltip : ItemTooltip;
+  };
+
   const columns = computed<TableColumnData[]>(() => [
     {
       title: t('duey.list.packageId'),
       dataIndex: 'packageId',
-      width: 100,
+      width: 80,
     },
     {
       title: t('duey.list.receiverName'),
@@ -369,43 +486,45 @@
     {
       title: t('duey.list.items'),
       slotName: 'items',
-      width: 300, // 增加宽度
+      width: 180, // 增加宽度
     },
     {
       title: t('duey.list.message'),
       dataIndex: 'message',
       ellipsis: true,
       tooltip: true,
+      minWidth: 150,
+      wordBreak: 'break-all',
     },
     {
       title: t('duey.list.type'),
       slotName: 'type',
-      width: 80,
+      width: 60,
     },
     {
       title: t('duey.list.status'),
       slotName: 'checked',
-      width: 80,
+      width: 60,
     },
     {
       title: t('duey.list.timeRange'),
-      dataIndex: 'timestamp',
-      width: 180,
+      slotName: 'timestamp',
+      width: 170,
     },
     {
       title: t('duey.list.deliveryTime'),
-      dataIndex: 'deliveryTime',
-      width: 180,
+      slotName: 'deliveryTime',
+      width: 170,
     },
     {
-      title: t('duey.list.expireTime'),
-      dataIndex: 'expireTime',
-      width: 180,
+      title: t('duey.list.statusChangeTime'), // 修改标题为状态变更时间
+      slotName: 'expireTime',
+      width: 170,
     },
     {
       title: t('duey.list.operation'),
       slotName: 'operations',
-      width: 100,
+      width: 80,
       fixed: 'right',
     },
   ]);

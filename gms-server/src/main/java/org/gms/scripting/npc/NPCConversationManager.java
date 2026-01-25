@@ -34,6 +34,7 @@ import org.gms.constants.id.MapId;
 import org.gms.constants.id.NpcId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.string.LanguageConstants;
+import org.gms.dao.entity.HiredMerchantsDO;
 import org.gms.manager.ServerManager;
 import org.gms.model.pojo.NextLevelContext;
 import org.gms.net.server.Server;
@@ -44,7 +45,9 @@ import org.gms.net.server.guild.Guild;
 import org.gms.net.server.guild.GuildPackets;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
+import org.gms.net.server.world.World;
 import org.gms.service.GachaponService;
+import org.gms.service.HiredMerchantService;
 import org.gms.util.packets.WeddingPackets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,6 +94,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
     private boolean itemScript;
     private List<PartyCharacter> otherParty;
     private static final GachaponService gachaponService = ServerManager.getApplicationContext().getBean(GachaponService.class);
+    private static final HiredMerchantService hiredMerchantService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
 
     private final Map<Integer, String> npcDefaultTalks = new HashMap<>();
     @Getter
@@ -497,14 +501,52 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
     }
 
     public boolean hasMerchantItems() {
+        // 1. 检查旧系统
         if (!ItemFactory.MERCHANT.loadItems(getPlayer().getId(), false).isEmpty()) {
             return true;
         }
-        return getPlayer().getMerchantMeso() != 0;
+        if (getPlayer().getMerchantMeso() != 0) {
+            return true;
+        }
+
+        // 2. 检查新系统
+        // 检查是否有可取回的商店（含金币）
+        List<HiredMerchantsDO> merchants = hiredMerchantService.getRetrieveableMerchants(getPlayer().getId());
+        for (HiredMerchantsDO merchant : merchants) {
+            if (merchant.getMesos() > 0) {
+                return true;
+            }
+            // 检查该商店是否有可取回的物品
+            if (!hiredMerchantService.getRetrieveableItems(merchant.getId()).isEmpty()) {
+                return true;
+            }
+        }
+        
+        // 3. 检查是否有僵尸商店 (ACTIVE 但不在内存中)
+        List<HiredMerchantsDO> zombieMerchants = hiredMerchantService.getZombieMerchants(getPlayer().getId());
+        for (HiredMerchantsDO zombie : zombieMerchants) {
+             World world = Server.getInstance().getWorld(zombie.getWorldId());
+             if (world == null || world.getHiredMerchant(getPlayer().getId()) == null) {
+                 return true; // 发现僵尸商店，允许进入取回界面（进入后会自动修复）
+             }
+        }
+
+        return false;
     }
 
     public void showFredrick() {
-        c.sendPacket(PacketCreator.getFredrick(getPlayer()));
+        // 获取所有可取回的商店（包括新系统和僵尸商店）
+        List<HiredMerchantsDO> merchants = hiredMerchantService.getRetrieveableMerchants(getPlayer().getId());
+        List<HiredMerchantsDO> zombieMerchants = hiredMerchantService.getZombieMerchants(getPlayer().getId());
+        
+        for (HiredMerchantsDO zombie : zombieMerchants) {
+             World world = Server.getInstance().getWorld(zombie.getWorldId());
+             if (world == null || world.getHiredMerchant(getPlayer().getId()) == null) {
+                 merchants.add(zombie);
+             }
+        }
+        
+        c.sendPacket(PacketCreator.getFredrick(getPlayer(), merchants));
     }
 
     public int partyMembersInMap() {

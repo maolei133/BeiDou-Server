@@ -5,8 +5,12 @@
     :ok-loading="loading"
     :mask-closable="false"
     :esc-to-close="false"
-    :ok-text="isEditMode ? $t('button.confirm') : $t('account.player.give')"
-    width="400px"
+    :ok-text="
+      isEditMode
+        ? $t('account.player.button.confirm')
+        : $t('account.player.give')
+    "
+    width="500px"
     @before-ok="submitClick"
     @cancel="handleCancel"
   >
@@ -57,11 +61,17 @@
             field="id"
             :label="$t('account.player.form.id')"
           >
-            <a-input-number
+            <a-input-search
               v-model="formData.id"
               style="width: 100%"
+              search-button
+              @search="openItemSelector"
               @blur="handleIdBlur"
-            />
+            >
+              <template #button-icon>
+                <icon-search />
+              </template>
+            </a-input-search>
           </a-form-item>
           <a-form-item
             v-if="
@@ -102,11 +112,17 @@
         <a-row :gutter="16">
           <a-col v-if="formData.type === 6" :span="24">
             <a-form-item field="id" :label="$t('account.player.form.equipId')">
-              <a-input-number
+              <a-input-search
                 v-model="formData.id"
                 style="width: 100%"
+                search-button
+                @search="openItemSelector"
                 @blur="handleIdBlur"
-              />
+              >
+                <template #button-icon>
+                  <icon-search />
+                </template>
+              </a-input-search>
             </a-form-item>
           </a-col>
 
@@ -343,10 +359,26 @@
                 />
               </a-form-item>
             </a-col>
+            <a-col :span="12">
+              <a-form-item
+                field="vicious"
+                :label="$t('account.player.form.vicious')"
+              >
+                <a-input-number
+                  v-model="formData.vicious"
+                  style="width: 100%"
+                />
+              </a-form-item>
+            </a-col>
           </template>
         </a-row>
       </template>
     </a-form>
+    <ItemSelector
+      v-model:visible="itemSelectorVisible"
+      :initial-id="formData.id"
+      @select="handleItemSelect"
+    />
   </a-modal>
 </template>
 
@@ -362,6 +394,7 @@
     getItemInitialInfo,
   } from '@/api/player';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
+  import ItemSelector from '@/components/ItemSelector/index.vue';
 
   const props = defineProps<{
     visible: boolean;
@@ -387,6 +420,7 @@
   });
   const itemIconUrl = ref('');
   const lastFetchedId = ref<number | undefined>(undefined);
+  const itemSelectorVisible = ref(false);
 
   const isFlaggedAsLock = computed(() => {
     return (
@@ -423,7 +457,18 @@
           itemInfo.desc = equipData.desc;
           itemIconUrl.value = getIconUrl('item', formData.value.id);
 
-          if (!props.isEditMode || !formData.value.str) {
+          // 只有在非编辑模式下，或者编辑模式下属性为空时，才覆盖属性
+          // 这样可以保留用户已经编辑过的属性
+          // 但如果是切换了物品ID，则应该覆盖
+          // 由于 handleIdBlur 是在 ID 变化时触发，所以这里应该覆盖
+          // 但是如果是编辑模式打开弹窗，初始ID已经设置，此时不应该覆盖
+          // 这里的逻辑是：如果 props.isEditMode 为 true，且 formData.id 与 props.initialData.id 相同，则不覆盖
+          // 否则（ID变了），覆盖
+
+          const isSameIdAsInitial =
+            props.isEditMode && formData.value.id === props.initialData.id;
+
+          if (!isSameIdAsInitial) {
             formData.value.str = equipData.str || 0;
             formData.value.dex = equipData.dex || 0;
             formData.value.int = equipData.int || 0;
@@ -442,6 +487,7 @@
             formData.value.upgradeSlot = equipData.upgradeSlot || 0;
             formData.value.level = equipData.level || 0;
             formData.value.itemLevel = equipData.itemLevel || 1;
+            formData.value.vicious = equipData.vicious || 0;
           }
 
           if (!props.isEditMode) {
@@ -502,6 +548,13 @@
         itemIconUrl.value = '';
         lastFetchedId.value = undefined;
         if (formData.value.id) {
+          // 如果是编辑模式，且ID存在，我们不应该直接调用 handleIdBlur，因为它会重置属性
+          // 我们只需要加载图标和名称
+          // 但是 handleIdBlur 内部有逻辑去获取信息
+          // 我们需要修改 handleIdBlur 的逻辑，或者在这里特殊处理
+          // 简单的方法是：在 handleIdBlur 中判断，如果是编辑模式且ID没变，就不覆盖属性
+          // 但这里有个问题：lastFetchedId 是 undefined，所以 handleIdBlur 会执行
+          // 我们可以在 handleIdBlur 中增加判断
           handleIdBlur();
         }
       }
@@ -541,6 +594,7 @@
       formData.value.upgradeSlot = undefined;
       formData.value.level = undefined;
       formData.value.itemLevel = undefined;
+      formData.value.vicious = undefined;
     }
   };
 
@@ -581,6 +635,17 @@
 
   const handleCancel = () => {
     visibleModel.value = false;
+  };
+
+  const openItemSelector = () => {
+    itemSelectorVisible.value = true;
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleItemSelect = (item: any) => {
+    formData.value.id = item.id;
+    handleIdBlur();
+    itemSelectorVisible.value = false;
   };
 </script>
 

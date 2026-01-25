@@ -1,5 +1,7 @@
 package org.gms.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.row.Db;
@@ -40,6 +42,7 @@ public class DueyService {
     private final DueypackagesMapper dueypackagesMapper;
     private final CharactersMapper charactersMapper;
     private final ItemFactoryService itemFactoryService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public Page<DueyPackageRtnDTO> getDueyList(DueySearchReqDTO req) {
         QueryWrapper query = QueryWrapper.create()
@@ -120,20 +123,24 @@ public class DueyService {
         }
 
         // Load items
-        if (dto.getPackageId() != null) {
+        // 优先从 item_data (JSON) 加载，如果为空则从 inventoryitems 表加载
+        String itemDataJson = getString(row, "item_data");
+        if (itemDataJson != null && !itemDataJson.isEmpty()) {
+            try {
+                ItemInfoRtnDTO itemDTO = objectMapper.readValue(itemDataJson, ItemInfoRtnDTO.class);
+                List<ItemInfoRtnDTO> itemDTOs = new ArrayList<>();
+                itemDTOs.add(itemDTO);
+                dto.setItems(itemDTOs);
+            } catch (JsonProcessingException e) {
+                // JSON 解析失败，降级处理或记录日志
+                dto.setItems(new ArrayList<>());
+            }
+        } else if (dto.getPackageId() != null) {
             List<Pair<Item, InventoryType>> items = itemFactoryService.loadItems(ItemFactory.DUEY.getValue(), false, dto.getPackageId().intValue(), false);
             List<ItemInfoRtnDTO> itemDTOs = new ArrayList<>();
             for (Pair<Item, InventoryType> pair : items) {
                 Item item = pair.getLeft();
-                ItemInfoRtnDTO itemDTO = new ItemInfoRtnDTO();
-                itemDTO.setItemId(item.getItemId());
-                itemDTO.setQuantity((int) item.getQuantity());
-                itemDTO.setOwner(item.getOwner());
-                itemDTO.setExpiration(item.getExpiration());
-                
-                String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
-                itemDTO.setName(itemName != null ? itemName : String.valueOf(item.getItemId()));
-                
+                ItemInfoRtnDTO itemDTO = convertItemToDTO(item);
                 itemDTOs.add(itemDTO);
             }
             dto.setItems(itemDTOs);
@@ -142,6 +149,42 @@ public class DueyService {
         }
 
         return dto;
+    }
+    
+    private ItemInfoRtnDTO convertItemToDTO(Item item) {
+        ItemInfoRtnDTO itemDTO = new ItemInfoRtnDTO();
+        itemDTO.setItemId(item.getItemId());
+        itemDTO.setQuantity((int) item.getQuantity());
+        itemDTO.setOwner(item.getOwner());
+        itemDTO.setExpiration(item.getExpiration());
+        
+        String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
+        itemDTO.setName(itemName != null ? itemName : String.valueOf(item.getItemId()));
+        
+        // 填充装备属性
+        if (item instanceof Equip) {
+            Equip equip = (Equip) item;
+            itemDTO.setStr(equip.getStr());
+            itemDTO.setDex(equip.getDex());
+            itemDTO.setInt_(equip.getInt());
+            itemDTO.setLuk(equip.getLuk());
+            itemDTO.setHp(equip.getHp());
+            itemDTO.setMp(equip.getMp());
+            itemDTO.setWatk(equip.getWatk());
+            itemDTO.setMatk(equip.getMatk());
+            itemDTO.setWdef(equip.getWdef());
+            itemDTO.setMdef(equip.getMdef());
+            itemDTO.setAcc(equip.getAcc());
+            itemDTO.setAvoid(equip.getAvoid());
+            itemDTO.setHands(equip.getHands());
+            itemDTO.setSpeed(equip.getSpeed());
+            itemDTO.setJump(equip.getJump());
+            itemDTO.setUpgradeSlots(equip.getUpgradeSlots());
+            itemDTO.setLevel((byte) equip.getLevel());
+            itemDTO.setItemLevel((byte) equip.getItemLevel());
+            itemDTO.setFlag((byte) equip.getFlag());
+        }
+        return itemDTO;
     }
     
     private Object getObjectCaseInsensitive(Row row, String col) {
@@ -190,7 +233,10 @@ public class DueyService {
 
     @Transactional
     public void deleteDueyPackage(Long id) {
+        // 逻辑修改：前端控制台属于管理员操作，可以正常物理删除记录
         dueypackagesMapper.deleteById(id);
+        
+        // 同时清理关联的物品数据
         itemFactoryService.saveItems(ItemFactory.DUEY.getValue(), false, new ArrayList<>(), id.intValue());
     }
 
@@ -224,6 +270,8 @@ public class DueyService {
 
     private void sendSinglePackage(SendDueyReqDTO req, Integer receiverId) {
         Item item = null;
+        ItemInfoRtnDTO itemDTO = null;
+        
         if (req.getItemId() != null && req.getQuantity() != null && req.getQuantity() > 0) {
             // 判断是否为装备
             InventoryType type = ItemInformationProvider.getInstance().getInventoryType(req.getItemId());
@@ -256,8 +304,8 @@ public class DueyService {
                 item = new Item(req.getItemId(), (byte) 0, req.getQuantity().shortValue(), -1);
             }
             
-            // 设置物品过期时间 (如果需要)
-            // 注意：这里是物品本身的过期时间，不是包裹的过期时间
+            // 生成 ItemInfoRtnDTO 用于 JSON 存储
+            itemDTO = convertItemToDTO(item);
         }
         
         String sender = req.getSenderName() != null && !req.getSenderName().isEmpty() ? req.getSenderName() : "管理员";
@@ -266,16 +314,6 @@ public class DueyService {
         newPackage.setReceiverid(receiverId.longValue());
         newPackage.setSendername(sender);
         newPackage.setMesos(req.getMesos() != null ? req.getMesos().longValue() : 0L);
-        
-        // 设置发送时间 (如果是普通快递且指定了配送时间，则使用配送时间作为timestamp，否则使用当前时间)
-        // 注意：DueyPackage.java 中 isDeliveringTime() 逻辑是 timestamp >= now
-        // 如果是快速快递，timestamp 就是当前时间
-        // 如果是普通快递，timestamp 应该是 配送时间 - 1天 (因为 DueyPackage.java 中 sentTimeInMilliseconds 会 +1个月，逻辑比较奇怪)
-        // 重新审视 DueyPackage.java:
-        // isDeliveringTime(): timestamp >= System.currentTimeMillis()
-        // 这里的 timestamp 实际上是 "可领取时间"
-        // 所以如果是快速快递，timestamp = now
-        // 如果是普通快递，timestamp = deliveryTime
         
         long timestamp = System.currentTimeMillis();
         if (Boolean.FALSE.equals(req.getQuick()) && req.getDeliveryTime() != null) {
@@ -301,6 +339,15 @@ public class DueyService {
              // 默认过期时间
              long expireDuration = GameConfig.getServerLong("duey_expire_time", 2592000000L);
              newPackage.setExpireDate(new Timestamp(System.currentTimeMillis() + expireDuration));
+        }
+        
+        // 序列化 itemData
+        if (itemDTO != null) {
+            try {
+                newPackage.setItemData(objectMapper.writeValueAsString(itemDTO));
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("Failed to serialize item data", e);
+            }
         }
 
         if (dueypackagesMapper.insert(newPackage, true) > 0) {

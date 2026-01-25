@@ -25,6 +25,7 @@ package org.gms.net.server.channel.handlers;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.InventoryType;
+import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
@@ -43,6 +44,11 @@ public class RemoteStoreHandler extends AbstractPacketHandler {
             if (hm.getChannel() == chr.getClient().getChannel()) {
                 boolean isPlayerOnMerchantMap = chr.getMapId() == hm.getMapId();
                 if (!isPlayerOnMerchantMap) {
+                    if (!GameConfig.getServerBoolean("hired_merchant_allow_remote", true)) {
+                        chr.dropMessage(1, "不允许远程管理商店。");
+                        c.sendPacket(PacketCreator.enableActions());
+                        return;
+                    }
                     var remoteControl = chr.getInventory(InventoryType.CASH).findById(ItemId.REMOTE_CONTROLLER);
                     if (remoteControl == null) {
                         return;
@@ -60,9 +66,10 @@ public class RemoteStoreHandler extends AbstractPacketHandler {
     }
 
     private static HiredMerchant getMerchant(Client c) {
-        if (c.getPlayer().hasMerchant()) {
-            return c.getWorldServer().getHiredMerchant(c.getPlayer().getId());
+        HiredMerchant hm = c.getWorldServer().getHiredMerchant(c.getPlayer().getId());
+        if (hm != null && !c.getPlayer().hasMerchant()) {
+            c.getPlayer().setHasMerchant(true);
         }
-        return null;
+        return hm;
     }
 }

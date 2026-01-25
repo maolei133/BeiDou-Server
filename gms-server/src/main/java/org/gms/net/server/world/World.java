@@ -32,6 +32,9 @@ import org.gms.client.Family;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
 import org.gms.dao.entity.CharactersDO;
+import org.gms.dao.entity.HiredMerchantItemsDO;
+import org.gms.dao.entity.HiredMerchantTransactionsDO;
+import org.gms.dao.entity.HiredMerchantsDO;
 import org.gms.manager.ServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.PlayerStorage;
@@ -54,7 +57,6 @@ import org.gms.net.server.task.CharacterAutosaverTask;
 import org.gms.net.server.task.CharacterHpDecreaseTask;
 import org.gms.net.server.task.FamilyDailyResetTask;
 import org.gms.net.server.task.FishingTask;
-import org.gms.net.server.task.HiredMerchantTask;
 import org.gms.net.server.task.MapOwnershipTask;
 import org.gms.net.server.task.MountTirednessTask;
 import org.gms.net.server.task.PartySearchTask;
@@ -74,6 +76,7 @@ import org.gms.server.maps.MiniDungeonInfo;
 import org.gms.server.maps.PlayerShop;
 import org.gms.server.maps.PlayerShopItem;
 import org.gms.service.CharacterService;
+import org.gms.service.HiredMerchantService;
 import org.gms.service.WorldService;
 import org.gms.util.I18nUtil;
 import org.gms.util.NumberTool;
@@ -196,9 +199,9 @@ public class World {
     private final Map<Integer, PlayerShop> activePlayerShops = new LinkedHashMap<>();
 
     private final Lock activeMerchantsLock = new ReentrantLock(true);
-    private final Map<Integer, Pair<HiredMerchant, Integer>> activeMerchants = new LinkedHashMap<>();
-    private ScheduledFuture<?> merchantSchedule;
-    private long merchantUpdate;
+    private final Map<Integer, HiredMerchant> activeMerchants = new LinkedHashMap<>();
+    //private ScheduledFuture<?> merchantSchedule;
+    //private long merchantUpdate;
 
     private final Map<Runnable, Long> registeredTimedMapObjects = new LinkedHashMap<>();
     private ScheduledFuture<?> timedMapObjectsSchedule;
@@ -252,7 +255,6 @@ public class World {
         petsSchedule = tman.register(new PetFullnessTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1)); // 注册宠物饱食度任务，每1分钟检查一次宠物饥饿状态
         srvMessagesSchedule = tman.register(new ServerMessageTask(this), SECONDS.toMillis(10), SECONDS.toMillis(10)); // 注册服务器消息任务，每10秒广播一次服务器消息
         mountsSchedule = tman.register(new MountTirednessTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1)); // 注册坐骑疲劳度任务，每1分钟检查一次坐骑疲劳状态
-        merchantSchedule = tman.register(new HiredMerchantTask(this), 10 * MINUTES.toMillis(1), 10 * MINUTES.toMillis(1)); // 注册雇佣商人任务，每10分钟检查一次商人状态和过期时间
         timedMapObjectsSchedule = tman.register(new TimedMapObjectTask(this), MINUTES.toMillis(1), MINUTES.toMillis(1)); // 注册定时地图对象任务，每1分钟清理一次过期的地图对象
         charactersSchedule = tman.register(new CharacterAutosaverTask(this), MINUTES.toMillis(30), MINUTES.toMillis(30)); // 注册角色自动保存任务，每30分钟自动保存一次所有在线角色数据
         marriagesSchedule = tman.register(new WeddingReservationTask(this), MINUTES.toMillis(GameConfig.getServerLong("wedding_reservation_interval")), MINUTES.toMillis(GameConfig.getServerLong("wedding_reservation_interval"))); // 注册婚礼预约任务，根据配置间隔检查婚礼预约状态
@@ -1605,14 +1607,7 @@ public class World {
     public void registerHiredMerchant(HiredMerchant hm) {
         activeMerchantsLock.lock();
         try {
-            int initProc;
-            if (Server.getInstance().getCurrentTime() - merchantUpdate > MINUTES.toMillis(5)) {
-                initProc = 1;
-            } else {
-                initProc = 0;
-            }
-
-            activeMerchants.put(hm.getOwnerId(), new Pair<>(hm, initProc));
+            activeMerchants.put(hm.getOwnerId(), hm);
         } finally {
             activeMerchantsLock.unlock();
         }
@@ -1627,37 +1622,11 @@ public class World {
         }
     }
 
-    public void runHiredMerchantSchedule() {
-        Map<Integer, Pair<HiredMerchant, Integer>> deployedMerchants;
-        activeMerchantsLock.lock();
-        try {
-            merchantUpdate = Server.getInstance().getCurrentTime();
-            deployedMerchants = new LinkedHashMap<>(activeMerchants);
-
-            for (Map.Entry<Integer, Pair<HiredMerchant, Integer>> dm : deployedMerchants.entrySet()) {
-                int timeOn = dm.getValue().getRight();
-                HiredMerchant hm = dm.getValue().getLeft();
-
-                if (timeOn <= 144) {   // 1440 minutes == 24hrs
-                    activeMerchants.put(hm.getOwnerId(), new Pair<>(dm.getValue().getLeft(), timeOn + 1));
-                } else {
-                    hm.forceClose();
-                    this.getChannel(hm.getChannel()).removeHiredMerchant(hm.getOwnerId());
-
-                    activeMerchants.remove(dm.getKey());
-                }
-            }
-        } finally {
-            activeMerchantsLock.unlock();
-        }
-    }
-
     public List<HiredMerchant> getActiveMerchants() {
         List<HiredMerchant> hmList = new ArrayList<>();
         activeMerchantsLock.lock();
         try {
-            for (Pair<HiredMerchant, Integer> hmp : activeMerchants.values()) {
-                HiredMerchant hm = hmp.getLeft();
+            for (HiredMerchant hm : activeMerchants.values()) {
                 if (hm.isOpen()) {
                     hmList.add(hm);
                 }
@@ -1672,11 +1641,7 @@ public class World {
     public HiredMerchant getHiredMerchant(int ownerid) {
         activeMerchantsLock.lock();
         try {
-            if (activeMerchants.containsKey(ownerid)) {
-                return activeMerchants.get(ownerid).getLeft();
-            }
-
-            return null;
+            return activeMerchants.get(ownerid);
         } finally {
             activeMerchantsLock.unlock();
         }
@@ -2037,11 +2002,6 @@ public class World {
             mountsSchedule = null;
         }
 
-        if (merchantSchedule != null) {
-            merchantSchedule.cancel(false);
-            merchantSchedule = null;
-        }
-
         if (timedMapObjectsSchedule != null) {
             timedMapObjectsSchedule.cancel(false);
             timedMapObjectsSchedule = null;
@@ -2082,10 +2042,121 @@ public class World {
             hpDecSchedule = null;
         }
 
+        // 关闭所有雇佣商人
+        List<HiredMerchant> merchants = getActiveMerchants();
+        for (HiredMerchant hm : merchants) {
+            hm.forceClose(true);
+        }
+
         players.disconnectAll();
         players = null;
 
         clearWorldData();
         log.info(I18nUtil.getLogMessage("World.shutdown.info1"), id);
+    }
+
+    public void loadActiveHiredMerchants() {
+        HiredMerchantService hmService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
+        List<HiredMerchantsDO> merchants = hmService.getActiveMerchantsByWorldId(this.id);
+        
+        if (merchants.isEmpty()) {
+            return;
+        }
+
+        if (!GameConfig.getServerBoolean("hired_merchant_reload_on_restart")) {
+            log.info("大区 {}: 发现 {} 个活跃商店，但重载配置已关闭。正在将其标记为 CLOSED。", this.id, merchants.size());
+            for (HiredMerchantsDO merchantDO : merchants) {
+                merchantDO.setStatus(HiredMerchantsDO.STATUS_CLOSED);
+                merchantDO.setCloseTime(System.currentTimeMillis());
+                hmService.updateMerchant(merchantDO);
+                
+                // Update character hasmerchant = false
+                characterService.update(CharactersDO.builder()
+                        .id(merchantDO.getOwnerId())
+                        .hasmerchant(false)
+                        .build());
+            }
+            return;
+        }
+        
+        log.info("大区 {}: 在数据库中发现 {} 个活跃的雇佣商店，正在重载...", this.id, merchants.size());
+
+        for (HiredMerchantsDO merchantDO : merchants) {
+            try {
+                // 获取店主名称
+                String ownerName = Character.getNameById(merchantDO.getOwnerId());
+                if (ownerName == null) {
+                    log.warn("大区 {}: 商店 {} 的店主 {} 未找到。", this.id, merchantDO.getId(), merchantDO.getOwnerId());
+                    continue;
+                }
+
+                HiredMerchant hm = new HiredMerchant(merchantDO, ownerName);
+
+                // 加载物品
+                List<HiredMerchantItemsDO> items = hmService.getMerchantItems(merchantDO.getId());
+                hm.loadItemsFromDb(items);
+                
+                // 加载销售记录
+                List<HiredMerchantTransactionsDO> transactions = hmService.getMerchantTransactions(merchantDO.getId());
+                hm.loadSoldItems(transactions);
+                
+                if (hm.getItems().isEmpty() && merchantDO.getMesos() == 0) {
+                     log.info("大区 {}: 商店 {} 是空的，正在关闭。", this.id, merchantDO.getId());
+                    // 关闭空的商店？还是保持开启？
+                    // 如果没有物品且没有金币，也许应该关闭。
+                    // 但也许店主刚打开就遇到服务器崩溃了。
+                }
+
+                // 获取频道
+                Channel ch = getChannel(merchantDO.getChannel());
+                if (ch == null) {
+                    log.warn("大区 {}: 商店 {} 的频道 {} 未找到。", this.id, merchantDO.getId(), merchantDO.getChannel());
+                    continue;
+                }
+
+                // 获取地图
+                MapleMap map = ch.getMapFactory().getMap(merchantDO.getMapId());
+                if (map == null) {
+                    log.warn("大区 {}: 商店 {} 的地图 {} 未找到。", this.id, merchantDO.getId(), merchantDO.getMapId());
+                    continue;
+                }
+
+                hm.setMap(map);
+                hm.setOpen(true);
+
+                // 添加到地图
+                map.addMapObject(hm);
+
+                // 添加到频道
+                ch.addHiredMerchant(hm.getOwnerId(), hm);
+
+                // 注册到大区（用于调度）
+                activeMerchantsLock.lock();
+                try {
+                    activeMerchants.put(hm.getOwnerId(), hm);
+                } finally {
+                    activeMerchantsLock.unlock();
+                }
+                
+                // 启动定时关闭任务
+                hm.rescheduleClose();
+
+//                log.info("已加载雇佣商店: {} (店主: {})", merchantDO.getId(), ownerName);
+            } catch (Exception e) {
+                log.error("加载雇佣商店失败 {}", merchantDO.getId(), e);
+                // 也许在数据库中关闭它？
+            }
+        }
+    }
+
+    public void rescheduleHiredMerchants() {
+        activeMerchantsLock.lock();
+        try {
+            for (HiredMerchant hm : activeMerchants.values()) {
+                hm.rescheduleClose();
+            }
+        } finally {
+            activeMerchantsLock.unlock();
+        }
     }
 }

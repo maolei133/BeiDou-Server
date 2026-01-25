@@ -7,6 +7,7 @@ export interface DueyItem {
   quantity: number;
   owner: string;
   expiration: number;
+  name?: string;
 }
 
 export interface DueyPackage {

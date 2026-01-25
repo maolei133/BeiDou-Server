@@ -95,7 +95,7 @@ public class LogConfig {
     /**
      * 是否启用日志系统
      */
-    private boolean enabled = true;
+    private boolean enabled = false;
 
     /**
      * 日志输出目录
@@ -105,7 +105,7 @@ public class LogConfig {
     /**
      * 冷数据保留天数
      */
-    private int coldDataDays = 30;
+    private int coldDataDays = 10;
 
     /**
      * 温数据保留天数

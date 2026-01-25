@@ -17,6 +17,7 @@ import org.gms.model.pojo.InformationSearch;
 import org.gms.model.pojo.InformationResult;
 import org.gms.net.server.Server;
 import org.gms.server.CommonInformation;
+import org.gms.server.ItemInformationProvider;
 import org.gms.util.I18nUtil;
 import org.gms.util.Pair;
 import org.gms.util.RequireUtil;
@@ -68,6 +69,19 @@ public class CommonService {
         rtn.setJump(equip.getJump());
         rtn.setUpgradeSlot(equip.getUpgradeSlots());
         rtn.setExpire(equip.getExpiration());
+        
+        // 补充穿戴要求
+        Map<String, Integer> equipStats = ItemInformationProvider.getInstance().getEquipStats(submitData.getId());
+        if (equipStats != null) {
+            rtn.setReqLevel(equipStats.get("reqLevel"));
+            rtn.setReqJob(equipStats.get("reqJob"));
+            rtn.setReqStr(equipStats.get("reqSTR"));
+            rtn.setReqDex(equipStats.get("reqDEX"));
+            rtn.setReqInt(equipStats.get("reqINT"));
+            rtn.setReqLuk(equipStats.get("reqLUK"));
+            rtn.setReqPop(equipStats.get("reqPOP"));
+        }
+
         return rtn;
     }
 

@@ -174,7 +174,14 @@ public final class MonsterBook {
     }
 
     public void saveCards(int chrId) {
-        monsterBookService.saveCards(chrId, cards);
+        Map<Integer, Integer> cardsCopy;
+        lock.lock();
+        try {
+            cardsCopy = new LinkedHashMap<>(cards);
+        } finally {
+            lock.unlock();
+        }
+        monsterBookService.saveCards(chrId, cardsCopy);
     }
 
     public static int[] getCardTierSize() {

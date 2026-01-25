@@ -64,6 +64,7 @@
           :placeholder="$t('informationSearch.placeholder.subCategory')"
           allow-clear
           allow-search
+          @change="handleSubCategoryChange"
         >
           <a-option
             v-for="option in subCategoryOptions"
@@ -88,9 +89,8 @@
       row-key="id"
       :loading="loading"
       :data="informationList"
-      :pagination="pagination"
-      @page-change="onPageChange"
-      @page-size-change="onPageSizeChange"
+      :pagination="false"
+      :scroll="{ y: 400 }"
       @row-click="handleRowClick"
     >
       <template #columns>
@@ -104,7 +104,59 @@
       </template>
     </a-table>
 
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        margin-top: 16px;
+      "
+    >
+      <a-pagination
+        :total="pagination.total"
+        :current="pagination.current"
+        :page-size="pagination.pageSize"
+        :page-size-options="pagination.pageSizeOptions"
+        show-total
+        show-page-size
+        show-jumper
+        @change="onPageChange"
+        @page-size-change="onPageSizeChange"
+      >
+        <template #page-item="{ page, active }">
+          <span
+            v-if="
+              page === 1 ||
+              page === pagination.totalPage ||
+              (page >= pagination.current - 1 && page <= pagination.current + 1)
+            "
+            :style="active ? { color: 'rgb(var(--primary-6))' } : {}"
+          >
+            {{ page }}
+          </span>
+          <span
+            v-else-if="
+              page === pagination.current - 2 || page === pagination.current + 2
+            "
+          >
+            ...
+          </span>
+        </template>
+        <template #total>
+          <!-- 隐藏默认的 total 显示，因为我们要把它移到下面 -->
+        </template>
+      </a-pagination>
+      <div style="margin-top: 8px; color: var(--color-text-3); font-size: 12px">
+        {{
+          $t('component.pagination.total', {
+            total: pagination.total,
+          })
+        }}
+      </div>
+    </div>
+
     <GiveItemModal
+      v-if="equipEditorVisible"
       v-model:visible="equipEditorVisible"
       :title="$t('duey.send.equipStats')"
       :initial-data="equipFormData"
@@ -115,7 +167,8 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref, reactive, computed, watch } from 'vue';
+  import { ref, reactive, computed, watch, defineAsyncComponent } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import useLoading from '@/hooks/loading';
   import useEquipCategories from '@/hooks/useEquipCategories';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
@@ -125,14 +178,20 @@
     informationSearch,
   } from '@/api/information';
   import { getEquInitialInfo, GiveForm } from '@/api/player';
-  import GiveItemModal from '@/views/account/player/components/GiveItemModal.vue';
+
+  // 使用异步组件解决循环引用问题
+  const GiveItemModal = defineAsyncComponent(
+    () => import('@/views/account/player/components/GiveItemModal.vue')
+  );
 
   const props = defineProps<{
     visible: boolean;
+    initialId?: number; // 新增：传入的初始ID
   }>();
 
   const emit = defineEmits(['update:visible', 'select']);
 
+  const { t } = useI18n();
   const { loading, setLoading } = useLoading(false);
   const { categoryOptions, getSubCategoryOptions, loadCategories } =
     useEquipCategories();
@@ -144,7 +203,7 @@
 
   const informationList = ref<InformationResult[]>([]);
   const condition = ref<InformationSearch>({
-    types: ['eqp'], // 默认选中装备
+    types: [], // 默认不选中任何类型，首次打开不加载数据
     filter: '',
     category: undefined,
     subCategory: undefined,
@@ -156,7 +215,8 @@
     current: 1,
     pageSize: 10,
     total: 0,
-    showTotal: true,
+    totalPage: 0,
+    showTotal: false, // 关闭默认的 total 显示，手动控制
     showPageSize: true,
     pageSizeOptions: [10, 20, 50],
   });
@@ -243,6 +303,14 @@
   };
 
   const fetchData = async () => {
+    // 如果没有选择类型，不加载数据
+    if (!condition.value.types || condition.value.types.length === 0) {
+      informationList.value = [];
+      pagination.total = 0;
+      pagination.totalPage = 0;
+      return;
+    }
+
     setLoading(true);
     try {
       const { data } = await informationSearch({
@@ -253,13 +321,16 @@
       if (data && Array.isArray(data.records)) {
         informationList.value = data.records;
         pagination.total = data.totalRow;
+        pagination.totalPage = data.totalPage;
       } else {
         informationList.value = [];
         pagination.total = 0;
+        pagination.totalPage = 0;
       }
     } catch (err) {
       informationList.value = [];
       pagination.total = 0;
+      pagination.totalPage = 0;
     } finally {
       setLoading(false);
     }
@@ -285,6 +356,10 @@
 
   const handleCategoryChange = () => {
     condition.value.subCategory = undefined;
+    searchData();
+  };
+
+  const handleSubCategoryChange = () => {
     searchData();
   };
 
@@ -375,9 +450,28 @@
     () => props.visible,
     (val) => {
       if (val) {
-        loadCategories();
-        searchData();
+        // 首次打开不加载数据，清空条件
+        condition.value.types = [];
+        condition.value.category = undefined;
+        condition.value.subCategory = undefined;
+        condition.value.filter = '';
+        informationList.value = [];
+        pagination.total = 0;
+        pagination.totalPage = 0;
         selectedRecord.value = null;
+
+        // 如果传入了 initialId，尝试自动定位（这里简化为搜索该ID）
+        if (props.initialId) {
+          condition.value.filter = props.initialId.toString();
+          // 尝试推断类型，或者默认全搜（如果后端支持不传类型搜ID）
+          // 由于后端接口似乎需要类型，这里我们可能需要先尝试几个类型，或者让用户自己选
+          // 但根据需求“根据ID自动定位”，我们可以尝试默认选中 'eqp' 或其他，或者后端支持不传类型
+          // 假设我们先不传类型，看后端是否支持。如果不支持，可能需要前端逻辑去判断ID范围（复杂）
+          // 这里简单处理：如果传入ID，默认选中 'eqp' 并搜索，或者留空类型让用户选
+          // 为了更好的体验，我们可以尝试搜索所有类型（如果后端支持 types 传多个）
+          condition.value.types = ['eqp', 'consume', 'ins', 'etc', 'cash'];
+          searchData();
+        }
       }
     }
   );

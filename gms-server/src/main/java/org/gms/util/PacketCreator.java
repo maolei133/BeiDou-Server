@@ -114,6 +114,10 @@ import java.util.Map.Entry;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.gms.dao.entity.HiredMerchantsDO;
+import org.gms.dao.entity.HiredMerchantItemsDO;
+import org.gms.service.HiredMerchantService;
+import org.gms.manager.ServerManager;
 /**
  * @author Frz
  */
@@ -4988,18 +4992,41 @@ public class PacketCreator {
         return p;
     }
 
-    public static Packet getFredrick(Character chr) {
+    public static Packet getFredrick(Character chr, List<HiredMerchantsDO> merchants) {
         final OutPacket p = OutPacket.create(SendOpcode.FREDRICK);
         p.writeByte(0x23);
         p.writeInt(NpcId.FREDRICK);
         p.writeInt(32272); //id
         p.skip(5);
-        p.writeInt(chr.getMerchantNetMeso());
-        p.writeByte(0);
-        List<Pair<Item, InventoryType>> items = ItemFactory.MERCHANT.loadItems(chr.getId(), false);
-        p.writeByte(items.size());
 
-        for (Pair<Item, InventoryType> item : items) {
+        long totalMesos = chr.getMerchantNetMeso();
+        List<Pair<Item, InventoryType>> allItems = new ArrayList<>();
+
+        // 1. 加载旧系统物品
+        allItems.addAll(ItemFactory.MERCHANT.loadItems(chr.getId(), false));
+
+        // 2. 加载新系统物品和金币
+        HiredMerchantService hmService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
+        for (HiredMerchantsDO merchant : merchants) {
+            totalMesos += merchant.getMesos();
+            List<HiredMerchantItemsDO> merchantItems = hmService.getRetrieveableItems(merchant.getId());
+            for (HiredMerchantItemsDO itemDO : merchantItems) {
+                Item item = hmService.deserializeItem(itemDO.getItemData());
+                if (item != null) {
+                    int remaining = itemDO.getBundles() - itemDO.getSoldQuantity();
+                    if (remaining > 0) {
+                        item.setQuantity((short) (item.getQuantity() * remaining));
+                        allItems.add(new Pair<>(item, item.getInventoryType()));
+                    }
+                }
+            }
+        }
+
+        p.writeInt((int) Math.min(totalMesos, Integer.MAX_VALUE));
+        p.writeByte(0);
+        p.writeByte(allItems.size());
+
+        for (Pair<Item, InventoryType> item : allItems) {
             addItemInfo(p, item.getLeft(), true);
         }
         p.skip(3);
@@ -5051,19 +5078,32 @@ public class PacketCreator {
         return p;
     }
 
-    // 0: Success
-    // 1: The room is already closed.
-    // 2: You can't enter the room due to full capacity.
-    // 3: Other requests are being fulfilled this minute.
-    // 4: You can't do it while you're dead.
-    // 7: You are not allowed to trade other items at this point.
-    // 17: You may not enter this store.
-    // 18: The owner of the store is currently undergoing store maintenance. Please try again in a bit.
-    // 23: This can only be used inside the Free Market.
-    // default: This character is unable to do it.
+    /**
+     * 获取猫头鹰商店操作结果消息包
+     * @param {number} msg - 消息代码
+     * @returns {Packet} 构建好的网络数据包
+     *
+     * @description
+     * 根据传入的消息代码返回对应的操作结果提示包。
+     * 消息代码含义：
+     * 0: 操作成功
+     * 1: 房间已关闭
+     * 2: 房间人数已满，无法进入
+     * 3: 当前分钟有其他请求正在处理
+     * 4: 死亡状态下无法执行此操作
+     * 7: 当前不允许交易其他物品
+     * 17: 无权进入此商店
+     * 18: 店主正在进行商店维护，请稍后再试
+     * 23: 此功能只能在自由市场内使用
+     * default: 角色无法执行此操作
+     */
     public static Packet getOwlMessage(int msg) {
+        // 创建商店链接结果数据包
         OutPacket p = OutPacket.create(SendOpcode.SHOP_LINK_RESULT);
-        p.writeByte(msg); // depending on the byte sent, a different message is sent.
+
+        // 写入消息代码，不同代码对应不同的客户端显示消息
+        p.writeByte(msg);
+
         return p;
     }
 
@@ -5128,29 +5168,34 @@ public class PacketCreator {
         return p;
     }
 
+    /**
+     * 创建远程频道切换数据包
+     *
+     * ENTRUSTED_SHOP_CHECK_RESULT 可能的值说明：
+     * 0x0E = 00 = 重命名失败 - 找不到商店, 01 = 重命名成功
+     * 0x10 = 切换到商店所在频道（商店在频道1开放，是否要切换频道？）
+     * 0x11 = 管理期间无法出售物品...等提示
+     * 0x12 = 弹出窗口提示
+     *
+     * @param {byte} ch - 目标频道号
+     * @return {Packet} 构建好的数据包
+     */
     public static Packet remoteChannelChange(byte ch) {
-        final OutPacket p = OutPacket.create(SendOpcode.ENTRUSTED_SHOP_CHECK_RESULT); // header.
-        p.writeByte(0x10);
-        p.writeInt(0);//No idea yet
-        p.writeByte(ch);
+        final OutPacket p = OutPacket.create(SendOpcode.ENTRUSTED_SHOP_CHECK_RESULT);// 创建数据包头
+        p.writeByte(0x10); // 远程频道切换操作码
+        p.writeInt(0);     // 暂时未知用途
+        p.writeByte(ch);   // 写入目标频道
         return p;
     }
-    /*
-     * Possible things for ENTRUSTED_SHOP_CHECK_RESULT
-     * 0x0E = 00 = Renaming Failed - Can't find the merchant, 01 = Renaming successful
-     * 0x10 = Changes channel to the store (Store is open at Channel 1, do you want to change channels?)
-     * 0x11 = You cannot sell any items when managing.. blabla
-     * 0x12 = FKING POPUP LOL
-     */
 
     public static Packet getHiredMerchant(Character chr, HiredMerchant hm, boolean firstTime) {//Thanks Dustin
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.ROOM.getCode());
         p.writeByte(0x05);
         p.writeByte(0x04);
-        p.writeShort(hm.getVisitorSlotThreadsafe(chr) + 1);
-        p.writeInt(hm.getItemId());
-        p.writeString("Hired Merchant");
+        p.writeShort(hm.getVisitorSlotThreadsafe(chr) + 1);     //玩家顾客列表
+        p.writeInt(hm.getItemId());     //雇佣商人ID
+        p.writeString(ItemInformationProvider.getInstance().getName(hm.getItemId()));   //雇佣商人显示名称
 
         Character[] visitors = hm.getVisitorCharacters();
         for (int i = 0; i < 3; i++) {
@@ -5191,11 +5236,16 @@ public class PacketCreator {
                 p.writeInt(s.getMesos());
                 p.writeString(s.getBuyer());
             }
-            p.writeInt(chr.getMerchantMeso());//:D?
+            p.writeInt(hm.getMesos());//:D?
+            // 为了在商店标题显示剩余天数
+            String description = hm.getDescription();
+            String days = "  |  剩余 " + hm.getRemainingDays() + " 天";
+            p.writeString(description + (hm.getRemainingDays() > 0 ? days : ""));
+        } else {
+            p.writeString(hm.getDescription());
         }
-        p.writeString(hm.getDescription());
-        p.writeByte(0x10); //TODO SLOTS, which is 16 for most stores...slotMax
-        p.writeInt(hm.isOwner(chr) ? chr.getMerchantMeso() : chr.getMeso());
+        p.writeByte(hm.getOnSaleSlotMax()); //TODO SLOTS, which is 16 for most stores...slotMax // byte类型，最多应该支持255个位置，但是封包似乎不能超过2048字节？
+        p.writeInt(hm.isOwner(chr) ? hm.getMesos() : chr.getMeso());
         p.writeByte(hm.getItems().size());
         if (hm.getItems().isEmpty()) {
             p.writeByte(0);//Hmm??
@@ -5213,7 +5263,7 @@ public class PacketCreator {
     public static Packet updateHiredMerchant(HiredMerchant hm, Character chr) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.UPDATE_MERCHANT.getCode());
-        p.writeInt(hm.isOwner(chr) ? chr.getMerchantMeso() : chr.getMeso());
+        p.writeInt(hm.isOwner(chr) ? hm.getMesos() : chr.getMeso());
         p.writeByte(hm.getItems().size());
         for (PlayerShopItem item : hm.getItems()) {
             p.writeShort(item.getBundles());

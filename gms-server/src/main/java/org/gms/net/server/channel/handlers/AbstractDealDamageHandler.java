@@ -499,6 +499,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             currentCalcDmg = (long) (currentCalcDmg * damageAttenuation);
 
             // [修复] 将所有依赖 monster 对象的逻辑集中到此代码块中
+            boolean currentMonsterCheat = false;
             if (monster != null) {
                 // [新增] 应用防御减伤公式到理论最大伤害上限
                 mobDef = ret.magic ? monster.getStats().getMDDamage() : monster.getStats().getPDDamage();
@@ -524,6 +525,8 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                             currentCalcDmg = 1;
                         }
 
+                        // 仅在检测到作弊时才生成调试字符串，节省性能
+                        /*
                         String monsterStatus = monster.getStati().keySet().stream()
                                 .map(MonsterStatus::getChineseName)
                                 .collect(Collectors.joining(", "));
@@ -538,6 +541,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                                 eff.getChineseName(),
                                 multiplier
                         );
+                        */
                     }
                 }
                 // 应用充能和元素效果对伤害进行修正
@@ -571,8 +575,12 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
 
                     // 作弊检测：伤害值 (仅在怪物存在时检测)
                     if (monster != null && damage != 0) {//伤害为0则代表miss
+                        long originalDamage = damage;
                         damage = chr.getAutoBanManager().checkDamageHack(damage, maxDamageToCheck, ret.skill, ret.skilllevel, monster);
-                        isCheat = !isCheat && damage <= 0 || damage == hitDmgMax;  //如果为篡改伤害则标记
+                        if (damage != originalDamage) {
+                            isCheat = true;
+                            currentMonsterCheat = true;
+                        }
                     }
                     if (ret.skill == Marksman.SNIPE || (canCrit && damage >= hitDmgMax)) {
                         // 如果伤害是暴击，则反转伤害值以使其在客户端上正确显示。
@@ -589,8 +597,8 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             }
             ret.allDamage.put(oid, allDamageNumbers);
 
-            // [修正] 将调试信息暂存，而不是立即打印 (仅在怪物存在时记录)
-            if (monster != null) {
+            // [修正] 仅在检测到作弊时才生成调试信息，避免高频攻击下的性能损耗
+            if (currentMonsterCheat && monster != null) {
                 String damagePerHit = allDamageNumbers.stream()
                         .map(d -> String.valueOf(d < 0 ? d + Integer.MAX_VALUE : d))
                         .collect(Collectors.joining(", "));
