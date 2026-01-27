@@ -35,4 +35,6 @@ public class DueyPackageRtnDTO {
     private Timestamp expireTime;
     /** 送达时间 */
     private Timestamp deliveryTime;
+    /** 状态变更时间 */
+    private Timestamp statusTime;
 }

@@ -153,46 +153,47 @@
           @page-change="onPageChange"
           @page-size-change="onPageSizeChange"
         >
-          <template #mesos="{ record }">
-            <span v-if="record.mesos > 0">{{ record.mesos }}</span>
-            <span v-else>-</span>
-          </template>
           <template #items="{ record }">
-            <a-space wrap>
-              <div
-                v-for="item in record.items"
-                :key="item.itemId"
-                class="item-cell"
-              >
-                <a-popover
-                  position="right"
-                  :content-style="{
-                    padding: 0,
-                    border: 'none',
-                    background: 'transparent',
-                    boxShadow: 'none',
-                  }"
-                  :arrow-style="{ display: 'none' }"
+            <div class="items-cell-content">
+              <a-space wrap>
+                <div
+                  v-for="item in record.items"
+                  :key="item.itemId"
+                  class="item-cell"
                 >
-                  <img
-                    :src="getIconUrl('item', item.itemId)"
-                    class="item-icon"
-                  />
-                  <template #content>
-                    <keep-alive>
-                      <component
-                        :is="getTooltipComponent(item.itemId)"
-                        :item="item"
-                      />
-                    </keep-alive>
-                  </template>
-                </a-popover>
-                <div class="item-info">
-                  <div class="item-name">{{ item.name || item.itemId }}</div>
-                  <div class="item-quantity">x {{ item.quantity }}</div>
+                  <a-popover
+                    position="right"
+                    :content-style="{
+                      padding: 0,
+                      border: 'none',
+                      background: 'transparent',
+                      boxShadow: 'none',
+                    }"
+                    :arrow-style="{ display: 'none' }"
+                  >
+                    <img
+                      :src="getIconUrl('item', item.itemId)"
+                      class="item-icon"
+                    />
+                    <template #content>
+                      <keep-alive>
+                        <component
+                          :is="getTooltipComponent(item.itemId)"
+                          :item="item"
+                        />
+                      </keep-alive>
+                    </template>
+                  </a-popover>
+                  <div class="item-info">
+                    <div class="item-name">{{ item.name || item.itemId }}</div>
+                    <div class="item-quantity">x {{ item.quantity }}</div>
+                  </div>
                 </div>
+              </a-space>
+              <div v-if="record.mesos > 0" class="mesos-info">
+                {{ $t('duey.list.mesos') }}: {{ record.mesos }}
               </div>
-            </a-space>
+            </div>
           </template>
           <template #type="{ record }">
             <a-tag :color="record.type === 1 ? 'red' : 'green'">
@@ -221,28 +222,59 @@
             </a-tag>
           </template>
           <template #timestamp="{ record }">
-            {{ formatDate(record.timestamp) }}
+            <div class="time-info-cell">
+              <div class="time-row">
+                <span class="time-label">{{ $t('duey.list.sendTime') }}:</span>
+                <span class="time-value">{{
+                  formatDate(record.timestamp)
+                }}</span>
+              </div>
+              <div class="time-row">
+                <span class="time-label"
+                  >{{ $t('duey.list.deliveryTime') }}:</span
+                >
+                <span class="time-value">{{
+                  formatDate(record.deliveryTime)
+                }}</span>
+              </div>
+            </div>
           </template>
-          <template #deliveryTime="{ record }">
-            {{ formatDate(record.deliveryTime) }}
-          </template>
-          <template #expireTime="{ record }">
-            {{ formatDate(record.expireTime) }}
+          <template #timeInfo="{ record }">
+            <div class="time-info-cell">
+              <div class="time-row">
+                <span class="time-label">{{ $t('duey.list.expire') }}:</span>
+                <span class="time-value">{{
+                  formatDate(record.expireTime)
+                }}</span>
+              </div>
+              <div class="time-row">
+                <span class="time-label"
+                  >{{ $t('duey.list.statusChange') }}:</span
+                >
+                <span class="time-value">{{
+                  formatDate(record.statusTime)
+                }}</span>
+              </div>
+            </div>
           </template>
           <template #operations="{ record }">
-            <a-space>
-              <a-button type="text" size="small" @click="handleEdit(record)">
-                {{ $t('button.edit') }}
+            <a-dropdown trigger="click">
+              <a-button type="text" size="small">
+                {{ $t('duey.list.operation') }} <icon-down />
               </a-button>
-              <a-popconfirm
-                :content="$t('duey.list.delete.confirm')"
-                @ok="handleDelete(record)"
-              >
-                <a-button type="text" status="danger" size="small">
-                  {{ $t('button.delete') }}
-                </a-button>
-              </a-popconfirm>
-            </a-space>
+              <template #content>
+                <a-doption @click="handleEdit(record)">
+                  <template #icon><icon-edit /></template>
+                  {{ $t('button.edit') }}
+                </a-doption>
+                <a-doption @click="handleDelete(record)">
+                  <template #icon><icon-delete /></template>
+                  <span style="color: rgb(var(--danger-6))">{{
+                    $t('button.delete')
+                  }}</span>
+                </a-doption>
+              </template>
+            </a-dropdown>
           </template>
         </a-table>
       </template>
@@ -258,19 +290,23 @@
               <a-grid-item v-for="item in renderData" :key="item.packageId">
                 <a-card class="duey-card" hoverable>
                   <template #actions>
-                    <a-space>
-                      <span class="action-button" @click="handleEdit(item)">
-                        <icon-edit /> {{ $t('button.edit') }}
+                    <a-dropdown trigger="click">
+                      <span class="action-button">
+                        {{ $t('duey.list.operation') }} <icon-down />
                       </span>
-                      <a-popconfirm
-                        :content="$t('duey.list.delete.confirm')"
-                        @ok="handleDelete(item)"
-                      >
-                        <span class="action-button delete">
-                          <icon-delete /> {{ $t('button.delete') }}
-                        </span>
-                      </a-popconfirm>
-                    </a-space>
+                      <template #content>
+                        <a-doption @click="handleEdit(item)">
+                          <template #icon><icon-edit /></template>
+                          {{ $t('button.edit') }}
+                        </a-doption>
+                        <a-doption @click="handleDelete(item)">
+                          <template #icon><icon-delete /></template>
+                          <span style="color: rgb(var(--danger-6))">{{
+                            $t('button.delete')
+                          }}</span>
+                        </a-doption>
+                      </template>
+                    </a-dropdown>
                   </template>
                   <a-card-meta>
                     <template #title>
@@ -373,7 +409,14 @@
                           </div>
                         </div>
                         <div class="card-time">
-                          {{ formatDate(item.timestamp) }}
+                          <div>
+                            {{ $t('duey.list.sendTime') }}:
+                            {{ formatDate(item.timestamp) }}
+                          </div>
+                          <div>
+                            {{ $t('duey.list.expire') }}:
+                            {{ formatDate(item.expireTime) }}
+                          </div>
                         </div>
                       </div>
                     </template>
@@ -432,6 +475,7 @@
     IconRight,
     IconDelete,
     IconEdit,
+    IconDown,
   } from '@arco-design/web-vue/es/icon';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import { isEquip } from '@/utils/mapleStoryItem';
@@ -497,14 +541,9 @@
       width: 120,
     },
     {
-      title: t('duey.list.mesos'),
-      slotName: 'mesos',
-      width: 120,
-    },
-    {
       title: t('duey.list.items'),
       slotName: 'items',
-      width: 180, // 增加宽度
+      width: 250, // 增加宽度以容纳物品和金币
     },
     {
       title: t('duey.list.message'),
@@ -527,22 +566,17 @@
     {
       title: t('duey.list.timeRange'),
       slotName: 'timestamp',
-      width: 170,
+      width: 200,
     },
     {
-      title: t('duey.list.deliveryTime'),
-      slotName: 'deliveryTime',
-      width: 170,
-    },
-    {
-      title: t('duey.list.statusChangeTime'), // 修改标题为状态变更时间
-      slotName: 'expireTime',
-      width: 170,
+      title: t('duey.list.timeInfo'),
+      slotName: 'timeInfo',
+      width: 200,
     },
     {
       title: t('duey.list.operation'),
       slotName: 'operations',
-      width: 120,
+      width: 100,
       fixed: 'right',
     },
   ]);
@@ -654,6 +688,19 @@
     }
   }
 
+  .items-cell-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0px;
+  }
+
+  .mesos-info {
+    font-size: 12px;
+    color: var(--color-text-2);
+    font-weight: bold;
+    margin-top: -8px;
+  }
+
   .item-cell {
     display: flex;
     align-items: center;
@@ -662,7 +709,7 @@
     border-radius: 4px;
     background-color: var(--color-bg-2);
     margin-right: 4px;
-    margin-bottom: 4px;
+    margin-bottom: 0px;
     white-space: nowrap; /* 防止换行 */
     cursor: pointer; /* 添加手型光标 */
     transition: background-color 0.2s;
@@ -694,6 +741,26 @@
       .item-quantity {
         font-size: 10px;
         color: var(--color-text-3);
+      }
+    }
+  }
+
+  /* 时间信息列样式 */
+  .time-info-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    .time-row {
+      display: flex;
+      align-items: center;
+      font-size: 12px;
+      .time-label {
+        color: var(--color-text-3);
+        margin-right: 4px;
+        min-width: 36px; /* 对齐标签 */
+      }
+      .time-value {
+        color: var(--color-text-1);
       }
     }
   }

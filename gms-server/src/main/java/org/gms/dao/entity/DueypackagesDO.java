@@ -34,6 +34,9 @@ public class DueypackagesDO implements Serializable {
     private Long receiverid;
 
     private String sendername;
+    
+    /** 发件人ID，-1表示系统/管理员 */
+    private Long senderid;
 
     private Long mesos;
 
@@ -48,5 +51,9 @@ public class DueypackagesDO implements Serializable {
     private Timestamp expireDate;
 
     private String itemData;
+
+    private Timestamp statusTime;
+
+    private Timestamp deliveryTime;
 
 }

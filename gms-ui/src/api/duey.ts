@@ -44,6 +44,7 @@ export interface DueyPackage {
   items: DueyItem[];
   expireTime: string;
   deliveryTime: string;
+  statusTime: string;
 }
 
 export interface DueyListParams {

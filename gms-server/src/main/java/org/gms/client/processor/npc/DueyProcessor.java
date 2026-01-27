@@ -56,6 +56,7 @@ import org.gms.util.Pair;
 import org.gms.util.SpringContextUtil;
 
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
@@ -66,6 +67,7 @@ import java.util.*;
 public class DueyProcessor {
     private static final Logger log = LoggerFactory.getLogger(DueyProcessor.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String DUEY_NAME = "[北斗快递] ";
 
     public enum Actions {
         TOSERVER_RECV_ITEM(0x00, "接收物品"),
@@ -161,6 +163,15 @@ public class DueyProcessor {
         dueypack.setSentTime(data.getTimestamp(), data.getType() == 1);
         dueypack.setMessage(data.getMessage());
         dueypack.setReceiverId(data.getReceiverid().intValue());
+        dueypack.setQuick(data.getType() == 1); // 设置 quick 属性
+        
+        if (data.getExpireDate() != null) {
+            dueypack.setExpireTime(data.getExpireDate().getTime());
+        }
+        
+        if (data.getDeliveryTime() != null) {
+            dueypack.setDeliveryTime(data.getDeliveryTime().getTime());
+        }
 
         return dueypack;
     }
@@ -168,14 +179,49 @@ public class DueyProcessor {
     private static List<DueyPackage> loadPackages(Character chr) {
         List<DueyPackage> packages = new LinkedList<>();
         DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        CharactersMapper charMapper = SpringContextUtil.getBean(CharactersMapper.class);
+        
         QueryWrapper query = QueryWrapper.create()
                 .where(DueypackagesDO::getReceiverid).eq(chr.getId())
                 .and(DueypackagesDO::getChecked).ne(2) // 过滤掉已领取的包裹 (状态2)
                 .and(DueypackagesDO::getChecked).ne(4); // 过滤掉已删除的包裹 (状态4)
         List<DueypackagesDO> results = mapper.selectListByQuery(query);
 
-        for (DueypackagesDO result : results) {
-            DueyPackage dueypack = getPackageFromDB(result);
+        for (DueypackagesDO data : results) {
+            // 实时检查包裹是否已过期
+            if (data.getChecked() != 3 && data.getExpireDate() != null && System.currentTimeMillis() >= data.getExpireDate().getTime()) {
+                // 标记为已过期
+                data.setChecked(3);
+                
+                // 执行退回逻辑
+                processExpiredPackages(Collections.singletonList(data), mapper, charMapper);
+                
+                // 更新数据库状态 (processExpiredPackages 已经做了，但为了保险起见，这里不需要额外操作，除非 processExpiredPackages 没更新 checked)
+                // processExpiredPackages 会更新 checked 为 3 并清理物品
+            }
+            
+            DueyPackage dueypack = getPackageFromDB(data);
+            
+            // 如果是已过期状态，处理留言并清空物品/金币
+            if (data.getChecked() == 3) {
+                String originalMessage = dueypack.getMessage() == null ? "" : dueypack.getMessage() + "\n\n";
+                String returnMessage = String.format("【玩家 %s 于 %s 给您邮寄的包裹已过期退回，您已无法领取该包裹】",
+                        dueypack.getSender(), new SimpleDateFormat("yyyy-MM-dd HH:mm").format(data.getTimestamp()));
+                
+                // 创建一个新的 DueyPackage 对象，或者修改现有对象
+                // 注意：getPackageFromDB 会尝试加载物品，但如果 processExpiredPackages 已经运行，物品可能已经被删除了
+                // 所以我们需要手动清空
+                dueypack = new DueyPackage(dueypack.getPackageId());
+                dueypack.setMessage(originalMessage + returnMessage);
+                dueypack.setSender(data.getSendername());
+                dueypack.setMesos(0);
+                dueypack.setReceiverId(data.getReceiverid().intValue());
+                dueypack.setSentTime(data.getTimestamp(), data.getType() == 1);
+                dueypack.setQuick(data.getType() == 1);
+                if (data.getExpireDate() != null) dueypack.setExpireTime(data.getExpireDate().getTime());
+                if (data.getDeliveryTime() != null) dueypack.setDeliveryTime(data.getDeliveryTime().getTime());
+            }
+            
             if (dueypack != null) {
                 packages.add(dueypack);
             }
@@ -183,20 +229,47 @@ public class DueyProcessor {
         return packages;
     }
 
-    private static int createPackage(int mesos, String message, String sender, int toCid, boolean quick, Item item) {
+    public static int createPackage(int mesos, String message, String sender, int toCid, boolean quick, Item item, int senderId, long expireTime) {
+        return createPackage(mesos, message, sender, toCid, quick, item, senderId, expireTime, 0);
+    }
+
+    public static int createPackage(int mesos, String message, String sender, int toCid, boolean quick, Item item, int senderId, long expireTime, long deliveryTime) {
+        return createPackage(mesos, message, sender, toCid, quick, item, senderId, expireTime, deliveryTime, 0);
+    }
+
+    public static int createPackage(int mesos, String message, String sender, int toCid, boolean quick, Item item, int senderId, long expireTime, long deliveryTime, int type) {
         DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
         DueypackagesDO newPackage = new DueypackagesDO();
         newPackage.setReceiverid((long) toCid);
         newPackage.setSendername(sender);
+        newPackage.setSenderid((long) senderId);
         newPackage.setMesos((long) mesos);
         newPackage.setTimestamp(new Timestamp(System.currentTimeMillis()));
         newPackage.setMessage(message);
-        newPackage.setType(quick ? 1 : 0);
+        if (type == 2) {
+            newPackage.setType(2); // 退回包裹
+        } else {
+            newPackage.setType(quick ? 1 : 0);
+        }
         newPackage.setChecked(1);
+        newPackage.setStatusTime(new Timestamp(System.currentTimeMillis()));
         
-        // 设置默认过期时间 (配置单位为分钟)
-        long expireDuration = GameConfig.getServerInt("duey_expire_time", 43200) * 60 * 1000L; // 默认30天
-        newPackage.setExpireDate(new Timestamp(System.currentTimeMillis() + expireDuration));
+        if (deliveryTime > 0) {
+            newPackage.setDeliveryTime(new Timestamp(deliveryTime));
+        }
+        
+        // 设置过期时间
+        if (expireTime == -1) {
+             // 永久不过期 (设置一个极大的时间戳)
+             long expireDuration = 3650L * 24 * 60 * 60 * 1000L; // 10年
+             newPackage.setExpireDate(new Timestamp(System.currentTimeMillis() + expireDuration));
+        } else if (expireTime > 0) {
+             newPackage.setExpireDate(new Timestamp(expireTime));
+        } else {
+             // 默认过期时间 (配置单位为分钟)
+             long expireDuration = GameConfig.getServerInt("duey_expire_time", 43200) * 60 * 1000L; // 默认30天
+             newPackage.setExpireDate(new Timestamp(System.currentTimeMillis() + expireDuration));
+        }
         
         // 序列化 itemData
         if (item != null) {
@@ -204,7 +277,7 @@ public class DueyProcessor {
             try {
                 newPackage.setItemData(objectMapper.writeValueAsString(itemDTO));
             } catch (JsonProcessingException e) {
-                log.error("Failed to serialize item data for duey package", e);
+                log.error("序列化快递包裹物品数据失败", e);
             }
         }
 
@@ -216,7 +289,7 @@ public class DueyProcessor {
         }
     }
     
-    private static ItemInfoRtnDTO convertItemToDTO(Item item) {
+    public static ItemInfoRtnDTO convertItemToDTO(Item item) {
         ItemInfoRtnDTO itemDTO = new ItemInfoRtnDTO();
         itemDTO.setItemId(item.getItemId());
         itemDTO.setQuantity((int) item.getQuantity());
@@ -253,7 +326,7 @@ public class DueyProcessor {
         return itemDTO;
     }
 
-    private static boolean insertPackageItem(int packageId, Item item) {
+    public static boolean insertPackageItem(int packageId, Item item) {
         Pair<Item, InventoryType> dueyItem = new Pair<>(item, InventoryType.getByType(item.getItemType()));
         ItemFactory.DUEY.saveItems(Collections.singletonList(dueyItem), packageId);
         return true;
@@ -313,6 +386,37 @@ public class DueyProcessor {
         return 0;
     }
 
+    private static int getNormalDeliveryTime() {
+        return GameConfig.getServerInt("duey_normal_delivery_time", 1440);
+    }
+
+    private static String formatDuration(long totalMinutes) {
+        if (totalMinutes <= 0) {
+            return "立即送达";
+        }
+
+        long days = totalMinutes / (24 * 60);
+        long remainingMinutesAfterDays = totalMinutes % (24 * 60);
+        long hours = remainingMinutesAfterDays / 60;
+        long minutes = remainingMinutesAfterDays % 60;
+
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) {
+            sb.append(days).append("天");
+        }
+        if (hours > 0) {
+            sb.append(hours).append("小时");
+        }
+        if (minutes > 0) {
+            sb.append(minutes).append("分钟");
+        }
+
+        if (sb.length() == 0) {
+            return "0分钟";
+        }
+        return sb.toString();
+    }
+
     public static void dueySendItem(Client c, byte invTypeId, short itemPos, short amount, int sendMesos, String sendMessage, String recipient, boolean quick) {
         if (c.tryacquireClient()) {
             try {
@@ -325,32 +429,32 @@ public class DueyProcessor {
                     if (gmLevel < minGmLevel) {
                         c.getPlayer().message("您当前的GM等级无法使用快递。");
                         log.info("GM {} 尝试发送一个包裹给 {}", c.getPlayer().getName(), recipient);
-                        c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                        c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
                         return;
                     }
                 } else {
                     if (!GameConfig.getServerBoolean("use_duey")) {
-                        c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOSERVER_CLOSE_DUEY.getCode()));
-                        c.getPlayer().dropMessage(1,"快递服务已经倒闭了，无法继续使用。");
+                        c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOSERVER_CLOSE_DUEY.getCode()));
+                        c.getPlayer().dropMessage(1,DUEY_NAME + "快递服务已经倒闭了，无法继续使用。");
                         return;
                     }
                     
                     if (c.getPlayer().getLevel() < GameConfig.getServerInt("duey_min_level")) {
                         c.getPlayer().message("您的等级不足，无法使用快递。");
-                        c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                        c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
                         return;
                     }
                 }
 
                 if (quick && !GameConfig.getServerBoolean("enable_duey_quick_delivery")) {
                     c.getPlayer().message("快速配送服务已禁用。");
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
                     return;
                 }
 
                 if (!quick && !GameConfig.getServerBoolean("enable_duey_normal_delivery")) {
                     c.getPlayer().message("普通配送服务已禁用。");
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
                     return;
                 }
 
@@ -385,7 +489,7 @@ public class DueyProcessor {
                 }
 
                 if (c.getPlayer().getMeso() < finalcost) {
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_NOT_ENOUGH_MESOS.getCode()));
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_NOT_ENOUGH_MESOS.getCode()));
                     return;
                 }
 
@@ -394,33 +498,43 @@ public class DueyProcessor {
                 var recipientCid = accIdCid.getRight();
 
                 if (recipientAccId == -1 || recipientCid == -1) {
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_NAME_DOES_NOT_EXIST.getCode()));
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_NAME_DOES_NOT_EXIST.getCode()));
                     return;
                 }
 
                 if (recipientAccId == c.getAccID()) {
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_SAMEACC_ERROR.getCode()));
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_SAMEACC_ERROR.getCode()));
                     return;
                 }
 
                 if (quick) {
                     InventoryManipulator.removeById(c, InventoryType.CASH, ItemId.QUICK_DELIVERY_TICKET, (short) 1, false, false);
                 }
+                
+                // 计算送达时间
+                long deliveryTime = 0;
+                if (!quick) {
+                    // 普通快递：当前时间 + 配置的送达时间 (单位：分钟)
+                    long deliveryDuration = getNormalDeliveryTime() * 60 * 1000L;
+                    deliveryTime = System.currentTimeMillis() + deliveryDuration;
+                }
 
-                int packageId = createPackage(sendMesos, sendMessage, c.getPlayer().getName(), recipientCid, quick, null);
+                // 修正：从游戏内发送快递时，expireTime 应该为 0，让 createPackage 使用默认配置
+                int packageId = createPackage(sendMesos, sendMessage, c.getPlayer().getName(), recipientCid, quick, null, c.getPlayer().getId(), 0, deliveryTime);
                 if (packageId == -1) {
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_ENABLE_ACTIONS.getCode()));
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_ENABLE_ACTIONS.getCode()));
                     return;
                 }
-                c.getPlayer().gainMeso((int) -finalcost, false);
+                c.getPlayer().gainMeso((int) -finalcost, true);
 
                 int res = addPackageItemFromInventory(packageId, c, invTypeId, itemPos, amount);
                 if (res == 0) {
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_SUCCESSFULLY_SENT.getCode()));
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_SUCCESSFULLY_SENT.getCode()));
+                    c.getPlayer().dropMessage(5, DUEY_NAME + "您邮寄给 " + recipient + " 的普通包裹已邮寄成功，本次邮寄基本费用：" + fee + " 金币，预计送达时间：" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(deliveryTime));
                 } else if (res > 0) {
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_ENABLE_ACTIONS.getCode()));
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_ENABLE_ACTIONS.getCode()));
                 } else {
-                    c.sendPacket(PacketCreator.sendDueyMSG(DueyProcessor.Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
                 }
 
                 Client rClient = null;
@@ -452,7 +566,7 @@ public class DueyProcessor {
                 
                 UpdateChain.of(DueypackagesDO.class)
                         .set(DueypackagesDO::getChecked, 4) // 4 表示已删除
-                        .set(DueypackagesDO::getExpireDate, new Timestamp(System.currentTimeMillis())) // 记录删除时间
+                        .set(DueypackagesDO::getStatusTime, new Timestamp(System.currentTimeMillis())) // 记录删除时间
                         .where(DueypackagesDO::getPackageid).eq(packageid)
                         .update();
                 
@@ -474,6 +588,25 @@ public class DueyProcessor {
         if (dpData == null) {
             c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
             log.warn("角色 {} 尝试接收一个不存在的快递包裹，ID {}", c.getPlayer().getName(), packageId);
+            return;
+        }
+
+        // 检查包裹是否已过期 (状态 3)
+        if (dpData.getChecked() == 3) {
+            c.getPlayer().dropMessage(1, "该包裹已超过存放时间，已退回给发件人。");
+            c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_ENABLE_ACTIONS.getCode()));
+//            // 从客户端UI中移除该包裹显示
+//            c.sendPacket(PacketCreator.removeItemFromDuey(false, packageId));
+            return;
+        }
+        
+        // 检查包裹是否已领取 (状态 2)
+        if (dpData.getChecked() == 2) {
+            c.getPlayer().dropMessage(1, "该包裹已被领取，无法重复领取。");
+            c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_RECV_UNKNOWN_ERROR.getCode()));
+            // 从客户端UI中移除该包裹显示
+            c.sendPacket(PacketCreator.removeItemFromDuey(false, packageId));
+            log.warn("角色 {} 尝试重复接收已领取的快递包裹，ID {}", c.getPlayer().getName(), packageId);
             return;
         }
 
@@ -517,14 +650,25 @@ public class DueyProcessor {
 
         c.getPlayer().gainMeso(dp.getMesos(), false);
         
-        // 修改逻辑：不再删除包裹，而是更新状态为已领取 (checked = 2) 并更新过期时间为当前时间
+        // 修改逻辑：不再删除包裹，而是更新状态为已领取 (checked = 2) 并更新状态变更时间为当前时间
         // dueyRemovePackage(c, packageId, false);
         
         UpdateChain.of(DueypackagesDO.class)
                 .set(DueypackagesDO::getChecked, 2) // 2 表示已领取
-                .set(DueypackagesDO::getExpireDate, new Timestamp(System.currentTimeMillis())) // 记录领取时间
+                .set(DueypackagesDO::getStatusTime, new Timestamp(System.currentTimeMillis())) // 记录领取时间
                 .where(DueypackagesDO::getPackageid).eq(packageId)
                 .update();
+        
+        // 如果是退回的包裹 (type == 2)，需要将原包裹也标记为已领取
+        if (dpData.getType() == 2 && dpData.getSenderid() != null && dpData.getSenderid() > 0) {
+             // 退回包裹的 senderid 存储的是原包裹的 packageId
+             long originalPackageId = dpData.getSenderid();
+             UpdateChain.of(DueypackagesDO.class)
+                     .set(DueypackagesDO::getChecked, 2)
+                     .where(DueypackagesDO::getPackageid).eq(originalPackageId)
+                     .and(DueypackagesDO::getChecked).eq(3) // 确保是已过期状态
+                     .update();
+        }
         
         // 从客户端UI中移除该包裹显示
         c.sendPacket(PacketCreator.removeItemFromDuey(false, packageId));
@@ -548,6 +692,12 @@ public class DueyProcessor {
                     c.sendPacket(PacketCreator.sendDuey(0x1A, null));
                 } else {
                     c.sendPacket(PacketCreator.sendDuey(0x8, loadPackages(c.getPlayer())));
+                    
+                    // 增加邮寄费用和税率的通知说明
+                    int normalFee = GameConfig.getServerInt("duey_normal_fee", 5000);
+                    String formattedDeliveryTime = formatDuration(getNormalDeliveryTime());
+                    c.getPlayer().dropMessage(0, DUEY_NAME + "欢迎使用快递服务，普通包裹邮费：" + normalFee + " 金币，配送时效：" + formattedDeliveryTime);
+                    c.getPlayer().dropMessage(1, "欢迎使用快递服务\r\n普快邮费：" + normalFee + " 金币\r\n普快时效：" + formattedDeliveryTime);
                 }
             } finally {
                 c.releaseClient();
@@ -556,7 +706,7 @@ public class DueyProcessor {
     }
 
     public static void dueyCreatePackage(Item item, int mesos, String sender, int recipientCid) {
-        int packageId = createPackage(mesos, null, sender, recipientCid, false, item);
+        int packageId = createPackage(mesos, null, sender, recipientCid, false, item, -1, 0);
         if (packageId != -1) {
             insertPackageItem(packageId, item);
         }
@@ -564,6 +714,10 @@ public class DueyProcessor {
 
     public static void runDueyExpireSchedule() {
         DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+        CharactersMapper charMapper = SpringContextUtil.getBean(CharactersMapper.class);
+        
+        int expiredCount = 0;
+        int deletedCount = 0;
         
         // 1. 清理旧逻辑的过期包裹 (timestamp + duey_expire_time < now)
         // 兼容旧数据，如果 expire_date 为空，则使用 timestamp 计算
@@ -573,38 +727,23 @@ public class DueyProcessor {
         final Timestamp ts = new Timestamp(c.getTime().getTime());
 
         QueryWrapper queryOld = QueryWrapper.create()
-                .select(DueypackagesDO::getPackageid)
                 .where(DueypackagesDO::getExpireDate).isNull()
                 .and(DueypackagesDO::getTimestamp).lt(ts);
         
         List<DueypackagesDO> toRemoveOld = mapper.selectListByQuery(queryOld);
-        for (DueypackagesDO pkg : toRemoveOld) {
-            // 标记为过期 (状态 3) 而不是直接删除
-            UpdateChain.of(DueypackagesDO.class)
-                    .set(DueypackagesDO::getChecked, 3)
-                    .where(DueypackagesDO::getPackageid).eq(pkg.getPackageid())
-                    .update();
-            // 恢复：清理物品数据，因为我们已经有了 JSON 备份
-            deletePackageFromInventoryDB(pkg.getPackageid().intValue());
-        }
+        expiredCount += toRemoveOld.size();
+        processExpiredPackages(toRemoveOld, mapper, charMapper);
         
         // 2. 清理新逻辑的过期包裹 (expire_date < now) 且未领取的 (checked != 2)
         QueryWrapper queryNew = QueryWrapper.create()
-                .select(DueypackagesDO::getPackageid)
                 .where(DueypackagesDO::getExpireDate).le(new Timestamp(System.currentTimeMillis()))
                 .and(DueypackagesDO::getChecked).ne(2) // 已领取的(2)不处理，保持原状
-                .and(DueypackagesDO::getChecked).ne(3); // 已经是过期的(3)不处理
+                .and(DueypackagesDO::getChecked).ne(3) // 已经是过期的(3)不处理
+                .and(DueypackagesDO::getChecked).ne(4); // 已删除的(4)不处理
 
         List<DueypackagesDO> toRemoveNew = mapper.selectListByQuery(queryNew);
-        for (DueypackagesDO pkg : toRemoveNew) {
-            // 标记为过期 (状态 3) 而不是直接删除
-            UpdateChain.of(DueypackagesDO.class)
-                    .set(DueypackagesDO::getChecked, 3)
-                    .where(DueypackagesDO::getPackageid).eq(pkg.getPackageid())
-                    .update();
-            // 恢复：清理物品数据，因为我们已经有了 JSON 备份
-            deletePackageFromInventoryDB(pkg.getPackageid().intValue());
-        }
+        expiredCount += toRemoveNew.size();
+        processExpiredPackages(toRemoveNew, mapper, charMapper);
         
         // 3. 物理删除已过期、已领取、已删除 N天以上的包裹记录
         long retentionTime = GameConfig.getServerLong("duey_retention_days", 30L) * 24 * 60 * 60 * 1000L;
@@ -612,14 +751,124 @@ public class DueyProcessor {
         
         QueryWrapper queryDelete = QueryWrapper.create()
                 .select(DueypackagesDO::getPackageid)
-                .where(DueypackagesDO::getExpireDate).le(retentionTs)
+                .where(DueypackagesDO::getStatusTime).le(retentionTs)
                 .and(DueypackagesDO::getChecked).in(2, 3, 4); // 2:已领取, 3:已过期, 4:已删除
         
         List<DueypackagesDO> toDelete = mapper.selectListByQuery(queryDelete);
+        deletedCount = toDelete.size();
         for (DueypackagesDO pkg : toDelete) {
             mapper.deleteById(pkg.getPackageid());
             // 再次确保物品数据被清理
             deletePackageFromInventoryDB(pkg.getPackageid().intValue());
         }
+        
+        if (expiredCount > 0 || deletedCount > 0) {
+            log.info("快递清理任务执行完毕：共处理过期包裹 {} 个，物理删除历史包裹 {} 个。", expiredCount, deletedCount);
+        }
+    }
+
+    private static void processExpiredPackages(List<DueypackagesDO> packages, DueypackagesMapper mapper, CharactersMapper charMapper) {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
+        
+        for (DueypackagesDO pkg : packages) {
+            // 1. 尝试恢复物品 (在删除之前)
+            Item item = null;
+            ItemInfoRtnDTO itemDTO = null;
+            // 优先从 JSON 恢复，因为它是最准确的快照
+            if (pkg.getItemData() != null && !pkg.getItemData().isEmpty()) {
+                try {
+                    itemDTO = objectMapper.readValue(pkg.getItemData(), ItemInfoRtnDTO.class);
+                    if (itemDTO != null) {
+                        item = restoreItemFromDTO(itemDTO);
+                    }
+                } catch (Exception e) {
+                    log.error("从JSON恢复退回包裹的物品失败", e);
+                }
+            }
+            
+            // 如果 JSON 恢复失败，尝试从 DB 加载
+            if (item == null) {
+                List<Pair<Item, InventoryType>> items = ItemFactory.DUEY.loadItems(pkg.getPackageid().intValue(), false);
+                if (!items.isEmpty()) {
+                    item = items.get(0).getLeft();
+                    itemDTO = convertItemToDTO(item);
+                }
+            }
+
+            // 2. 退回逻辑
+            // 检查 senderid 是否有效 (大于 0)
+            Long senderId = pkg.getSenderid();
+            if (senderId != null && senderId > 0) {
+                // 查找发件人是否存在
+                CharactersDO sender = charMapper.selectOneById(senderId);
+                
+                if (sender != null) {
+                    String receiverName = "未知";
+                    CharactersDO receiver = charMapper.selectOneById(pkg.getReceiverid());
+                    if (receiver != null) {
+                        receiverName = receiver.getName();
+                    }
+
+                    String returnMessage = String.format("您于 %s 寄给 %s 的包裹超时未领取，已自动退回。", 
+                            sdf.format(pkg.getTimestamp()), receiverName);
+                    
+                    // 创建退回包裹
+                    // 发件人ID设为原包裹ID (pkg.getPackageid())，以便在领取时能关联回原包裹
+                    // 类型设为 2 (退回包裹)
+                    
+                    int returnPackageId = createPackage(pkg.getMesos().intValue(), returnMessage, "包裹超时退回", sender.getId(), false, item, pkg.getPackageid().intValue(), -1, 0, 2);
+                    if (returnPackageId != -1) {
+                        if (item != null) {
+                            insertPackageItem(returnPackageId, item);
+                        }
+                    }
+                }
+            }
+
+            // 3. 标记原包裹为过期并清理数据
+            UpdateChain.of(DueypackagesDO.class)
+                    .set(DueypackagesDO::getChecked, 3)
+                    .set(DueypackagesDO::getStatusTime, new Timestamp(System.currentTimeMillis()))
+                    .where(DueypackagesDO::getPackageid).eq(pkg.getPackageid())
+                    .update();
+            
+            deletePackageFromInventoryDB(pkg.getPackageid().intValue());
+        }
+    }
+
+    private static Item restoreItemFromDTO(ItemInfoRtnDTO itemDTO) {
+        Item item;
+        if (ItemConstants.getInventoryType(itemDTO.getItemId()) == InventoryType.EQUIP) {
+            Equip equip = new Equip(itemDTO.getItemId(), (byte)0, -1);
+            equip.setQuantity(itemDTO.getQuantity().shortValue());
+            if (itemDTO.getStr() != null) equip.setStr(itemDTO.getStr().shortValue());
+            if (itemDTO.getDex() != null) equip.setDex(itemDTO.getDex().shortValue());
+            if (itemDTO.getInt_() != null) equip.setInt(itemDTO.getInt_().shortValue());
+            if (itemDTO.getLuk() != null) equip.setLuk(itemDTO.getLuk().shortValue());
+            if (itemDTO.getHp() != null) equip.setHp(itemDTO.getHp().shortValue());
+            if (itemDTO.getMp() != null) equip.setMp(itemDTO.getMp().shortValue());
+            if (itemDTO.getWatk() != null) equip.setWatk(itemDTO.getWatk().shortValue());
+            if (itemDTO.getMatk() != null) equip.setMatk(itemDTO.getMatk().shortValue());
+            if (itemDTO.getWdef() != null) equip.setWdef(itemDTO.getWdef().shortValue());
+            if (itemDTO.getMdef() != null) equip.setMdef(itemDTO.getMdef().shortValue());
+            if (itemDTO.getAcc() != null) equip.setAcc(itemDTO.getAcc().shortValue());
+            if (itemDTO.getAvoid() != null) equip.setAvoid(itemDTO.getAvoid().shortValue());
+            if (itemDTO.getHands() != null) equip.setHands(itemDTO.getHands().shortValue());
+            if (itemDTO.getSpeed() != null) equip.setSpeed(itemDTO.getSpeed().shortValue());
+            if (itemDTO.getJump() != null) equip.setJump(itemDTO.getJump().shortValue());
+            if (itemDTO.getUpgradeSlots() != null) equip.setUpgradeSlots(itemDTO.getUpgradeSlots().byteValue());
+            if (itemDTO.getLevel() != null) equip.setLevel(itemDTO.getLevel().byteValue());
+            if (itemDTO.getItemLevel() != null) equip.setItemLevel(itemDTO.getItemLevel().byteValue());
+            if (itemDTO.getFlag() != null) equip.setFlag(itemDTO.getFlag().shortValue());
+            if (itemDTO.getVicious() != null) equip.setVicious(itemDTO.getVicious().shortValue());
+            if (itemDTO.getOwner() != null) equip.setOwner(itemDTO.getOwner());
+            if (itemDTO.getExpiration() != null) equip.setExpiration(itemDTO.getExpiration());
+            item = equip;
+        } else {
+            item = new Item(itemDTO.getItemId(), (byte)0, itemDTO.getQuantity().shortValue(), (byte)0);
+            if (itemDTO.getOwner() != null) item.setOwner(itemDTO.getOwner());
+            if (itemDTO.getExpiration() != null) item.setExpiration(itemDTO.getExpiration());
+        }
+        return item;
     }
 }

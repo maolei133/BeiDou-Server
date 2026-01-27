@@ -503,6 +503,7 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
             UpdateChain.of(DueypackagesDO.class)
                     .set(DueypackagesDO::getChecked, 0)
                     .where(DueypackagesDO::getReceiverid).eq(player.getId())
+                    .and(DueypackagesDO::getChecked).eq(1) // 增加条件：只更新状态为1的
                     .update();
 
             c.sendPacket(PacketCreator.sendDueyParcelNotification(result.getType() == 1));
