@@ -82,6 +82,7 @@ public class PlifeService {
         plifeDO.setMap(mapId);
         plifeDO.setMobtime(mobTime);
         plifeDO.setHide(0);
+        plifeDO.setTeam(-1);
         plifeMapper.insert(plifeDO);
     }
 
@@ -100,6 +101,7 @@ public class PlifeService {
         plifeDO.setMap(mapId);
         plifeDO.setMobtime(-1);
         plifeDO.setHide(0);
+        plifeDO.setTeam(-1);
         plifeMapper.insert(plifeDO);
     }
 }
