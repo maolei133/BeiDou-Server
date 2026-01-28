@@ -128,7 +128,7 @@ public class Storage {
     public void saveToDB() {
         lock.lock();
         try {
-            log.info("正在保存账号ID: {} 的仓库，物品数量: {}", this.id, items.size());
+//            log.info("正在保存账号ID: {} 的仓库，物品数量: {}", this.id, items.size());
             StorageService storageService = SpringContextUtil.getBean(StorageService.class);
 
             StoragesDO storageToUpdate = new StoragesDO();
