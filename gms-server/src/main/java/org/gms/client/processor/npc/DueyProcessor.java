@@ -780,15 +780,25 @@ public class DueyProcessor {
         processExpiredPackages(toRemoveOld, mapper, charMapper);
         
         // 2. 清理新逻辑的过期包裹 (expire_date < now) 且未领取的 (checked != 2)
-        QueryWrapper queryNew = QueryWrapper.create()
+        // 优化：先将过期包裹标记为 5 (待退回)，然后统一处理
+        // 这样可以保证与 loadPackages 的逻辑一致，并利用 Checked=5 的原子性
+        
+        // 2.1 查找需要标记为待退回的包裹 (Checked = 0, 1)
+        QueryWrapper queryToMark = QueryWrapper.create()
                 .where(DueypackagesDO::getExpireDate).le(new Timestamp(System.currentTimeMillis()))
-                .and(DueypackagesDO::getChecked).ne(2) // 已领取的(2)不处理，保持原状
-                .and(DueypackagesDO::getChecked).ne(3) // 已经是过期的(3)不处理
-                .and(DueypackagesDO::getChecked).ne(4); // 已删除的(4)不处理
+                .and(DueypackagesDO::getChecked).in(0, 1);
 
-        List<DueypackagesDO> toRemoveNew = mapper.selectListByQuery(queryNew);
-        expiredCount += toRemoveNew.size();
-        processExpiredPackages(toRemoveNew, mapper, charMapper);
+        DueypackagesDO updateToMark = new DueypackagesDO();
+        updateToMark.setChecked(5);
+        mapper.updateByQuery(updateToMark, queryToMark);
+        
+        // 2.2 查找所有待退回的包裹 (Checked = 5) 进行处理
+        QueryWrapper queryToProcess = QueryWrapper.create()
+                .where(DueypackagesDO::getChecked).eq(5);
+
+        List<DueypackagesDO> toProcess = mapper.selectListByQuery(queryToProcess);
+        expiredCount += toProcess.size();
+        processExpiredPackages(toProcess, mapper, charMapper);
         
         // 3. 物理删除已过期、已领取、已删除 N天以上的包裹记录
         long retentionTime = GameConfig.getServerLong("duey_retention_days", 30L) * 24 * 60 * 60 * 1000L;
