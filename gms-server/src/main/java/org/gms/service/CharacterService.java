@@ -935,6 +935,20 @@ public class CharacterService {
             player.getCashShop().save();
         }
 
+        // 保存仓库数据
+        if (player.getStorage() != null) {
+            try {
+                player.getStorage().saveToDB();
+//                log.info("角色 {} 的仓库保存成功。", player.getName());
+            } catch (Exception e) {
+                log.error("保存角色 {} 的仓库时出错", player.getName(), e);
+            }
+        } else {
+            if (notAutosave) {
+//                log.info("角色 {} 的仓库为空，跳过保存。", player.getName());
+            }
+        }
+
         // 保存技能
         saveSkills(player.getId(), player.getSkills());
         // 保存技能宏

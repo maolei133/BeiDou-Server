@@ -96,6 +96,7 @@ public class Storage {
         for (Pair<Item, InventoryType> item : ItemFactory.STORAGE.loadItems(ret.id, false)) {
             ret.items.add(item.getLeft());
         }
+        log.info("已加载账号ID: {} 的仓库，物品数量: {}", accountId, ret.items.size());
 
         return ret;
     }
@@ -125,20 +126,27 @@ public class Storage {
     }
 
     public void saveToDB() {
-        StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+        lock.lock();
+        try {
+            log.info("正在保存账号ID: {} 的仓库，物品数量: {}", this.id, items.size());
+            StorageService storageService = SpringContextUtil.getBean(StorageService.class);
 
-        StoragesDO storageToUpdate = new StoragesDO();
-        storageToUpdate.setStorageid((long) this.id);
-        storageToUpdate.setSlots((int) this.slots);
-        storageToUpdate.setMeso(this.meso);
+            StoragesDO storageToUpdate = new StoragesDO();
+            storageToUpdate.setStorageid((long) this.id);
+            storageToUpdate.setSlots((int) this.slots);
+            storageToUpdate.setMeso(this.meso);
 
-        List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
-        List<Item> list = getItems();
-        for (Item item : list) {
-            itemsWithType.add(new Pair<>(item, item.getInventoryType()));
+            List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
+            for (Item item : items) {
+                itemsWithType.add(new Pair<>(item, item.getInventoryType()));
+            }
+
+            storageService.saveStorage(storageToUpdate, itemsWithType, id);
+        } catch (Exception e) {
+            log.error("保存账号ID: {} 的仓库时出错", this.id, e);
+        } finally {
+            lock.unlock();
         }
-
-        storageService.saveStorage(storageToUpdate, itemsWithType, id);
     }
 
     public Item getItem(byte slot) {
