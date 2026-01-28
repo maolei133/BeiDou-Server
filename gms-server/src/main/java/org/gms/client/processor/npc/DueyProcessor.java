@@ -129,16 +129,20 @@ public class DueyProcessor {
 
         DueypackagesDO result = mapper.selectOneByQuery(query);
         if (result != null) {
-            UpdateChain.of(DueypackagesDO.class)
-                    .set(DueypackagesDO::getChecked, 0)
+            DueypackagesDO updateDO = new DueypackagesDO();
+            updateDO.setChecked(0);
+            QueryWrapper updateQuery = QueryWrapper.create()
                     .where(DueypackagesDO::getReceiverid).eq(player.getId())
-                    .update();
+                    .and(DueypackagesDO::getChecked).eq(1); // 仅更新未读包裹
+            mapper.updateByQuery(updateDO, updateQuery);
+            
             c.sendPacket(PacketCreator.sendDueyParcelReceived(result.getSendername(), result.getType() == 1));
         }
     }
 
     private static void deletePackageFromInventoryDB(int packageId) {
-        ItemFactory.DUEY.saveItems(new LinkedList<>(), packageId);
+        // 不再操作 inventoryitems 表
+        // 如果需要清理旧数据，应在迁移逻辑中处理
     }
 
     private static void removePackageFromDB(int packageId) {
@@ -149,11 +153,52 @@ public class DueyProcessor {
 
     private static DueyPackage getPackageFromDB(DueypackagesDO data) {
         int packageId = data.getPackageid().intValue();
-        List<Pair<Item, InventoryType>> dueyItems = ItemFactory.DUEY.loadItems(packageId, false);
+        Item item = null;
+
+        // 1. 尝试从 JSON 加载物品数据
+        if (data.getItemData() != null && !data.getItemData().isEmpty()) {
+            try {
+                if (data.getItemData().trim().startsWith("[")) {
+                    List<ItemInfoRtnDTO> list = objectMapper.readValue(data.getItemData(), objectMapper.getTypeFactory().constructCollectionType(List.class, ItemInfoRtnDTO.class));
+                    if (!list.isEmpty()) {
+                        item = restoreItemFromDTO(list.get(0));
+                    }
+                } else {
+                    ItemInfoRtnDTO itemDTO = objectMapper.readValue(data.getItemData(), ItemInfoRtnDTO.class);
+                    item = restoreItemFromDTO(itemDTO);
+                }
+            } catch (Exception e) {
+                log.error("从JSON恢复包裹物品失败，包裹ID: " + packageId, e);
+            }
+        }
+
+        // 2. 兼容旧数据：如果 JSON 中没有物品，尝试从 inventoryitems 表加载
+        if (item == null) {
+            List<Pair<Item, InventoryType>> dueyItems = ItemFactory.DUEY.loadItems(packageId, false);
+            if (!dueyItems.isEmpty()) {
+                item = dueyItems.get(0).getLeft();
+
+                // 自动迁移：将旧表数据转换为 JSON 并保存
+                try {
+                    ItemInfoRtnDTO itemDTO = convertItemToDTO(item);
+                    String json = objectMapper.writeValueAsString(itemDTO);
+                    UpdateChain.of(DueypackagesDO.class)
+                            .set(DueypackagesDO::getItemData, json)
+                            .where(DueypackagesDO::getPackageid).eq(packageId)
+                            .update();
+
+                    // 迁移完成后，清理旧表数据，实现“完全切断”
+                    ItemFactory.DUEY.saveItems(new LinkedList<>(), packageId);
+                } catch (Exception e) {
+                    log.error("迁移包裹物品到JSON失败，包裹ID: " + packageId, e);
+                }
+            }
+        }
+
         DueyPackage dueypack;
 
-        if (!dueyItems.isEmpty()) {
-            dueypack = new DueyPackage(packageId, dueyItems.get(0).getLeft());
+        if (item != null) {
+            dueypack = new DueyPackage(packageId, item);
         } else {
             dueypack = new DueyPackage(packageId);
         }
@@ -189,37 +234,35 @@ public class DueyProcessor {
 
         for (DueypackagesDO data : results) {
             // 实时检查包裹是否已过期
-            if (data.getChecked() != 3 && data.getExpireDate() != null && System.currentTimeMillis() >= data.getExpireDate().getTime()) {
-                // 标记为已过期
-                data.setChecked(3);
+            // 状态 5: 待退回 (Expired, Pending Return)
+            boolean isExpired = data.getExpireDate() != null && System.currentTimeMillis() >= data.getExpireDate().getTime();
+            
+            if (data.getChecked() != 3 && data.getChecked() != 5 && isExpired) {
+                // 标记为待退回 (状态 5)
+                DueypackagesDO updateDO = new DueypackagesDO();
+                updateDO.setChecked(5);
+                mapper.updateByQuery(updateDO, QueryWrapper.create().where(DueypackagesDO::getPackageid).eq(data.getPackageid()));
                 
-                // 执行退回逻辑
+                // 更新内存对象状态，以便后续处理
+                data.setChecked(5);
+            }
+            
+            // 处理待退回的包裹 (状态 5)
+            if (data.getChecked() == 5) {
                 processExpiredPackages(Collections.singletonList(data), mapper, charMapper);
-                
-                // 更新数据库状态 (processExpiredPackages 已经做了，但为了保险起见，这里不需要额外操作，除非 processExpiredPackages 没更新 checked)
-                // processExpiredPackages 会更新 checked 为 3 并清理物品
+                // processExpiredPackages 会将状态更新为 3，这里同步更新内存对象以便显示
+                data.setChecked(3);
             }
             
             DueyPackage dueypack = getPackageFromDB(data);
             
-            // 如果是已过期状态，处理留言并清空物品/金币
-            if (data.getChecked() == 3) {
+            // 如果是已过期状态 (3) 或 待退回状态 (5)，处理留言
+            if (data.getChecked() == 3 || data.getChecked() == 5) {
                 String originalMessage = dueypack.getMessage() == null ? "" : dueypack.getMessage() + "\n\n";
-                String returnMessage = String.format("【玩家 %s 于 %s 给您邮寄的包裹已过期退回，您已无法领取该包裹】",
+                String returnMessage = String.format("\r\n发件：%s\r\n时间：%s\r\n状态：已过期退回",
                         dueypack.getSender(), new SimpleDateFormat("yyyy-MM-dd HH:mm").format(data.getTimestamp()));
                 
-                // 创建一个新的 DueyPackage 对象，或者修改现有对象
-                // 注意：getPackageFromDB 会尝试加载物品，但如果 processExpiredPackages 已经运行，物品可能已经被删除了
-                // 所以我们需要手动清空
-                dueypack = new DueyPackage(dueypack.getPackageId());
                 dueypack.setMessage(originalMessage + returnMessage);
-                dueypack.setSender(data.getSendername());
-                dueypack.setMesos(0);
-                dueypack.setReceiverId(data.getReceiverid().intValue());
-                dueypack.setSentTime(data.getTimestamp(), data.getType() == 1);
-                dueypack.setQuick(data.getType() == 1);
-                if (data.getExpireDate() != null) dueypack.setExpireTime(data.getExpireDate().getTime());
-                if (data.getDeliveryTime() != null) dueypack.setDeliveryTime(data.getDeliveryTime().getTime());
             }
             
             if (dueypack != null) {
@@ -327,8 +370,8 @@ public class DueyProcessor {
     }
 
     public static boolean insertPackageItem(int packageId, Item item) {
-        Pair<Item, InventoryType> dueyItem = new Pair<>(item, InventoryType.getByType(item.getItemType()));
-        ItemFactory.DUEY.saveItems(Collections.singletonList(dueyItem), packageId);
+        // 不再写入 inventoryitems 表
+        // 物品数据应在 createPackage 或 addPackageItemFromInventory 中通过更新 item_data 字段来保存
         return true;
     }
 
@@ -370,10 +413,11 @@ public class DueyProcessor {
             ItemInfoRtnDTO itemDTO = convertItemToDTO(item);
             try {
                 String itemDataJson = objectMapper.writeValueAsString(itemDTO);
-                UpdateChain.of(DueypackagesDO.class)
-                        .set(DueypackagesDO::getItemData, itemDataJson)
-                        .where(DueypackagesDO::getPackageid).eq(packageId)
-                        .update();
+                
+                DueypackagesDO updateDO = new DueypackagesDO();
+                updateDO.setItemData(itemDataJson);
+                DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+                mapper.updateByQuery(updateDO, QueryWrapper.create().where(DueypackagesDO::getPackageid).eq(packageId));
             } catch (JsonProcessingException e) {
                 log.error("更新快递包裹物品数据失败", e);
             }
@@ -564,11 +608,12 @@ public class DueyProcessor {
                 // 玩家删除包裹时，只是标记为已删除 (状态 4)
                 // removePackageFromDB(packageid);
                 
-                UpdateChain.of(DueypackagesDO.class)
-                        .set(DueypackagesDO::getChecked, 4) // 4 表示已删除
-                        .set(DueypackagesDO::getStatusTime, new Timestamp(System.currentTimeMillis())) // 记录删除时间
-                        .where(DueypackagesDO::getPackageid).eq(packageid)
-                        .update();
+                DueypackagesDO updateDO = new DueypackagesDO();
+                updateDO.setChecked(4); // 4 表示已删除
+                updateDO.setStatusTime(new Timestamp(System.currentTimeMillis())); // 记录删除时间
+                
+                DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+                mapper.updateByQuery(updateDO, QueryWrapper.create().where(DueypackagesDO::getPackageid).eq(packageid));
                 
                 // 同时清理关联的物品数据，因为物品已经进入玩家背包或者被删除了
                 // 恢复：清理物品数据，因为我们已经有了 JSON 备份
@@ -653,21 +698,21 @@ public class DueyProcessor {
         // 修改逻辑：不再删除包裹，而是更新状态为已领取 (checked = 2) 并更新状态变更时间为当前时间
         // dueyRemovePackage(c, packageId, false);
         
-        UpdateChain.of(DueypackagesDO.class)
-                .set(DueypackagesDO::getChecked, 2) // 2 表示已领取
-                .set(DueypackagesDO::getStatusTime, new Timestamp(System.currentTimeMillis())) // 记录领取时间
-                .where(DueypackagesDO::getPackageid).eq(packageId)
-                .update();
+        DueypackagesDO updateDO = new DueypackagesDO();
+        updateDO.setChecked(2); // 2 表示已领取
+        updateDO.setStatusTime(new Timestamp(System.currentTimeMillis())); // 记录领取时间
+        mapper.updateByQuery(updateDO, QueryWrapper.create().where(DueypackagesDO::getPackageid).eq(packageId));
         
         // 如果是退回的包裹 (type == 2)，需要将原包裹也标记为已领取
         if (dpData.getType() == 2 && dpData.getSenderid() != null && dpData.getSenderid() > 0) {
              // 退回包裹的 senderid 存储的是原包裹的 packageId
              long originalPackageId = dpData.getSenderid();
-             UpdateChain.of(DueypackagesDO.class)
-                     .set(DueypackagesDO::getChecked, 2)
+             
+             DueypackagesDO updateOriginalDO = new DueypackagesDO();
+             updateOriginalDO.setChecked(2);
+             mapper.updateByQuery(updateOriginalDO, QueryWrapper.create()
                      .where(DueypackagesDO::getPackageid).eq(originalPackageId)
-                     .and(DueypackagesDO::getChecked).eq(3) // 确保是已过期状态
-                     .update();
+                     .and(DueypackagesDO::getChecked).eq(3)); // 确保是已过期状态
         }
         
         // 从客户端UI中移除该包裹显示
@@ -771,14 +816,26 @@ public class DueyProcessor {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
         
         for (DueypackagesDO pkg : packages) {
+            // 再次检查状态，防止重复处理或处理已领取的包裹
+            // 注意：这里允许处理状态 5 (待退回)
+            if (pkg.getChecked() == 2 || pkg.getChecked() == 3 || pkg.getChecked() == 4) {
+                continue;
+            }
+
             // 1. 尝试恢复物品 (在删除之前)
             Item item = null;
             ItemInfoRtnDTO itemDTO = null;
             // 优先从 JSON 恢复，因为它是最准确的快照
             if (pkg.getItemData() != null && !pkg.getItemData().isEmpty()) {
                 try {
-                    itemDTO = objectMapper.readValue(pkg.getItemData(), ItemInfoRtnDTO.class);
-                    if (itemDTO != null) {
+                    if (pkg.getItemData().trim().startsWith("[")) {
+                        List<ItemInfoRtnDTO> list = objectMapper.readValue(pkg.getItemData(), objectMapper.getTypeFactory().constructCollectionType(List.class, ItemInfoRtnDTO.class));
+                        if (!list.isEmpty()) {
+                            itemDTO = list.get(0);
+                            item = restoreItemFromDTO(itemDTO);
+                        }
+                    } else {
+                        itemDTO = objectMapper.readValue(pkg.getItemData(), ItemInfoRtnDTO.class);
                         item = restoreItemFromDTO(itemDTO);
                     }
                 } catch (Exception e) {
@@ -792,45 +849,58 @@ public class DueyProcessor {
                 if (!items.isEmpty()) {
                     item = items.get(0).getLeft();
                     itemDTO = convertItemToDTO(item);
+                    // 这里不需要回写 JSON，因为马上就要创建新的退回包裹了
+                    // 也不需要删除旧表数据，因为下面 deletePackageFromInventoryDB 会被调用（虽然现在是空的，但我们可以手动清理）
+                    ItemFactory.DUEY.saveItems(new LinkedList<>(), pkg.getPackageid().intValue());
                 }
             }
 
             // 2. 退回逻辑
             // 检查 senderid 是否有效 (大于 0)
+            // 并且检查包裹类型，如果是退回包裹 (type == 2)，则不再退回，直接标记为过期
             Long senderId = pkg.getSenderid();
-            if (senderId != null && senderId > 0) {
+            if (senderId != null && senderId > 0 && pkg.getType() != 2) {
                 // 查找发件人是否存在
                 CharactersDO sender = charMapper.selectOneById(senderId);
                 
                 if (sender != null) {
-                    String receiverName = "未知";
-                    CharactersDO receiver = charMapper.selectOneById(pkg.getReceiverid());
-                    if (receiver != null) {
-                        receiverName = receiver.getName();
-                    }
-
-                    String returnMessage = String.format("您于 %s 寄给 %s 的包裹超时未领取，已自动退回。", 
-                            sdf.format(pkg.getTimestamp()), receiverName);
+                    // 检查是否已经存在对应的退回包裹 (type=2, senderid=pkg.packageid)
+                    QueryWrapper checkQuery = QueryWrapper.create()
+                            .where(DueypackagesDO::getType).eq(2)
+                            .and(DueypackagesDO::getSenderid).eq(pkg.getPackageid());
+                    long count = mapper.selectCountByQuery(checkQuery);
                     
-                    // 创建退回包裹
-                    // 发件人ID设为原包裹ID (pkg.getPackageid())，以便在领取时能关联回原包裹
-                    // 类型设为 2 (退回包裹)
-                    
-                    int returnPackageId = createPackage(pkg.getMesos().intValue(), returnMessage, "包裹超时退回", sender.getId(), false, item, pkg.getPackageid().intValue(), -1, 0, 2);
-                    if (returnPackageId != -1) {
-                        if (item != null) {
-                            insertPackageItem(returnPackageId, item);
+                    if (count == 0) {
+                        String receiverName = "未知";
+                        CharactersDO receiver = charMapper.selectOneById(pkg.getReceiverid());
+                        if (receiver != null) {
+                            receiverName = receiver.getName();
                         }
+    
+                        String returnMessage = String.format("您于 %s 寄给 %s 的包裹超时未领取，已自动退回。", 
+                                sdf.format(pkg.getTimestamp()), receiverName);
+                        
+                        // 创建退回包裹
+                        // 发件人ID设为原包裹ID (pkg.getPackageid())，以便在领取时能关联回原包裹
+                        // 类型设为 2 (退回包裹)
+                        
+                        int returnPackageId = createPackage(pkg.getMesos().intValue(), returnMessage, "包裹超时退回", sender.getId(), false, item, pkg.getPackageid().intValue(), -1, 0, 2);
+                        if (returnPackageId != -1) {
+                            if (item != null) {
+                                insertPackageItem(returnPackageId, item);
+                            }
+                        }
+                    } else {
+                        log.info("包裹 {} 已存在退回包裹，跳过创建。", pkg.getPackageid());
                     }
                 }
             }
 
             // 3. 标记原包裹为过期并清理数据
-            UpdateChain.of(DueypackagesDO.class)
-                    .set(DueypackagesDO::getChecked, 3)
-                    .set(DueypackagesDO::getStatusTime, new Timestamp(System.currentTimeMillis()))
-                    .where(DueypackagesDO::getPackageid).eq(pkg.getPackageid())
-                    .update();
+            DueypackagesDO updateDO = new DueypackagesDO();
+            updateDO.setChecked(3);
+            updateDO.setStatusTime(new Timestamp(System.currentTimeMillis()));
+            mapper.updateByQuery(updateDO, QueryWrapper.create().where(DueypackagesDO::getPackageid).eq(pkg.getPackageid()));
             
             deletePackageFromInventoryDB(pkg.getPackageid().intValue());
         }
