@@ -96,7 +96,7 @@ public class Storage {
         for (Pair<Item, InventoryType> item : ItemFactory.STORAGE.loadItems(ret.id, false)) {
             ret.items.add(item.getLeft());
         }
-        log.info("已加载账号ID: {} 的仓库，物品数量: {}", accountId, ret.items.size());
+//        log.info("已加载账号ID: {} 的仓库，物品数量: {}", accountId, ret.items.size());
 
         return ret;
     }
