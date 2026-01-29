@@ -5,9 +5,10 @@ import org.gms.client.cheatsystem.core.CheatManager;
 import org.gms.client.cheatsystem.core.CheatPlugin;
 import org.gms.client.cheatsystem.core.CheatPluginFactory;
 import org.gms.client.Character;
-import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.facade.CheatSystemLoggerFacade;
+import org.gms.logging.AuditLogger;
+import org.gms.logging.LogModule;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -38,7 +39,7 @@ public class CheatModuleManager {
         
         CheatManager cheatManager = new CheatManager(player);
         cheatManagers.put(player.getId(), cheatManager);
-        CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "为玩家创建辅助管理器", "INFO");
+        logCheatSystemEvent(player, "为玩家创建辅助管理器", "INFO");
         return cheatManager;
     }
     
@@ -86,7 +87,20 @@ public class CheatModuleManager {
         }
         
         if (pluginCount > 0) {
-            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "为玩家注册了 " + pluginCount + " 个辅助插件", "INFO");
+            logCheatSystemEvent(player, "为玩家注册了 " + pluginCount + " 个辅助插件", "INFO");
+        }
+    }
+
+    private void logCheatSystemEvent(Character player, String message, String level) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("characterId", player.getId());
+        data.put("characterName", player.getName());
+        data.put("message", message);
+        
+        if ("WARN".equals(level) || "ERROR".equals(level)) {
+             AuditLogger.error(LogModule.SYSTEM, "CHEAT_MODULE", data, null);
+        } else {
+             AuditLogger.info(LogModule.SYSTEM, "CHEAT_MODULE", data);
         }
     }
 }

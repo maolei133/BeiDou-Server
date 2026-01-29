@@ -21,6 +21,7 @@
  */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Job;
@@ -37,8 +38,7 @@ import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.MapId;
 import org.gms.constants.id.MobId;
 import org.gms.constants.skills.*;
-import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.facade.PlayerLoggerFacade;
+import org.gms.server.logging.AuditLogger;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.PlayerBuffValueHolder;
@@ -675,7 +675,13 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 finalDebugMessage.append(msg).append("\n");
             }
             // 记录玩家战斗日志
-            if (isCheat) PlayerLoggerFacade.logPlayerEventAuto(chr, DynamicCategoryManager.Category.MINOR_PLAYER_COMBAT, finalDebugMessage.toString(), "INFO");
+            if (isCheat) {
+                MapMessage msg = new MapMessage()
+                    .with("chr", chr.getName())
+                    .with("chrId", chr.getId())
+                    .with("msg", finalDebugMessage.toString());
+                AuditLogger.info("command", "player_combat", msg);
+            }
 //            System.out.println(finalDebugMessage.toString());
         }
 

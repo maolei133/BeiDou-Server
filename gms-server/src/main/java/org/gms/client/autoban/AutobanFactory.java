@@ -22,11 +22,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package org.gms.client.autoban;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
-import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.facade.SecurityLoggerFacade;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.gms.server.logging.AuditLogger;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -61,7 +59,6 @@ public enum AutobanFactory {
     MISS_HACK(7,SECONDS.toMillis(5), "MISS无敌"),
     MPCON(25, SECONDS.toMillis(30), "MP消耗");
 
-    private static final Logger log = LoggerFactory.getLogger(AutobanFactory.class);
     private static final Set<Integer> ignoredChrIds = new HashSet<>();
 
     private final int points;
@@ -126,22 +123,17 @@ public enum AutobanFactory {
             }
         }
         if (chr.getAutoBanManager().useAutoBanLog()) {
-//            Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常提示] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + this.getName() + " - " + reason));
-            log.warn("[异常提示] 玩家 {}({}) [Lv {}] 职业:{}({}) 在地图 {}({}) 坐标({},{}) 因触发 {} {}",
-                chr.getName(), 
-                chr.getId(), 
-                chr.getLevel(),
-                chr.getJob().getName(),
-                chr.getJob().getId(),
-                chr.getMap().getMapName(),
-                chr.getMapId(), 
-                chr.getPosition().x,
-                chr.getPosition().y,
-                this.getName(), 
-                reason);
+            // 使用 AuditLogger
+            MapMessage msg = new MapMessage()
+                .with("lvl", chr.getLevel())
+                .with("job", chr.getJob().getId())
+                .with("x", chr.getPosition().x)
+                .with("y", chr.getPosition().y)
+                .with("sub", this.getName())
+                .with("rsn", reason)
+                .with("msg", "异常提示");
             
-            // 根据新日志系统规则，添加新的日志记录信息
-            SecurityLoggerFacade.logSecurityEventAuto(chr, DynamicCategoryManager.Category.MINOR_HACK_DETECTION, reason, "WARN");
+            AuditLogger.info("autoban", "alert", msg);
         }
     }
 

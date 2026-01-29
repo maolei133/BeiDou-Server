@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration status="ERROR" monitorInterval="300" shutdownHook="disable">
+<Configuration status="ERROR" monitorInterval="300" shutdownHook="disable">
 
     <Properties>
         <property name="basePath">logs</property>
@@ -16,12 +16,33 @@
         <property name="output_log_level">INFO</property>
     </Properties>
 
-    <appenders>
+    <Appenders>
+        <!-- 1. 控制台：输出 INFO 及以上级别 -->
         <Console name="Console" target="SYSTEM_OUT">
             <ThresholdFilter level="${console_print_level}" onMatch="ACCEPT" onMismatch="DENY"/>
             <PatternLayout pattern="${console_log_pattern}"/>
         </Console>
 
+        <!-- 2. 业务审计日志：JSON 格式，全量 (Loki) -->
+        <RollingFile name="AuditLog" fileName="logs/audit/audit.json"
+                     filePattern="logs/audit/audit-%d{yyyy-MM-dd}.json.gz">
+            <JsonLayout compact="true" eventEol="true" properties="true"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+            </Policies>
+        </RollingFile>
+
+        <!-- 3. 错误独立日志：文本格式，方便快速查看 (Loki) -->
+        <RollingFile name="ErrorLog" fileName="logs/error/error.log"
+                     filePattern="logs/error/error-%d{yyyy-MM-dd}.log.gz">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n%throwable"/>
+            <ThresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+            </Policies>
+        </RollingFile>
+
+        <!-- 4. 旧版滚动日志 (保留以兼容旧习惯) -->
         <RollingFile name="RollingFile" fileName="${rolling_fileName}" filePattern="${rolling_filePattern}">
             <ThresholdFilter level="${file_print_level}" onMatch="ACCEPT" onMismatch="DENY"/>
             <PatternLayout pattern="${log_pattern}"/>
@@ -36,23 +57,33 @@
                 </Delete>
             </DefaultRolloverStrategy>
         </RollingFile>
-    </appenders>
+    </Appenders>
 
-    <loggers>
+    <Loggers>
+        <!-- 业务 Logger (Loki) -->
+        <Logger name="audit" level="INFO" additivity="false">
+            <AppenderRef ref="AuditLog"/>
+            <AppenderRef ref="ErrorLog"/> <!-- 错误同时也写到 ErrorLog -->
+            <AppenderRef ref="Console" level="WARN"/>  <!-- 错误同时也输出到控制台，但只显示WARN及以上 -->
+        </Logger>
+
         <!-- 关闭 Druid 日志输出 -->
         <Logger name="com.alibaba.druid" level="ERROR">
             <AppenderRef ref="Console"/>
         </Logger>
 
         <!-- 关闭 flyway 日志输出 -->
+<!--
         <Logger name="org.flywaydb" level="ERROR">
             <AppenderRef ref="Console"/>
         </Logger>
+-->
 
-        <root level="${output_log_level}">
-            <appender-ref ref="RollingFile"/>
-            <appender-ref ref="Console"/>
-        </root>
-    </loggers>
-
-</configuration>
+        <!-- 根 Logger -->
+        <Root level="${output_log_level}">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="RollingFile"/> <!-- 保留旧版文件日志 -->
+            <AppenderRef ref="ErrorLog"/>    <!-- 同时也记录错误到 Loki 专用错误日志 -->
+        </Root>
+    </Loggers>
+</Configuration>

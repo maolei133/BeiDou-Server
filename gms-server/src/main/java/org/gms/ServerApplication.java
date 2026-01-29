@@ -2,6 +2,8 @@ package org.gms;
 
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
+import org.gms.logging.AuditLogger;
+import org.gms.logging.LogModule;
 import org.gms.util.RequireUtil;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
@@ -16,7 +18,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.Map;
 
 @SpringBootApplication
 @MapperScan("org.gms.dao.mapper")
@@ -28,9 +32,24 @@ public class ServerApplication {
             initDb(args);
         } catch (Exception e) {
             log.error("自动创建数据库失败：", e);
+            // 记录到 Loki
+            Map<String, Object> logData = new HashMap<>();
+            logData.put("phase", "INIT_DB");
+            AuditLogger.error(LogModule.SYSTEM, "DB_INIT_FAILED", logData, e);
             return;
         }
+        
+        // 记录服务器启动日志
+        Map<String, Object> startData = new HashMap<>();
+        startData.put("status", "STARTING");
+        AuditLogger.info(LogModule.SYSTEM, "SERVER_START", startData);
+        
         SpringApplication.run(ServerApplication.class, args);
+        
+        // 记录服务器启动完成日志
+        Map<String, Object> startedData = new HashMap<>();
+        startedData.put("status", "STARTED");
+        AuditLogger.info(LogModule.SYSTEM, "SERVER_STARTED", startedData);
     }
 
     /**

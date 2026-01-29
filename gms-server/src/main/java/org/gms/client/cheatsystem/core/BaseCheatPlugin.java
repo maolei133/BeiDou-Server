@@ -4,12 +4,13 @@ import lombok.Getter;
 import lombok.Setter;
 import org.gms.client.Character;
 import org.gms.dao.entity.ExtendValueDO;
-import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.facade.CheatSystemLoggerFacade;
+import org.gms.logging.AuditLogger;
+import org.gms.logging.LogModule;
 import org.gms.util.ExtendUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -251,7 +252,17 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logPluginEventAuto(String minorCategory, String message, String level) {
         if (loggingEnabled && player != null) {
-            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, minorCategory, message, level);
+            Map<String, Object> data = new HashMap<>();
+            data.put("chrId", player.getId());
+            data.put("chr", player.getName());
+            data.put("msg", message);
+            data.put("category", minorCategory);
+            
+            if ("WARN".equals(level) || "ERROR".equals(level)) {
+                 AuditLogger.error(LogModule.SYSTEM, "CHEAT_PLUGIN", data, null);
+            } else {
+                 AuditLogger.info(LogModule.SYSTEM, "CHEAT_PLUGIN", data);
+            }
         }
     }
     
@@ -261,7 +272,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      * @param message 日志消息
      */
     protected void logPluginActivationAuto(String message) {
-        logPluginEventAuto(DynamicCategoryManager.Category.MINOR_PLUGIN_ACTIVATION, message, "INFO");
+        logPluginEventAuto("PLUGIN_ACTIVATION", message, "INFO");
     }
     
     /**
@@ -270,7 +281,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      * @param message 日志消息
      */
     protected void logPluginOperationAuto(String message) {
-        logPluginEventAuto(DynamicCategoryManager.Category.MINOR_PLUGIN_OPERATION, message, "INFO");
+        logPluginEventAuto("PLUGIN_OPERATION", message, "INFO");
     }
     
     /**

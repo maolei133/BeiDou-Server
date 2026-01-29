@@ -66,6 +66,7 @@ import org.gms.server.SystemRescue;
 import org.gms.server.ThreadManager;
 import org.gms.server.TimerManager;
 import org.gms.server.life.Monster;
+import org.gms.server.logging.AuditContext;
 import org.gms.server.maps.FieldLimit;
 import org.gms.server.maps.MapleMap;
 import org.gms.server.maps.MiniDungeonInfo;
@@ -223,6 +224,7 @@ public class Client extends ChannelInboundHandlerAdapter {
         if (handler != null && handler.validateState(this)) {
             try {
                 ThreadLocalUtil.setCurrentClient(this);
+                AuditContext.set(this);
                 MonitoredChrLogger.logPacketIfMonitored(this, opcode, packet.getBytes());
                 handler.handlePacket(packet, this);
             } catch (final Throwable t) {
@@ -231,6 +233,7 @@ public class Client extends ChannelInboundHandlerAdapter {
                         getAccountName(), chrInfo, packet, t);
                 enableActions();//解除客户端假死
             } finally {
+                AuditContext.clear();
                 ThreadLocalUtil.removeCurrentClient();
             }
         }

@@ -1,10 +1,11 @@
 package org.gms.client.cheatsystem.core;
 
 import org.gms.client.Character;
-import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.facade.CheatSystemLoggerFacade;
+import org.gms.logging.AuditLogger;
+import org.gms.logging.LogModule;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,7 +20,7 @@ public class CheatManager {
     public CheatManager(Character player) {
         this.player = player;
         if (player != null) {
-            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "创建辅助管理器实例", "INFO");
+            logCheatSystemEvent("创建辅助管理器实例", "INFO");
         }
     }
     
@@ -31,7 +32,7 @@ public class CheatManager {
         if (player != null) {
             plugin.initialize(player);
             plugins.put(plugin.getName(), plugin);
-            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "注册辅助插件: " + plugin.getName(), "INFO");
+            logCheatSystemEvent("注册辅助插件: " + plugin.getName(), "INFO");
         }
     }
     
@@ -44,7 +45,7 @@ public class CheatManager {
             CheatPlugin plugin = plugins.remove(pluginName);
             if (plugin != null) {
                 plugin.stop();
-                CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "注销辅助插件: " + pluginName, "INFO");
+                logCheatSystemEvent("注销辅助插件: " + pluginName, "INFO");
             }
         }
     }
@@ -74,7 +75,7 @@ public class CheatManager {
         if (player != null) {
             plugins.values().forEach(plugin -> {
                 plugin.start();
-                CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_ACTIVATION, "启动插件: " + plugin.getName(), "INFO");
+                logCheatSystemEvent("启动插件: " + plugin.getName(), "INFO");
             });
         }
     }
@@ -86,7 +87,7 @@ public class CheatManager {
         if (player != null) {
             plugins.values().forEach(plugin -> {
                 plugin.stop();
-                CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_ACTIVATION, "停止插件: " + plugin.getName(), "INFO");
+                logCheatSystemEvent("停止插件: " + plugin.getName(), "INFO");
             });
         }
     }
@@ -98,8 +99,21 @@ public class CheatManager {
         if (player != null) {
             plugins.values().forEach(plugin -> {
                 plugin.updateConfig();
-                CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "更新辅助插件配置: " + plugin.getName(), "INFO");
+                logCheatSystemEvent("更新辅助插件配置: " + plugin.getName(), "INFO");
             });
+        }
+    }
+
+    private void logCheatSystemEvent(String message, String level) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("chrId", player.getId());
+        data.put("chr", player.getName());
+        data.put("msg", message);
+        
+        if ("WARN".equals(level) || "ERROR".equals(level)) {
+             AuditLogger.error(LogModule.SYSTEM, "CHEAT_SYSTEM", data, null);
+        } else {
+             AuditLogger.info(LogModule.SYSTEM, "CHEAT_SYSTEM", data);
         }
     }
 }
