@@ -69,7 +69,7 @@ public final class AcceptFamilyHandler extends AbstractPacketHandler {
         if (inviter != null) {
             InviteResult inviteResult = InviteCoordinator.answerInvite(InviteType.FAMILY, c.getPlayer().getId(), c.getPlayer(), accept);
             if (inviteResult.result == InviteResultType.NOT_FOUND) {
-                return; //was never invited. (or expired on server only somehow?)
+                return; // 从未被邀请。（或者仅在服务器上过期了？）
             }
             if (accept) {
                 if (inviter.getFamily() != null) {
@@ -80,17 +80,25 @@ public final class AcceptFamilyHandler extends AbstractPacketHandler {
                             inviter.sendPacket(PacketCreator.sendFamilyMessage(1, 0));
                             return;
                         } else {
-                            // save
+                            // 保存
                             inviter.getFamily().addEntry(newEntry);
                             insertNewFamilyRecord(chr.getId(), inviter.getFamily().getID(), inviter.getId(), false);
                         }
-                    } else { //absorb target family
+                    } else { // 吸收目标家族
                         FamilyEntry targetEntry = chr.getFamilyEntry();
                         Family targetFamily = targetEntry.getFamily();
                         if (targetFamily.getLeader() != targetEntry) {
                             return;
                         }
                         if (inviter.getFamily().getTotalGenerations() + targetFamily.getTotalGenerations() <= GameConfig.getServerInt("family_max_generations")) {
+                            // 加入前检查循环
+                            // targetEntry 是加入的一方（成为晚辈）
+                            // inviter.getFamilyEntry() 是长辈
+                            // 我们需要确保 inviter 不是 targetEntry 的后代
+                            // 但是，targetEntry 是另一个家族的族长，所以除非有跨家族的奇怪现象或者他们在同一个家族（这在其他地方检查过），否则 inviter 不可能是后代
+                            // 主要风险是如果 inviter 已经以某种方式链接到 targetEntry。
+                            // FamilyEntry 中的 join() 方法应该处理 setSenior 调用，该调用现在具有循环检测。
+                            
                             targetEntry.join(inviter.getFamilyEntry());
                         } else {
                             inviter.sendPacket(PacketCreator.sendFamilyMessage(76, 0));
@@ -98,7 +106,7 @@ public final class AcceptFamilyHandler extends AbstractPacketHandler {
                             return;
                         }
                     }
-                } else { // create new family
+                } else { // 创建新家族
                     if (chr.getFamily() != null && inviter.getFamily() != null && chr.getFamily().getTotalGenerations() + inviter.getFamily().getTotalGenerations() >= GameConfig.getServerInt("family_max_generations")) {
                         inviter.sendPacket(PacketCreator.sendFamilyMessage(76, 0));
                         chr.sendPacket(PacketCreator.sendFamilyMessage(76, 0));
@@ -108,17 +116,21 @@ public final class AcceptFamilyHandler extends AbstractPacketHandler {
                     c.getWorldServer().addFamily(newFamily.getID(), newFamily);
                     FamilyEntry inviterEntry = new FamilyEntry(newFamily, inviter.getId(), inviter.getName(), inviter.getLevel(), inviter.getJob());
                     inviterEntry.setCharacter(inviter);
-                    newFamily.setLeader(inviter.getFamilyEntry());
+                    newFamily.setLeader(inviterEntry);
                     newFamily.addEntry(inviterEntry);
-                    if (chr.getFamily() == null) { //completely new family
+                    if (chr.getFamily() == null) { // 完全是新家族
                         FamilyEntry newEntry = new FamilyEntry(newFamily, chr.getId(), chr.getName(), chr.getLevel(), chr.getJob());
                         newEntry.setCharacter(chr);
-                        newEntry.setSenior(inviterEntry, true);
-                        // save new family
+                        if (!newEntry.setSenior(inviterEntry, true)) {
+                             // 理论上对于新家族不应该发生这种情况，但最好处理一下
+                             inviter.sendPacket(PacketCreator.sendFamilyMessage(1, 0));
+                             return;
+                        }
+                        // 保存新家族
                         insertNewFamilyRecord(inviter.getId(), newFamily.getID(), 0, true);
-                        insertNewFamilyRecord(chr.getId(), newFamily.getID(), inviter.getId(), false); // char was already saved from setSenior() above
+                        insertNewFamilyRecord(chr.getId(), newFamily.getID(), inviter.getId(), false); // 角色已在上面的 setSenior() 中保存
                         newFamily.setMessage("", true);
-                    } else { //new family for inviter, absorb invitee family
+                    } else { // 邀请者的新家族，吸收被邀请者的家族
                         insertNewFamilyRecord(inviter.getId(), newFamily.getID(), 0, true);
                         newFamily.setMessage("", true);
                         chr.getFamilyEntry().join(inviterEntry);

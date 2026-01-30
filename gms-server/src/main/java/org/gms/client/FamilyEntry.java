@@ -54,14 +54,14 @@ public class FamilyEntry {
     private final FamilyEntry[] juniors = new FamilyEntry[2];
     private final int[] entitlements = new int[11];
     private volatile int reputation, totalReputation;
-    private volatile int todaysRep, repsToSenior; //both are daily values
+    private volatile int todaysRep, repsToSenior; // 都是每日值
     private volatile int totalJuniors, totalSeniors;
 
     private volatile int generation;
 
-    private volatile boolean repChanged; //used to ignore saving unchanged rep values
+    private volatile boolean repChanged; // 用于忽略保存未更改的声望值
 
-    // cached values for offline players
+    // 离线玩家的缓存值
     private String charName;
     private int level;
     private Job job;
@@ -102,20 +102,20 @@ public class FamilyEntry {
         Family oldFamily = getFamily();
         Family newFamily = senior.getFamily();
         setSenior(senior, false);
-        addSeniorCount(newFamily.getTotalGenerations(), newFamily); //count will be overwritten by doFullCount()
-        newFamily.getLeader().doFullCount(); //easier than keeping track of numbers
+        addSeniorCount(newFamily.getTotalGenerations(), newFamily); // 计数将被 doFullCount() 覆盖
+        newFamily.getLeader().doFullCount(); // 比跟踪数字更容易
         oldFamily.setMessage(null, true);
         newFamily.addEntryTree(this);
         Server.getInstance().getWorld(oldFamily.getWorld()).removeFamily(oldFamily.getID());
 
-        //db
+        // 数据库操作
         TransactionTemplate transactionTemplate = SpringContextUtil.getBean(TransactionTemplate.class);
         transactionTemplate.executeWithoutResult(status -> {
             try {
                 boolean success = updateDBChangeFamily(getChrId(), newFamily.getID(), senior.getChrId());
-                for (FamilyEntry junior : juniors) { // better to duplicate this than the SQL code
+                for (FamilyEntry junior : juniors) { // 最好复制这个而不是 SQL 代码
                     if (junior != null) {
-                        success = junior.updateNewFamilyDB(); // recursively updates juniors in db
+                        success = junior.updateNewFamilyDB(); // 递归更新数据库中的晚辈
                         if (!success) {
                             break;
                         }
@@ -123,11 +123,11 @@ public class FamilyEntry {
                 }
                 if (!success) {
                     status.setRollbackOnly();
-                    log.error("Could not absorb {}'s family into {}'s family. (SQL ERROR)", oldFamily.getName(), newFamily.getName());
+                    log.error("无法将 {} 的家族合并到 {} 的家族中。(SQL 错误)", oldFamily.getName(), newFamily.getName());
                 }
             } catch (Exception e) {
                 status.setRollbackOnly();
-                log.error("Could not get connection to DB when joining families", e);
+                log.error("合并家族时无法连接到数据库", e);
             }
         });
     }
@@ -151,16 +151,16 @@ public class FamilyEntry {
         this.repsToSenior = 0;
         this.repChanged = true;
         family.setMessage("", true);
-        doFullCount(); //to make sure all counts are correct
-        // update db
+        doFullCount(); // 确保所有计数正确
+        // 更新数据库
         TransactionTemplate transactionTemplate = SpringContextUtil.getBean(TransactionTemplate.class);
         transactionTemplate.executeWithoutResult(status -> {
             try {
                 boolean success = updateDBChangeFamily(getChrId(), getFamily().getID(), 0);
 
-                for (FamilyEntry junior : juniors) { // better to duplicate this than the SQL code
+                for (FamilyEntry junior : juniors) { // 最好复制这个而不是 SQL 代码
                     if (junior != null) {
-                        success = junior.updateNewFamilyDB(); // recursively updates juniors in db
+                        success = junior.updateNewFamilyDB(); // 递归更新数据库中的晚辈
                         if (!success) {
                             break;
                         }
@@ -168,11 +168,11 @@ public class FamilyEntry {
                 }
                 if (!success) {
                     status.setRollbackOnly();
-                    log.error("Could not fork family with new leader {}. (Old senior: {}, leader: {})", getName(), oldSenior.getName(), oldFamily.getLeader().getName());
+                    log.error("无法使用新族长 {} 分离家族。(旧长辈: {}, 族长: {})", getName(), oldSenior.getName(), oldFamily.getLeader().getName());
                 }
             } catch (Exception e) {
                 status.setRollbackOnly();
-                log.error("Could not get connection to DB when forking families", e);
+                log.error("分离家族时无法连接到数据库", e);
             }
         });
     }
@@ -202,13 +202,13 @@ public class FamilyEntry {
                     .where(FamilyCharacterDO::getCid).eq(cid)
                     .update();
         } catch (Exception e) {
-            log.error("Could not update family id in 'family_character' for chrId {}. (fork)", cid, e);
+            log.error("无法更新角色ID {} 在 'family_character' 表中的家族ID。(分离)", cid, e);
             return false;
         }
         return true;
     }
 
-    private synchronized void addSeniorCount(int seniorCount, Family newFamily) { // traverses tree and subtracts seniors and updates family
+    private synchronized void addSeniorCount(int seniorCount, Family newFamily) { // 遍历树并减去长辈数并更新家族
         if (newFamily != null) {
             this.family = newFamily;
         }
@@ -221,7 +221,7 @@ public class FamilyEntry {
         }
     }
 
-    private synchronized void addJuniorCount(int juniorCount) { // climbs tree and adds junior count
+    public synchronized void addJuniorCount(int juniorCount) { // 爬树并增加晚辈计数
         setTotalJuniors(getTotalJuniors() + juniorCount);
         FamilyEntry senior = getSenior();
         if (senior != null) {
@@ -320,7 +320,7 @@ public class FamilyEntry {
         int actualGain = gain;
         FamilyEntry senior = getSenior();
         if (senior != null && senior.getLevel() < getLevel() && gain > 0) {
-            actualGain /= 2; //don't halve negative values
+            actualGain /= 2; // 不要减半负值
         }
         if (senior != null) {
             senior.gainReputation(actualGain, true, this);
@@ -352,8 +352,23 @@ public class FamilyEntry {
         return senior;
     }
 
+    private boolean isDescendant(FamilyEntry entry) {
+        for (FamilyEntry junior : juniors) {
+            if (junior != null) {
+                if (junior == entry || junior.isDescendant(entry)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public synchronized boolean setSenior(FamilyEntry senior, boolean save) {
         if (this.senior == senior) {
+            return false;
+        }
+        if (senior != null && (senior == this || isDescendant(senior))) {
+            log.warn("检测到家族树循环: {} 不能成为 {} 的长辈", senior.getName(), getName());
             return false;
         }
         FamilyEntry oldSenior = this.senior;
@@ -388,7 +403,7 @@ public class FamilyEntry {
                     .where(FamilyCharacterDO::getCid).eq(cid)
                     .update();
         } catch (Exception e) {
-            log.error("Could not update seniorId in 'family_character' for chrId {}", cid, e);
+            log.error("无法更新角色ID {} 在 'family_character' 表中的长辈ID", cid, e);
             return false;
         }
         return updateCharacterFamilyDB(cid, familyid, false);
@@ -401,7 +416,7 @@ public class FamilyEntry {
                     .where(CharactersDO::getId).eq(charid)
                     .update();
         } catch (Exception e) {
-            log.error("Could not update familyId in 'characters' for chrId {} when changing family. {}", charid, fork ? "(fork)" : "", e);
+            log.error("更改家族时无法更新角色ID {} 在 'characters' 表中的家族ID。{}", charid, fork ? "(分离)" : "", e);
             return false;
         }
         return true;
@@ -420,7 +435,7 @@ public class FamilyEntry {
         return null;
     }
 
-    public int getJuniorCount() { //close enough to be relatively consistent to multiple threads (and the result is not vital)
+    public int getJuniorCount() { // 足够接近，对于多线程相对一致（结果并不重要）
         int juniorCount = 0;
         if (juniors[0] != null) {
             juniorCount++;
@@ -433,7 +448,7 @@ public class FamilyEntry {
 
     public synchronized boolean addJunior(FamilyEntry newJunior) {
         for (int i = 0; i < juniors.length; i++) {
-            if (juniors[i] == null) { // successfully add new junior to family
+            if (juniors[i] == null) { // 成功添加新晚辈到家族
                 juniors[i] = newJunior;
                 addJuniorCount(1);
                 getFamily().addEntry(newJunior);
@@ -443,7 +458,7 @@ public class FamilyEntry {
         return false;
     }
 
-    public synchronized boolean isJunior(FamilyEntry entry) { //require locking since result accuracy is vital
+    public synchronized boolean isJunior(FamilyEntry entry) { // 需要锁定，因为结果准确性至关重要
         if (juniors[0] == entry) {
             return true;
         } else {
@@ -512,14 +527,14 @@ public class FamilyEntry {
     }
 
     /**
-     * Traverses entire family tree to update senior/junior counts. Call on leader.
+     * 遍历整个家族树以更新长辈/晚辈计数。在族长上调用。
      */
     public synchronized void doFullCount() {
         Pair<Integer, Integer> counts = this.traverseAndUpdateCounts(0);
         getFamily().setTotalGenerations(counts.getLeft() + 1);
     }
 
-    private Pair<Integer, Integer> traverseAndUpdateCounts(int seniors) { // recursion probably limits family size, but it should handle a depth of a few thousand
+    private Pair<Integer, Integer> traverseAndUpdateCounts(int seniors) { // 递归可能会限制家族大小，但它应该能处理几千的深度
         setTotalSeniors(seniors);
         this.generation = seniors;
         int juniorCount = 0;
@@ -527,14 +542,14 @@ public class FamilyEntry {
         for (FamilyEntry entry : juniors) {
             if (entry != null) {
                 Pair<Integer, Integer> counts = entry.traverseAndUpdateCounts(seniors + 1);
-                juniorCount += counts.getRight(); //total juniors
+                juniorCount += counts.getRight(); // 总晚辈数
                 if (counts.getLeft() > highestGeneration) {
                     highestGeneration = counts.getLeft();
                 }
             }
         }
         setTotalJuniors(juniorCount);
-        return new Pair<>(highestGeneration, juniorCount); //creating new objects to return is a bit inefficient, but cleaner than packing into a long
+        return new Pair<>(highestGeneration, juniorCount); // 创建新对象返回有点低效，但比打包成 long 更干净
     }
 
     public boolean useEntitlement(FamilyEntitlement entitlement) {
@@ -551,7 +566,7 @@ public class FamilyEntry {
             entitlements[id]++;
             return true;
         } else {
-            log.error("Could not insert new row in 'family_entitlement' for chr {}", getName());
+            log.error("无法为角色 {} 在 'family_entitlement' 表中插入新行", getName());
             return false;
         }
     }
@@ -566,7 +581,7 @@ public class FamilyEntry {
             entitlements[id] = 0;
             return true;
         } else {
-            log.error("Could not refund family entitlement \"{}\" for chr {}", entitlement.getName(), getName());
+            log.error("无法为角色 {} 退还家族特权 \"{}\"", getName(), entitlement.getName());
             return false;
         }
     }
@@ -602,7 +617,7 @@ public class FamilyEntry {
                     .where(FamilyCharacterDO::getCid).eq(getChrId())
                     .update();
         } catch (Exception e) {
-            log.error("Failed to autosave rep to 'family_character' for chrId {}", getChrId(), e);
+            log.error("无法自动保存角色ID {} 的声望到 'family_character' 表", getChrId(), e);
             return false;
         }
         return true;
