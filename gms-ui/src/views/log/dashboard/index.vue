@@ -914,12 +914,16 @@
   const saveLayout = async () => {
     savingLayout.value = true;
     try {
-      await saveConfigFile(
-        'dashboard-layout.json',
-        JSON.stringify(charts.value)
-      );
+      // 显式深拷贝，确保序列化纯数据
+      const dataToSave = JSON.parse(JSON.stringify(charts.value));
+      // eslint-disable-next-line no-console
+      console.log('Saving layout data:', dataToSave);
+
+      await saveConfigFile('dashboard-layout.json', JSON.stringify(dataToSave));
       Message.success(t('log.dashboard.custom.message.save.success'));
     } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Save layout failed:', err);
       Message.error(t('log.dashboard.custom.message.save.fail'));
     } finally {
       savingLayout.value = false;
@@ -930,15 +934,46 @@
     try {
       const { data } = await readConfigFile('dashboard-layout.json');
       if (data) {
-        charts.value = JSON.parse(data);
-        charts.value.forEach((c) => {
-          if (!c.height) c.height = 300;
-        });
+        let parsed = typeof data === 'string' ? JSON.parse(data) : data;
+
+        // 兼容处理：如果文件内容被错误地包装了（例如包含 requestId 和 data 字段）
+        if (parsed && !Array.isArray(parsed) && parsed.data) {
+          // 如果 data 字段是字符串（被二次序列化了），尝试解析它
+          if (typeof parsed.data === 'string') {
+            try {
+              parsed = JSON.parse(parsed.data);
+            } catch (e) {
+              parsed = parsed.data;
+            }
+          } else {
+            parsed = parsed.data;
+          }
+        }
+
+        // 再次检查是否为字符串（处理可能的双重序列化）
+        if (typeof parsed === 'string') {
+          try {
+            parsed = JSON.parse(parsed);
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        if (Array.isArray(parsed)) {
+          charts.value = parsed;
+          charts.value.forEach((c) => {
+            if (!c.height) c.height = 300;
+          });
+        } else {
+          // 如果解析结果不是数组，回退到默认图表
+          charts.value = getDefaultCharts();
+        }
       } else {
-        // 如果文件不存在或为空，加载默认图表
         charts.value = getDefaultCharts();
       }
     } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to load layout file, using default charts:', err);
       charts.value = getDefaultCharts();
     }
   };
