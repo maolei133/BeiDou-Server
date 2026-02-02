@@ -180,9 +180,11 @@ public class Pet extends Item {
         if (petz != null) {
             owner.forceUpdateItem(petz);
         }
-        ItemVacPlugin itemVacPlugin = owner.getCheatManager().getPlugin("ItemVac");
-        if (itemVacPlugin != null) {
-            itemVacPlugin.updatePetVacParam();
+        if (owner.getCheatManager() != null) {
+            ItemVacPlugin itemVacPlugin = owner.getCheatManager().getPlugin("ItemVac");
+            if (itemVacPlugin != null) {
+                itemVacPlugin.updatePetVacParam();
+            }
         }
     }
 
