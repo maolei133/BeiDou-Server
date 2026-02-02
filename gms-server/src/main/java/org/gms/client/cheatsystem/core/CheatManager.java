@@ -1,11 +1,13 @@
 package org.gms.client.cheatsystem.core;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
-import org.gms.logging.AuditLogger;
-import org.gms.logging.LogModule;
+import org.gms.server.logging.AuditContext;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -105,15 +107,27 @@ public class CheatManager {
     }
 
     private void logCheatSystemEvent(String message, String level) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("chrId", player.getId());
-        data.put("chr", player.getName());
-        data.put("msg", message);
-        
-        if ("WARN".equals(level) || "ERROR".equals(level)) {
-             AuditLogger.error(LogModule.SYSTEM, "CHEAT_SYSTEM", data, null);
-        } else {
-             AuditLogger.info(LogModule.SYSTEM, "CHEAT_SYSTEM", data);
+        // 确保上下文存在
+        boolean contextSet = false;
+        if (AuditContext.get().isEmpty() && player != null && player.getClient() != null) {
+            AuditContext.set(player.getClient());
+            contextSet = true;
+        }
+
+        try {
+            MapMessage data = new MapMessage()
+                .with("msg", message);
+            
+            if ("WARN".equals(level) || "ERROR".equals(level)) {
+                 AuditLogger.error(LogModule.PLUGIN, LogAction.PLUGIN_ERROR, message, null);
+            } else {
+                 AuditLogger.info(LogModule.PLUGIN, LogAction.PLUGIN_USE, data);
+            }
+        } finally {
+            // 如果是我们临时设置的上下文，使用完后清理，避免污染线程
+            if (contextSet) {
+                AuditContext.clear();
+            }
         }
     }
 }

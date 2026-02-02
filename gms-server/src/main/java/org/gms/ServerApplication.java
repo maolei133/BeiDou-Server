@@ -2,8 +2,9 @@ package org.gms;
 
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
-import org.gms.logging.AuditLogger;
-import org.gms.logging.LogModule;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.util.RequireUtil;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
@@ -33,23 +34,17 @@ public class ServerApplication {
         } catch (Exception e) {
             log.error("自动创建数据库失败：", e);
             // 记录到 Loki
-            Map<String, Object> logData = new HashMap<>();
-            logData.put("phase", "INIT_DB");
-            AuditLogger.error(LogModule.SYSTEM, "DB_INIT_FAILED", logData, e);
+            AuditLogger.error(LogModule.SYSTEM, LogAction.ERROR, "DB_INIT_FAILED", e);
             return;
         }
         
         // 记录服务器启动日志
-        Map<String, Object> startData = new HashMap<>();
-        startData.put("status", "STARTING");
-        AuditLogger.info(LogModule.SYSTEM, "SERVER_START", startData);
+        AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_START, "STARTING");
         
         SpringApplication.run(ServerApplication.class, args);
         
         // 记录服务器启动完成日志
-        Map<String, Object> startedData = new HashMap<>();
-        startedData.put("status", "STARTED");
-        AuditLogger.info(LogModule.SYSTEM, "SERVER_STARTED", startedData);
+        AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_START, "STARTED");
     }
 
     /**

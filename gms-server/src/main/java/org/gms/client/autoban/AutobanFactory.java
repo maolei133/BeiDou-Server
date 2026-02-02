@@ -25,6 +25,8 @@ package org.gms.client.autoban;
 import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -125,15 +127,15 @@ public enum AutobanFactory {
         if (chr.getAutoBanManager().useAutoBanLog()) {
             // 使用 AuditLogger
             MapMessage msg = new MapMessage()
-                .with("lvl", chr.getLevel())
-                .with("job", chr.getJob().getId())
+                //.with("lvl", chr.getLevel()) // 已自动注入
+                //.with("job", chr.getJob().getId()) // 已自动注入
                 .with("x", chr.getPosition().x)
                 .with("y", chr.getPosition().y)
                 .with("sub", this.getName())
                 .with("rsn", reason)
                 .with("msg", "异常提示");
             
-            AuditLogger.info("autoban", "alert", msg);
+            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, msg);
         }
     }
 

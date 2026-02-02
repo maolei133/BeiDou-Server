@@ -155,6 +155,9 @@ public class Client extends ChannelInboundHandlerAdapter {
     @Getter
     @Setter
     private String tempPassword = null;
+    
+    // 缓存已加载的角色列表，用于角色选择时快速获取信息
+    private List<Character> loadedChars = new ArrayList<>();
 
     public enum Type {
         LOGIN,
@@ -356,7 +359,23 @@ public class Client extends ChannelInboundHandlerAdapter {
         } catch (Exception e) {
             e.printStackTrace();
         }
+        // 缓存加载的角色列表
+        this.loadedChars = chars;
         return chars;
+    }
+    
+    /**
+     * 从缓存中获取已加载的角色
+     * @param charId 角色ID
+     * @return 角色对象，如果未找到则返回 null
+     */
+    public Character getLoadedChar(int charId) {
+        for (Character chr : loadedChars) {
+            if (chr.getId() == charId) {
+                return chr;
+            }
+        }
+        return null;
     }
 
     public List<String> loadCharacterNames(int worldId) {
@@ -1044,6 +1063,7 @@ public class Client extends ChannelInboundHandlerAdapter {
         this.birthday = null;
         this.engines = null;
         this.player = null;
+        this.loadedChars.clear();
     }
 
     public void setCharacterOnSessionTransitionState(int cid) {

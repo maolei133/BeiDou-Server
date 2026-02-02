@@ -12,6 +12,8 @@ import org.gms.client.cheatsystem.plugin.MobVacPlugin;
 import org.gms.config.GameConfig;
 import org.gms.constants.skills.*;
 import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.net.server.Server;
 import org.gms.server.StatEffect;
 import org.gms.server.life.MobSkillFactory;
@@ -129,6 +131,10 @@ public class AutobanManager {
         return GameConfig.getServerBoolean("anti_cheat_auto_losehpmp");
     }
 
+    public int addPoint(AutobanFactory fac, String reason) {
+        return addPoint(fac, reason, null);
+    }
+
     /**
      * 添加违规点数
      * 当惩罚点数达到阈值时清零惩罚点数并增加封号点数
@@ -136,9 +142,10 @@ public class AutobanManager {
      *
      * @param fac 违规类型工厂
      * @param reason 违规原因描述
+     * @param extraData 额外数据 (如怪物信息)
      * @return 1-已封号, 0-需要惩罚, -1-未触发任何操作
      */
-    public int addPoint(AutobanFactory fac, String reason) {
+    public int addPoint(AutobanFactory fac, String reason, MapMessage extraData) {
         if (!useAntiCheat()) return -1;
         // GM或已被封禁的玩家不处理
         if (chr.gmLevel() >= 4 || chr.isBanned()) {
@@ -164,18 +171,18 @@ public class AutobanManager {
         // 记录日志
         if (useAutoBanLog() && (fac != AutobanFactory.FAST_ATTACK && currentPunishPoints >= (fac.getMaximum() * 0.90))) {
             MapMessage msg = new MapMessage()
-                .with("chr", chr.getName())
-                .with("chrId", chr.getId())
-                .with("lvl", chr.getLevel())
-                .with("job", chr.getJob().getId())
-                .with("map", chr.getMapId())
                 .with("x", chr.getPosition().x)
                 .with("y", chr.getPosition().y)
                 .with("type", fac.getName())
                 .with("reason", reason)
-                .with("points", currentPunishPoints)
-                .with("msg", "异常预警");
-            AuditLogger.info("autoban", "warning", msg);
+                .with("points", currentPunishPoints);
+            
+            if (extraData != null) {
+                // 使用 forEach 并显式转换类型，避免 raw type 导致的编译错误
+                extraData.getData().forEach((k, v) -> msg.with(String.valueOf(k), String.valueOf(v)));
+            }
+            
+            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, msg);
         }
 
         // 惩罚点数达到最大值时增加封号点数并清零惩罚点数
@@ -199,38 +206,40 @@ public class AutobanManager {
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + fac.getName() + " 而被断开连接"));
                     if (useAutoBanLog()) {
                         MapMessage msg = new MapMessage()
-                            .with("chr", chr.getName())
-                            .with("map", chr.getMapId())
                             .with("type", fac.getName())
-                            .with("reason", reason)
-                            .with("msg", "异常触发-断开连接");
-                        AuditLogger.info("autoban", "disconnect", msg);
+                            .with("reason", reason);
+                        if (extraData != null) {
+                            extraData.getData().forEach((k, v) -> msg.with(String.valueOf(k), String.valueOf(v)));
+                        }
+                        AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DISCONNECT, msg);
                     }
                     return 1;
                 } else if (useAutoBanLog()) {
                     // 记录日志但不执行封号
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + fac.getName() + " 但未启用自动封禁，因此无事发生。"));
                     MapMessage msg = new MapMessage()
-                        .with("chr", chr.getName())
-                        .with("map", chr.getMapId())
                         .with("type", fac.getName())
                         .with("reason", reason)
-                        .with("msg", "异常触发-未启用封禁");
-                    AuditLogger.info("autoban", "detected", msg);
+                        .with("msg", "未启用封禁");
+                    if (extraData != null) {
+                        extraData.getData().forEach((k, v) -> msg.with(String.valueOf(k), String.valueOf(v)));
+                    }
+                    AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DETECTED, msg);
                 }
             } else {
                 // 记录日志
                 if (useAutoBanLog()) {
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 触发 " + fac.getName() + " - " + reason));
                     MapMessage msg = new MapMessage()
-                        .with("chr", chr.getName())
-                        .with("map", chr.getMapId())
                         .with("type", fac.getName())
                         .with("reason", reason)
                         .with("points", fac.getMaximum())
                         .with("banPoints", currentBanPoints)
-                        .with("msg", "异常触发-增加封号点数");
-                    AuditLogger.info("autoban", "ban_point", msg);
+                        .with("msg", "增加封号点数");
+                    if (extraData != null) {
+                        extraData.getData().forEach((k, v) -> msg.with(String.valueOf(k), String.valueOf(v)));
+                    }
+                    AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DETECTED, msg);
                 }
             }
             return 0; // 需要惩罚但未达到封号条件
@@ -249,8 +258,7 @@ public class AutobanManager {
     public void applyLoseHpMp(int hpToLose, int mpToLose) {
         if (!useAntiCheatLoseHpMp() || chr == null || chr.gmLevel() >= 4) {
             if (chr.gmLevel() >= 4) {
-                AuditLogger.info("autoban", "skip_punish", new MapMessage()
-                    .with("chr", chr.getName())
+                AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, new MapMessage()
                     .with("reason", "GM等级>=4")
                     .with("msg", "跳过HP/MP扣除惩罚"));
             }
@@ -267,8 +275,7 @@ public class AutobanManager {
 
         // 记录日志
         if (useAutoBanLog()) {
-            AuditLogger.info("autoban", "punish_hpmp", new MapMessage()
-                .with("chr", chr.getName())
+            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, new MapMessage()
                 .with("hpLoss", actualHpLoss)
                 .with("mpLoss", actualMpLoss)
                 .with("msg", "扣除HP/MP惩罚"));
@@ -305,8 +312,7 @@ public class AutobanManager {
         MobSkillFactory.getMobSkill(MobSkillType.SEAL, 1).ifPresent(skill -> chr.giveDebuff(Disease.SEAL, skill, duration));
         MobSkillFactory.getMobSkill(MobSkillType.DARKNESS, 1).ifPresent(skill -> chr.giveDebuff(Disease.DARKNESS, skill, duration));
         if (useAutoBanLog()) {
-            AuditLogger.info("autoban", "punish_debuff", new MapMessage()
-                .with("chr", chr.getName())
+            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, new MapMessage()
                 .with("duration", duration)
                 .with("msg", "施加Debuff惩罚"));
         }
@@ -448,8 +454,7 @@ public class AutobanManager {
             if (currentCount >= times) {
                 if (useAutoBan()) {
                     chr.getClient().disconnect(false, false);
-                    AuditLogger.info("autoban", "spam_disconnect", new MapMessage()
-                        .with("chr", chr.getName())
+                    AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DISCONNECT, new MapMessage()
                         .with("type", type)
                         .with("msg", "频繁操作断开连接"));
                 }
@@ -737,10 +742,15 @@ public class AutobanManager {
         }
 
         if (distance > distanceToDetect * 1.15) {
+            MapMessage extra = new MapMessage();
+            if (monster != null) {
+                extra.with("mob", monster.getId())
+                     .with("mobName", monster.getName());
+            }
             addPoint(AutobanFactory.DISTANCE_HACK,
                     " 尝试使用: " + (attackInfo.skill > 0 ? SkillFactory.getSkillName(attackInfo.skill) + "[Lv." + attackInfo.skilllevel + "](" + attackInfo.skill + ")" : "普通攻击") +
                     " 对怪物：" + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null")+
-                    " 距离：" + distance + " 上限：" + distanceToDetect + " 已作废");
+                    " 距离：" + distance + " 上限：" + distanceToDetect + " 已作废", extra);
             monster.refreshMobPosition();
             return true;
         }
@@ -759,10 +769,15 @@ public class AutobanManager {
     public boolean checkFixedDamage(int totDamageToOneMonster, StatEffect attackEffect, int skillId, int skillLevel, Monster monster) {
         if (!useAntiCheat()) return false;
         if (attackEffect.getFixDamage() != -1 && totDamageToOneMonster != attackEffect.getFixDamage() && totDamageToOneMonster != 0) {
+            MapMessage extra = new MapMessage();
+            if (monster != null) {
+                extra.with("mob", monster.getId())
+                     .with("mobName", monster.getName());
+            }
             int retban = addPoint(AutobanFactory.DAMAGE_FIX,
                     "尝试使用: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" +
                             " 对怪物" + (monster != null ? monster.getName() + "[Lv." + monster.getLevel() + "](" + monster.getId() + ")" : "null") +
-                            " 造成固定伤害 " + totDamageToOneMonster + " 已作废"
+                            " 造成固定伤害 " + totDamageToOneMonster + " 已作废", extra
             );
             if (retban == 0) {
                 applyLoseHpMp(totDamageToOneMonster, totDamageToOneMonster, "检测到固定伤害，");
@@ -785,10 +800,15 @@ public class AutobanManager {
         if (!useAntiCheat() || numDamage <= maxAttack) {
             return numDamage;
         }
+        MapMessage extra = new MapMessage();
+        if (monster != null) {
+            extra.with("mob", monster.getId())
+                 .with("mobName", monster.getName());
+        }
         addPoint(AutobanFactory.DAMAGE_SEGMENTS_HACK,
                 (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
                 " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
-                " 段数: " + numDamage + " 上限: " + maxAttack + " 已纠正: " + maxAttack
+                " 段数: " + numDamage + " 上限: " + maxAttack + " 已纠正: " + maxAttack, extra
         );
         return maxAttack;
     }
@@ -809,10 +829,15 @@ public class AutobanManager {
 
         // 如果伤害超过我们计算值的2.00倍，则添加一个自动封禁点数，并将伤害调整为上限值。
         if (damage < 0 || damage > maxWithCrit * 1.6) {
+            MapMessage extra = new MapMessage();
+            if (monster != null) {
+                extra.with("mob", monster.getId())
+                     .with("mobName", monster.getName());
+            }
             int tmpretban = addPoint(AutobanFactory.DAMAGE_HACK,
                     (skillId > 0 ? "技能: " + SkillFactory.getSkillName(skillId) + "[Lv." + skillLevel + "](" + skillId + ")" : "普通攻击: ") +
                     " 怪物: " + (monster != null ? monster.getName() + "[Lv."+monster.getLevel()+"]("+monster.getId()+")" : "null") +
-                    " 伤害: " + damage + " 预警: " + maxWithCrit * 1.6 + " 已取消"
+                    " 伤害: " + damage + " 预警: " + maxWithCrit * 1.6 + " 已取消", extra
             );
             if (tmpretban == 0) {
                 int tmpdamge = (int) Math.min(damage - maxWithCrit, Integer.MAX_VALUE);

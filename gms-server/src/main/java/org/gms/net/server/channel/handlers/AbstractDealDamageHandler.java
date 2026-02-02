@@ -39,6 +39,8 @@ import org.gms.constants.id.MapId;
 import org.gms.constants.id.MobId;
 import org.gms.constants.skills.*;
 import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.PlayerBuffValueHolder;
@@ -677,10 +679,8 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             // 记录玩家战斗日志
             if (isCheat) {
                 MapMessage msg = new MapMessage()
-                    .with("chr", chr.getName())
-                    .with("chrId", chr.getId())
                     .with("msg", finalDebugMessage.toString());
-                AuditLogger.info("command", "player_combat", msg);
+                AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DETECTED, msg);
             }
 //            System.out.println(finalDebugMessage.toString());
         }

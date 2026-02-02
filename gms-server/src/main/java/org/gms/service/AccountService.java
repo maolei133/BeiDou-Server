@@ -26,10 +26,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.gms.client.Client.LOGIN_LOGGEDIN;
 import static org.gms.client.Client.LOGIN_NOTLOGGEDIN;
@@ -484,5 +482,83 @@ public class AccountService {
 
     public void setGender(int accountId, byte gender) {
         accountsMapper.update(AccountsDO.builder().id(accountId).gender((int) gender).build());
+    }
+
+    public List<Map<String, Object>> searchAccounts(String keyword) {
+        QueryWrapper query = QueryWrapper.create();
+        try {
+            int id = Integer.parseInt(keyword);
+            query.where(ACCOUNTS_D_O.ID.eq(id)).or(ACCOUNTS_D_O.NAME.like(keyword));
+        } catch (NumberFormatException e) {
+            query.where(ACCOUNTS_D_O.NAME.like(keyword));
+        }
+        query.limit(20);
+        return accountsMapper.selectListByQuery(query).stream().map(a -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", a.getId());
+            map.put("name", a.getName());
+            return map;
+        }).collect(Collectors.toList());
+    }
+
+    public List<Map<String, Object>> searchCharacters(String keyword) {
+        QueryWrapper query = QueryWrapper.create();
+        try {
+            int id = Integer.parseInt(keyword);
+            query.where(CHARACTERS_D_O.ID.eq(id)).or(CHARACTERS_D_O.NAME.like(keyword));
+        } catch (NumberFormatException e) {
+            query.where(CHARACTERS_D_O.NAME.like(keyword));
+        }
+        query.limit(20);
+        return charactersMapper.selectListByQuery(query).stream().map(c -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", c.getId());
+            map.put("name", c.getName());
+            return map;
+        }).collect(Collectors.toList());
+    }
+
+    public List<String> searchIps(String keyword) {
+        return accountsMapper.selectListByQuery(QueryWrapper.create()
+                .select(ACCOUNTS_D_O.IP)
+                .where(ACCOUNTS_D_O.IP.like(keyword))
+                .limit(50))
+                .stream()
+                .map(AccountsDO::getIp)
+                .filter(s -> s != null && !s.isEmpty())
+                .flatMap(s -> Arrays.stream(s.split(",")))
+                .map(String::trim)
+                .filter(s -> s.contains(keyword))
+                .distinct()
+                .limit(20)
+                .collect(Collectors.toList());
+    }
+
+    public List<String> searchMacs(String keyword) {
+        return accountsMapper.selectListByQuery(QueryWrapper.create()
+                .select(ACCOUNTS_D_O.MACS)
+                .where(ACCOUNTS_D_O.MACS.like(keyword))
+                .limit(50))
+                .stream()
+                .map(AccountsDO::getMacs)
+                .filter(s -> s != null && !s.isEmpty())
+                .flatMap(s -> Arrays.stream(s.split(",")))
+                .map(String::trim)
+                .filter(s -> s.contains(keyword))
+                .distinct()
+                .limit(20)
+                .collect(Collectors.toList());
+    }
+
+    public List<String> searchHwids(String keyword) {
+        return accountsMapper.selectListByQuery(QueryWrapper.create()
+                .select(ACCOUNTS_D_O.HWID)
+                .where(ACCOUNTS_D_O.HWID.like(keyword))
+                .limit(20))
+                .stream()
+                .map(AccountsDO::getHwid)
+                .filter(s -> s != null && !s.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
     }
 }

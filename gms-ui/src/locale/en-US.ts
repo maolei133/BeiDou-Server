@@ -11,6 +11,7 @@ import login from '@/views/login/locale/en-US';
 import inventory from '@/views/game/inventory/locale/en-US';
 import duey from '@/views/game/duey/locale/en-US';
 import tooltip from '@/components/ToolTip/locale/en-US';
+import log from '@/views/log/locale/en-US';
 import base from './en-US/base';
 
 export default {
@@ -33,6 +34,10 @@ export default {
   'menu.account': 'Account',
   'menu.account.list': 'Account List',
   'menu.account.player': 'Player',
+  'menu.log': 'Log System',
+  'menu.log.dashboard': 'Status',
+  'menu.log.query': 'Query',
+  'menu.log.config': 'Config',
   'menu.arco': 'UI Doc',
   'menu.beiDou': 'About BeiDou',
   'message.success': 'Success',
@@ -63,4 +68,5 @@ export default {
   ...config,
   ...duey,
   ...tooltip,
+  ...log,
 };

@@ -30,6 +30,10 @@ import org.gms.net.PacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
 import org.gms.net.server.coordinator.session.Hwid;
+import org.gms.server.logging.AuditContext;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.util.BCrypt;
 import org.gms.util.HexTool;
 import org.gms.util.PacketCreator;
@@ -155,12 +159,17 @@ public final class LoginPasswordHandler implements PacketHandler {
         } else if (loginok != 0) {
             c.sendPacket(PacketCreator.getLoginFailed(loginok));    //通知客户端密码错误
             log.warn("客户端 {} 尝试登录账号 {} ，但是登录失败：{}",c.getRemoteAddress(),login,loginok);
+            AuditLogger.info(LogModule.LOGIN, LogAction.LOGIN_FAIL, "登录失败: " + loginok);
             return;
         }
         if (c.finishLogin() == 0) {
             c.checkChar(c.getAccID());
             login(c);
             log.info("客户端 {} 成功登录账号 {} 。",c.getRemoteAddress(),login);
+            
+            // 刷新上下文并记录登录成功日志
+            AuditContext.set(c);
+            AuditLogger.info(LogModule.LOGIN, LogAction.LOGIN_SUCCESS, "登录成功");
         } else {
             c.sendPacket(PacketCreator.getLoginFailed(7));
         }

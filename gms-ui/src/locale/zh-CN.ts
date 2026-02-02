@@ -11,6 +11,7 @@ import login from '@/views/login/locale/zh-CN';
 import inventory from '@/views/game/inventory/locale/zh-CN';
 import duey from '@/views/game/duey/locale/zh-CN';
 import tooltip from '@/components/ToolTip/locale/zh-CN';
+import log from '@/views/log/locale/zh-CN';
 import baseConfig from './zh-CN/base';
 
 export default {
@@ -34,6 +35,10 @@ export default {
   'menu.account': '玩家管理',
   'menu.account.list': '账户列表',
   'menu.account.player': '玩家管理',
+  'menu.log': '日志系统',
+  'menu.log.dashboard': '系统状态',
+  'menu.log.query': '日志查询',
+  'menu.log.config': '配置管理',
   'menu.arco': 'UI 开发文档',
   'menu.beiDou': '关于北斗',
   // 提示信息
@@ -66,4 +71,5 @@ export default {
   ...config,
   ...duey,
   ...tooltip,
+  ...log,
 };

@@ -21,7 +21,9 @@
  */
 package org.gms.net.server.handlers.login;
 
+import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.client.Job;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
@@ -29,6 +31,10 @@ import org.gms.net.server.coordinator.session.Hwid;
 import org.gms.net.server.coordinator.session.SessionCoordinator;
 import org.gms.net.server.coordinator.session.SessionCoordinator.AntiMulticlientResult;
 import org.gms.net.server.world.World;
+import org.gms.server.logging.AuditContext;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.util.PacketCreator;
@@ -60,7 +66,7 @@ public final class CharSelectedHandler extends AbstractPacketHandler {
         try {
             hwid = Hwid.fromHostString(hostString);
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid host string: {}", hostString, e);
+            log.warn("无效的主机字符串: {}", hostString, e);
             c.sendPacket(PacketCreator.getAfterLoginError(17));
             return;
         }
@@ -112,6 +118,25 @@ public final class CharSelectedHandler extends AbstractPacketHandler {
 
         try {
             c.sendPacket(PacketCreator.getServerIP(InetAddress.getByName(socket[0]), Integer.parseInt(socket[1]), charId));
+            
+            // 刷新上下文 (更新 MAC/HWID 等信息)
+            AuditContext.set(c);
+            
+            // 从 Client 缓存中获取角色信息，避免重复查询数据库
+            Character chr = c.getLoadedChar(charId);
+            if (chr != null) {
+                AuditContext.put("cid", String.valueOf(chr.getId()));
+                AuditContext.put("chr", chr.getName());
+                AuditContext.put("lvl", String.valueOf(chr.getLevel()));
+                AuditContext.put("job", String.valueOf(chr.getJob().getId()));
+                AuditContext.put("map", String.valueOf(chr.getMapId()));
+                AuditContext.put("jobName", chr.getJob().getName());
+            } else {
+                log.warn("在 Client 缓存中未找到角色 ID: {}，无法记录详细审计日志", charId);
+            }
+
+            AuditLogger.info(LogModule.LOGIN, LogAction.LOGIN_SUCCESS, "选择角色: " + charId);
+
         } catch (UnknownHostException | NumberFormatException e) {
             e.printStackTrace();
         }
