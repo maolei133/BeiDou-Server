@@ -5933,19 +5933,23 @@ public class PacketCreator {
         }
 
         OutPacket p = OutPacket.create(SendOpcode.FAMILY_INFO_RESULT);
-        p.writeInt(f.getReputation()); // cur rep left
-        p.writeInt(f.getTotalReputation()); // tot rep left
-        p.writeInt(f.getTodaysRep()); // todays rep
-        p.writeShort(f.getJuniorCount()); // juniors added
-        p.writeShort(2); // juniors allowed
-        p.writeShort(0); //Unknown
-        p.writeInt(f.getFamily().getLeader().getChrId()); // Leader ID (Allows setting message)
+        p.writeInt(f.getReputation()); // 当前声望值
+        p.writeInt(f.getTotalReputation()); // 总声望值
+        p.writeInt(f.getTodaysRep()); // 今日声望值
+        p.writeShort(f.getJuniorCount()); // 已添加的下级数量
+        p.writeShort(2); // 允许的下级数量
+        p.writeShort(0); // 未知
+        if (f.getFamily().getLeader() != null) {
+            p.writeInt(f.getFamily().getLeader().getChrId()); // 族长ID（允许设置留言）
+        } else {
+            p.writeInt(0); // 如果没有族长，写入0
+        }
         p.writeString(f.getFamily().getName());
-        p.writeString(f.getFamily().getMessage()); //family message
-        p.writeInt(FamilyEntitlement.values().length); //Entitlement info count
+        p.writeString(f.getFamily().getMessage()); // 家族留言
+        p.writeInt(FamilyEntitlement.values().length); // 权益信息数量
         for (FamilyEntitlement entitlement : FamilyEntitlement.values()) {
-            p.writeInt(entitlement.ordinal()); //ID
-            p.writeInt(f.isEntitlementUsed(entitlement) ? 1 : 0); //Used count
+            p.writeInt(entitlement.ordinal()); // ID
+            p.writeInt(f.isEntitlementUsed(entitlement) ? 1 : 0); // 使用次数
         }
         return p;
     }
