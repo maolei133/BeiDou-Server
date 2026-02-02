@@ -119,6 +119,8 @@
     'update:height',
     'update:width',
     'config',
+    'resizeStart',
+    'resizeEnd',
   ]);
   const { t, te, locale, messages } = useI18n();
 
@@ -151,36 +153,43 @@
 
   const startResize = (e: MouseEvent) => {
     e.preventDefault();
+    emit('resizeStart'); // 通知父组件开始调整大小
+
     const startX = e.clientX;
     const startY = e.clientY;
     const startHeight = props.height;
     const startWidth = props.width;
-    const colElement = cardRef.value?.parentElement;
-    const containerWidth = colElement?.parentElement?.offsetWidth || 1000;
-    const pxPerSpan = containerWidth / 24;
+
+    // 16px 是网格间距
+    const gridStep = 16;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
+      // 1. 计算高度变化
       const deltaY = moveEvent.clientY - startY;
-      const newHeight = Math.max(200, startHeight + deltaY);
-      emit('update:height', newHeight);
+      const newHeightRaw = Math.max(200, startHeight + deltaY);
+      // 对齐到最近的 16px 倍数
+      const newHeight = Math.round(newHeightRaw / gridStep) * gridStep;
 
+      if (newHeight !== props.height) {
+        emit('update:height', newHeight);
+      }
+
+      // 2. 计算宽度变化 (改为像素级对齐)
       const deltaX = moveEvent.clientX - startX;
-      const spanDelta = Math.round(deltaX / pxPerSpan);
+      // 最小宽度限制为 200px (约 12 个网格)
+      const newWidthRaw = Math.max(200, startWidth + deltaX);
+      // 对齐到最近的 16px 倍数
+      const newWidth = Math.round(newWidthRaw / gridStep) * gridStep;
 
-      if (spanDelta !== 0) {
-        let newSpan = startWidth + spanDelta;
-        if (newSpan < 6) newSpan = 6;
-        if (newSpan > 24) newSpan = 24;
-
-        if (newSpan !== props.width) {
-          emit('update:width', newSpan);
-        }
+      if (newWidth !== props.width) {
+        emit('update:width', newWidth);
       }
     };
 
     const handleMouseUp = () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      emit('resizeEnd'); // 通知父组件结束调整大小
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -467,8 +476,9 @@
 <style scoped lang="less">
   .log-chart-wrapper {
     position: relative;
-    margin-bottom: 16px;
+    padding: 8px;
     transition: height 0.1s;
+    box-sizing: border-box;
   }
 
   .log-chart-card {
@@ -514,8 +524,8 @@
 
   .resize-handle {
     position: absolute;
-    bottom: 2px;
-    right: 2px;
+    bottom: 10px;
+    right: 10px;
     cursor: nwse-resize;
     color: var(--color-text-3);
     z-index: 10;

@@ -112,12 +112,19 @@
     </div>
 
     <!-- 拖拽排序区域 -->
-    <div ref="sortableRef" class="chart-grid-container">
-      <a-row :gutter="16" class="chart-grid">
+    <div
+      ref="sortableRef"
+      class="chart-grid-container"
+      :class="{ resizing: isResizing }"
+    >
+      <a-row :gutter="0" class="chart-grid">
         <a-col
           v-for="(chart, index) in charts"
           :key="chart.id"
-          :span="chart.width"
+          :style="{
+            width: chart.width + 'px',
+            flex: '0 0 ' + chart.width + 'px',
+          }"
           class="sortable-item"
           :data-id="chart.id"
         >
@@ -131,6 +138,8 @@
             :range="chart.range"
             @remove="removeChart(index)"
             @config="openEditModal(index)"
+            @resize-start="handleResizeStart"
+            @resize-end="handleResizeEnd"
           />
         </a-col>
       </a-row>
@@ -595,6 +604,7 @@
   const showAddModal = ref(false);
   const isEditMode = ref(false);
   const editingIndex = ref(-1);
+  const isResizing = ref(false);
 
   const addForm = reactive({
     title: '',
@@ -798,6 +808,14 @@
     }
   };
 
+  const handleResizeStart = () => {
+    isResizing.value = true;
+  };
+
+  const handleResizeEnd = () => {
+    isResizing.value = false;
+  };
+
   // 默认预置图表
   const getDefaultCharts = (): ChartConfig[] => [
     {
@@ -806,7 +824,7 @@
       type: 'line',
       query:
         'sum by (act) (count_over_time({job="gms-audit", mod="LOGIN"}[1h]))',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -816,7 +834,7 @@
       type: 'pie',
       query:
         'sum by (act) (count_over_time({job="gms-audit", mod="CASH_SHOP"}[1h]))',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -826,7 +844,7 @@
       type: 'bar',
       query:
         'sum by (act) (count_over_time({job="gms-audit", mod="SHOP"}[1h]))',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -836,7 +854,7 @@
       type: 'pie',
       query:
         'sum by (jobName) (count_over_time({job="gms-audit", mod="LOGIN", act="LOGIN_SUCCESS"}[24h]))',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -846,7 +864,7 @@
       type: 'bar',
       query:
         'topk(10, sum by (mapName) (count_over_time({job="gms-audit", mod="FIELD", act="CHANGE_MAP"}[1h])))',
-      width: 24,
+      width: 1200,
       height: 350,
       range: '24h',
     },
@@ -856,7 +874,7 @@
       type: 'bar',
       query:
         'sum by (act) (count_over_time({job="gms-audit", mod="AUTOBAN"}[1h]))',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -865,7 +883,7 @@
       title: '系统错误监控 (System Errors)',
       type: 'line',
       query: 'count_over_time({job="gms-audit", level="ERROR"}[1m])',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -875,7 +893,7 @@
       type: 'line',
       query:
         'sum by (act) (count_over_time({job="gms-audit", mod="PARTY"}[1h]))',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -885,7 +903,7 @@
       type: 'bar',
       query:
         'sum by (act) (count_over_time({job="gms-audit", mod="GUILD"}[1h]))',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -895,7 +913,7 @@
       type: 'pie',
       query:
         'sum by (act) (count_over_time({job="gms-audit", mod="QUEST"}[24h]))',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -905,7 +923,7 @@
       type: 'line',
       query:
         'sum by (act) (count_over_time({job="gms-audit", mod="TRADE"}[1h]))',
-      width: 12,
+      width: 600,
       height: 300,
       range: '24h',
     },
@@ -963,6 +981,11 @@
           charts.value = parsed;
           charts.value.forEach((c) => {
             if (!c.height) c.height = 300;
+            // 兼容旧数据：如果 width <= 24，说明是栅格数，转换为像素
+            if (c.width <= 24) {
+              c.width *= 50; // 假设每列 50px，或者给一个默认值 600
+              if (c.width < 200) c.width = 600;
+            }
           });
         } else {
           // 如果解析结果不是数组，回退到默认图表
@@ -992,7 +1015,7 @@
   const resetForm = () => {
     addForm.title = '';
     addForm.query = '';
-    addForm.width = 12;
+    addForm.width = 600;
     addForm.height = 300;
     addForm.type = 'line';
     addForm.range = '24h';
@@ -1299,5 +1322,28 @@
     border-radius: 4px;
     margin-bottom: 16px;
     border: 1px solid var(--color-border-2);
+  }
+
+  /* 网格背景样式 */
+  .chart-grid-container {
+    position: relative;
+    border: 1px solid transparent; /* 默认透明边框，避免抖动 */
+    min-height: 600px;
+    transition: background-image 0.2s;
+  }
+
+  /* 仅在调整大小时显示网格 */
+  .chart-grid-container.resizing {
+    /* 垂直网格：16px 间隔 */
+    /* 水平网格：16px 间隔 */
+    background-image: linear-gradient(
+        90deg,
+        var(--color-neutral-3) 1px,
+        transparent 1px
+      ),
+      linear-gradient(180deg, var(--color-neutral-3) 1px, transparent 1px);
+    background-size: 16px 16px;
+    background-position: 0 0;
+    border-color: var(--color-neutral-3);
   }
 </style>
