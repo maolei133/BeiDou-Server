@@ -159,7 +159,7 @@ public final class AcceptFamilyHandler extends AbstractPacketHandler {
             familyCharacterDO.setReptosenior(0);
             familyCharacterDO.setPrecepts("");
             familyCharacterDO.setLastresettime(System.currentTimeMillis());
-            familyCharacterMapper.insert(familyCharacterDO);
+            familyCharacterMapper.insertOrUpdate(familyCharacterDO);
         } catch (Exception e) {
             log.error("无法保存角色ID {} 的新家族记录", characterID, e);
         }
