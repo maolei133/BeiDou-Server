@@ -21,6 +21,8 @@ package org.gms.net.server.coordinator.world;
 
 import org.gms.client.Character;
 import org.gms.util.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -32,6 +34,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author Ronan
  */
 public class InviteCoordinator {
+    private static final Logger log = LoggerFactory.getLogger(InviteCoordinator.class);
+
+    static {
+        log.info("InviteCoordinator initialized");
+    }
 
     public enum InviteResultType {
         ACCEPTED,
