@@ -96,6 +96,7 @@ public enum SendOpcode {
     MARRIAGE_RESULT(0x49), // 结婚结果
     WEDDING_GIFT_RESULT(0x4A), // 结婚礼物结果
     NOTIFY_MARRIED_PARTNER_MAP_TRANSFER(0x4B), // 通知结婚伴侣地图转移
+    NOTIFY_WEDDING_PARTNER_TRANSFER(0x4B), // 通知结婚伴侣地图转移 (别名)
 
     CASH_PET_FOOD_RESULT(0x4C), // 宠物食物结果
     SET_WEEK_EVENT_MESSAGE(0x4D), // 设置周活动消息
@@ -355,6 +356,8 @@ public enum SendOpcode {
     MAPLELIFE_ERROR(0x15E), // MapleLife错误
     VICIOUS_HAMMER(0x162), // 恶毒锤子
     VEGA_SCROLL(0x166), // VEGA卷轴
+    WEDDING_WISH_LIST(0x167), // 结婚愿望清单
+    WEDDING_INVITATION(0x168), // 结婚请柬
 
     UPDATE_HPMPAALERT(0x1000), // 更新HP/MP/EXP警报
     ;
