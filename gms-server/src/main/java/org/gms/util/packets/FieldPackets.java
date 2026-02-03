@@ -76,6 +76,15 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 获取地图切换包（指定坐标）
+     *
+     * @param to            目标地图
+     * @param spawnPoint    出生点编号
+     * @param spawnPosition 出生坐标
+     * @param chr           角色对象
+     * @return 地图切换包
+     */
     public static Packet getWarpToMap(MapleMap to, int spawnPoint, Point spawnPosition, Character chr) {
         final OutPacket p = OutPacket.create(SendOpcode.SET_FIELD);
         p.writeInt(chr.getClient().getChannel() - 1);
@@ -182,6 +191,17 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 生成风筝
+     *
+     * @param objId  对象ID
+     * @param itemId 物品ID
+     * @param name   名称
+     * @param msg    消息
+     * @param pos    位置
+     * @param ft     类型
+     * @return 生成风筝包
+     */
     public static Packet spawnKite(int objId, int itemId, String name, String msg, Point pos, int ft) {
         OutPacket p = OutPacket.create(SendOpcode.SPAWN_KITE);
         p.writeInt(objId);
@@ -193,6 +213,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 移除风筝
+     *
+     * @param objId         对象ID
+     * @param animationType 动画类型
+     * @return 移除风筝包
+     */
     public static Packet removeKite(int objId, int animationType) {
         OutPacket p = OutPacket.create(SendOpcode.REMOVE_KITE);
         p.writeByte(animationType); // 0 is 10/10, 1 just vanishes
@@ -200,14 +227,38 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 发送无法生成风筝包
+     *
+     * @return 无法生成风筝包
+     */
     public static Packet sendCannotSpawnKite() {
         return OutPacket.create(SendOpcode.CANNOT_SPAWN_KITE);
     }
 
+    /**
+     * 生成怪物迷雾
+     *
+     * @param objId      对象ID
+     * @param ownerMobId 拥有者怪物ID
+     * @param msId       怪物技能ID
+     * @param mist       迷雾对象
+     * @return 生成怪物迷雾包
+     */
     public static Packet spawnMobMist(int objId, int ownerMobId, MobSkillId msId, Mist mist) {
         return spawnMist(objId, ownerMobId, msId.type().getId(), msId.level(), mist);
     }
 
+    /**
+     * 生成迷雾
+     *
+     * @param objId   对象ID
+     * @param ownerId 拥有者ID
+     * @param skill   技能ID
+     * @param level   等级
+     * @param mist    迷雾对象
+     * @return 生成迷雾包
+     */
     public static Packet spawnMist(int objId, int ownerId, int skill, int level, Mist mist) {
         OutPacket p = OutPacket.create(SendOpcode.SPAWN_MIST);
         p.writeInt(objId);
@@ -224,12 +275,24 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 移除迷雾
+     *
+     * @param objId 对象ID
+     * @return 移除迷雾包
+     */
     public static Packet removeMist(int objId) {
         OutPacket p = OutPacket.create(SendOpcode.REMOVE_MIST);
         p.writeInt(objId);
         return p;
     }
 
+    /**
+     * 生成反应堆
+     *
+     * @param reactor 反应堆对象
+     * @return 生成反应堆包
+     */
     public static Packet spawnReactor(Reactor reactor) {
         OutPacket p = OutPacket.create(SendOpcode.REACTOR_SPAWN);
         p.writeInt(reactor.getObjectId());
@@ -241,6 +304,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 触发反应堆
+     *
+     * @param reactor 反应堆对象
+     * @param stance  姿态
+     * @return 触发反应堆包
+     */
     public static Packet triggerReactor(Reactor reactor, int stance) {
         OutPacket p = OutPacket.create(SendOpcode.REACTOR_HIT);
         p.writeInt(reactor.getObjectId());
@@ -252,6 +322,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 销毁反应堆
+     *
+     * @param reactor 反应堆对象
+     * @return 销毁反应堆包
+     */
     public static Packet destroyReactor(Reactor reactor) {
         OutPacket p = OutPacket.create(SendOpcode.REACTOR_DESTROY);
         p.writeInt(reactor.getObjectId());
@@ -260,18 +336,43 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 音乐变更
+     *
+     * @param song 音乐名称
+     * @return 音乐变更包
+     */
     public static Packet musicChange(String song) {
         return environmentChange(song, 6);
     }
 
+    /**
+     * 显示特效
+     *
+     * @param effect 特效名称
+     * @return 显示特效包
+     */
     public static Packet showEffect(String effect) {
         return environmentChange(effect, 3);
     }
 
+    /**
+     * 播放声音
+     *
+     * @param sound 声音名称
+     * @return 播放声音包
+     */
     public static Packet playSound(String sound) {
         return environmentChange(sound, 4);
     }
 
+    /**
+     * 环境变更
+     *
+     * @param env  环境名称
+     * @param mode 模式
+     * @return 环境变更包
+     */
     public static Packet environmentChange(String env, int mode) {
         OutPacket p = OutPacket.create(SendOpcode.FIELD_EFFECT);
         p.writeByte(mode);
@@ -279,6 +380,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 环境移动
+     *
+     * @param env  环境名称
+     * @param mode 模式
+     * @return 环境移动包
+     */
     public static Packet environmentMove(String env, int mode) {
         OutPacket p = OutPacket.create(SendOpcode.FIELD_OBSTACLE_ONOFF);
         p.writeString(env);
@@ -286,6 +394,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 环境移动列表
+     *
+     * @param envList 环境列表
+     * @return 环境移动列表包
+     */
     public static Packet environmentMoveList(Set<Entry<String, Integer>> envList) {
         OutPacket p = OutPacket.create(SendOpcode.FIELD_OBSTACLE_ONOFF_LIST);
         p.writeInt(envList.size());
@@ -298,10 +412,23 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 环境移动重置
+     *
+     * @return 环境移动重置包
+     */
     public static Packet environmentMoveReset() {
         return OutPacket.create(SendOpcode.FIELD_OBSTACLE_ALL_RESET);
     }
 
+    /**
+     * 开始地图特效
+     *
+     * @param msg    消息
+     * @param itemId 物品ID
+     * @param active 是否激活
+     * @return 开始地图特效包
+     */
     public static Packet startMapEffect(String msg, int itemId, boolean active) {
         OutPacket p = OutPacket.create(SendOpcode.BLOW_WEATHER);
         p.writeBool(!active);
@@ -312,6 +439,11 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 移除地图特效
+     *
+     * @return 移除地图特效包
+     */
     public static Packet removeMapEffect() {
         OutPacket p = OutPacket.create(SendOpcode.BLOW_WEATHER);
         p.writeByte(0);
@@ -319,6 +451,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 地图特效
+     *
+     * @param path 路径
+     * @return 地图特效包
+     */
     public static Packet mapEffect(String path) {
         final OutPacket p = OutPacket.create(SendOpcode.FIELD_EFFECT);
         p.writeByte(3);
@@ -326,6 +464,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 地图声音
+     *
+     * @param path 路径
+     * @return 地图声音包
+     */
     public static Packet mapSound(String path) {
         final OutPacket p = OutPacket.create(SendOpcode.FIELD_EFFECT);
         p.writeByte(4);
@@ -333,6 +477,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 震动特效
+     *
+     * @param type  类型
+     * @param delay 延迟
+     * @return 震动特效包
+     */
     public static Packet trembleEffect(int type, int delay) {
         final OutPacket p = OutPacket.create(SendOpcode.FIELD_EFFECT);
         p.writeByte(1);
@@ -341,32 +492,71 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示特殊特效
+     *
+     * @param effect 特效ID
+     * @return 显示特殊特效包
+     */
     public static Packet showSpecialEffect(int effect) {
         OutPacket p = OutPacket.create(SendOpcode.SHOW_ITEM_GAIN_INCHAT);
         p.writeByte(effect);
         return p;
     }
 
+    /**
+     * 播放传送门声音
+     *
+     * @return 播放传送门声音包
+     */
     public static Packet playPortalSound() {
         return showSpecialEffect(7);
     }
 
+    /**
+     * 显示怪物图鉴拾取
+     *
+     * @return 显示怪物图鉴拾取包
+     */
     public static Packet showMonsterBookPickup() {
         return showSpecialEffect(14);
     }
 
+    /**
+     * 显示装备升级
+     *
+     * @return 显示装备升级包
+     */
     public static Packet showEquipmentLevelUp() {
         return showSpecialEffect(15);
     }
 
+    /**
+     * 显示物品升级
+     *
+     * @return 显示物品升级包
+     */
     public static Packet showItemLevelup() {
         return showSpecialEffect(15);
     }
 
+    /**
+     * 显示外部特效
+     *
+     * @param effect 特效ID
+     * @return 显示外部特效包
+     */
     public static Packet showForeignEffect(int effect) {
         return showForeignEffect(-1, effect);
     }
 
+    /**
+     * 显示外部特效
+     *
+     * @param chrId  角色ID
+     * @param effect 特效ID
+     * @return 显示外部特效包
+     */
     public static Packet showForeignEffect(int chrId, int effect) {
         OutPacket p = OutPacket.create(SendOpcode.SHOW_FOREIGN_EFFECT);
         p.writeInt(chrId);
@@ -374,10 +564,27 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示Buff特效
+     *
+     * @param chrId    角色ID
+     * @param skillId  技能ID
+     * @param effectId 特效ID
+     * @return 显示Buff特效包
+     */
     public static Packet showBuffEffect(int chrId, int skillId, int effectId) {
         return showBuffEffect(chrId, skillId, effectId, (byte) 3);
     }
 
+    /**
+     * 显示Buff特效
+     *
+     * @param chrId     角色ID
+     * @param skillId   技能ID
+     * @param effectId  特效ID
+     * @param direction 方向
+     * @return 显示Buff特效包
+     */
     public static Packet showBuffEffect(int chrId, int skillId, int effectId, byte direction) {
         OutPacket p = OutPacket.create(SendOpcode.SHOW_FOREIGN_EFFECT);
         p.writeInt(chrId);
@@ -389,6 +596,16 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示Buff特效
+     *
+     * @param chrId     角色ID
+     * @param skillId   技能ID
+     * @param skillLv   技能等级
+     * @param effectId  特效ID
+     * @param direction 方向
+     * @return 显示Buff特效包
+     */
     public static Packet showBuffEffect(int chrId, int skillId, int skillLv, int effectId, byte direction) {
         OutPacket p = OutPacket.create(SendOpcode.SHOW_FOREIGN_EFFECT);
         p.writeInt(chrId);
@@ -400,6 +617,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示自身Buff特效
+     *
+     * @param skillId  技能ID
+     * @param effectId 特效ID
+     * @return 显示自身Buff特效包
+     */
     public static Packet showOwnBuffEffect(int skillId, int effectId) {
         OutPacket p = OutPacket.create(SendOpcode.SHOW_ITEM_GAIN_INCHAT);
         p.writeByte(effectId);
@@ -409,6 +633,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示自身狂暴
+     *
+     * @param skilllevel 技能等级
+     * @param Berserk    是否狂暴
+     * @return 显示自身狂暴包
+     */
     public static Packet showOwnBerserk(int skilllevel, boolean Berserk) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_ITEM_GAIN_INCHAT);
         p.writeByte(1);
@@ -419,6 +650,14 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示狂暴
+     *
+     * @param chrId   角色ID
+     * @param skillLv 技能等级
+     * @param berserk 是否狂暴
+     * @return 显示狂暴包
+     */
     public static Packet showBerserk(int chrId, int skillLv, boolean berserk) {
         OutPacket p = OutPacket.create(SendOpcode.SHOW_FOREIGN_EFFECT);
         p.writeInt(chrId);
@@ -430,6 +669,17 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 技能特效
+     *
+     * @param from      来源角色
+     * @param skillId   技能ID
+     * @param level     等级
+     * @param flags     标志
+     * @param speed     速度
+     * @param direction 方向
+     * @return 技能特效包
+     */
     public static Packet skillEffect(Character from, int skillId, int level, byte flags, int speed, byte direction) {
         final OutPacket p = OutPacket.create(SendOpcode.SKILL_EFFECT);
         p.writeInt(from.getId());
@@ -441,6 +691,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 取消技能
+     *
+     * @param from    来源角色
+     * @param skillId 技能ID
+     * @return 取消技能包
+     */
     public static Packet skillCancel(Character from, int skillId) {
         final OutPacket p = OutPacket.create(SendOpcode.CANCEL_SKILL_EFFECT);
         p.writeInt(from.getId());
@@ -448,6 +705,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 获取时钟
+     *
+     * @param time 时间
+     * @return 获取时钟包
+     */
     public static Packet getClock(Number time) { // time in seconds
         OutPacket p = OutPacket.create(SendOpcode.CLOCK);
         p.writeByte(2);
@@ -455,6 +718,14 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 获取时钟时间
+     *
+     * @param hour 小时
+     * @param min  分钟
+     * @param sec  秒
+     * @return 获取时钟时间包
+     */
     public static Packet getClockTime(int hour, int min, int sec) { // Current Time
         OutPacket p = OutPacket.create(SendOpcode.CLOCK);
         p.writeByte(1); //Clock-Type
@@ -464,18 +735,35 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 移除时钟
+     *
+     * @return 移除时钟包
+     */
     public static Packet removeClock() {
         final OutPacket p = OutPacket.create(SendOpcode.STOP_CLOCK);
         p.writeByte(0);
         return p;
     }
 
+    /**
+     * 生成向导
+     *
+     * @param spawn 是否生成
+     * @return 生成向导包
+     */
     public static Packet spawnGuide(boolean spawn) {
         OutPacket p = OutPacket.create(SendOpcode.SPAWN_GUIDE);
         p.writeBool(spawn);
         return p;
     }
 
+    /**
+     * 向导对话
+     *
+     * @param talk 对话内容
+     * @return 向导对话包
+     */
     public static Packet talkGuide(String talk) {
         final OutPacket p = OutPacket.create(SendOpcode.TALK_GUIDE);
         p.writeByte(0);
@@ -484,6 +772,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 向导提示
+     *
+     * @param hint 提示内容
+     * @return 向导提示包
+     */
     public static Packet guideHint(int hint) {
         OutPacket p = OutPacket.create(SendOpcode.TALK_GUIDE);
         p.writeByte(1);
@@ -492,6 +786,14 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 改变背景特效
+     *
+     * @param remove     是否移除
+     * @param layer      层级
+     * @param transition 过渡
+     * @return 改变背景特效包
+     */
     public static Packet changeBackgroundEffect(boolean remove, int layer, int transition) {
         OutPacket p = OutPacket.create(SendOpcode.SET_BACK_EFFECT);
         p.writeBool(remove);
@@ -501,6 +803,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 生成龙
+     *
+     * @param dragon 龙对象
+     * @return 生成龙包
+     */
     public static Packet spawnDragon(Dragon dragon) {
         OutPacket p = OutPacket.create(SendOpcode.SPAWN_DRAGON);
         p.writeInt(dragon.getOwner().getId());
@@ -514,6 +822,15 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 移动龙
+     *
+     * @param dragon             龙对象
+     * @param startPos           起始位置
+     * @param movementPacket     移动数据包
+     * @param movementDataLength 移动数据长度
+     * @return 移动龙包
+     */
     public static Packet moveDragon(Dragon dragon, Point startPos, InPacket movementPacket, long movementDataLength) {
         final OutPacket p = OutPacket.create(SendOpcode.MOVE_DRAGON);
         p.writeInt(dragon.getOwner().getId());
@@ -522,12 +839,26 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 移除龙
+     *
+     * @param chrId 角色ID
+     * @return 移除龙包
+     */
     public static Packet removeDragon(int chrId) {
         OutPacket p = OutPacket.create(SendOpcode.REMOVE_DRAGON);
         p.writeInt(chrId);
         return p;
     }
 
+    /**
+     * 移动玩家
+     *
+     * @param chrId              角色ID
+     * @param movementPacket     移动数据包
+     * @param movementDataLength 移动数据长度
+     * @return 移动玩家包
+     */
     public static Packet movePlayer(int chrId, InPacket movementPacket, long movementDataLength) {
         OutPacket p = OutPacket.create(SendOpcode.MOVE_PLAYER);
         p.writeInt(chrId);
@@ -536,6 +867,16 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 移动召唤物
+     *
+     * @param cid                角色ID
+     * @param oid                对象ID
+     * @param startPos           起始位置
+     * @param movementPacket     移动数据包
+     * @param movementDataLength 移动数据长度
+     * @return 移动召唤物包
+     */
     public static Packet moveSummon(int cid, int oid, Point startPos, InPacket movementPacket, long movementDataLength) {
         final OutPacket p = OutPacket.create(SendOpcode.MOVE_SUMMON);
         p.writeInt(cid);
@@ -545,6 +886,15 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 召唤物攻击
+     *
+     * @param cid       角色ID
+     * @param summonOid 召唤物对象ID
+     * @param direction 方向
+     * @param allDamage 所有伤害
+     * @return 召唤物攻击包
+     */
     public static Packet summonAttack(int cid, int summonOid, byte direction, List<SummonAttackEntry> allDamage) {
         OutPacket p = OutPacket.create(SendOpcode.SUMMON_ATTACK);
         p.writeInt(cid);
@@ -579,6 +929,15 @@ public class FieldPackets {
     }
     */
 
+    /**
+     * 伤害召唤物
+     *
+     * @param cid           角色ID
+     * @param oid           对象ID
+     * @param damage        伤害
+     * @param monsterIdFrom 来源怪物ID
+     * @return 伤害召唤物包
+     */
     public static Packet damageSummon(int cid, int oid, int damage, int monsterIdFrom) {
         final OutPacket p = OutPacket.create(SendOpcode.DAMAGE_SUMMON);
         p.writeInt(cid);
@@ -590,6 +949,14 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 召唤技能
+     *
+     * @param cid           角色ID
+     * @param summonSkillId 召唤技能ID
+     * @param newStance     新姿态
+     * @return 召唤技能包
+     */
     public static Packet summonSkill(int cid, int summonSkillId, int newStance) {
         final OutPacket p = OutPacket.create(SendOpcode.SUMMON_SKILL);
         p.writeInt(cid);
@@ -598,12 +965,41 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 近战攻击
+     *
+     * @param chr                  角色对象
+     * @param skill                技能ID
+     * @param skilllevel           技能等级
+     * @param stance               姿态
+     * @param numAttackedAndDamage 攻击数量和伤害
+     * @param damage               伤害列表
+     * @param speed                速度
+     * @param direction            方向
+     * @param display              显示
+     * @return 近战攻击包
+     */
     public static Packet closeRangeAttack(Character chr, int skill, int skilllevel, int stance, int numAttackedAndDamage, Map<Integer, List<Integer>> damage, int speed, int direction, int display) {
         final OutPacket p = OutPacket.create(SendOpcode.CLOSE_RANGE_ATTACK);
         PacketHelper.addAttackBody(p, chr, skill, skilllevel, stance, numAttackedAndDamage, 0, damage, speed, direction, display);
         return p;
     }
 
+    /**
+     * 远程攻击
+     *
+     * @param chr                  角色对象
+     * @param skill                技能ID
+     * @param skilllevel           技能等级
+     * @param stance               姿态
+     * @param numAttackedAndDamage 攻击数量和伤害
+     * @param projectile           投掷物
+     * @param damage               伤害列表
+     * @param speed                速度
+     * @param direction            方向
+     * @param display              显示
+     * @return 远程攻击包
+     */
     public static Packet rangedAttack(Character chr, int skill, int skilllevel, int stance, int numAttackedAndDamage, int projectile, Map<Integer, List<Integer>> damage, int speed, int direction, int display) {
         final OutPacket p = OutPacket.create(SendOpcode.RANGED_ATTACK);
         PacketHelper.addAttackBody(p, chr, skill, skilllevel, stance, numAttackedAndDamage, projectile, damage, speed, direction, display);
@@ -611,6 +1007,21 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 魔法攻击
+     *
+     * @param chr                  角色对象
+     * @param skill                技能ID
+     * @param skilllevel           技能等级
+     * @param stance               姿态
+     * @param numAttackedAndDamage 攻击数量和伤害
+     * @param damage               伤害列表
+     * @param charge               充能
+     * @param speed                速度
+     * @param direction            方向
+     * @param display              显示
+     * @return 魔法攻击包
+     */
     public static Packet magicAttack(Character chr, int skill, int skilllevel, int stance, int numAttackedAndDamage, Map<Integer, List<Integer>> damage, int charge, int speed, int direction, int display) {
         final OutPacket p = OutPacket.create(SendOpcode.MAGIC_ATTACK);
         PacketHelper.addAttackBody(p, chr, skill, skilllevel, stance, numAttackedAndDamage, 0, damage, speed, direction, display);
@@ -620,6 +1031,16 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 投掷手榴弹
+     *
+     * @param cid        角色ID
+     * @param pos        位置
+     * @param keyDown    按键按下
+     * @param skillId    技能ID
+     * @param skillLevel 技能等级
+     * @return 投掷手榴弹包
+     */
     public static Packet throwGrenade(int cid, Point pos, int keyDown, int skillId, int skillLevel) {
         OutPacket p = OutPacket.create(SendOpcode.THROW_GRENADE);
         p.writeInt(cid);
@@ -631,6 +1052,23 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 伤害玩家
+     *
+     * @param skill         技能ID
+     * @param monsteridfrom 来源怪物ID
+     * @param cid           角色ID
+     * @param damage        伤害
+     * @param fake          假伤害
+     * @param direction     方向
+     * @param pgmr          pgmr
+     * @param pgmr_1        pgmr_1
+     * @param is_pg         is_pg
+     * @param oid           对象ID
+     * @param pos_x         X坐标
+     * @param pos_y         Y坐标
+     * @return 伤害玩家包
+     */
     public static Packet damagePlayer(int skill, int monsteridfrom, int cid, int damage, int fake, int direction, boolean pgmr, int pgmr_1, boolean is_pg, int oid, int pos_x, int pos_y) {
         final OutPacket p = OutPacket.create(SendOpcode.DAMAGE_PLAYER);
         p.writeInt(cid);
@@ -663,6 +1101,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 面部表情
+     *
+     * @param from       来源角色
+     * @param expression 表情ID
+     * @return 面部表情包
+     */
     public static Packet facialExpression(Character from, int expression) {
         OutPacket p = OutPacket.create(SendOpcode.FACIAL_EXPRESSION);
         p.writeInt(from.getId());
@@ -670,6 +1115,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示椅子
+     *
+     * @param characterid 角色ID
+     * @param itemid      物品ID
+     * @return 显示椅子包
+     */
     public static Packet showChair(int characterid, int itemid) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_CHAIR);
         p.writeInt(characterid);
@@ -677,6 +1129,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 取消椅子
+     *
+     * @param id ID
+     * @return 取消椅子包
+     */
     public static Packet cancelChair(int id) {
         final OutPacket p = OutPacket.create(SendOpcode.CANCEL_CHAIR);
         if (id < 0) {
@@ -688,6 +1146,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 给予外部椅子技能特效
+     *
+     * @param cid 角色ID
+     * @return 给予外部椅子技能特效包
+     */
     public static Packet giveForeignChairSkillEffect(int cid) {
         final OutPacket p = OutPacket.create(SendOpcode.GIVE_FOREIGN_BUFF);
         p.writeInt(cid);
@@ -706,6 +1170,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 取消外部椅子技能特效
+     *
+     * @param chrId 角色ID
+     * @return 取消外部椅子技能特效包
+     */
     public static Packet cancelForeignChairSkillEffect(int chrId) {
         OutPacket p = OutPacket.create(SendOpcode.CANCEL_FOREIGN_BUFF);
         p.writeInt(chrId);
@@ -713,6 +1183,14 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 生成玩家地图对象
+     *
+     * @param target        目标客户端
+     * @param chr           角色对象
+     * @param enteringField 是否进入地图
+     * @return 生成玩家地图对象包
+     */
     public static Packet spawnPlayerMapObject(Client target, Character chr, boolean enteringField) {
         OutPacket p = OutPacket.create(SendOpcode.SPAWN_PLAYER);
         p.writeInt(chr.getId());
@@ -808,12 +1286,25 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 从地图移除玩家
+     *
+     * @param chrId 角色ID
+     * @return 从地图移除玩家包
+     */
     public static Packet removePlayerFromMap(int chrId) {
         OutPacket p = OutPacket.create(SendOpcode.REMOVE_PLAYER_FROM_MAP);
         p.writeInt(chrId);
         return p;
     }
 
+    /**
+     * 更新角色外观
+     *
+     * @param target 目标客户端
+     * @param chr    角色对象
+     * @return 更新角色外观包
+     */
     public static Packet updateCharLook(Client target, Character chr) {
         OutPacket p = OutPacket.create(SendOpcode.UPDATE_CHAR_LOOK);
         p.writeInt(chr.getId());
@@ -826,6 +1317,13 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示外部信息
+     *
+     * @param cid  角色ID
+     * @param path 路径
+     * @return 显示外部信息包
+     */
     public static Packet showForeignInfo(int cid, String path) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_FOREIGN_EFFECT);
         p.writeInt(cid);
@@ -835,6 +1333,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示信息
+     *
+     * @param path 路径
+     * @return 显示信息包
+     */
     public static Packet showInfo(String path) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_ITEM_GAIN_INCHAT);
         p.writeByte(0x17);
@@ -843,6 +1347,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示介绍
+     *
+     * @param path 路径
+     * @return 显示介绍包
+     */
     public static Packet showIntro(String path) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_ITEM_GAIN_INCHAT);
         p.writeByte(0x12);
@@ -850,6 +1360,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示信息文本
+     *
+     * @param text 文本内容
+     * @return 显示信息文本包
+     */
     public static Packet showInfoText(String text) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_STATUS_INFO);
         p.writeByte(9);
@@ -857,18 +1373,36 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 阻挡消息
+     *
+     * @param type 类型
+     * @return 阻挡消息包
+     */
     public static Packet blockedMessage(int type) {
         final OutPacket p = OutPacket.create(SendOpcode.BLOCKED_MAP);
         p.writeByte(type);
         return p;
     }
 
+    /**
+     * 阻挡消息2
+     *
+     * @param type 类型
+     * @return 阻挡消息2包
+     */
     public static Packet blockedMessage2(int type) {
         final OutPacket p = OutPacket.create(SendOpcode.BLOCKED_SERVER);
         p.writeByte(type);
         return p;
     }
 
+    /**
+     * 船只数据包
+     *
+     * @param type 类型
+     * @return 船只数据包
+     */
     public static Packet boatPacket(boolean type) {
         OutPacket p = OutPacket.create(SendOpcode.CONTI_STATE);
         p.writeByte(type ? 1 : 2);
@@ -876,6 +1410,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 蝙蝠魔船只数据包
+     *
+     * @param type 类型
+     * @return 蝙蝠魔船只数据包
+     */
     public static Packet crogBoatPacket(boolean type) {
         OutPacket p = OutPacket.create(SendOpcode.CONTI_MOVE);
         p.writeByte(10);
@@ -883,6 +1423,12 @@ public class FieldPackets {
         return p;
     }
 
+    /**
+     * 显示强制装备
+     *
+     * @param team 队伍
+     * @return 显示强制装备包
+     */
     public static Packet showForcedEquip(int team) {
         OutPacket p = OutPacket.create(SendOpcode.FORCED_MAP_EQUIP);
         if (team > -1) {
@@ -892,12 +1438,12 @@ public class FieldPackets {
     }
 
     /**
-     * Sends a player hint.
+     * 发送玩家提示
      *
-     * @param hint   The hint it's going to send.
-     * @param width  How tall the box is going to be.
-     * @param height How long the box is going to be.
-     * @return The player hint packet.
+     * @param hint   要发送的提示
+     * @param width  框的高度
+     * @param height 框的长度
+     * @return 玩家提示包
      */
     public static Packet sendHint(String hint, int width, int height) {
         if (width < 1) {

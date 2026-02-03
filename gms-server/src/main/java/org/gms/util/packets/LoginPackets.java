@@ -176,28 +176,52 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * PIN 码已注册
+     * @return 数据包
+     */
     public static Packet pinRegistered() {
         OutPacket p = OutPacket.create(SendOpcode.UPDATE_PINCODE);
         p.writeByte(0);
         return p;
     }
 
+    /**
+     * 请求 PIN 码
+     * @return 数据包
+     */
     public static Packet requestPin() {
         return pinOperation((byte) 4);
     }
 
+    /**
+     * 失败后请求 PIN 码
+     * @return 数据包
+     */
     public static Packet requestPinAfterFailure() {
         return pinOperation((byte) 2);
     }
 
+    /**
+     * 注册 PIN 码
+     * @return 数据包
+     */
     public static Packet registerPin() {
         return pinOperation((byte) 1);
     }
 
+    /**
+     * PIN 码已接受
+     * @return 数据包
+     */
     public static Packet pinAccepted() {
         return pinOperation((byte) 0);
     }
 
+    /**
+     * 错误的 PIC 码
+     * @return 数据包
+     */
     public static Packet wrongPic() {
         OutPacket p = OutPacket.create(SendOpcode.CHECK_SPW_RESULT);
         p.writeByte(0);
@@ -334,6 +358,10 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 发送访客服务条款
+     * @return 数据包
+     */
     public static Packet sendGuestTOS() {
         final OutPacket p = OutPacket.create(SendOpcode.GUEST_ID_LOGIN);
         p.writeShort(0x100);
@@ -346,6 +374,11 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 发送推荐服务器
+     * @param worlds 推荐服务器列表
+     * @return 数据包
+     */
     public static Packet sendRecommended(List<Pair<Integer, String>> worlds) {
         final OutPacket p = OutPacket.create(SendOpcode.RECOMMENDED_WORLD_MESSAGE);
         p.writeByte(worlds.size());//size
@@ -356,12 +389,23 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 选择世界
+     * @param world 世界ID
+     * @return 数据包
+     */
     public static Packet selectWorld(int world) {
         final OutPacket p = OutPacket.create(SendOpcode.LAST_CONNECTED_WORLD);
         p.writeInt(world);
         return p;
     }
 
+    /**
+     * 显示所有角色
+     * @param totalWorlds 总世界数
+     * @param totalChrs 总角色数
+     * @return 数据包
+     */
     public static Packet showAllCharacter(int totalWorlds, int totalChrs) {
         OutPacket p = OutPacket.create(SendOpcode.VIEW_ALL_CHAR);
         p.writeByte(totalChrs > 0 ? 1 : 5); // 2: already connected to server, 3 : unk error (view-all-characters), 5 : cannot find any
@@ -370,6 +414,13 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 显示所有角色信息
+     * @param worldid 世界ID
+     * @param chars 角色列表
+     * @param usePic 是否使用PIC
+     * @return 数据包
+     */
     public static Packet showAllCharacterInfo(int worldid, List<Character> chars, boolean usePic) {
         final OutPacket p = OutPacket.create(SendOpcode.VIEW_ALL_CHAR);
         p.writeByte(0);
@@ -382,6 +433,11 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 添加新角色条目
+     * @param chr 角色对象
+     * @return 数据包
+     */
     public static Packet addNewCharEntry(Character chr) {
         final OutPacket p = OutPacket.create(SendOpcode.ADD_NEW_CHAR_ENTRY);
         p.writeByte(0);
@@ -414,6 +470,12 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 角色名称响应
+     * @param charname 角色名称
+     * @param nameUsed 名称是否已使用
+     * @return 数据包
+     */
     public static Packet charNameResponse(String charname, boolean nameUsed) {
         final OutPacket p = OutPacket.create(SendOpcode.CHAR_NAME_RESPONSE);
         p.writeString(charname);
@@ -421,12 +483,20 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 发送 MapleLife 角色信息
+     * @return 数据包
+     */
     public static Packet sendMapleLifeCharacterInfo() {
         final OutPacket p = OutPacket.create(SendOpcode.MAPLELIFE_RESULT);
         p.writeInt(0);
         return p;
     }
 
+    /**
+     * 发送 MapleLife 名称错误
+     * @return 数据包
+     */
     public static Packet sendMapleLifeNameError() {
         OutPacket p = OutPacket.create(SendOpcode.MAPLELIFE_RESULT);
         p.writeInt(2);
@@ -435,6 +505,11 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 发送 MapleLife 错误
+     * @param code 错误代码
+     * @return 数据包
+     */
     public static Packet sendMapleLifeError(int code) {
         OutPacket p = OutPacket.create(SendOpcode.MAPLELIFE_ERROR);
         p.writeByte(0);
@@ -442,6 +517,10 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 启用举报
+     * @return 数据包
+     */
     public static Packet enableReport() {
         OutPacket p = OutPacket.create(SendOpcode.CLAIM_STATUS_CHANGED);
         p.writeByte(1);
@@ -467,17 +546,32 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 更新性别
+     * @param chr 角色对象
+     * @return 数据包
+     */
     public static Packet updateGender(Character chr) {
         OutPacket p = OutPacket.create(SendOpcode.SET_GENDER);
         p.writeByte(chr.getGender());
         return p;
     }
 
+    /**
+     * 发送金币限制
+     * @return 数据包
+     */
     public static Packet sendMesoLimit() {
         final OutPacket p = OutPacket.create(SendOpcode.TRADE_MONEY_LIMIT); // 15级以下玩家每天只能交易100万金币
         return p;
     }
 
+    /**
+     * 更新 HP/MP 警告
+     * @param hp HP 百分比
+     * @param mp MP 百分比
+     * @return 数据包
+     */
     public static Packet updateHpMpAlert(byte hp, byte mp) {
         OutPacket p = OutPacket.create(SendOpcode.UPDATE_HPMPAALERT);
         p.writeByte(hp);
@@ -485,6 +579,12 @@ public class LoginPackets {
         return p;
     }
 
+    /**
+     * 发送世界转移规则
+     * @param error 错误代码
+     * @param c 客户端对象
+     * @return 数据包
+     */
     public static Packet sendWorldTransferRules(int error, Client c) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_CHECK_TRANSFER_WORLD_POSSIBLE_RESULT);
         p.writeInt(0); //ignored

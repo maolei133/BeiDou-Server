@@ -35,6 +35,11 @@ public class AdminPackets {
         return p;
     }
 
+    /**
+     * 获取永久封禁数据包
+     * @param reason 封禁原因
+     * @return 永久封禁数据包
+     */
     public static Packet getPermBan(byte reason) {
         final OutPacket p = OutPacket.create(SendOpcode.LOGIN_STATUS);
         p.writeByte(2); // Account is banned
@@ -45,6 +50,12 @@ public class AdminPackets {
         return p;
     }
 
+    /**
+     * 获取临时封禁数据包
+     * @param timestampTill 封禁截止时间戳
+     * @param reason 封禁原因
+     * @return 临时封禁数据包
+     */
     public static Packet getTempBan(long timestampTill, byte reason) {
         OutPacket p = OutPacket.create(SendOpcode.LOGIN_STATUS);
         p.writeByte(2);
@@ -55,18 +66,33 @@ public class AdminPackets {
         return p;
     }
 
+    /**
+     * 发送警察消息（无内容）
+     * @return 警察消息数据包
+     */
     public static Packet sendPolice() {
         final OutPacket p = OutPacket.create(SendOpcode.FAKE_GM_NOTICE);
         p.writeByte(0);
         return p;
     }
 
+    /**
+     * 发送警察消息（带文本）
+     * @param text 消息文本
+     * @return 警察消息数据包
+     */
     public static Packet sendPolice(String text) {
         final OutPacket p = OutPacket.create(SendOpcode.DATA_CRC_CHECK_FAILED);
         p.writeString(text);
         return p;
     }
 
+    /**
+     * 查找商人响应数据包
+     * @param map 是否在地图上
+     * @param extra 额外信息（地图ID或频道ID）
+     * @return 查找商人响应数据包
+     */
     public static Packet findMerchantResponse(boolean map, int extra) {
         final OutPacket p = OutPacket.create(SendOpcode.ADMIN_RESULT);
         p.writeByte(0x13);
@@ -80,6 +106,10 @@ public class AdminPackets {
         return p;
     }
 
+    /**
+     * 禁用小地图数据包
+     * @return 禁用小地图数据包
+     */
     public static Packet disableMinimap() {
         final OutPacket p = OutPacket.create(SendOpcode.ADMIN_RESULT);
         p.writeShort(0x1C);

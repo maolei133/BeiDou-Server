@@ -71,10 +71,10 @@ import java.util.stream.Collectors;
 public class PacketHelper {
 
     public static final List<Pair<Stat, Integer>> EMPTY_STATUPDATE = Collections.emptyList();
-    private final static long FT_UT_OFFSET = 116444736010800000L + (10000L * TimeZone.getDefault().getOffset(System.currentTimeMillis()));
-    private final static long DEFAULT_TIME = 150842304000000000L;
-    public final static long ZERO_TIME = 94354848000000000L;
-    private final static long PERMANENT = 150841440000000000L;
+    private final static long FT_UT_OFFSET = 116444736010800000L + (10000L * TimeZone.getDefault().getOffset(System.currentTimeMillis())); // 根据 Ari 的建议，使用时区偏移进行标准化
+    private final static long DEFAULT_TIME = 150842304000000000L;//00 80 05 BB 46 E6 17 02
+    public final static long ZERO_TIME = 94354848000000000L;//00 40 E0 FD 3B 37 4F 01
+    private final static long PERMANENT = 150841440000000000L; // 00 C0 9B 90 7D E5 17 02
 
     public static class WhisperFlag {
         public static final byte LOCATION = 0x01;
@@ -86,10 +86,15 @@ public class PacketHelper {
         public static final byte LOCATION_FRIEND = 0x40;
     }
 
+    /**
+     * 获取时间戳
+     * @param utcTimestamp UTC时间戳
+     * @return 转换后的时间戳
+     */
     public static long getTime(long utcTimestamp) {
         if (utcTimestamp < 0 && utcTimestamp >= -3) {
             if (utcTimestamp == -1) {
-                return DEFAULT_TIME;
+                return DEFAULT_TIME;    // 高数值 ll
             } else if (utcTimestamp == -2) {
                 return ZERO_TIME;
             } else {
@@ -99,11 +104,21 @@ public class PacketHelper {
         return utcTimestamp * 10000 + FT_UT_OFFSET;
     }
 
+    /**
+     * 写入怪物技能ID
+     * @param packet 数据包
+     * @param msId 怪物技能ID
+     */
     public static void writeMobSkillId(OutPacket packet, MobSkillId msId) {
         packet.writeShort(msId.type().getId());
         packet.writeShort(msId.level());
     }
 
+    /**
+     * 添加剩余技能信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addRemainingSkillInfo(final OutPacket p, Character chr) {
         int[] remainingSp = chr.getRemainingSps();
         int effectiveLength = 0;
@@ -122,56 +137,72 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加角色属性
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addCharStats(OutPacket p, Character chr) {
-        p.writeInt(chr.getId()); // character id
+        p.writeInt(chr.getId()); // 角色ID
         p.writeFixedString(StringUtil.getRightPaddedStr(chr.getName(), '\0', 13));
-        p.writeByte(chr.getGender()); // gender (0 = male, 1 = female)
-        p.writeByte(chr.getSkinColor().getId()); // skin color
-        p.writeInt(chr.getFace()); // face
-        p.writeInt(chr.getHair()); // hair
+        p.writeByte(chr.getGender()); // 性别 (0 = 男, 1 = 女)
+        p.writeByte(chr.getSkinColor().getId()); // 肤色
+        p.writeInt(chr.getFace()); // 脸型
+        p.writeInt(chr.getHair()); // 发型
 
         for (int i = 0; i < 3; i++) {
             Pet pet = chr.getPet(i);
-            if (pet != null) {
+            if (pet != null) { // 检查 GMS.. 进入商城时宠物会保留。
                 p.writeLong(pet.getUniqueId());
             } else {
                 p.writeLong(0);
             }
         }
 
-        p.writeByte(chr.getLevel()); // level
-        p.writeShort(chr.getJob().getId()); // job
-        p.writeShort(chr.getStr()); // str
-        p.writeShort(chr.getDex()); // dex
-        p.writeShort(chr.getInt()); // int
-        p.writeShort(chr.getLuk()); // luk
-        p.writeShort(chr.getHp()); // hp (?)
-        p.writeShort(chr.getClientMaxHp()); // maxhp
-        p.writeShort(chr.getMp()); // mp (?)
-        p.writeShort(chr.getClientMaxMp()); // maxmp
-        p.writeShort(chr.getRemainingAp()); // remaining ap
+        p.writeByte(chr.getLevel()); // 等级
+        p.writeShort(chr.getJob().getId()); // 职业
+        p.writeShort(chr.getStr()); // 力量
+        p.writeShort(chr.getDex()); // 敏捷
+        p.writeShort(chr.getInt()); // 智力
+        p.writeShort(chr.getLuk()); // 运气
+        p.writeShort(chr.getHp()); // HP (?)
+        p.writeShort(chr.getClientMaxHp()); // 最大HP
+        p.writeShort(chr.getMp()); // MP (?)
+        p.writeShort(chr.getClientMaxMp()); // 最大MP
+        p.writeShort(chr.getRemainingAp()); // 剩余AP
         if (GameConstants.hasSPTable(chr.getJob())) {
             addRemainingSkillInfo(p, chr);
         } else {
-            p.writeShort(chr.getRemainingSp()); // remaining sp
+            p.writeShort(chr.getRemainingSp()); // 剩余SP
         }
-        p.writeInt(chr.getExp()); // current exp
-        p.writeShort(chr.getFame()); // fame
-        p.writeInt(chr.getGachaExp()); //Gacha Exp
-        p.writeInt(chr.getMapId()); // current map id
-        p.writeByte(chr.getInitialSpawnPoint()); // spawnpoint
+        p.writeInt(chr.getExp()); // 当前经验
+        p.writeShort(chr.getFame()); // 人气
+        p.writeInt(chr.getGachaExp()); // 扭蛋经验
+        p.writeInt(chr.getMapId()); // 当前地图ID
+        p.writeByte(chr.getInitialSpawnPoint()); // 出生点
         p.writeInt(0);
     }
 
+    /**
+     * 添加角色外观
+     * @param p 数据包
+     * @param chr 角色对象
+     * @param mega 是否大喇叭
+     */
     public static void addCharLook(final OutPacket p, Character chr, boolean mega) {
         p.writeByte(chr.getGender());
-        p.writeByte(chr.getSkinColor().getId()); // skin color
-        p.writeInt(chr.getFace()); // face
+        p.writeByte(chr.getSkinColor().getId()); // 肤色
+        p.writeInt(chr.getFace()); // 脸型
         p.writeBool(!mega);
-        p.writeInt(chr.getHair()); // hair
+        p.writeInt(chr.getHair()); // 发型
         addCharEquips(p, chr);
     }
 
+    /**
+     * 添加角色信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addCharacterInfo(OutPacket p, Character chr) {
         p.writeLong(-1);
         p.writeByte(0);
@@ -194,10 +225,15 @@ public class PacketHelper {
         addTeleportInfo(p, chr);
         addMonsterBookInfo(p, chr);
         addNewYearInfo(p, chr);
-        addAreaInfo(p, chr);
+        addAreaInfo(p, chr); // 假设它留在这里 xd
         p.writeShort(0);
     }
 
+    /**
+     * 添加新年信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addNewYearInfo(OutPacket p, Character chr) {
         Set<NewYearCardRecord> received = chr.getReceivedNewYearRecords();
 
@@ -207,6 +243,11 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加传送信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addTeleportInfo(OutPacket p, Character chr) {
         final List<Integer> tele = chr.getTrockMaps();
         final List<Integer> viptele = chr.getVipTrockMaps();
@@ -218,10 +259,27 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加小游戏信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addMiniGameInfo(OutPacket p, Character chr) {
         p.writeShort(0);
+        /*for (int m = size; m > 0; m--) {//nexon does this :P
+         p.writeInt(0);
+         p.writeInt(0);
+         p.writeInt(0);
+         p.writeInt(0);
+         p.writeInt(0);
+         }*/
     }
 
+    /**
+     * 添加区域信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addAreaInfo(OutPacket p, Character chr) {
         Map<Short, String> areaInfos = chr.getAreaInfos();
         p.writeShort(areaInfos.size());
@@ -231,16 +289,21 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加角色装备
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addCharEquips(final OutPacket p, Character chr) {
         Inventory equip = chr.getInventory(InventoryType.EQUIPPED);
         Collection<Item> ii = ItemInformationProvider.getInstance().canWearEquipment(chr, equip.list());
         Map<Short, Integer> myEquip = new LinkedHashMap<>();
         Map<Short, Integer> maskedEquip = new LinkedHashMap<>();
         for (Item item : ii) {
-            short pos = (short) (item.getPosition() * -1);
+            short pos = (short) (item.getPosition() * -1); // 修复其他角色无法看到现金勋章
             if (pos < 100 && myEquip.get(pos) == null) {
                 myEquip.put(pos, item.getItemId());
-            } else if (pos > 100 && pos != 111) {
+            } else if (pos > 100 && pos != 111) { // 别问。o.o
                 pos -= 100;
                 if (myEquip.get(pos) != null) {
                     maskedEquip.put(pos, myEquip.get(pos));
@@ -271,23 +334,34 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加角色条目
+     * @param p 数据包
+     * @param chr 角色对象
+     * @param viewall 是否查看全部
+     */
     public static void addCharEntry(OutPacket p, Character chr, boolean viewall) {
         addCharStats(p, chr);
         addCharLook(p, chr, false);
         if (!viewall) {
             p.writeByte(0);
         }
-        if (chr.isGM() || chr.isGmJob()) {
+        if (chr.isGM() || chr.isGmJob()) { // 感谢 Daddy Egg (Ubaware), resinate 发现 GM 职业在非 GM 玩家账户上崩溃的问题
             p.writeByte(0);
             return;
         }
-        p.writeByte(1);
-        p.writeInt(chr.getRank());
-        p.writeInt(chr.getRankMove());
-        p.writeInt(chr.getJobRank());
-        p.writeInt(chr.getJobRankMove());
+        p.writeByte(1); // 启用世界排名（如果禁用，则不发送接下来的 4 个 int）Short??
+        p.writeInt(chr.getRank()); // 世界排名
+        p.writeInt(chr.getRankMove()); // 移动（负数表示向下）
+        p.writeInt(chr.getJobRank()); // 职业排名
+        p.writeInt(chr.getJobRankMove()); // 移动（负数表示向下）
     }
 
+    /**
+     * 添加任务信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addQuestInfo(OutPacket p, Character chr) {
         List<QuestStatus> started = chr.getStartedQuests();
         int startedSize = 0;
@@ -317,14 +391,30 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加过期时间
+     * @param p 数据包
+     * @param time 时间
+     */
     public static void addExpirationTime(final OutPacket p, long time) {
-        p.writeLong(getTime(time));
+        p.writeLong(getTime(time)); // 感谢 Thora 发现的过期时间偏移问题
     }
 
+    /**
+     * 添加物品信息
+     * @param p 数据包
+     * @param item 物品对象
+     */
     public static void addItemInfo(OutPacket p, Item item) {
         addItemInfo(p, item, false);
     }
 
+    /**
+     * 添加物品信息
+     * @param p 数据包
+     * @param item 物品对象
+     * @param zeroPosition 是否零位置
+     */
     public static void addItemInfo(final OutPacket p, Item item, boolean zeroPosition) {
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
         boolean isCash = ii.isCash(item.getItemId());
@@ -361,16 +451,16 @@ public class PacketHelper {
             p.writeShort(pet.getTameness());
             p.writeByte(pet.getFullness());
             addExpirationTime(p, item.getExpiration());
-            p.writeShort(pet.getPetAttribute());
-            p.writeShort(0);
-            p.writeInt(18000);
-            p.writeShort(0);
+            p.writeShort(pet.getPetAttribute()); // lrenex & Spoon 发现的宠物属性
+            p.writeShort(0); // 宠物技能
+            p.writeInt(18000); // 剩余生命
+            p.writeShort(0); // 属性
             return;
         }
         if (equip == null) {
             p.writeShort(item.getQuantity());
             p.writeString(item.getOwner());
-            p.writeShort(item.getFlag());
+            p.writeShort(item.getFlag()); // 标志
 
             if (ItemConstants.isRechargeable(item.getItemId())) {
                 p.writeInt(2);
@@ -378,25 +468,25 @@ public class PacketHelper {
             }
             return;
         }
-        p.writeByte(equip.getUpgradeSlots());
-        p.writeByte(equip.getLevel());
-        p.writeShort(equip.getStr());
-        p.writeShort(equip.getDex());
-        p.writeShort(equip.getInt());
-        p.writeShort(equip.getLuk());
-        p.writeShort(equip.getHp());
-        p.writeShort(equip.getMp());
-        p.writeShort(equip.getWatk());
-        p.writeShort(equip.getMatk());
-        p.writeShort(equip.getWdef());
-        p.writeShort(equip.getMdef());
-        p.writeShort(equip.getAcc());
-        p.writeShort(equip.getAvoid());
-        p.writeShort(equip.getHands());
-        p.writeShort(equip.getSpeed());
-        p.writeShort(equip.getJump());
-        p.writeString(equip.getOwner());
-        p.writeShort(equip.getFlag());
+        p.writeByte(equip.getUpgradeSlots()); // 升级槽
+        p.writeByte(equip.getLevel()); // 等级
+        p.writeShort(equip.getStr()); // 力量
+        p.writeShort(equip.getDex()); // 敏捷
+        p.writeShort(equip.getInt()); // 智力
+        p.writeShort(equip.getLuk()); // 运气
+        p.writeShort(equip.getHp()); // hp
+        p.writeShort(equip.getMp()); // mp
+        p.writeShort(equip.getWatk()); // 物理攻击
+        p.writeShort(equip.getMatk()); // 魔法攻击
+        p.writeShort(equip.getWdef()); // 物理防御
+        p.writeShort(equip.getMdef()); // 魔法防御
+        p.writeShort(equip.getAcc()); // 命中率
+        p.writeShort(equip.getAvoid()); // 回避率
+        p.writeShort(equip.getHands()); // 手技
+        p.writeShort(equip.getSpeed()); // 速度
+        p.writeShort(equip.getJump()); // 跳跃
+        p.writeString(equip.getOwner()); // 拥有者名称
+        p.writeShort(equip.getFlag()); // 物品标志
 
         if (isCash) {
             for (int i = 0; i < 10; i++) {
@@ -409,15 +499,20 @@ public class PacketHelper {
             expNibble /= ExpTable.getEquipExpNeededForLevel(itemLevel);
 
             p.writeByte(0);
-            p.writeByte(itemLevel);
+            p.writeByte(itemLevel); // 物品等级
             p.writeInt((int) expNibble);
-            p.writeInt(equip.getVicious());
+            p.writeInt(equip.getVicious()); // 纳尼 NEXON 你是认真的吗？
             p.writeLong(0);
         }
         p.writeLong(getTime(-2));
         p.writeInt(-1);
     }
 
+    /**
+     * 添加背包信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addInventoryInfo(OutPacket p, Character chr) {
         for (byte i = 1; i <= 5; i++) {
             p.writeByte(chr.getInventory(InventoryType.getByType(i)).getSlotLimit());
@@ -434,14 +529,14 @@ public class PacketHelper {
                 equipped.add(item);
             }
         }
-        for (Item item : equipped) {
+        for (Item item : equipped) {    // 已装备物品实际上不需要排序，感谢 Pllsz
             addItemInfo(p, item);
         }
-        p.writeShort(0);
+        p.writeShort(0); // 现金装备开始
         for (Item item : equippedCash) {
             addItemInfo(p, item);
         }
-        p.writeShort(0);
+        p.writeShort(0); // 装备栏开始
         for (Item item : chr.getInventory(InventoryType.EQUIP).list()) {
             addItemInfo(p, item);
         }
@@ -463,10 +558,16 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加技能信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addSkillInfo(OutPacket p, Character chr) {
-        p.writeByte(0);
+        p.writeByte(0); // 技能开始
         Map<Skill, SkillEntry> skills = chr.getSkills();
         int skillsSize = skills.size();
+        // 我们不想包含任何隐藏技能，所以从大小列表中减去它们并忽略它们。
         for (Entry<Skill, SkillEntry> skill : skills.entrySet()) {
             if (GameConstants.isHiddenSkills(skill.getKey().getId())) {
                 skillsSize--;
@@ -492,20 +593,30 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加怪物图鉴信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addMonsterBookInfo(OutPacket p, Character chr) {
-        p.writeInt(chr.getMonsterBookCover());
+        p.writeInt(chr.getMonsterBookCover()); // 封面
         p.writeByte(0);
         Map<Integer, Integer> cards = chr.getMonsterBook().getCards();
         p.writeShort(cards.size());
         for (Entry<Integer, Integer> all : cards.entrySet()) {
-            p.writeShort(all.getKey() % 10000);
-            p.writeByte(all.getValue());
+            p.writeShort(all.getKey() % 10000); // ID
+            p.writeByte(all.getValue()); // 等级
         }
     }
 
+    /**
+     * 写入外部Buff
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void writeForeignBuffs(OutPacket p, Character chr) {
         p.writeInt(0);
-        p.writeShort(0);
+        p.writeShort(0); //v83
         p.writeByte(0xFC);
         p.writeByte(1);
         if (chr.getBuffedValue(BuffStat.MORPH) != null) {
@@ -533,7 +644,7 @@ public class PacketHelper {
         }
         p.writeInt((int) ((buffmask >> 32) & 0xffffffffL));
         if (buffvalue != null) {
-            if (chr.getBuffedValue(BuffStat.MORPH) != null) {
+            if (chr.getBuffedValue(BuffStat.MORPH) != null) { //测试
                 p.writeShort(buffvalue);
             } else {
                 p.writeByte(buffvalue.byteValue());
@@ -541,19 +652,23 @@ public class PacketHelper {
         }
         p.writeInt((int) (buffmask & 0xffffffffL));
 
+        // 能量充能
         p.writeInt(chr.getEnergyBar() == 15000 ? 1 : 0);
         p.writeShort(0);
         p.skip(4);
 
         boolean dashBuff = chr.getBuffedValue(BuffStat.DASH) != null;
+        // 冲刺速度
         p.writeInt(dashBuff ? 1 << 24 : 0);
         p.skip(11);
         p.writeShort(0);
+        // 冲刺跳跃
         p.skip(9);
         p.writeInt(dashBuff ? 1 << 24 : 0);
         p.writeShort(0);
         p.writeByte(0);
 
+        // 怪物骑乘
         Integer bv = chr.getBuffedValue(BuffStat.MONSTER_RIDING);
         if (bv != null) {
             Mount mount = chr.getMapleMount();
@@ -567,22 +682,30 @@ public class PacketHelper {
             p.writeLong(0);
         }
 
-        int CHAR_MAGIC_SPAWN = Randomizer.nextInt();
+        int CHAR_MAGIC_SPAWN = Randomizer.nextInt();    // 技能引用发现感谢 Rien 开发团队
         p.writeInt(CHAR_MAGIC_SPAWN);
+        // 速度注入
         p.skip(8);
         p.writeInt(CHAR_MAGIC_SPAWN);
         p.writeByte(0);
         p.writeInt(CHAR_MAGIC_SPAWN);
         p.writeShort(0);
+        // 导航灯
         p.skip(9);
         p.writeInt(CHAR_MAGIC_SPAWN);
         p.writeInt(0);
+        // 僵尸化
         p.skip(9);
         p.writeInt(CHAR_MAGIC_SPAWN);
         p.writeShort(0);
         p.writeShort(0);
     }
 
+    /**
+     * 编码新年卡片信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void encodeNewYearCardInfo(OutPacket p, Character chr) {
         Set<NewYearCardRecord> newyears = chr.getReceivedNewYearRecords();
         if (!newyears.isEmpty()) {
@@ -597,6 +720,11 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 编码新年卡片
+     * @param newyear 新年卡片记录
+     * @param p 数据包
+     */
     public static void encodeNewYearCard(NewYearCardRecord newyear, OutPacket p) {
         p.writeInt(newyear.getId());
         p.writeInt(newyear.getSenderId());
@@ -611,6 +739,12 @@ public class PacketHelper {
         p.writeString(newyear.getMessage());
     }
 
+    /**
+     * 添加戒指外观
+     * @param p 数据包
+     * @param chr 角色对象
+     * @param crush 是否情侣戒指
+     */
     public static void addRingLook(final OutPacket p, Character chr, boolean crush) {
         List<Ring> rings;
         if (crush) {
@@ -637,6 +771,12 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加结婚戒指外观
+     * @param target 目标客户端
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addMarriageRingLook(Client target, final OutPacket p, Character chr) {
         Ring ring = chr.getMarriageRing();
 
@@ -658,6 +798,12 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加公告盒
+     * @param p 数据包
+     * @param shop 玩家商店
+     * @param availability 可用性
+     */
     public static void addAnnounceBox(final OutPacket p, PlayerShop shop, int availability) {
         p.writeByte(4);
         p.writeInt(shop.getObjectId());
@@ -669,17 +815,29 @@ public class PacketHelper {
         p.writeByte(0);
     }
 
+    /**
+     * 添加公告盒
+     * @param p 数据包
+     * @param game 小游戏
+     * @param ammount 数量
+     * @param joinable 是否可加入
+     */
     public static void addAnnounceBox(final OutPacket p, MiniGame game, int ammount, int joinable) {
         p.writeByte(game.getGameType().getValue());
-        p.writeInt(game.getObjectId());
-        p.writeString(game.getDescription());
-        p.writeBool(!game.getPassword().isEmpty());
+        p.writeInt(game.getObjectId()); // 游戏ID/商店ID
+        p.writeString(game.getDescription()); // 描述
+        p.writeBool(!game.getPassword().isEmpty());    // 密码在这里，感谢 GabrielSin
         p.writeByte(game.getPieceType());
         p.writeByte(ammount);
-        p.writeByte(2);
+        p.writeByte(2);         // 玩家容量
         p.writeByte(joinable);
     }
 
+    /**
+     * 更新雇佣商人盒信息
+     * @param p 数据包
+     * @param hm 雇佣商人
+     */
     public static void updateHiredMerchantBoxInfo(OutPacket p, HiredMerchant hm) {
         byte[] roomInfo = hm.getShopRoomInfo();
 
@@ -687,28 +845,46 @@ public class PacketHelper {
         p.writeInt(hm.getObjectId());
         p.writeString(hm.getDescription());
         p.writeByte(hm.getItemId() % 100);
-        p.writeBytes(roomInfo);
+        p.writeBytes(roomInfo);    // 访客容量在这里，感谢 GabrielSin
     }
 
+    /**
+     * 更新玩家商店盒信息
+     * @param p 数据包
+     * @param shop 玩家商店
+     */
     public static void updatePlayerShopBoxInfo(OutPacket p, PlayerShop shop) {
         byte[] roomInfo = shop.getShopRoomInfo();
 
         p.writeByte(4);
         p.writeInt(shop.getObjectId());
         p.writeString(shop.getDescription());
-        p.writeByte(0);
+        p.writeByte(0);                 // 密码
         p.writeByte(shop.getItemId() % 100);
-        p.writeByte(roomInfo[0]);
-        p.writeByte(roomInfo[1]);
+        p.writeByte(roomInfo[0]);       // 当前玩家
+        p.writeByte(roomInfo[1]);       // 最大玩家
         p.writeByte(0);
     }
 
+    /**
+     * 重新广播移动列表
+     * @param op 输出数据包
+     * @param ip 输入数据包
+     * @param movementDataLength 移动数据长度
+     */
     public static void rebroadcastMovementList(OutPacket op, InPacket ip, long movementDataLength) {
+        // 移动命令长度由客户端发送，可能不是大问题？（可以在服务器端计算）
+        // 如果多次读写很慢，可以使用（并缓存？）byte[] 缓冲区
         for (long i = 0; i < movementDataLength; i++) {
             op.writeByte(ip.readByte());
         }
     }
 
+    /**
+     * 序列化移动列表
+     * @param p 数据包
+     * @param moves 移动列表
+     */
     public static void serializeMovementList(OutPacket p, List<LifeMovementFragment> moves) {
         p.writeByte(moves.size());
         for (LifeMovementFragment move : moves) {
@@ -716,10 +892,24 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加攻击主体
+     * @param p 数据包
+     * @param chr 角色对象
+     * @param skill 技能ID
+     * @param skilllevel 技能等级
+     * @param stance 姿态
+     * @param numAttackedAndDamage 攻击数量和伤害
+     * @param projectile 投掷物
+     * @param damage 伤害列表
+     * @param speed 速度
+     * @param direction 方向
+     * @param display 显示
+     */
     public static void addAttackBody(OutPacket p, Character chr, int skill, int skilllevel, int stance, int numAttackedAndDamage, int projectile, Map<Integer, List<Integer>> damage, int speed, int direction, int display) {
         p.writeInt(chr.getId());
         p.writeByte(numAttackedAndDamage);
-        p.writeByte(0x5B);
+        p.writeByte(0x5B);//?
         p.writeByte(skilllevel);
         if (skilllevel > 0) {
             p.writeInt(skill);
@@ -745,10 +935,20 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 双精度转短整型位
+     * @param d 双精度值
+     * @return 短整型位
+     */
     public static int doubleToShortBits(double d) {
         return (int) (Double.doubleToLongBits(d) >> 48);
     }
 
+    /**
+     * 写入长整型掩码D
+     * @param p 数据包
+     * @param statups 状态提升列表
+     */
     public static void writeLongMaskD(final OutPacket p, List<Pair<Disease, Integer>> statups) {
         long firstmask = 0;
         long secondmask = 0;
@@ -763,6 +963,11 @@ public class PacketHelper {
         p.writeLong(secondmask);
     }
 
+    /**
+     * 写入长整型掩码
+     * @param p 数据包
+     * @param statups 状态提升列表
+     */
     public static void writeLongMask(final OutPacket p, List<Pair<BuffStat, Integer>> statups) {
         long firstmask = 0;
         long secondmask = 0;
@@ -777,6 +982,11 @@ public class PacketHelper {
         p.writeLong(secondmask);
     }
 
+    /**
+     * 从列表写入长整型掩码
+     * @param p 数据包
+     * @param statups 状态列表
+     */
     public static void writeLongMaskFromList(OutPacket p, List<BuffStat> statups) {
         long firstmask = 0;
         long secondmask = 0;
@@ -791,6 +1001,11 @@ public class PacketHelper {
         p.writeLong(secondmask);
     }
 
+    /**
+     * 写入长整型编码临时掩码
+     * @param p 数据包
+     * @param stati 状态集合
+     */
     public static void writeLongEncodeTemporaryMask(final OutPacket p, Collection<MonsterStatus> stati) {
         int[] masks = new int[4];
 
@@ -806,18 +1021,31 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 写入长整型掩码SlowD
+     * @param p 数据包
+     */
     public static void writeLongMaskSlowD(final OutPacket p) {
         p.writeInt(0);
         p.writeInt(2048);
         p.writeLong(0);
     }
 
+    /**
+     * 写入长整型掩码椅子
+     * @param p 数据包
+     */
     public static void writeLongMaskChair(OutPacket p) {
         p.writeInt(0);
         p.writeInt(262144);
         p.writeLong(0);
     }
 
+    /**
+     * 写入整型掩码
+     * @param p 数据包
+     * @param stats 状态映射
+     */
     public static void writeIntMask(OutPacket p, Map<MonsterStatus, Integer> stats) {
         int firstmask = 0;
         int secondmask = 0;
@@ -832,6 +1060,13 @@ public class PacketHelper {
         p.writeInt(secondmask);
     }
 
+    /**
+     * 获取右填充字符串
+     * @param in 输入字符串
+     * @param padchar 填充字符
+     * @param length 长度
+     * @return 填充后的字符串
+     */
     public static String getRightPaddedStr(String in, char padchar, int length) {
         StringBuilder builder = new StringBuilder(in);
         for (int x = in.length(); x < length; x++) {
@@ -840,6 +1075,11 @@ public class PacketHelper {
         return builder.toString();
     }
 
+    /**
+     * 添加戒指信息
+     * @param p 数据包
+     * @param chr 角色对象
+     */
     public static void addRingInfo(OutPacket p, Character chr) {
         p.writeShort(chr.getCrushRings().size());
         for (Ring ring : chr.getCrushRings()) {
@@ -873,8 +1113,8 @@ public class PacketHelper {
                 p.writeInt(marriageRing.getItemId());
                 p.writeInt(marriageRing.getItemId());
             } else {
-                p.writeInt(ItemId.WEDDING_RING_MOONSTONE);
-                p.writeInt(ItemId.WEDDING_RING_MOONSTONE);
+                p.writeInt(ItemId.WEDDING_RING_MOONSTONE); // 订婚戒指的结果（对于订婚并不重要）
+                p.writeInt(ItemId.WEDDING_RING_MOONSTONE); // 订婚戒指的结果（对于订婚并不重要）
             }
             p.writeFixedString(StringUtil.getRightPaddedStr(chr.getGender() == 0 ? chr.getName() : Character.getNameById(chr.getPartnerId()), '\0', 13));
             p.writeFixedString(StringUtil.getRightPaddedStr(chr.getGender() == 0 ? Character.getNameById(chr.getPartnerId()) : chr.getName(), '\0', 13));
@@ -883,6 +1123,12 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 添加宠物信息
+     * @param p 数据包
+     * @param pet 宠物对象
+     * @param showpet 是否显示宠物
+     */
     public static void addPetInfo(final OutPacket p, Pet pet, boolean showpet) {
         p.writeByte(1);
         if (showpet) {
@@ -897,10 +1143,23 @@ public class PacketHelper {
         p.writeInt(pet.getFh());
     }
 
+    /**
+     * 添加现金物品信息
+     * @param p 数据包
+     * @param item 物品对象
+     * @param accountId 账号ID
+     */
     public static void addCashItemInformation(OutPacket p, Item item, int accountId) {
         addCashItemInformation(p, item, accountId, null);
     }
 
+    /**
+     * 添加现金物品信息
+     * @param p 数据包
+     * @param item 物品对象
+     * @param accountId 账号ID
+     * @param giftMessage 礼物消息
+     */
     public static void addCashItemInformation(OutPacket p, Item item, int accountId, String giftMessage) {
         boolean isGift = giftMessage != null;
         boolean isRing = false;
@@ -928,6 +1187,11 @@ public class PacketHelper {
         p.writeLong(0);
     }
 
+    /**
+     * 写入修改后的现金物品
+     * @param p 数据包
+     * @param item 修改后的现金物品对象
+     */
     public static void writeModifiedCashItem(OutPacket p, ModifiedCashItemDO item) {
         List<Pair<CommodityFlag, Number>> writeList = new ArrayList<>();
         for (CommodityFlag commodityFlag : CommodityFlag.getAvailableSortedValues()) {
@@ -967,6 +1231,11 @@ public class PacketHelper {
         });
     }
 
+    /**
+     * 添加家谱条目
+     * @param p 数据包
+     * @param entry 家族条目
+     */
     public static void addPedigreeEntry(OutPacket p, FamilyEntry entry) {
         Character chr = entry.getChr();
         boolean isOnline = chr != null;
@@ -984,6 +1253,12 @@ public class PacketHelper {
         p.writeString(entry.getName()); //name
     }
 
+    /**
+     * 编码无父级怪物生成特效
+     * @param p 数据包
+     * @param newSpawn 是否新生成
+     * @param effect 特效
+     */
     public static void encodeParentlessMobSpawnEffect(OutPacket p, boolean newSpawn, int effect) {
         if (effect > 0) {
             p.writeByte(effect);
@@ -996,16 +1271,21 @@ public class PacketHelper {
         p.writeByte(newSpawn ? -2 : -1);
     }
 
+    /**
+     * 编码临时状态
+     * @param p 数据包
+     * @param stati 状态映射
+     */
     public static void encodeTemporary(OutPacket p, Map<MonsterStatus, MonsterStatusEffect> stati) {
         int pCounter = -1;
         int mCounter = -1;
 
-        stati = stati.entrySet()
+        stati = stati.entrySet()  // 修复一些导致玩家崩溃的状态
                 .stream()
                 .filter(e -> !(e.getKey().equals(MonsterStatus.WATK) || e.getKey().equals(MonsterStatus.WDEF)))
                 .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
 
-        writeLongEncodeTemporaryMask(p, stati.keySet());
+        writeLongEncodeTemporaryMask(p, stati.keySet());    // 数据包结构映射感谢 Eric
 
         for (Entry<MonsterStatus, MonsterStatusEffect> s : stati.entrySet()) {
             MonsterStatusEffect mse = s.getValue();
@@ -1024,20 +1304,27 @@ public class PacketHelper {
                 p.writeInt(skill != null ? skill.getId() : 0);
             }
 
-            p.writeShort(-1);
+            p.writeShort(-1);    // 持续时间
         }
 
+        // 反射数据包结构发现感谢 Arnah (Vertisy)
         if (pCounter != -1) {
-            p.writeInt(pCounter);
+            p.writeInt(pCounter);// wPCounter_
         }
         if (mCounter != -1) {
-            p.writeInt(mCounter);
+            p.writeInt(mCounter);// wMCounter_
         }
         if (pCounter != -1 || mCounter != -1) {
-            p.writeInt(100);
+            p.writeInt(100);// nCounterProb_
         }
     }
 
+    /**
+     * 归一化自定义最大HP
+     * @param currHP 当前HP
+     * @param maxHP 最大HP
+     * @return 归一化后的HP对
+     */
     public static Pair<Integer, Integer> normalizedCustomMaxHP(long currHP, long maxHP) {
         int sendHP, sendMaxHP;
 
@@ -1054,6 +1341,13 @@ public class PacketHelper {
         return new Pair<>(sendHP, sendMaxHP);
     }
 
+    /**
+     * 添加队伍状态
+     * @param forchannel 频道
+     * @param party 队伍对象
+     * @param p 数据包
+     * @param leaving 是否离开
+     */
     public static void addPartyStatus(int forchannel, Party party, OutPacket p, boolean leaving) {
         List<PartyCharacter> partymembers = new ArrayList<>(party.getMembers());
         while (partymembers.size() < 6) {
@@ -1119,6 +1413,12 @@ public class PacketHelper {
         }
     }
 
+    /**
+     * 显示HP恢复
+     * @param cid 角色ID
+     * @param amount 恢复量
+     * @return 数据包
+     */
     public static Packet showHpHealed(int cid, int amount) {
         OutPacket p = OutPacket.create(SendOpcode.SHOW_FOREIGN_EFFECT);
         p.writeInt(cid);
@@ -1127,38 +1427,46 @@ public class PacketHelper {
         return p;
     }
 
+    /**
+     * 新年卡片响应
+     * @param user 用户
+     * @param newyear 新年卡片记录
+     * @param mode 模式
+     * @param msg 消息
+     * @return 数据包
+     */
     public static Packet onNewYearCardRes(Character user, NewYearCardRecord newyear, int mode, int msg) {
         OutPacket p = OutPacket.create(SendOpcode.NEW_YEAR_CARD_RES);
         p.writeByte(mode);
         switch (mode) {
-            case 4: // Successfully sent a New Year Card\r\n to %s.
-            case 6: // Successfully received a New Year Card.
+            case 4: // 成功发送新年卡片\r\n 给 %s。
+            case 6: // 成功接收新年卡片。
                 encodeNewYearCard(newyear, p);
                 break;
 
-            case 8: // Successfully deleted a New Year Card.
+            case 8: // 成功删除新年卡片。
                 p.writeInt(newyear.getId());
                 break;
 
-            case 5: // Nexon's stupid and makes 4 modes do the same operation..
+            case 5: // Nexon 很蠢，让 4 种模式做同样的操作..
             case 7:
             case 9:
             case 0xB:
-                // 0x10: You have no free slot to store card.\r\ntry later on please.
-                // 0x11: You have no card to send.
-                // 0x12: Wrong inventory information !
-                // 0x13: Cannot find such character !
-                // 0x14: Incoherent Data !
-                // 0x15: An error occured during DB operation.
-                // 0x16: An unknown error occured !
-                // 0xF: You cannot send a card to yourself !
+                // 0x10: 您没有空闲插槽来存储卡片。\r\n请稍后再试。
+                // 0x11: 您没有卡片可发送。
+                // 0x12: 错误的库存信息！
+                // 0x13: 找不到该角色！
+                // 0x14: 数据不连贯！
+                // 0x15: 数据库操作期间发生错误。
+                // 0x16: 发生未知错误！
+                // 0xF: 您不能给自己发送卡片！
                 p.writeByte(msg);
                 break;
 
             case 0xA:   // GetUnreceivedList_Done
                 int nSN = 1;
                 p.writeInt(nSN);
-                if ((nSN - 1) <= 98 && nSN > 0) {//lol nexon are you kidding
+                if ((nSN - 1) <= 98 && nSN > 0) {//呵呵 Nexon 你在开玩笑吗
                     for (int i = 0; i < nSN; i++) {
                         p.writeInt(newyear.getId());
                         p.writeInt(newyear.getSenderId());
@@ -1184,6 +1492,13 @@ public class PacketHelper {
         return p;
     }
 
+    /**
+     * 刷新传送地图列表
+     * @param chr 角色对象
+     * @param delete 是否删除
+     * @param vip 是否VIP
+     * @return 数据包
+     */
     public static Packet trockRefreshMapList(Character chr, boolean delete, boolean vip) {
         final OutPacket p = OutPacket.create(SendOpcode.MAP_TRANSFER_RESULT);
         p.writeByte(delete ? 2 : 3);
@@ -1203,56 +1518,96 @@ public class PacketHelper {
         return p;
     }
 
+    /**
+     * 给予名声错误响应
+     * @param status 状态
+     * @return 数据包
+     */
     public static Packet giveFameErrorResponse(int status) {
         final OutPacket p = OutPacket.create(SendOpcode.FAME_RESPONSE);
         p.writeByte(status);
         return p;
     }
 
+    /**
+     * 左侧击退
+     * @return 数据包
+     */
     public static Packet leftKnockBack() {
         return OutPacket.create(SendOpcode.LEFT_KNOCK_BACK);
     }
 
+    /**
+     * 发送自动HP药水
+     * @param itemId 物品ID
+     * @return 数据包
+     */
     public static Packet sendAutoHpPot(int itemId) {
         final OutPacket p = OutPacket.create(SendOpcode.AUTO_HP_POT);
         p.writeInt(itemId);
         return p;
     }
 
+    /**
+     * 发送自动MP药水
+     * @param itemId 物品ID
+     * @return 数据包
+     */
     public static Packet sendAutoMpPot(int itemId) {
         OutPacket p = OutPacket.create(SendOpcode.AUTO_MP_POT);
         p.writeInt(itemId);
         return p;
     }
 
+    /**
+     * 发送Vega卷轴
+     * @param op 操作
+     * @return 数据包
+     */
     public static Packet sendVegaScroll(int op) {
         OutPacket p = OutPacket.create(SendOpcode.VEGA_SCROLL);
         p.writeByte(op);
         return p;
     }
 
+    /**
+     * 获取显示经验获得
+     * @param gain 获得量
+     * @param equip 装备
+     * @param party 队伍
+     * @param inChat 是否在聊天框显示
+     * @param white 是否白色
+     * @return 数据包
+     */
     public static Packet getShowExpGain(int gain, int equip, int party, boolean inChat, boolean white) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_STATUS_INFO);
-        p.writeByte(3); // 3 = exp, 4 = fame, 5 = mesos, 6 = guildpoints
+        p.writeByte(3); // 3 = 经验, 4 = 人气, 5 = 金币, 6 = 公会点数
         p.writeBool(white);
         p.writeInt(gain);
         p.writeBool(inChat);
-        p.writeInt(0); // bonus event exp
-        p.writeByte(0); // third monster kill event
-        p.writeByte(0); // RIP byte, this is always a 0
-        p.writeInt(0); //wedding bonus
-        if (inChat) { // quest bonus rate stuff
+        p.writeInt(0); // 奖励活动经验
+        p.writeByte(0); // 第三个怪物击杀活动
+        p.writeByte(0); // RIP 字节，这总是 0
+        p.writeInt(0); // 婚礼奖励
+        if (inChat) { // 任务奖励倍率相关
             p.writeByte(0);
         }
 
-        p.writeByte(0); //0 = party bonus, 100 = 1x Bonus EXP, 200 = 2x Bonus EXP
-        p.writeInt(party); // party bonus
-        p.writeInt(equip); //equip bonus
-        p.writeInt(0); //Internet Cafe Bonus
-        p.writeInt(0); //Rainbow Week Bonus
+        p.writeByte(0); // 0 = 组队奖励, 100 = 1x 奖励经验, 200 = 2x 奖励经验
+        p.writeInt(party); // 组队奖励
+        p.writeInt(equip); // 装备奖励
+        p.writeInt(0); // 网吧奖励
+        p.writeInt(0); // 彩虹周奖励
         return p;
     }
 
+    /**
+     * 给予名声响应
+     * @param mode 模式
+     * @param charname 角色名
+     * @param newfame 新名声
+     * @return 数据包
+     */
     public static Packet giveFameResponse(int mode, String charname, int newfame) {
         final OutPacket p = OutPacket.create(SendOpcode.FAME_RESPONSE);
         p.writeByte(0);
@@ -1263,6 +1618,12 @@ public class PacketHelper {
         return p;
     }
 
+    /**
+     * 接收名声
+     * @param mode 模式
+     * @param charnameFrom 来源角色名
+     * @return 数据包
+     */
     public static Packet receiveFame(int mode, String charnameFrom) {
         final OutPacket p = OutPacket.create(SendOpcode.FAME_RESPONSE);
         p.writeByte(5);
@@ -1271,6 +1632,11 @@ public class PacketHelper {
         return p;
     }
 
+    /**
+     * 获取显示名声获得
+     * @param gain 获得量
+     * @return 数据包
+     */
     public static Packet getShowFameGain(int gain) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_STATUS_INFO);
         p.writeByte(4);
@@ -1278,6 +1644,12 @@ public class PacketHelper {
         return p;
     }
 
+    /**
+     * 获取显示金币获得
+     * @param gain 获得量
+     * @param inChat 是否在聊天框显示
+     * @return 数据包
+     */
     public static Packet getShowMesoGain(int gain, boolean inChat) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_STATUS_INFO);
         if (!inChat) {
@@ -1291,6 +1663,13 @@ public class PacketHelper {
         return p;
     }
 
+    /**
+     * 显示OX测验
+     * @param questionSet 问题集
+     * @param questionId 问题ID
+     * @param askQuestion 是否提问
+     * @return 数据包
+     */
     public static Packet showOXQuiz(int questionSet, int questionId, boolean askQuestion) {
         OutPacket p = OutPacket.create(SendOpcode.OX_QUIZ);
         p.writeByte(askQuestion ? 1 : 0);

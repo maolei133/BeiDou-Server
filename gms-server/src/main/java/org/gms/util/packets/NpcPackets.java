@@ -118,6 +118,12 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 获取次元之镜对话包
+     *
+     * @param talk 对话内容
+     * @return 次元之镜对话包
+     */
     public static Packet getDimensionalMirror(String talk) {
         final OutPacket p = OutPacket.create(SendOpcode.NPC_TALK);
         p.writeByte(4);
@@ -129,6 +135,14 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 获取 NPC 对话样式包
+     *
+     * @param npc    NPC ID
+     * @param talk   对话内容
+     * @param styles 样式数组
+     * @return NPC 对话样式包
+     */
     public static Packet getNPCTalkStyle(int npc, String talk, int[] styles) {
         final OutPacket p = OutPacket.create(SendOpcode.NPC_TALK);
         p.writeByte(4);
@@ -143,6 +157,16 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 获取 NPC 对话数字包
+     *
+     * @param npc  NPC ID
+     * @param talk 对话内容
+     * @param def  默认值
+     * @param min  最小值
+     * @param max  最大值
+     * @return NPC 对话数字包
+     */
     public static Packet getNPCTalkNum(int npc, String talk, int def, int min, int max) {
         final OutPacket p = OutPacket.create(SendOpcode.NPC_TALK);
         p.writeByte(4);
@@ -157,6 +181,17 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 获取 NPC 对话数字包（带说话者）
+     *
+     * @param npc     NPC ID
+     * @param talk    对话内容
+     * @param def     默认值
+     * @param min     最小值
+     * @param max     最大值
+     * @param speaker 说话者
+     * @return NPC 对话数字包
+     */
     public static Packet getNPCTalkNum(int npc, String talk, int def, int min, int max, byte speaker) {
         final OutPacket p = OutPacket.create(SendOpcode.NPC_TALK);
         p.writeByte(4);
@@ -171,6 +206,14 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 获取 NPC 对话文本包
+     *
+     * @param npc  NPC ID
+     * @param talk 对话内容
+     * @param def  默认文本
+     * @return NPC 对话文本包
+     */
     public static Packet getNPCTalkText(int npc, String talk, String def) {
         final OutPacket p = OutPacket.create(SendOpcode.NPC_TALK);
         p.writeByte(4);
@@ -183,6 +226,15 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 获取 NPC 对话文本包（带说话者）
+     *
+     * @param npc     NPC ID
+     * @param talk    对话内容
+     * @param def     默认文本
+     * @param speaker 说话者
+     * @return NPC 对话文本包
+     */
     public static Packet getNPCTalkText(int npc, String talk, String def, byte speaker) {
         final OutPacket p = OutPacket.create(SendOpcode.NPC_TALK);
         p.writeByte(4);
@@ -195,6 +247,20 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 提问测验包
+     *
+     * @param nSpeakerTypeID     说话者类型 ID
+     * @param nSpeakerTemplateID 说话者模板 ID
+     * @param nResCode           结果代码
+     * @param sTitle             标题
+     * @param sProblemText       问题文本
+     * @param sHintText          提示文本
+     * @param nMinInput          最小输入
+     * @param nMaxInput          最大输入
+     * @param tRemainInitialQuiz 剩余初始测验时间
+     * @return 提问测验包
+     */
     public static Packet OnAskQuiz(int nSpeakerTypeID, int nSpeakerTemplateID, int nResCode, String sTitle, String sProblemText, String sHintText, int nMinInput, int nMaxInput, int tRemainInitialQuiz) {
         OutPacket p = OutPacket.create(SendOpcode.NPC_TALK);
         p.writeByte(nSpeakerTypeID);
@@ -213,6 +279,19 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 提问速度测验包
+     *
+     * @param nSpeakerTypeID     说话者类型 ID
+     * @param nSpeakerTemplateID 说话者模板 ID
+     * @param nResCode           结果代码
+     * @param nType              类型
+     * @param dwAnswer           答案
+     * @param nCorrect           正确数
+     * @param nRemain            剩余数
+     * @param tRemainInitialQuiz 剩余初始测验时间
+     * @return 提问速度测验包
+     */
     public static Packet OnAskSpeedQuiz(int nSpeakerTypeID, int nSpeakerTemplateID, int nResCode, int nType, int dwAnswer, int nCorrect, int nRemain, int tRemainInitialQuiz) {
         OutPacket p = OutPacket.create(SendOpcode.NPC_TALK);
         p.writeByte(nSpeakerTypeID);
@@ -230,6 +309,14 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 获取 NPC 商店包
+     *
+     * @param c     客户端对象
+     * @param sid   商店 ID
+     * @param items 商品列表
+     * @return NPC 商店包
+     */
     public static Packet getNPCShop(Client c, int sid, List<ShopItem> items) {
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
         final OutPacket p = OutPacket.create(SendOpcode.OPEN_NPC_SHOP);
@@ -264,6 +351,22 @@ public class NpcPackets {
      * 08 = /
      * 0D = You need more items
      * 0E = CRASH; LENGTH NEEDS TO BE LONGER :O
+     * 00 = /
+     * 01 = 库存不足
+     * 02 = 金币不足
+     * 03 = 请检查背包是否已满
+     * 05 = 库存不足
+     * 06 = 由于错误，交易未发生
+     * 07 = 由于错误，交易未发生
+     * 08 = /
+     * 0D = 您需要更多物品
+     * 0E = 崩溃；长度需要更长 :O
+     */
+    /**
+     * 商店交易包
+     *
+     * @param code 代码
+     * @return 商店交易包
      */
     public static Packet shopTransaction(byte code) {
         OutPacket p = OutPacket.create(SendOpcode.CONFIRM_SHOP_TRANSACTION);
@@ -271,6 +374,13 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 商店错误消息包
+     *
+     * @param error 错误代码
+     * @param type  类型
+     * @return 商店错误消息包
+     */
     public static Packet shopErrorMessage(int error, int type) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(0x0A);
@@ -279,6 +389,12 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 生成玩家 NPC 包
+     *
+     * @param npc 玩家 NPC 对象
+     * @return 生成玩家 NPC 包
+     */
     public static Packet spawnPlayerNPC(PlayerNPC npc) {
         final OutPacket p = OutPacket.create(SendOpcode.SPAWN_NPC_REQUEST_CONTROLLER);
         p.writeByte(1);
@@ -294,6 +410,12 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 获取玩家 NPC 包
+     *
+     * @param npc 玩家 NPC 对象
+     * @return 玩家 NPC 包
+     */
     public static Packet getPlayerNPC(PlayerNPC npc) {
         final OutPacket p = OutPacket.create(SendOpcode.IMITATED_NPC_DATA);
         p.writeByte(0x01);
@@ -343,6 +465,12 @@ public class NpcPackets {
         return p;
     }
 
+    /**
+     * 移除玩家 NPC 包
+     *
+     * @param oid 对象 ID
+     * @return 移除玩家 NPC 包
+     */
     public static Packet removePlayerNPC(int oid) {
         final OutPacket p = OutPacket.create(SendOpcode.IMITATED_NPC_DATA);
         p.writeByte(0x00);
@@ -351,6 +479,7 @@ public class NpcPackets {
     }
 
     /**
+     * 设置 NPC 可编写脚本包
      * 使提供的 NPC 设置为可编写脚本，通知客户端搜索这些 NPC 的 js 脚本，
      * 即使它们在 wz 文件中已有条目。
      *

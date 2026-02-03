@@ -30,6 +30,13 @@ import java.util.stream.Stream;
  */
 public class CashShopPackets {
 
+    /**
+     * 打开商城
+     * @param c 客户端对象
+     * @param mts 是否MTS
+     * @return 数据包
+     * @throws Exception 异常
+     */
     public static Packet openCashShop(Client c, boolean mts) throws Exception {
         final OutPacket p = OutPacket.create(mts ? SendOpcode.SET_ITC : SendOpcode.SET_CASH_SHOP);
 
@@ -64,7 +71,7 @@ public class CashShopPackets {
                             LinkedHashMap::new // 保持插入顺序
                     ));
             Collection<ModifiedCashItemDO> items = itemMap.values();
-            p.writeShort(items.size());//Guess what
+            p.writeShort(items.size());// 猜猜看
             for (ModifiedCashItemDO item : items) {
                 PacketHelper.writeModifiedCashItem(p, item);
             }
@@ -91,6 +98,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示点券
+     * @param mc 角色对象
+     * @return 数据包
+     */
     public static Packet showCash(Character mc) {
         final OutPacket p = OutPacket.create(SendOpcode.QUERY_CASH_RESULT);
         p.writeInt(mc.getCashShop().getCash(CashShop.NX_CREDIT));
@@ -99,10 +111,20 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 启用商城使用
+     * @param mc 角色对象
+     * @return 数据包
+     */
     public static Packet enableCSUse(Character mc) {
         return showCash(mc);
     }
 
+    /**
+     * 显示商城背包
+     * @param c 客户端对象
+     * @return 数据包
+     */
     public static Packet showCashInventory(Client c) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -119,6 +141,12 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示购买的商城物品
+     * @param item 物品对象
+     * @param accountId 账号ID
+     * @return 数据包
+     */
     public static Packet showBoughtCashItem(Item item, int accountId) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -128,6 +156,12 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示购买的商城礼包
+     * @param cashPackage 礼包列表
+     * @param accountId 账号ID
+     * @return 数据包
+     */
     public static Packet showBoughtCashPackage(List<Item> cashPackage, int accountId) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -143,6 +177,13 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示购买的商城戒指
+     * @param ring 戒指物品
+     * @param recipient 接收者
+     * @param accountId 账号ID
+     * @return 数据包
+     */
     public static Packet showBoughtCashRing(Item ring, String recipient, int accountId) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
         p.writeByte(0x87);
@@ -153,6 +194,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示购买的任务物品
+     * @param itemId 物品ID
+     * @return 数据包
+     */
     public static Packet showBoughtQuestItem(int itemId) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
         p.writeByte(0x8D);
@@ -164,6 +210,12 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示购买的背包槽位
+     * @param type 类型
+     * @param slots 槽位数
+     * @return 数据包
+     */
     public static Packet showBoughtInventorySlots(int type, short slots) {
         OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -174,6 +226,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示购买的仓库槽位
+     * @param slots 槽位数
+     * @return 数据包
+     */
     public static Packet showBoughtStorageSlots(short slots) {
         OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -183,6 +240,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示购买的角色槽位
+     * @param slots 槽位数
+     * @return 数据包
+     */
     public static Packet showBoughtCharacterSlot(short slots) {
         OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -192,10 +254,16 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示礼物成功
+     * @param to 接收者
+     * @param item 物品对象
+     * @return 数据包
+     */
     public static Packet showGiftSucceed(String to, ModifiedCashItemDO item) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
-        p.writeByte(0x5E); //0x5D, Couldn't be sent
+        p.writeByte(0x5E); // 0x5D, 无法发送
         p.writeString(to);
         p.writeInt(item.getItemId());
         p.writeShort(item.getCount());
@@ -204,6 +272,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示礼物列表
+     * @param gifts 礼物列表
+     * @return 数据包
+     */
     public static Packet showGifts(List<Pair<Item, String>> gifts) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -217,6 +290,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 从商城背包取出
+     * @param item 物品对象
+     * @return 数据包
+     */
     public static Packet takeFromCashInventory(Item item) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -227,6 +305,12 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 放入商城背包
+     * @param item 物品对象
+     * @param accountId 账号ID
+     * @return 数据包
+     */
     public static Packet putIntoCashInventory(Item item, int accountId) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -236,6 +320,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 删除商城物品
+     * @param item 物品对象
+     * @return 数据包
+     */
     public static Packet deleteCashItem(Item item) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
         p.writeByte(0x6C);
@@ -243,6 +332,12 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 退款商城物品
+     * @param item 物品对象
+     * @param maplePoints 抵用券
+     * @return 数据包
+     */
     public static Packet refundCashItem(Item item, int maplePoints) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
         p.writeByte(0x85);
@@ -251,6 +346,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示商城消息
+     * @param message 消息代码
+     * @return 数据包
+     */
     public static Packet showCashShopMessage(byte message) {
         OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
         p.writeByte(0x5C);
@@ -258,6 +358,12 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示愿望清单
+     * @param mc 角色对象
+     * @param update 是否更新
+     * @return 数据包
+     */
     public static Packet showWishList(Character mc, boolean update) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
 
@@ -278,6 +384,15 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示兑换券兑换物品
+     * @param accountId 账号ID
+     * @param maplePoints 抵用券
+     * @param mesos 金币
+     * @param cashItems 现金物品列表
+     * @param items 物品列表
+     * @return 数据包
+     */
     public static Packet showCouponRedeemedItems(int accountId, int maplePoints, int mesos, List<Item> cashItems, List<Pair<Integer, Integer>> items) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
         p.writeByte(0x59);
@@ -289,39 +404,60 @@ public class CashShopPackets {
         p.writeInt(items.size());
         for (Pair<Integer, Integer> itemPair : items) {
             int quantity = itemPair.getLeft();
-            p.writeShort((short) quantity); //quantity (0 = 1 for cash items)
-            p.writeShort(0x1F); //0 = ?, >=0x20 = ?, <0x20 = ? (does nothing?)
+            p.writeShort((short) quantity); // 数量 (现金物品 0 = 1)
+            p.writeShort(0x1F); // 0 = ?, >=0x20 = ?, <0x20 = ? (无作用?)
             p.writeInt(itemPair.getRight());
         }
         p.writeInt(mesos);
         return p;
     }
 
+    /**
+     * 现金物品转蛋打开失败
+     * @return 数据包
+     */
     public static Packet onCashItemGachaponOpenFailed() {
         OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_CASH_ITEM_GACHAPON_RESULT);
         p.writeByte(0xE4);
         return p;
     }
 
+    /**
+     * 现金物品转蛋打开成功
+     * @param accountid 账号ID
+     * @param boxCashId 盒子现金ID
+     * @param remainingBoxes 剩余盒子数
+     * @param reward 奖励物品
+     * @param rewardItemId 奖励物品ID
+     * @param rewardQuantity 奖励数量
+     * @param bJackpot 是否大奖
+     * @return 数据包
+     */
     public static Packet onCashGachaponOpenSuccess(int accountid, long boxCashId, int remainingBoxes, Item reward,
                                                    int rewardItemId, int rewardQuantity, boolean bJackpot) {
         OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_CASH_ITEM_GACHAPON_RESULT);
-        p.writeByte(0xE5);   // subopcode thanks to Ubaware
+        p.writeByte(0xE5);   // 子操作码，感谢 Ubaware
         p.writeLong(boxCashId);
         p.writeInt(remainingBoxes);
         PacketHelper.addCashItemInformation(p, reward, accountid);
         p.writeInt(rewardItemId);
-        p.writeByte(rewardQuantity); // nSelectedItemCount
-        p.writeBool(bJackpot);// "CashGachaponJackpot"
+        p.writeByte(rewardQuantity); // 选中物品数量
+        p.writeBool(bJackpot);// "现金转蛋大奖"
         return p;
     }
 
+    /**
+     * 发送世界转移规则
+     * @param error 错误代码
+     * @param c 客户端对象
+     * @return 数据包
+     */
     public static Packet sendWorldTransferRules(int error, Client c) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_CHECK_TRANSFER_WORLD_POSSIBLE_RESULT);
-        p.writeInt(0); //ignored
+        p.writeInt(0); // 忽略
         p.writeByte(error);
         p.writeInt(0);
-        p.writeBool(error == 0); //0 = ?, otherwise list servers
+        p.writeBool(error == 0); // 0 = ?, 否则列出服务器
         if (error == 0) {
             List<World> worlds = Server.getInstance().getWorlds();
             p.writeInt(worlds.size());
@@ -332,6 +468,12 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示世界转移成功
+     * @param item 物品对象
+     * @param accountId 账号ID
+     * @return 数据包
+     */
     public static Packet showWorldTransferSuccess(Item item, int accountId) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
         p.writeByte(0xA0);
@@ -339,6 +481,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示世界转移取消
+     * @param success 是否成功
+     * @return 数据包
+     */
     public static Packet showWorldTransferCancel(boolean success) {
         OutPacket p = OutPacket.create(SendOpcode.CANCEL_TRANSFER_WORLD_RESULT);
         p.writeBool(success);
@@ -348,6 +495,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 发送名称转移规则
+     * @param error 错误代码
+     * @return 数据包
+     */
     public static Packet sendNameTransferRules(int error) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_CHECK_NAME_CHANGE_POSSIBLE_RESULT);
         p.writeInt(0);
@@ -357,14 +509,26 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 发送名称转移检查
+     * @param availableName 可用名称
+     * @param canUseName 是否可用
+     * @return 数据包
+     */
     public static Packet sendNameTransferCheck(String availableName, boolean canUseName) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_CHECK_NAME_CHANGE);
-        //Send provided name back to client to add to temporary cache of checked & accepted names
+        // 将提供的名称发送回客户端，以添加到已检查和已接受名称的临时缓存中
         p.writeString(availableName);
         p.writeBool(!canUseName);
         return p;
     }
 
+    /**
+     * 显示名称更改成功
+     * @param item 物品对象
+     * @param accountId 账号ID
+     * @return 数据包
+     */
     public static Packet showNameChangeSuccess(Item item, int accountId) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
         p.writeByte(0x9E);
@@ -372,6 +536,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示名称更改取消
+     * @param success 是否成功
+     * @return 数据包
+     */
     public static Packet showNameChangeCancel(boolean success) {
         OutPacket p = OutPacket.create(SendOpcode.CANCEL_NAME_CHANGE_RESULT);
         p.writeBool(success);
@@ -381,6 +550,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 显示MTS点券
+     * @param chr 角色对象
+     * @return 数据包
+     */
     public static Packet showMTSCash(Character chr) {
         final OutPacket p = OutPacket.create(SendOpcode.MTS_OPERATION2);
         p.writeInt(chr.getCashShop().getCash(CashShop.NX_PREPAID));
@@ -388,11 +562,20 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 发送MTS
+     * @param items 物品列表
+     * @param tab 标签
+     * @param type 类型
+     * @param page 页码
+     * @param pages 总页数
+     * @return 数据包
+     */
     public static Packet sendMTS(List<MTSItemInfo> items, int tab, int type, int page, int pages) {
         final OutPacket p = OutPacket.create(SendOpcode.MTS_OPERATION);
-        p.writeByte(0x15); //operation
-        p.writeInt(pages * 16); //testing, change to 10 if fails
-        p.writeInt(items.size()); //number of items
+        p.writeByte(0x15); // 操作
+        p.writeInt(pages * 16); // 测试中，如果失败请改为 10
+        p.writeInt(items.size()); // 物品数量
         p.writeInt(tab);
         p.writeInt(type);
         p.writeInt(page);
@@ -400,13 +583,13 @@ public class CashShopPackets {
         p.writeByte(1);
         for (MTSItemInfo item : items) {
             PacketHelper.addItemInfo(p, item.getItem(), true);
-            p.writeInt(item.getID()); //id
-            p.writeInt(item.getTaxes()); //this + below = price
-            p.writeInt(item.getPrice()); //price
+            p.writeInt(item.getID()); // ID
+            p.writeInt(item.getTaxes()); // 此项 + 下一项 = 价格
+            p.writeInt(item.getPrice()); // 价格
             p.writeInt(0);
             p.writeLong(PacketHelper.getTime(item.getEndingDate()));
-            p.writeString(item.getSeller()); //account name (what was nexon thinking?)
-            p.writeString(item.getSeller()); //char name
+            p.writeString(item.getSeller()); // 账号名称 (Nexon 在想什么？)
+            p.writeString(item.getSeller()); // 角色名称
             for (int j = 0; j < 28; j++) {
                 p.writeByte(0);
             }
@@ -415,6 +598,12 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * MTS求购列表结束
+     * @param nx 点券
+     * @param items 物品数
+     * @return 数据包
+     */
     public static Packet MTSWantedListingOver(int nx, int items) {
         final OutPacket p = OutPacket.create(SendOpcode.MTS_OPERATION);
         p.writeByte(0x3D);
@@ -423,18 +612,30 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * MTS确认出售
+     * @return 数据包
+     */
     public static Packet MTSConfirmSell() {
         final OutPacket p = OutPacket.create(SendOpcode.MTS_OPERATION);
         p.writeByte(0x1D);
         return p;
     }
 
+    /**
+     * MTS确认购买
+     * @return 数据包
+     */
     public static Packet MTSConfirmBuy() {
         final OutPacket p = OutPacket.create(SendOpcode.MTS_OPERATION);
         p.writeByte(0x33);
         return p;
     }
 
+    /**
+     * MTS购买失败
+     * @return 数据包
+     */
     public static Packet MTSFailBuy() {
         final OutPacket p = OutPacket.create(SendOpcode.MTS_OPERATION);
         p.writeByte(0x34);
@@ -442,6 +643,12 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * MTS确认转移
+     * @param quantity 数量
+     * @param pos 位置
+     * @return 数据包
+     */
     public static Packet MTSConfirmTransfer(int quantity, int pos) {
         final OutPacket p = OutPacket.create(SendOpcode.MTS_OPERATION);
         p.writeByte(0x27);
@@ -450,6 +657,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 未售出物品
+     * @param items 物品列表
+     * @return 数据包
+     */
     public static Packet notYetSoldInv(List<MTSItemInfo> items) {
         final OutPacket p = OutPacket.create(SendOpcode.MTS_OPERATION);
         p.writeByte(0x23);
@@ -457,13 +669,13 @@ public class CashShopPackets {
         if (!items.isEmpty()) {
             for (MTSItemInfo item : items) {
                 PacketHelper.addItemInfo(p, item.getItem(), true);
-                p.writeInt(item.getID()); //id
-                p.writeInt(item.getTaxes()); //this + below = price
-                p.writeInt(item.getPrice()); //price
+                p.writeInt(item.getID()); // ID
+                p.writeInt(item.getTaxes()); // 此项 + 下一项 = 价格
+                p.writeInt(item.getPrice()); // 价格
                 p.writeInt(0);
                 p.writeLong(PacketHelper.getTime(item.getEndingDate()));
-                p.writeString(item.getSeller()); //account name (what was nexon thinking?)
-                p.writeString(item.getSeller()); //char name
+                p.writeString(item.getSeller()); // 账号名称 (Nexon 在想什么？)
+                p.writeString(item.getSeller()); // 角色名称
                 for (int i = 0; i < 28; i++) {
                     p.writeByte(0);
                 }
@@ -474,6 +686,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 转移背包
+     * @param items 物品列表
+     * @return 数据包
+     */
     public static Packet transferInventory(List<MTSItemInfo> items) {
         final OutPacket p = OutPacket.create(SendOpcode.MTS_OPERATION);
         p.writeByte(0x21);
@@ -481,13 +698,13 @@ public class CashShopPackets {
         if (!items.isEmpty()) {
             for (MTSItemInfo item : items) {
                 PacketHelper.addItemInfo(p, item.getItem(), true);
-                p.writeInt(item.getID()); //id
-                p.writeInt(item.getTaxes()); //taxes
-                p.writeInt(item.getPrice()); //price
+                p.writeInt(item.getID()); // ID
+                p.writeInt(item.getTaxes()); // 税费
+                p.writeInt(item.getPrice()); // 价格
                 p.writeInt(0);
                 p.writeLong(PacketHelper.getTime(item.getEndingDate()));
-                p.writeString(item.getSeller()); //account name (what was nexon thinking?)
-                p.writeString(item.getSeller()); //char name
+                p.writeString(item.getSeller()); // 账号名称 (Nexon 在想什么？)
+                p.writeString(item.getSeller()); // 角色名称
                 for (int i = 0; i < 28; i++) {
                     p.writeByte(0);
                 }
@@ -498,6 +715,11 @@ public class CashShopPackets {
         return p;
     }
 
+    /**
+     * 使用宝箱
+     * @param type 类型
+     * @return 数据包
+     */
     public static Packet UseTreasureBox(int type){
         OutPacket p = OutPacket.create(SendOpcode.SUCCESS_IN_USE_GACHAPON_BOX);
         p.writeInt(type);

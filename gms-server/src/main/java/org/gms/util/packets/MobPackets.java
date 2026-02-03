@@ -106,7 +106,7 @@ public class MobPackets {
 
         p.writePos(life.getPosition());
         p.writeByte(life.getStance());
-        p.writeShort(0); //Origin FH
+        p.writeShort(0); //Origin FH // 原点 FH
         p.writeShort(life.getFh());
 
         if (life.getParentMobOid() != 0) {
@@ -122,10 +122,17 @@ public class MobPackets {
         }
 
         p.writeByte(life.getTeam());
-        p.writeInt(0); // getItemEffect
+        p.writeInt(0); // getItemEffect // 获取物品特效
         return p;
     }
 
+    /**
+     * 生成假怪物包
+     *
+     * @param life   怪物对象
+     * @param effect 特效
+     * @return 生成假怪物包
+     */
     public static Packet spawnFakeMonster(Monster life, int effect) {
         OutPacket p = OutPacket.create(SendOpcode.SPAWN_MONSTER_CONTROL);
         p.writeByte(1);
@@ -148,6 +155,12 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 使怪物变真包
+     *
+     * @param life 怪物对象
+     * @return 使怪物变真包
+     */
     public static Packet makeMonsterReal(Monster life) {
         OutPacket p = OutPacket.create(SendOpcode.SPAWN_MONSTER);
         p.writeInt(life.getObjectId());
@@ -163,6 +176,12 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 移除怪物隐身包
+     *
+     * @param life 怪物对象
+     * @return 移除怪物隐身包
+     */
     public static Packet removeMonsterInvisibility(Monster life) {
         final OutPacket p = OutPacket.create(SendOpcode.SPAWN_MONSTER_CONTROL);
         p.writeByte(1);
@@ -170,10 +189,30 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 使怪物隐身包
+     *
+     * @param life 怪物对象
+     * @return 使怪物隐身包
+     */
     public static Packet makeMonsterInvisible(Monster life) {
         return spawnMonsterInternal(life, true, false, false, 0, true);
     }
 
+    /**
+     * 移动怪物包
+     *
+     * @param oid                对象ID
+     * @param skillPossible      是否可能使用技能
+     * @param skill              技能
+     * @param skillId            技能ID
+     * @param skillLevel         技能等级
+     * @param pOption            选项
+     * @param startPos           起始位置
+     * @param movementPacket     移动数据包
+     * @param movementDataLength 移动数据长度
+     * @return 移动怪物包
+     */
     public static Packet moveMonster(int oid, boolean skillPossible, int skill, int skillId, int skillLevel, int pOption,
                                      Point startPos, InPacket movementPacket, long movementDataLength) {
         final OutPacket p = OutPacket.create(SendOpcode.MOVE_MONSTER);
@@ -189,10 +228,30 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 移动怪物响应包
+     *
+     * @param objectid  对象ID
+     * @param moveid    移动ID
+     * @param currentMp 当前MP
+     * @param useSkills 是否使用技能
+     * @return 移动怪物响应包
+     */
     public static Packet moveMonsterResponse(int objectid, short moveid, int currentMp, boolean useSkills) {
         return moveMonsterResponse(objectid, moveid, currentMp, useSkills, 0, 0);
     }
 
+    /**
+     * 移动怪物响应包（带技能）
+     *
+     * @param objectid   对象ID
+     * @param moveid     移动ID
+     * @param currentMp  当前MP
+     * @param useSkills  是否使用技能
+     * @param skillId    技能ID
+     * @param skillLevel 技能等级
+     * @return 移动怪物响应包
+     */
     public static Packet moveMonsterResponse(int objectid, short moveid, int currentMp, boolean useSkills, int skillId, int skillLevel) {
         OutPacket p = OutPacket.create(SendOpcode.MOVE_MONSTER_RESPONSE);
         p.writeInt(objectid);
@@ -204,10 +263,24 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 杀死怪物包
+     *
+     * @param objId     对象ID
+     * @param animation 是否有动画
+     * @return 杀死怪物包
+     */
     public static Packet killMonster(int objId, boolean animation) {
         return killMonster(objId, animation ? 1 : 0);
     }
 
+    /**
+     * 杀死怪物包（带动画类型）
+     *
+     * @param objId     对象ID
+     * @param animation 动画类型
+     * @return 杀死怪物包
+     */
     public static Packet killMonster(int objId, int animation) {
         OutPacket p = OutPacket.create(SendOpcode.KILL_MONSTER);
         p.writeInt(objId);
@@ -216,14 +289,39 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 伤害怪物包
+     *
+     * @param oid    对象ID
+     * @param damage 伤害
+     * @return 伤害怪物包
+     */
     public static Packet damageMonster(int oid, int damage) {
         return damageMonster(oid, damage, 0, 0);
     }
 
+    /**
+     * 治疗怪物包
+     *
+     * @param oid   对象ID
+     * @param heal  治疗量
+     * @param curhp 当前HP
+     * @param maxhp 最大HP
+     * @return 治疗怪物包
+     */
     public static Packet healMonster(int oid, int heal, int curhp, int maxhp) {
         return damageMonster(oid, -heal, curhp, maxhp);
     }
 
+    /**
+     * 伤害怪物包（带HP信息）
+     *
+     * @param oid    对象ID
+     * @param damage 伤害
+     * @param curhp  当前HP
+     * @param maxhp  最大HP
+     * @return 伤害怪物包
+     */
     private static Packet damageMonster(int oid, int damage, int curhp, int maxhp) {
         final OutPacket p = OutPacket.create(SendOpcode.DAMAGE_MONSTER);
         p.writeInt(oid);
@@ -234,6 +332,13 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 显示怪物HP包
+     *
+     * @param oid             对象ID
+     * @param remhppercentage 剩余HP百分比
+     * @return 显示怪物HP包
+     */
     public static Packet showMonsterHP(int oid, int remhppercentage) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_MONSTER_HP);
         p.writeInt(oid);
@@ -241,6 +346,16 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 显示Boss HP包
+     *
+     * @param oid        对象ID
+     * @param currHP     当前HP
+     * @param maxHP      最大HP
+     * @param tagColor   标签颜色
+     * @param tagBgColor 标签背景颜色
+     * @return 显示Boss HP包
+     */
     public static Packet showBossHP(int oid, int currHP, int maxHP, byte tagColor, byte tagBgColor) {
         final OutPacket p = OutPacket.create(SendOpcode.FIELD_EFFECT);
         p.writeByte(5);
@@ -252,6 +367,17 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 自定义显示Boss HP包
+     *
+     * @param call       调用
+     * @param oid        对象ID
+     * @param currHP     当前HP
+     * @param maxHP      最大HP
+     * @param tagColor   标签颜色
+     * @param tagBgColor 标签背景颜色
+     * @return 自定义显示Boss HP包
+     */
     public static Packet customShowBossHP(byte call, int oid, long currHP, long maxHP, byte tagColor, byte tagBgColor) {
         Pair<Integer, Integer> customHP = PacketHelper.normalizedCustomMaxHP(currHP, maxHP);
 
@@ -265,6 +391,14 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 应用怪物状态包
+     *
+     * @param oid        对象ID
+     * @param mse        怪物状态效果
+     * @param reflection 反射
+     * @return 应用怪物状态包
+     */
     public static Packet applyMonsterStatus(final int oid, final MonsterStatusEffect mse, final List<Integer> reflection) {
         Map<MonsterStatus, Integer> stati = mse.getStati();
         final OutPacket p = OutPacket.create(SendOpcode.APPLY_MONSTER_STATUS);
@@ -294,6 +428,13 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 取消怪物状态包
+     *
+     * @param oid   对象ID
+     * @param stats 状态映射
+     * @return 取消怪物状态包
+     */
     public static Packet cancelMonsterStatus(int oid, Map<MonsterStatus, Integer> stats) {
         final OutPacket p = OutPacket.create(SendOpcode.CANCEL_MONSTER_STATUS);
         p.writeInt(oid);
@@ -303,6 +444,13 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 捕捉怪物包
+     *
+     * @param mobOid  怪物对象ID
+     * @param success 是否成功
+     * @return 捕捉怪物包
+     */
     public static Packet catchMonster(int mobOid, byte success) {
         final OutPacket p = OutPacket.create(SendOpcode.CATCH_MONSTER);
         p.writeInt(mobOid);
@@ -310,6 +458,14 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 捕捉怪物包（带物品）
+     *
+     * @param mobOid  怪物对象ID
+     * @param itemid  物品ID
+     * @param success 是否成功
+     * @return 捕捉怪物包
+     */
     public static Packet catchMonster(int mobOid, int itemid, byte success) {
         final OutPacket p = OutPacket.create(SendOpcode.CATCH_MONSTER_WITH_ITEM);
         p.writeInt(mobOid);
@@ -318,6 +474,12 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 捕捉消息包
+     *
+     * @param message 消息
+     * @return 捕捉消息包
+     */
     public static Packet catchMessage(int message) {
         final OutPacket p = OutPacket.create(SendOpcode.BRIDLE_MOB_CATCH_FAIL);
         p.writeByte(message);
@@ -326,6 +488,14 @@ public class MobPackets {
         return p;
     }
 
+    /**
+     * 怪物伤害怪物包（友好）
+     *
+     * @param mob         怪物对象
+     * @param damage      伤害
+     * @param remainingHp 剩余HP
+     * @return 怪物伤害怪物包
+     */
     public static Packet MobDamageMobFriendly(Monster mob, int damage, int remainingHp) {
         final OutPacket p = OutPacket.create(SendOpcode.DAMAGE_MONSTER);
         p.writeInt(mob.getObjectId());

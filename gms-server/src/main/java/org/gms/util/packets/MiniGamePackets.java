@@ -34,6 +34,15 @@ import java.util.Set;
  */
 public class MiniGamePackets {
 
+    /**
+     * 获取小游戏包
+     *
+     * @param c        客户端对象
+     * @param minigame 小游戏对象
+     * @param owner    是否是房主
+     * @param piece    棋子类型
+     * @return 小游戏包
+     */
     public static Packet getMiniGame(Client c, MiniGame minigame, boolean owner, int piece) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.ROOM.getCode());
@@ -72,18 +81,37 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取小游戏准备包
+     *
+     * @param game 小游戏对象
+     * @return 小游戏准备包
+     */
     public static Packet getMiniGameReady(MiniGame game) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.READY.getCode());
         return p;
     }
 
+    /**
+     * 获取小游戏取消准备包
+     *
+     * @param game 小游戏对象
+     * @return 小游戏取消准备包
+     */
     public static Packet getMiniGameUnReady(MiniGame game) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.UN_READY.getCode());
         return p;
     }
 
+    /**
+     * 获取小游戏开始包
+     *
+     * @param game  小游戏对象
+     * @param loser 输家
+     * @return 小游戏开始包
+     */
     public static Packet getMiniGameStart(MiniGame game, int loser) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.START.getCode());
@@ -91,6 +119,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取小游戏房主跳过包
+     *
+     * @param game 小游戏对象
+     * @return 小游戏房主跳过包
+     */
     public static Packet getMiniGameSkipOwner(MiniGame game) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.SKIP.getCode());
@@ -98,24 +132,51 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取小游戏访客跳过包
+     *
+     * @param game 小游戏对象
+     * @return 小游戏访客跳过包
+     */
     public static Packet getMiniGameSkipVisitor(MiniGame game) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeShort(PlayerInteractionHandler.Action.SKIP.getCode());
         return p;
     }
 
+    /**
+     * 获取小游戏请求平局包
+     *
+     * @param game 小游戏对象
+     * @return 小游戏请求平局包
+     */
     public static Packet getMiniGameRequestTie(MiniGame game) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.REQUEST_TIE.getCode());
         return p;
     }
 
+    /**
+     * 获取小游戏拒绝平局包
+     *
+     * @param game 小游戏对象
+     * @return 小游戏拒绝平局包
+     */
     public static Packet getMiniGameDenyTie(MiniGame game) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.ANSWER_TIE.getCode());
         return p;
     }
 
+    /**
+     * 获取小游戏移动五子棋包
+     *
+     * @param game  小游戏对象
+     * @param move1 移动坐标1
+     * @param move2 移动坐标2
+     * @param move3 移动坐标3
+     * @return 小游戏移动五子棋包
+     */
     public static Packet getMiniGameMoveOmok(MiniGame game, int move1, int move2, int move3) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.MOVE_OMOK.getCode());
@@ -125,6 +186,14 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取小游戏新访客包
+     *
+     * @param minigame 小游戏对象
+     * @param chr      角色对象
+     * @param slot     槽位
+     * @return 小游戏新访客包
+     */
     public static Packet getMiniGameNewVisitor(MiniGame minigame, Character chr, int slot) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.VISIT.getCode());
@@ -139,6 +208,11 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取小游戏移除访客包
+     *
+     * @return 小游戏移除访客包
+     */
     public static Packet getMiniGameRemoveVisitor() {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.EXIT.getCode());
@@ -146,18 +220,47 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取小游戏房主胜利包
+     *
+     * @param game    小游戏对象
+     * @param forfeit 是否弃权
+     * @return 小游戏房主胜利包
+     */
     public static Packet getMiniGameOwnerWin(MiniGame game, boolean forfeit) {
         return getMiniGameResult(game, 0, 1, forfeit ? 1 : 0);
     }
 
+    /**
+     * 获取小游戏访客胜利包
+     *
+     * @param game    小游戏对象
+     * @param forfeit 是否弃权
+     * @return 小游戏访客胜利包
+     */
     public static Packet getMiniGameVisitorWin(MiniGame game, boolean forfeit) {
         return getMiniGameResult(game, 0, 2, forfeit ? 1 : 0);
     }
 
+    /**
+     * 获取小游戏平局包
+     *
+     * @param game 小游戏对象
+     * @return 小游戏平局包
+     */
     public static Packet getMiniGameTie(MiniGame game) {
         return getMiniGameResult(game, 1, 3, 0);
     }
 
+    /**
+     * 获取小游戏结果包
+     *
+     * @param game    小游戏对象
+     * @param tie     是否平局
+     * @param result  结果
+     * @param forfeit 是否弃权
+     * @return 小游戏结果包
+     */
     private static Packet getMiniGameResult(MiniGame game, int tie, int result, int forfeit) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.GET_RESULT.getCode());
@@ -205,6 +308,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取小游戏关闭包
+     *
+     * @param visitor 是否是访客
+     * @param type    类型
+     * @return 小游戏关闭包
+     */
     public static Packet getMiniGameClose(boolean visitor, int type) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.EXIT.getCode());
@@ -213,6 +323,15 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取配对卡包
+     *
+     * @param c        客户端对象
+     * @param minigame 小游戏对象
+     * @param owner    是否是房主
+     * @param piece    棋子类型
+     * @return 配对卡包
+     */
     public static Packet getMatchCard(Client c, MiniGame minigame, boolean owner, int piece) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.ROOM.getCode());
@@ -253,6 +372,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取配对卡开始包
+     *
+     * @param game  小游戏对象
+     * @param loser 输家
+     * @return 配对卡开始包
+     */
     public static Packet getMatchCardStart(MiniGame game, int loser) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.START.getCode());
@@ -274,6 +400,14 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取配对卡新访客包
+     *
+     * @param minigame 小游戏对象
+     * @param chr      角色对象
+     * @param slot     槽位
+     * @return 配对卡新访客包
+     */
     public static Packet getMatchCardNewVisitor(MiniGame minigame, Character chr, int slot) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.VISIT.getCode());
@@ -288,6 +422,16 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取配对卡选择包
+     *
+     * @param game      小游戏对象
+     * @param turn      回合
+     * @param slot      槽位
+     * @param firstslot 第一张卡槽位
+     * @param type      类型
+     * @return 配对卡选择包
+     */
     public static Packet getMatchCardSelect(MiniGame game, int turn, int slot, int firstslot, int type) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.SELECT_CARD.getCode());
@@ -302,6 +446,26 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取迷你房间错误包
+     * 1 = Room already closed  2 = Can't enter due full cappacity 3 = Other requests at this minute
+     * 4 = Can't do while dead 5 = Can't do while middle event 6 = This character unable to do it
+     * 7, 20 = Not allowed to trade anymore 9 = Can only trade on same map 10 = May not open store near portal
+     * 11, 14 = Can't start game here 12 = Can't open store at this channel 13 = Can't estabilish miniroom
+     * 15 = Stores only an the free market 16 = Lists the rooms at FM (?) 17 = You may not enter this store
+     * 18 = Owner undergoing store maintenance 19 = Unable to enter tournament room 21 = Not enough mesos to enter
+     * 22 = Incorrect password
+     * 1 = 房间已关闭 2 = 房间已满无法进入 3 = 此刻有其他请求
+     * 4 = 死亡状态无法操作 5 = 活动进行中无法操作 6 = 此角色无法操作
+     * 7, 20 = 不允许再交易 9 = 只能在同一地图交易 10 = 不能在传送门附近开店
+     * 11, 14 = 无法在此处开始游戏 12 = 无法在此频道开店 13 = 无法建立迷你房间
+     * 15 = 商店只能在自由市场 16 = 列出自由市场的房间 (?) 17 = 您不能进入此商店
+     * 18 = 店主正在维护商店 19 = 无法进入锦标赛房间 21 = 金币不足无法进入
+     * 22 = 密码错误
+     *
+     * @param status 状态码
+     * @return 迷你房间错误包
+     */
     public static Packet getMiniRoomError(int status) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.ROOM.getCode());
@@ -310,6 +474,14 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 添加五子棋盒包
+     *
+     * @param chr    角色对象
+     * @param amount 数量
+     * @param type   类型
+     * @return 添加五子棋盒包
+     */
     public static Packet addOmokBox(Character chr, int amount, int type) {
         OutPacket p = OutPacket.create(SendOpcode.UPDATE_CHAR_BOX);
         p.writeInt(chr.getId());
@@ -317,6 +489,14 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 添加配对卡盒包
+     *
+     * @param chr    角色对象
+     * @param amount 数量
+     * @param type   类型
+     * @return 添加配对卡盒包
+     */
     public static Packet addMatchCardBox(Character chr, int amount, int type) {
         OutPacket p = OutPacket.create(SendOpcode.UPDATE_CHAR_BOX);
         p.writeInt(chr.getId());
@@ -324,6 +504,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 移除小游戏盒包
+     *
+     * @param chr 角色对象
+     * @return 移除小游戏盒包
+     */
     public static Packet removeMinigameBox(Character chr) {
         OutPacket p = OutPacket.create(SendOpcode.UPDATE_CHAR_BOX);
         p.writeInt(chr.getId());
@@ -331,6 +517,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取玩家商店包
+     *
+     * @param shop  玩家商店对象
+     * @param owner 是否是店主
+     * @return 玩家商店包
+     */
     public static Packet getPlayerShop(PlayerShop shop, boolean owner) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.ROOM.getCode());
@@ -382,6 +575,14 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取玩家商店聊天包
+     *
+     * @param chr   角色对象
+     * @param chat  聊天内容
+     * @param owner 是否是店主
+     * @return 玩家商店聊天包
+     */
     public static Packet getPlayerShopChat(Character chr, String chat, boolean owner) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.CHAT.getCode());
@@ -391,6 +592,14 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取玩家商店聊天包（带槽位）
+     *
+     * @param chr  角色对象
+     * @param chat 聊天内容
+     * @param slot 槽位
+     * @return 玩家商店聊天包
+     */
     public static Packet getPlayerShopChat(Character chr, String chat, byte slot) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.CHAT.getCode());
@@ -400,6 +609,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取玩家商店新访客包
+     *
+     * @param chr  角色对象
+     * @param slot 槽位
+     * @return 玩家商店新访客包
+     */
     public static Packet getPlayerShopNewVisitor(Character chr, int slot) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.VISIT.getCode());
@@ -409,6 +625,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取玩家商店移除访客包
+     *
+     * @param slot 槽位
+     * @return 玩家商店移除访客包
+     */
     public static Packet getPlayerShopRemoveVisitor(int slot) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.EXIT.getCode());
@@ -418,6 +640,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取玩家商店物品更新包
+     *
+     * @param shop 玩家商店对象
+     * @return 玩家商店物品更新包
+     */
     public static Packet getPlayerShopItemUpdate(PlayerShop shop) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.UPDATE_MERCHANT.getCode());
@@ -431,6 +659,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取玩家商店店主更新包
+     *
+     * @param item     售出物品
+     * @param position 位置
+     * @return 玩家商店店主更新包
+     */
     public static Packet getPlayerShopOwnerUpdate(PlayerShop.SoldItem item, int position) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.UPDATE_PLAYERSHOP.getCode());
@@ -441,6 +676,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 更新玩家商店盒包
+     *
+     * @param shop 玩家商店对象
+     * @return 更新玩家商店盒包
+     */
     public static Packet updatePlayerShopBox(PlayerShop shop) {
         final OutPacket p = OutPacket.create(SendOpcode.UPDATE_CHAR_BOX);
         p.writeInt(shop.getOwner().getId());
@@ -448,6 +689,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 移除玩家商店盒包
+     *
+     * @param shop 玩家商店对象
+     * @return 移除玩家商店盒包
+     */
     public static Packet removePlayerShopBox(PlayerShop shop) {
         OutPacket p = OutPacket.create(SendOpcode.UPDATE_CHAR_BOX);
         p.writeInt(shop.getOwner().getId());
@@ -455,6 +702,14 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取交易开始包
+     *
+     * @param c      客户端对象
+     * @param trade  交易对象
+     * @param number 编号
+     * @return 交易开始包
+     */
     public static Packet getTradeStart(Client c, org.gms.server.Trade trade, byte number) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.ROOM.getCode());
@@ -473,12 +728,31 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取交易确认包
+     *
+     * @return 交易确认包
+     */
     public static Packet getTradeConfirmation() {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.CONFIRM.getCode());
         return p;
     }
 
+    /**
+     * 获取交易结果包
+     * Possible values for <code>operation</code>:<br> 2: Trade cancelled, by the
+     * other character<br> 7: Trade successful<br> 8: Trade unsuccessful<br>
+     * 9: Cannot carry more one-of-a-kind items<br> 12: Cannot trade on different maps<br>
+     * 13: Cannot trade, game files damaged<br>
+     * operation 可能的值:<br> 2: 交易被对方取消<br> 7: 交易成功<br> 8: 交易失败<br>
+     * 9: 无法携带更多唯一物品<br> 12: 无法在不同地图交易<br>
+     * 13: 无法交易，游戏文件损坏<br>
+     *
+     * @param number    编号
+     * @param operation 操作码
+     * @return 交易结果包
+     */
     public static Packet getTradeResult(byte number, byte operation) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.EXIT.getCode());
@@ -487,6 +761,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取交易伙伴添加包
+     *
+     * @param chr 角色对象
+     * @return 交易伙伴添加包
+     */
     public static Packet getTradePartnerAdd(Character chr) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.VISIT.getCode());
@@ -496,6 +776,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 交易邀请包
+     *
+     * @param chr 角色对象
+     * @return 交易邀请包
+     */
     public static Packet tradeInvite(Character chr) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.INVITE.getCode());
@@ -505,6 +791,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取交易金币设置包
+     *
+     * @param number 编号
+     * @param meso   金币
+     * @return 交易金币设置包
+     */
     public static Packet getTradeMesoSet(byte number, int meso) {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.SET_MESO.getCode());
@@ -513,6 +806,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取交易物品添加包
+     *
+     * @param number 编号
+     * @param item   物品对象
+     * @return 交易物品添加包
+     */
     public static Packet getTradeItemAdd(byte number, Item item) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.SET_ITEMS.getCode());
@@ -522,6 +822,14 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取交易聊天包
+     *
+     * @param chr   角色对象
+     * @param chat  聊天内容
+     * @param owner 是否是房主
+     * @return 交易聊天包
+     */
     public static Packet getTradeChat(Character chr, String chat, boolean owner) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.CHAT.getCode());
@@ -531,12 +839,25 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 雇佣商人盒包
+     *
+     * @return 雇佣商人盒包
+     */
     public static Packet hiredMerchantBox() {
         final OutPacket p = OutPacket.create(SendOpcode.ENTRUSTED_SHOP_CHECK_RESULT); // header.
         p.writeByte(0x07);
         return p;
     }
 
+    /**
+     * 获取雇佣商人包
+     *
+     * @param chr       角色对象
+     * @param hm        雇佣商人对象
+     * @param firstTime 是否首次
+     * @return 雇佣商人包
+     */
     public static Packet getHiredMerchant(Character chr, HiredMerchant hm, boolean firstTime) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.ROOM.getCode());
@@ -607,6 +928,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 更新雇佣商人包
+     *
+     * @param hm  雇佣商人对象
+     * @param chr 角色对象
+     * @return 更新雇佣商人包
+     */
     public static Packet updateHiredMerchant(HiredMerchant hm, Character chr) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.UPDATE_MERCHANT.getCode());
@@ -621,6 +949,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 雇佣商人聊天包
+     *
+     * @param message 消息
+     * @param slot    槽位
+     * @return 雇佣商人聊天包
+     */
     public static Packet hiredMerchantChat(String message, byte slot) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.CHAT.getCode());
@@ -630,6 +965,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 雇佣商人访客离开包
+     *
+     * @param slot 槽位
+     * @return 雇佣商人访客离开包
+     */
     public static Packet hiredMerchantVisitorLeave(int slot) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.EXIT.getCode());
@@ -639,6 +980,11 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 雇佣商人店主离开包
+     *
+     * @return 雇佣商人店主离开包
+     */
     public static Packet hiredMerchantOwnerLeave() {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.REAL_CLOSE_MERCHANT.getCode());
@@ -646,6 +992,11 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 雇佣商人店主维护离开包
+     *
+     * @return 雇佣商人店主维护离开包
+     */
     public static Packet hiredMerchantOwnerMaintenanceLeave() {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.REAL_CLOSE_MERCHANT.getCode());
@@ -653,6 +1004,11 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 雇佣商人维护消息包
+     *
+     * @return 雇佣商人维护消息包
+     */
     public static Packet hiredMerchantMaintenanceMessage() {
         OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.ROOM.getCode());
@@ -661,6 +1017,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 离开雇佣商人包
+     *
+     * @param slot    槽位
+     * @param status2 状态2
+     * @return 离开雇佣商人包
+     */
     public static Packet leaveHiredMerchant(int slot, int status2) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.EXIT.getCode());
@@ -669,6 +1032,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 查看商人访客历史包
+     *
+     * @param pastVisitors 访客历史列表
+     * @return 查看商人访客历史包
+     */
     public static Packet viewMerchantVisitorHistory(List<HiredMerchant.PastVisitor> pastVisitors) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.VIEW_VISITORS.getCode());
@@ -680,6 +1049,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 查看商人黑名单包
+     *
+     * @param chrNames 角色名集合
+     * @return 查看商人黑名单包
+     */
     public static Packet viewMerchantBlacklist(Set<String> chrNames) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.VIEW_BLACKLIST.getCode());
@@ -690,6 +1065,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 雇佣商人添加访客包
+     *
+     * @param chr  角色对象
+     * @param slot 槽位
+     * @return 雇佣商人添加访客包
+     */
     public static Packet hiredMerchantVisitorAdd(Character chr, int slot) {
         final OutPacket p = OutPacket.create(SendOpcode.PLAYER_INTERACTION);
         p.writeByte(PlayerInteractionHandler.Action.VISIT.getCode());
@@ -699,6 +1081,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 生成雇佣商人盒包
+     *
+     * @param hm 雇佣商人对象
+     * @return 生成雇佣商人盒包
+     */
     public static Packet spawnHiredMerchantBox(HiredMerchant hm) {
         final OutPacket p = OutPacket.create(SendOpcode.SPAWN_HIRED_MERCHANT);
         p.writeInt(hm.getOwnerId());
@@ -715,12 +1103,24 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 移除雇佣商人盒包
+     *
+     * @param id ID
+     * @return 移除雇佣商人盒包
+     */
     public static Packet removeHiredMerchantBox(int id) {
         final OutPacket p = OutPacket.create(SendOpcode.DESTROY_HIRED_MERCHANT);
         p.writeInt(id);
         return p;
     }
 
+    /**
+     * 更新雇佣商人盒包
+     *
+     * @param hm 雇佣商人对象
+     * @return 更新雇佣商人盒包
+     */
     public static Packet updateHiredMerchantBox(HiredMerchant hm) {
         final OutPacket p = OutPacket.create(SendOpcode.UPDATE_HIRED_MERCHANT);
         p.writeInt(hm.getOwnerId());
@@ -728,6 +1128,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取弗雷德里克包
+     *
+     * @param op 操作码
+     * @return 弗雷德里克包
+     */
     public static Packet getFredrick(byte op) {
         final OutPacket p = OutPacket.create(SendOpcode.FREDRICK);
         p.writeByte(op);
@@ -744,6 +1150,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取弗雷德里克包（带物品）
+     *
+     * @param chr       角色对象
+     * @param merchants 商人列表
+     * @return 弗雷德里克包
+     */
     public static Packet getFredrick(Character chr, List<HiredMerchantsDO> merchants) {
         final OutPacket p = OutPacket.create(SendOpcode.FREDRICK);
         p.writeByte(0x23);
@@ -785,12 +1198,23 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 弗雷德里克消息包
+     *
+     * @param operation 操作码
+     * @return 弗雷德里克消息包
+     */
     public static Packet fredrickMessage(byte operation) {
         final OutPacket p = OutPacket.create(SendOpcode.FREDRICK_MESSAGE);
         p.writeByte(operation);
         return p;
     }
 
+    /**
+     * 打开 RPS NPC 包
+     *
+     * @return 打开 RPS NPC 包
+     */
     public static Packet openRPSNPC() {
         OutPacket p = OutPacket.create(SendOpcode.RPS_GAME);
         p.writeByte(8);// open npc
@@ -798,6 +1222,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * RPS 金币错误包
+     *
+     * @param mesos 金币
+     * @return RPS 金币错误包
+     */
     public static Packet rpsMesoError(int mesos) {
         OutPacket p = OutPacket.create(SendOpcode.RPS_GAME);
         p.writeByte(0x06);
@@ -807,6 +1237,13 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * RPS 选择包
+     *
+     * @param selection 选择
+     * @param answer    答案
+     * @return RPS 选择包
+     */
     public static Packet rpsSelection(byte selection, byte answer) {
         OutPacket p = OutPacket.create(SendOpcode.RPS_GAME);
         p.writeByte(0x0B);// 11l
@@ -815,18 +1252,51 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * RPS 模式包
+     *
+     * @param mode 模式
+     * @return RPS 模式包
+     */
     public static Packet rpsMode(byte mode) {
         OutPacket p = OutPacket.create(SendOpcode.RPS_GAME);
         p.writeByte(mode);
         return p;
     }
 
+    /**
+     * 获取猫头鹰消息包
+     * 获取猫头鹰商店操作结果消息包
+     *
+     * @param msg 消息代码
+     * @return 猫头鹰消息包
+     * @description 根据传入的消息代码返回对应的操作结果提示包。
+     * 消息代码含义：
+     * 0: 操作成功
+     * 1: 房间已关闭
+     * 2: 房间人数已满，无法进入
+     * 3: 当前分钟有其他请求正在处理
+     * 4: 死亡状态下无法执行此操作
+     * 7: 当前不允许交易其他物品
+     * 17: 无权进入此商店
+     * 18: 店主正在进行商店维护，请稍后再试
+     * 23: 此功能只能在自由市场内使用
+     * default: 角色无法执行此操作
+     */
     public static Packet getOwlMessage(int msg) {
         OutPacket p = OutPacket.create(SendOpcode.SHOP_LINK_RESULT);
         p.writeByte(msg);
         return p;
     }
 
+    /**
+     * 密涅瓦猫头鹰包
+     *
+     * @param c            客户端对象
+     * @param itemId       物品ID
+     * @param hmsAvailable 可用商人列表
+     * @return 密涅瓦猫头鹰包
+     */
     public static Packet owlOfMinerva(Client c, int itemId, List<Pair<PlayerShopItem, AbstractMapObject>> hmsAvailable) {
         byte itemType = ItemConstants.getInventoryType(itemId).getType();
 
@@ -871,6 +1341,12 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 获取猫头鹰打开包
+     *
+     * @param owlLeaderboards 排行榜
+     * @return 猫头鹰打开包
+     */
     public static Packet getOwlOpen(List<Integer> owlLeaderboards) {
         OutPacket p = OutPacket.create(SendOpcode.SHOP_SCANNER_RESULT);
         p.writeByte(7);
@@ -882,12 +1358,30 @@ public class MiniGamePackets {
         return p;
     }
 
+    /**
+     * 检索第一条消息包
+     *
+     * @return 检索第一条消息包
+     */
     public static Packet retrieveFirstMessage() {
         final OutPacket p = OutPacket.create(SendOpcode.ENTRUSTED_SHOP_CHECK_RESULT); // header.
         p.writeByte(0x09);
         return p;
     }
 
+    /**
+     * 远程频道更改包
+     * 创建远程频道切换数据包
+     * <p>
+     * ENTRUSTED_SHOP_CHECK_RESULT 可能的值说明：
+     * 0x0E = 00 = 重命名失败 - 找不到商店, 01 = 重命名成功
+     * 0x10 = 切换到商店所在频道（商店在频道1开放，是否要切换频道？）
+     * 0x11 = 管理期间无法出售物品...等提示
+     * 0x12 = 弹出窗口提示
+     *
+     * @param ch 目标频道号
+     * @return 远程频道更改包
+     */
     public static Packet remoteChannelChange(byte ch) {
         final OutPacket p = OutPacket.create(SendOpcode.ENTRUSTED_SHOP_CHECK_RESULT);
         p.writeByte(0x10);

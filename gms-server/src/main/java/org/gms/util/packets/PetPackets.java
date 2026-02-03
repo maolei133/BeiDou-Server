@@ -16,6 +16,14 @@ import java.util.List;
  */
 public class PetPackets {
 
+    /**
+     * 显示宠物
+     * @param chr 角色对象
+     * @param pet 宠物对象
+     * @param remove 是否移除
+     * @param hunger 是否饥饿
+     * @return 数据包
+     */
     public static Packet showPet(Character chr, Pet pet, boolean remove, boolean hunger) {
         OutPacket p = OutPacket.create(SendOpcode.SPAWN_PET);
         p.writeInt(chr.getId());
@@ -29,6 +37,14 @@ public class PetPackets {
         return p;
     }
 
+    /**
+     * 移动宠物
+     * @param cid 角色ID
+     * @param pid 宠物ID
+     * @param slot 槽位
+     * @param moves 移动列表
+     * @return 数据包
+     */
     public static Packet movePet(int cid, int pid, byte slot, List<LifeMovementFragment> moves) {
         final OutPacket p = OutPacket.create(SendOpcode.MOVE_PET);
         p.writeInt(cid);
@@ -38,6 +54,14 @@ public class PetPackets {
         return p;
     }
 
+    /**
+     * 宠物聊天
+     * @param cid 角色ID
+     * @param index 索引
+     * @param act 动作
+     * @param text 文本
+     * @return 数据包
+     */
     public static Packet petChat(int cid, byte index, int act, String text) {
         final OutPacket p = OutPacket.create(SendOpcode.PET_CHAT);
         p.writeInt(cid);
@@ -49,6 +73,14 @@ public class PetPackets {
         return p;
     }
 
+    /**
+     * 宠物食物响应
+     * @param cid 角色ID
+     * @param index 索引
+     * @param success 是否成功
+     * @param balloonType 气泡类型
+     * @return 数据包
+     */
     public static Packet petFoodResponse(int cid, byte index, boolean success, boolean balloonType) {
         final OutPacket p = OutPacket.create(SendOpcode.PET_COMMAND);
         p.writeInt(cid);
@@ -59,6 +91,15 @@ public class PetPackets {
         return p;
     }
 
+    /**
+     * 命令响应
+     * @param cid 角色ID
+     * @param index 索引
+     * @param talk 是否说话
+     * @param animation 动画
+     * @param balloonType 气泡类型
+     * @return 数据包
+     */
     public static Packet commandResponse(int cid, byte index, boolean talk, int animation, boolean balloonType) {
         final OutPacket p = OutPacket.create(SendOpcode.PET_COMMAND);
         p.writeInt(cid);
@@ -70,14 +111,25 @@ public class PetPackets {
         return p;
     }
 
+    /**
+     * 显示自身宠物升级
+     * @param index 索引
+     * @return 数据包
+     */
     public static Packet showOwnPetLevelUp(byte index) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_ITEM_GAIN_INCHAT);
         p.writeByte(4);
         p.writeByte(0);
-        p.writeByte(index); // Pet Index
+        p.writeByte(index); // 宠物索引
         return p;
     }
 
+    /**
+     * 显示宠物升级
+     * @param chr 角色对象
+     * @param index 索引
+     * @return 数据包
+     */
     public static Packet showPetLevelUp(Character chr, byte index) {
         final OutPacket p = OutPacket.create(SendOpcode.SHOW_FOREIGN_EFFECT);
         p.writeInt(chr.getId());
@@ -87,6 +139,13 @@ public class PetPackets {
         return p;
     }
 
+    /**
+     * 更改宠物名称
+     * @param chr 角色对象
+     * @param newname 新名称
+     * @param slot 槽位
+     * @return 数据包
+     */
     public static Packet changePetName(Character chr, String newname, int slot) {
         OutPacket p = OutPacket.create(SendOpcode.PET_NAMECHANGE);
         p.writeInt(chr.getId());
@@ -96,6 +155,14 @@ public class PetPackets {
         return p;
     }
 
+    /**
+     * 加载例外列表
+     * @param cid 角色ID
+     * @param petId 宠物ID
+     * @param petIdx 宠物索引
+     * @param data 数据列表
+     * @return 数据包
+     */
     public static Packet loadExceptionList(final int cid, final int petId, final byte petIdx, final List<Integer> data) {
         final OutPacket p = OutPacket.create(SendOpcode.PET_EXCEPTION_LIST);
         p.writeInt(cid);
@@ -108,6 +175,11 @@ public class PetPackets {
         return p;
     }
 
+    /**
+     * 宠物状态更新
+     * @param chr 角色对象
+     * @return 数据包
+     */
     public static Packet petStatUpdate(Character chr) {
         final OutPacket p = OutPacket.create(SendOpcode.STAT_CHANGED);
         int mask = 0;

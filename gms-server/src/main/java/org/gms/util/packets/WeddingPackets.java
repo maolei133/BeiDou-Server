@@ -234,9 +234,9 @@ public class WeddingPackets {
      */
     public static Packet onMarriageRequest(String name, int playerid) {
         OutPacket p = OutPacket.create(SendOpcode.MARRIAGE_REQUEST);
-        p.writeByte(0); //mode, 0 = engage, 1 = cancel, 2 = answer.. etc
-        p.writeString(name); // name
-        p.writeInt(playerid); // playerid
+        p.writeByte(0); //mode, 0 = engage, 1 = cancel, 2 = answer.. etc // 模式，0 = 订婚，1 = 取消，2 = 回答.. 等
+        p.writeString(name); // name // 名字
+        p.writeInt(playerid); // playerid // 玩家ID
         return p;
     }
 
@@ -260,17 +260,17 @@ public class WeddingPackets {
      * @return mplew (MaplePacket) 用于 byte[]->ImageIO 转换和读取的字节数组
      */
     public static Packet onTakePhoto(String ReservedGroomName, String ReservedBrideName, int m_dwField, List<Character> m_dwUsers) { // OnIFailedAtWeddingPhotos
-        OutPacket p = OutPacket.create(SendOpcode.WEDDING_PHOTO);// v53 header, convert -> v83
+        OutPacket p = OutPacket.create(SendOpcode.WEDDING_PHOTO);// v53 header, convert -> v83 // v53 头部，转换为 v83
         p.writeString(ReservedGroomName);
         p.writeString(ReservedBrideName);
-        p.writeInt(m_dwField); // field id?
+        p.writeInt(m_dwField); // field id? // 字段 ID？
         p.writeInt(m_dwUsers.size());
 
         for (Character guest : m_dwUsers) {
             // 开始头像编码
             addCharLook(p, guest, false); // CUser::EncodeAvatar
-            p.writeInt(30000); // v20 = *(_DWORD *)(v13 + 2192) -- new groom marriage ID??
-            p.writeInt(30000); // v20 = *(_DWORD *)(v13 + 2192) -- new bride marriage ID??
+            p.writeInt(30000); // v20 = *(_DWORD *)(v13 + 2192) -- new groom marriage ID?? // 新新郎婚姻 ID？？
+            p.writeInt(30000); // v20 = *(_DWORD *)(v13 + 2192) -- new bride marriage ID?? // 新新娘婚姻 ID？？
             p.writeString(guest.getName());
             p.writeString(guest.getGuildId() > 0 && guest.getGuild() != null ? guest.getGuild().getName() : "");
             p.writeShort(guest.getGuildId() > 0 && guest.getGuild() != null ? guest.getGuild().getLogoBG() : 0);
@@ -282,11 +282,11 @@ public class WeddingPackets {
             // 开始截图编码
             p.writeByte(1); // // if ( *(_DWORD *)(v13 + 288) ) { COutPacket::Encode1(&thisa, v20);
             // CPet::EncodeScreenShotPacket(*(CPet **)(v13 + 288), &thisa);
-            p.writeInt(1); // dwTemplateID
-            p.writeString(guest.getName()); // m_sName
-            p.writeShort(guest.getPosition().x); // m_ptCurPos.x
-            p.writeShort(guest.getPosition().y); // m_ptCurPos.y
-            p.writeByte(guest.getStance()); // guest.m_bMoveAction
+            p.writeInt(1); // dwTemplateID // 模板 ID
+            p.writeString(guest.getName()); // m_sName // 名字
+            p.writeShort(guest.getPosition().x); // m_ptCurPos.x // 当前位置 X
+            p.writeShort(guest.getPosition().y); // m_ptCurPos.y // 当前位置 Y
+            p.writeByte(guest.getStance()); // guest.m_bMoveAction // 姿态
         }
 
         return p;
@@ -300,14 +300,14 @@ public class WeddingPackets {
      * @param wedding    是否为婚礼
      * @return mplew
      */
-    public static Packet OnMarriageResult(int marriageId, Character chr, boolean wedding) {
+    public static Packet OnMarriageResult(int mode, Character chr, boolean success) {
         OutPacket p = OutPacket.create(SendOpcode.MARRIAGE_RESULT);
         p.writeByte(11);
-        p.writeInt(marriageId);
+        p.writeInt(mode);
         p.writeInt(chr.getGender() == 0 ? chr.getId() : chr.getPartnerId());
         p.writeInt(chr.getGender() == 0 ? chr.getPartnerId() : chr.getId());
-        p.writeShort(wedding ? 3 : 1);
-        if (wedding) {
+        p.writeShort(success ? 3 : 1);
+        if (success) {
             p.writeInt(chr.getMarriageItemId());
             p.writeInt(chr.getMarriageItemId());
         } else {
@@ -383,11 +383,11 @@ public class WeddingPackets {
         p.writeByte(15);
         p.writeString(groom);
         p.writeString(bride);
-        p.writeShort(1); // 0 = Cathedral Normal?, 1 = Cathedral Premium?, 2 = Chapel Normal?
+        p.writeShort(1); // 0 = Cathedral Normal?, 1 = Cathedral Premium?, 2 = Chapel Normal? // 0 = 大教堂普通？，1 = 大教堂高级？，2 = 教堂普通？
         return p;
     }
 
-    public static Packet sendWishList() { // fuck my life
+    public static Packet sendWishList() { // fuck my life // 操蛋的生活
         OutPacket p = OutPacket.create(SendOpcode.MARRIAGE_REQUEST);
         p.writeByte(9);
         return p;
