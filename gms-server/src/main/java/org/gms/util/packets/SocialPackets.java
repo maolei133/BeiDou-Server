@@ -2,6 +2,7 @@ package org.gms.util.packets;
 
 import org.gms.client.BuddylistEntry;
 import org.gms.client.Character;
+import org.gms.client.Family;
 import org.gms.client.FamilyEntitlement;
 import org.gms.client.FamilyEntry;
 import org.gms.client.inventory.Item;
@@ -361,13 +362,23 @@ public class SocialPackets {
         p.writeShort(f.getJuniorCount()); // 已添加的下级数量
         p.writeShort(2); // 允许的下级数量
         p.writeShort(0); // 未知
-        if (f.getFamily().getLeader() != null) {
-            p.writeInt(f.getFamily().getLeader().getChrId()); // 族长ID（允许设置留言）
+
+        Family family = f.getFamily();
+        if (family != null) {
+            FamilyEntry leader = family.getLeader();
+            if (leader != null) {
+                p.writeInt(leader.getChrId()); // 族长ID（允许设置留言）
+            } else {
+                p.writeInt(0); // 如果没有族长，写入0
+            }
+            p.writeString(family.getName());
+            p.writeString(family.getMessage()); // 家族留言
         } else {
-            p.writeInt(0); // 如果没有族长，写入0
+            p.writeInt(0);
+            p.writeString("");
+            p.writeString("");
         }
-        p.writeString(f.getFamily().getName());
-        p.writeString(f.getFamily().getMessage()); // 家族留言
+
         p.writeInt(FamilyEntitlement.values().length); // 权益信息数量
         for (FamilyEntitlement entitlement : FamilyEntitlement.values()) {
             p.writeInt(entitlement.ordinal()); // ID
