@@ -70,15 +70,58 @@ public class Equip extends Item {
         }
     }
 
+    /** 可升级次数 */
     private byte upgradeSlots;
+    /** 装备等级 */
     @Getter
-    private short level, itemLevel;
+    private short level;
+    /** 物品等级 */
+    @Getter
+    private short itemLevel;
+    /** 标志位 */
     private short flag;
-    private short str, dex, _int, luk, hp, mp, watk, matk, wdef, mdef, acc, avoid, hands, speed, jump, vicious;
+    /** 力量 */
+    private short str;
+    /** 敏捷 */
+    private short dex;
+    /** 智力 */
+    private short _int;
+    /** 运气 */
+    private short luk;
+    /** HP */
+    private short hp;
+    /** MP */
+    private short mp;
+    /** 物理攻击力 */
+    private short watk;
+    /** 魔法攻击力 */
+    private short matk;
+    /** 物理防御力 */
+    private short wdef;
+    /** 魔法防御力 */
+    private short mdef;
+    /** 命中率 */
+    private short acc;
+    /** 回避率 */
+    private short avoid;
+    /** 手技 */
+    private short hands;
+    /** 移动速度 */
+    private short speed;
+    /** 跳跃力 */
+    private short jump;
+    /** 金锤子次数 */
+    private short vicious;
+    /** 物品经验值 */
     private float itemExp;
+    /** 戒指ID */
     private int ringid = -1;
+    /** 是否穿戴中 */
     private boolean wear = false;
-    private boolean isUpgradeable, isElemental = false;    // timeless or reverse, or any equip that could levelup on GMS for all effects
+    /** 是否可升级 */
+    private boolean isUpgradeable;
+    /** 是否为元素装备 */
+    private boolean isElemental = false;    // timeless or reverse, or any equip that could levelup on GMS for all effects
     private static ItemInformationProvider ii = ItemInformationProvider.getInstance();
 
     public Equip(int id, short position) {
