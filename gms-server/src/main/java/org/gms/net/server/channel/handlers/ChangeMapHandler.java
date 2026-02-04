@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.InventoryType;
@@ -30,6 +31,9 @@ import org.gms.constants.id.MapId;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.server.maps.HiredMerchant;
 import org.gms.util.I18nUtil;
 import org.slf4j.Logger;
@@ -107,6 +111,7 @@ public final class ChangeMapHandler extends AbstractPacketHandler {
 
                         chr.updateHp(50);
                         chr.changeMap(map, map.findClosestPlayerSpawnpoint(chr.getPosition()));
+                        AuditLogger.info(LogModule.CHARACTER, LogAction.REVIVE, new MapMessage().with("map", map.getId()).with("item", ItemId.WHEEL_OF_FORTUNE));
                     } else {
                         boolean executeStandardPath = true;
                         if (chr.getEventInstance() != null) {
@@ -114,6 +119,7 @@ public final class ChangeMapHandler extends AbstractPacketHandler {
                         }
                         if (executeStandardPath) {
                             chr.respawn(map.getReturnMapId());
+                            AuditLogger.info(LogModule.CHARACTER, LogAction.REVIVE, new MapMessage().with("map", map.getReturnMapId()));
                         }
                     }
                 } else {

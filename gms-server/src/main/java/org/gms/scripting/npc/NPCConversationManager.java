@@ -35,6 +35,7 @@ import org.gms.constants.id.NpcId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.string.LanguageConstants;
 import org.gms.dao.entity.HiredMerchantsDO;
+import org.gms.dao.entity.ItemRecoveryLogsDO;
 import org.gms.manager.ServerManager;
 import org.gms.model.pojo.NextLevelContext;
 import org.gms.net.server.Server;
@@ -48,6 +49,7 @@ import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.World;
 import org.gms.service.GachaponService;
 import org.gms.service.HiredMerchantService;
+import org.gms.service.ItemRecoveryService;
 import org.gms.util.packets.WeddingPackets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,6 +78,7 @@ import org.gms.util.PacketCreator;
 
 import java.awt.*;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.*;
 
@@ -95,6 +98,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
     private List<PartyCharacter> otherParty;
     private static final GachaponService gachaponService = ServerManager.getApplicationContext().getBean(GachaponService.class);
     private static final HiredMerchantService hiredMerchantService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
+    private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
 
     private final Map<Integer, String> npcDefaultTalks = new HashMap<>();
     @Getter
@@ -235,7 +239,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
         if (styles.length > 0) {
             nextLevelContext.clear();
             getClient().sendPacket(PacketCreator.getNPCTalkStyle(npc, text, styles));
-        } else {    // thanks Conrad for noticing empty styles crashing players
+        } else {    // 感谢 Conrad 注意到空样式会导致玩家崩溃
             sendOk("抱歉，目前这里没有适合您的装饰选项。");
             dispose();
         }
@@ -426,7 +430,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
 
         if (shop != null) {
             shop.sendShop(c);
-        } else {    // check for missing shopids thanks to resinate
+        } else {    // 检查丢失的 shopid，感谢 resinate
             log.warn("Shop ID: {} is missing from database.", id);
             ShopFactory.getInstance().getShop(11000).sendShop(c);
         }
@@ -477,7 +481,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
         Server.getInstance().allianceMessage(alliance.getId(), GuildPackets.getGuildAlliances(alliance, c.getWorld()), -1, -1);
         Server.getInstance().allianceMessage(alliance.getId(), GuildPackets.allianceNotice(alliance.getId(), alliance.getNotice()), -1, -1);
 
-        c.sendPacket(GuildPackets.updateAllianceInfo(alliance, c.getWorld()));  // thanks Vcoc for finding an alliance update to leader issue
+        c.sendPacket(GuildPackets.updateAllianceInfo(alliance, c.getWorld()));  // 感谢 Vcoc 发现联盟更新给盟主的问题
     }
 
     public void disbandAlliance(Client c, int allianceId) {
@@ -1482,5 +1486,38 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
         nextLevelContext.setLevelType(NextLevelType.SEND_YES_NO);
         nextLevelContext.setLastLevel(noLevel);
         nextLevelContext.setNextLevel(yesLevel);
+    }
+
+    /**
+     * 打开物品找回界面
+     */
+    public void openItemRecovery() {
+        List<ItemRecoveryLogsDO> items = itemRecoveryService.getRecoverableItems(getPlayer().getId());
+        if (items.isEmpty()) {
+            sendOk("您目前没有可找回的物品。");
+            dispose();
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder("请选择您要找回的物品（需支付手续费）：\r\n");
+        SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm");
+        for (ItemRecoveryLogsDO log : items) {
+            String itemName = ItemInformationProvider.getInstance().getName(log.getItemId());
+            String time = sdf.format(new Date(log.getDisposalTime()));
+            sb.append("#L").append(log.getId()).append("#")
+              .append(itemName)
+              .append(" (").append(time).append(")")
+              .append("#l\r\n");
+        }
+        
+        sendSimple(sb.toString());
+    }
+
+    /**
+     * 处理物品找回选择
+     */
+    public void recoverItem(int selection) {
+        itemRecoveryService.recoverItem(getClient(), selection);
+        dispose();
     }
 }

@@ -22,6 +22,7 @@
 package org.gms.server;
 
 import com.mybatisflex.core.query.QueryWrapper;
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.Inventory;
@@ -35,6 +36,10 @@ import org.gms.dao.entity.ShopitemsDO;
 import org.gms.dao.entity.ShopsDO;
 import org.gms.dao.mapper.ShopitemsMapper;
 import org.gms.dao.mapper.ShopsMapper;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.util.PacketCreator;
@@ -116,6 +121,7 @@ public class Shop {
                             c.getPlayer().gainMeso(-item.getPrice(), false);
                         }
                         c.sendPacket(PacketCreator.shopTransaction((byte) 0));
+                        AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", amount));
                     } else {
                         c.sendPacket(PacketCreator.shopTransaction((byte) 3));
                     }
@@ -139,6 +145,7 @@ public class Shop {
                             InventoryManipulator.removeById(c, InventoryType.ETC, ItemId.PERFECT_PITCH, amount, false, false);
                         }
                         c.sendPacket(PacketCreator.shopTransaction((byte) 0));
+                        AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", amount).with("currency", "PITCH"));
                     } else {
                         c.sendPacket(PacketCreator.shopTransaction((byte) 3));
                     }
@@ -163,6 +170,7 @@ public class Shop {
                         c.sendPacket(PacketCreator.shopTransaction((byte) 3));
                     }
                     c.sendPacket(PacketCreator.shopTransaction((byte) 0));
+                    AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", cost).with("currency", "TOKEN"));
                 } else {
                     c.sendPacket(PacketCreator.shopTransaction((byte) 2));
                 }
@@ -215,6 +223,12 @@ public class Shop {
         inventory.lockInventory();
         try {
             if (canSell(item, quantity)) {
+                // 物品找回系统拦截点
+                if (InventoryManipulator.isValuableForRecovery(item)) {
+                    TraceabilityService traceabilityService = SpringContextUtil.getBean(TraceabilityService.class);
+                    traceabilityService.logRecovery(item, c.getPlayer(), "SELL");
+                }
+
                 quantity = getSellingQuantity(item, quantity);
                 InventoryManipulator.removeFromSlot(c, type, (byte) slot, quantity, false);
 
@@ -224,6 +238,7 @@ public class Shop {
                     c.getPlayer().gainMeso(recvMesos, false);
                 }
                 c.sendPacket(PacketCreator.shopTransaction((byte) 0x8));
+                AuditLogger.info(LogModule.SHOP, LogAction.SHOP_SELL, new MapMessage().with("itm", item.getItemId()).with("cnt", quantity).with("gain", recvMesos));
             } else {
                 c.sendPacket(PacketCreator.shopTransaction((byte) 0x5));
             }
@@ -252,6 +267,7 @@ public class Shop {
                     c.getPlayer().forceUpdateItem(item);
                     c.getPlayer().gainMeso(-price, false, true, false);
                     c.sendPacket(PacketCreator.shopTransaction((byte) 0x8));
+                    AuditLogger.info(LogModule.SHOP, LogAction.SHOP_RECHARGE, new MapMessage().with("itm", item.getItemId()).with("cost", price));
                 } else {
                     c.sendPacket(PacketCreator.shopTransaction((byte) 0x2));
                 }

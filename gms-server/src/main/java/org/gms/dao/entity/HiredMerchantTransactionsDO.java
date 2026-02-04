@@ -31,4 +31,5 @@ public class HiredMerchantTransactionsDO implements Serializable {
     private Integer price;
     private Long totalPrice;
     private Long timestamp;
+    private Long uid;
 }

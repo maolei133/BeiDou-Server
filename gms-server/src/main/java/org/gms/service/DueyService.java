@@ -22,6 +22,7 @@ import org.gms.model.dto.DueySearchReqDTO;
 import org.gms.model.dto.ItemInfoRtnDTO;
 import org.gms.model.dto.SendDueyReqDTO;
 import org.gms.server.ItemInformationProvider;
+import org.gms.util.SnowflakeIdGenerator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -508,6 +509,9 @@ public class DueyService {
 
         if (req.getOwner() != null) item.setOwner(req.getOwner());
         if (req.getExpiration() != null) item.setExpiration(req.getExpiration());
+        
+        // Generate UID for new item
+        item.setUid(SnowflakeIdGenerator.getInstance().nextId());
         
         return item;
     }

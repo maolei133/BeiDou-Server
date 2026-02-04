@@ -21,6 +21,7 @@
  */
 package org.gms.net.server.handlers.login;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Client;
 import org.gms.client.Family;
 import org.gms.dao.entity.CharactersDO;
@@ -28,6 +29,9 @@ import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.service.CharacterService;
 import org.gms.service.WorldTransferService;
 import org.slf4j.Logger;
@@ -73,6 +77,7 @@ public final class DeleteCharHandler extends AbstractPacketHandler {
 
             if (c.deleteCharacter(cid, c.getAccID())) {
                 log.info("账号 {} 删除了角色 ID {}", c.getAccountName(), cid);
+                AuditLogger.info(LogModule.LOGIN, LogAction.DELETE_CHAR, new MapMessage().with("cid", cid).with("chr", charactersDO.getName()));
                 c.sendPacket(PacketCreator.deleteCharResponse(cid, 0));
             } else {
                 c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x09));

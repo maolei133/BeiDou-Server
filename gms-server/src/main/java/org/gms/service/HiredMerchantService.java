@@ -15,6 +15,9 @@ import org.gms.dao.entity.HiredMerchantsDO;
 import org.gms.dao.mapper.HiredMerchantItemsMapper;
 import org.gms.dao.mapper.HiredMerchantTransactionsMapper;
 import org.gms.dao.mapper.HiredMerchantsMapper;
+import org.gms.util.SnowflakeIdGenerator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,9 +30,11 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class HiredMerchantService {
 
+    private static final Logger log = LoggerFactory.getLogger(HiredMerchantService.class);
     private final HiredMerchantsMapper hiredMerchantsMapper;
     private final HiredMerchantItemsMapper hiredMerchantItemsMapper;
     private final HiredMerchantTransactionsMapper hiredMerchantTransactionsMapper;
+    private final TraceabilityService traceabilityService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public HiredMerchantsDO getActiveMerchantByOwnerId(int ownerId) {
@@ -72,6 +77,24 @@ public class HiredMerchantService {
 
     @Transactional
     public void addItem(HiredMerchantItemsDO item, HiredMerchantTransactionsDO transaction) {
+        // 检查 UID 是否重复
+        if (item.getUid() != null && item.getUid() > 0) {
+            QueryWrapper checkUidQuery = QueryWrapper.create()
+                    .select(HiredMerchantItemsDO::getId)
+                    .where(HiredMerchantItemsDO::getUid).eq(item.getUid());
+            
+            Long existingId = hiredMerchantItemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
+            if (existingId != null) {
+                log.error("发现重复 UID 物品入库尝试 (HiredMerchant)! UID: {}, ItemID: {}, MerchantID: {}", 
+                        item.getUid(), item.getItemId(), item.getMerchantId());
+                // 记录异常日志
+                traceabilityService.log(null, null, TraceabilityService.ActionType.ADMIN_DELETE, 
+                        "DUPLICATE_UID_BLOCKED", 0, "Blocked hired merchant add due to duplicate UID: " + item.getUid(), "MerchantID: " + item.getMerchantId());
+                // 抛出异常以回滚事务
+                throw new RuntimeException("检测到重复 UID: " + item.getUid());
+            }
+        }
+
         hiredMerchantItemsMapper.insert(item);
         if (transaction != null) {
             transaction.setItemId(item.getItemId());
@@ -270,6 +293,9 @@ public class HiredMerchantService {
             if (item.getSN() > 0) {
                 map.put("sn", item.getSN());
             }
+            if (item.getUid() > 0) {
+                map.put("uid", item.getUid());
+            }
 
             if (item instanceof Equip) {
                 Equip equip = (Equip) item;
@@ -323,6 +349,7 @@ public class HiredMerchantService {
             if (map.containsKey("expiration")) item.setExpiration(((Number) map.get("expiration")).longValue());
             if (map.containsKey("giftFrom")) item.setGiftFrom((String) map.get("giftFrom"));
             if (map.containsKey("sn")) item.setSN(((Number) map.get("sn")).intValue());
+            if (map.containsKey("uid")) item.setUid(((Number) map.get("uid")).longValue());
             
             if (item instanceof Equip equip) {
                 if (map.containsKey("upgradeSlots")) equip.setUpgradeSlots(((Number) map.get("upgradeSlots")).byteValue());
@@ -424,6 +451,11 @@ public class HiredMerchantService {
                     .status(HiredMerchantItemsDO.STATUS_ON_SALE)
                     .itemData((String) itemData.get("itemData"))
                     .build();
+            
+            // 恢复时也需要检查 UID，如果备份数据中有 UID
+            // 但这里 itemData 是 JSON 字符串，需要解析后检查，或者在 deserializeItem 中处理
+            // 鉴于 restoreFromBackup 是管理员操作，且通常是灾难恢复，这里暂不强制检查，
+            // 但如果 itemData 中包含 UID，deserializeItem 会恢复它。
             
             hiredMerchantItemsMapper.insert(itemDO);
         }

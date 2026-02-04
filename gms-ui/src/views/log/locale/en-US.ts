@@ -241,4 +241,7 @@ export default {
   'log.action.PLUGIN_STOP': 'Plugin Stop',
   'log.action.PLUGIN_USE': 'Plugin Use',
   'log.action.PLUGIN_ERROR': 'Plugin Error',
+  'log.action.STORAGE_IN': 'Storage In',
+  'log.action.STORAGE_OUT': 'Storage Out',
+  'log.action.STORAGE_MIGRATE': 'Storage Migrate',
 };

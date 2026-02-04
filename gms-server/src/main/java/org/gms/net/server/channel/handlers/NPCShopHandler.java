@@ -21,11 +21,15 @@
 */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Client;
 import org.gms.client.autoban.AutobanFactory;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

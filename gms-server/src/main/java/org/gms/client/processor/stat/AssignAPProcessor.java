@@ -23,6 +23,7 @@
 */
 package org.gms.client.processor.stat;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.Job;
@@ -41,6 +42,9 @@ import org.gms.constants.skills.Magician;
 import org.gms.constants.skills.ThunderBreaker;
 import org.gms.constants.skills.Warrior;
 import org.gms.net.packet.InPacket;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.util.PacketCreator;
 import org.gms.util.Randomizer;
 
@@ -431,6 +435,7 @@ public class AssignAPProcessor {
                                 "\r\n敏捷(DEX): +" + statGain[1] +
                                 "\r\n智力(INT): +" + statGain[3] +
                                 "\r\n运气(LUK): +" + statGain[2]));
+                AuditLogger.info(LogModule.CHARACTER, LogAction.AP_DISTRIBUTE, new MapMessage().with("str", statGain[0]).with("dex", statGain[1]).with("int", statGain[3]).with("luk", statGain[2]).with("msg", "自动分配"));
             } else { // 不使用自动分配器的情况
                 if (inPacket.available() < 16) { // 检查数据包是否完整
                     AutobanFactory.PACKET_EDIT.alert(chr, "Auto Assign数据包不完整"); // 记录异常
@@ -452,6 +457,7 @@ public class AssignAPProcessor {
                 chr.assignStrDexIntLuk(statGain[0], statGain[1], statGain[3], statGain[2]);
                 // 允许玩家行动
                 c.sendPacket(PacketCreator.enableActions());
+                AuditLogger.info(LogModule.CHARACTER, LogAction.AP_DISTRIBUTE, new MapMessage().with("str", statGain[0]).with("dex", statGain[1]).with("int", statGain[3]).with("luk", statGain[2]).with("msg", "手动分配"));
             }
         } finally {
             c.unlockClient(); // 确保最终解锁客户端
@@ -681,6 +687,7 @@ public class AssignAPProcessor {
             }
 
             addStat(player, APTo, true);
+            AuditLogger.info(LogModule.CHARACTER, LogAction.AP_DISTRIBUTE, new MapMessage().with("from", APFrom).with("to", APTo).with("msg", "AP重置"));
             return true;
         } finally {
             c.unlockClient();
@@ -701,6 +708,7 @@ public class AssignAPProcessor {
         c.lockClient();
         try {
             addStat(c.getPlayer(), num, false);
+            AuditLogger.info(LogModule.CHARACTER, LogAction.AP_DISTRIBUTE, new MapMessage().with("to", num).with("msg", "手动分配"));
         } finally {
             c.unlockClient();
         }

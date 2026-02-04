@@ -24,6 +24,7 @@ package org.gms.client.inventory;
 import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.server.ItemInformationProvider;
+import org.gms.util.SnowflakeIdGenerator;
 
 import java.util.Collections;
 import java.util.LinkedList;
@@ -46,6 +47,7 @@ public class Item implements Comparable<Item> {
     private short flag;
     private long expiration = -1;
     private String giftFrom = "";
+    private long uid;
 
     public Item(int id, short position, short quantity) {
         this.id = id;
@@ -53,6 +55,7 @@ public class Item implements Comparable<Item> {
         this.quantity = quantity;
         this.itemLog = new LinkedList<>();
         this.flag = 0;
+        this.uid = SnowflakeIdGenerator.getInstance().nextId();
     }
 
     public Item(int id, short position, short quantity, int petid) {
@@ -68,6 +71,7 @@ public class Item implements Comparable<Item> {
         this.petid = petid;
         this.flag = 0;
         this.itemLog = new LinkedList<>();
+        this.uid = SnowflakeIdGenerator.getInstance().nextId();
     }
 
     public Item copy() {
@@ -76,6 +80,7 @@ public class Item implements Comparable<Item> {
         ret.owner = owner;
         ret.expiration = expiration;
         ret.itemLog = new LinkedList<>(itemLog);
+        ret.uid = this.uid; // Copy uid
         return ret;
     }
 
@@ -194,5 +199,13 @@ public class Item implements Comparable<Item> {
 
     public boolean isUntradeable() {
         return ((this.getFlag() & ItemConstants.UNTRADEABLE) == ItemConstants.UNTRADEABLE) || (ItemInformationProvider.getInstance().isDropRestricted(this.getItemId()) && !KarmaManipulator.hasKarmaFlag(this));
+    }
+
+    public long getUid() {
+        return uid;
+    }
+
+    public void setUid(long uid) {
+        this.uid = uid;
     }
 }

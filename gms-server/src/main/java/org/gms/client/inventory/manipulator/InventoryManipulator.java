@@ -21,6 +21,7 @@
  */
 package org.gms.client.inventory.manipulator;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Client;
@@ -34,7 +35,12 @@ import org.gms.model.pojo.NewYearCardRecord;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
+import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.ItemInformationProvider;
@@ -46,6 +52,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * @author Matze
@@ -65,25 +72,37 @@ public class InventoryManipulator {
     public static boolean addById(Client c, int itemId, short quantity, String owner, int petid) {
         return addById(c, itemId, quantity, owner, petid, -1);
     }
+    
+    public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, Consumer<Item> tracker) {
+        return addById(c, itemId, quantity, owner, petid, -1, tracker);
+    }
 
     public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, long expiration) {
         return addById(c, itemId, quantity, owner, petid, (byte) 0, expiration);
     }
+    
+    public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, long expiration, Consumer<Item> tracker) {
+        return addById(c, itemId, quantity, owner, petid, (byte) 0, expiration, tracker);
+    }
 
     public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, short flag, long expiration) {
+        return addById(c, itemId, quantity, owner, petid, flag, expiration, null);
+    }
+
+    public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, short flag, long expiration, Consumer<Item> tracker) {
         Character chr = c.getPlayer();
         InventoryType type = ItemConstants.getInventoryType(itemId);
 
         Inventory inv = chr.getInventory(type);
         inv.lockInventory();
         try {
-            return addByIdInternal(c, chr, type, inv, itemId, quantity, owner, petid, flag, expiration);
+            return addByIdInternal(c, chr, type, inv, itemId, quantity, owner, petid, flag, expiration, tracker);
         } finally {
             inv.unlockInventory();
         }
     }
 
-    private static boolean addByIdInternal(Client c, Character chr, InventoryType type, Inventory inv, int itemId, short quantity, String owner, int petid, short flag, long expiration) {
+    private static boolean addByIdInternal(Client c, Character chr, InventoryType type, Inventory inv, int itemId, short quantity, String owner, int petid, short flag, long expiration, Consumer<Item> tracker) {
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
         if (!type.equals(InventoryType.EQUIP)) {
             short slotMax = ii.getSlotMax(c, itemId);
@@ -101,6 +120,7 @@ public class InventoryManipulator {
                                 eItem.setQuantity(newQ);
                                 eItem.setExpiration(expiration);
                                 c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(1, eItem))));
+                                if (tracker != null) tracker.accept(eItem);
                             }
                         } else {
                             break;
@@ -128,6 +148,7 @@ public class InventoryManipulator {
                         if (sandboxItem) {
                             chr.setHasSandboxItem();
                         }
+                        if (tracker != null) tracker.accept(nItem);
                     } else {
                         c.sendPacket(PacketCreator.enableActions());
                         return false;
@@ -147,6 +168,7 @@ public class InventoryManipulator {
                 if (InventoryManipulator.isSandboxItem(nItem)) {
                     chr.setHasSandboxItem();
                 }
+                if (tracker != null) tracker.accept(nItem);
             }
         } else if (quantity == 1) {
             Item nEquip = ii.getEquipById(itemId);
@@ -168,9 +190,11 @@ public class InventoryManipulator {
             if (InventoryManipulator.isSandboxItem(nEquip)) {
                 chr.setHasSandboxItem();
             }
+            if (tracker != null) tracker.accept(nEquip);
         } else {
             throw new RuntimeException("试图创建一件数量不为 1 的装备");
         }
+        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_GAIN, new MapMessage().with("itm", itemId).with("cnt", quantity).with("msg", "addById"));
         return true;
     }
 
@@ -280,7 +304,7 @@ public class InventoryManipulator {
                 chr.setHasSandboxItem();
             }
         } else {
-            log.warn("Tried to pickup Equip id {} containing more than 1 quantity --> {}", itemid, quantity);
+            log.warn("尝试拾取数量大于 1 的装备 ID {} --> {}", itemid, quantity);
             c.sendPacket(PacketCreator.getInventoryFull());
             c.sendPacket(PacketCreator.showItemUnavailable());
             return false;
@@ -288,6 +312,7 @@ public class InventoryManipulator {
         if (show) {
             c.sendPacket(PacketCreator.getShowItemGain(itemid, item.getQuantity()));
         }
+        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_PICKUP, new MapMessage().with("itm", itemid).with("cnt", quantity).with("msg", "addFromDrop"));
         return true;
     }
 
@@ -449,6 +474,7 @@ public class InventoryManipulator {
                 }
             }
         }
+        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_LOST, new MapMessage().with("itm", item.getItemId()).with("cnt", quantity).with("msg", "removeFromSlot"));
     }
 
     private static void announceModifyInventory(Client c, Item item, boolean fromDrop, boolean allowZero) {
@@ -480,7 +506,7 @@ public class InventoryManipulator {
             }
         }
         if (removeQuantity > 0 && type != InventoryType.CANHOLD) {
-            throw new RuntimeException("[Hack] Not enough items available of Item:" + itemId + ", Quantity (After Quantity/Over Current Quantity): " + (quantity - removeQuantity) + "/" + quantity);
+            throw new RuntimeException("[Hack] 物品数量不足 Item:" + itemId + ", 数量 (剩余/总需): " + (quantity - removeQuantity) + "/" + quantity);
         }
     }
 
@@ -528,6 +554,7 @@ public class InventoryManipulator {
             int itemID = source.getItemId();
             c.getPlayer().dropMessage(5, I18nUtil.getMessage("InventoryManipulator.handlePacket.message1")  + itemID);
         }
+        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_MOVE, new MapMessage().with("itm", source.getItemId()).with("src", src).with("dst", dst));
     }
 
     /*
@@ -740,8 +767,8 @@ public class InventoryManipulator {
         Item source = inv.getItem(src);
 
         if (chr.isGM() && chr.gmLevel() < GameConfig.getServerInt("minimum_gm_level_to_drop")) {
-            chr.message("You cannot drop items at your GM level.");
-            log.info("GM %s tried to drop item id %d", chr.getName(), source.getItemId());
+            chr.message("您的 GM 等级不足，无法丢弃物品。");
+            log.info("GM %s 尝试丢弃物品 ID %d", chr.getName(), source.getItemId());
             return;
         }
 
@@ -762,6 +789,12 @@ public class InventoryManipulator {
                 Pet pet = chr.getPet(petIdx);
                 chr.unEquipPet(pet, true);
             }
+        }
+
+        // 物品找回系统拦截点
+        if (isValuableForRecovery(source)) {
+            TraceabilityService traceabilityService = SpringContextUtil.getBean(TraceabilityService.class);
+            traceabilityService.logRecovery(source, chr, "DROP");
         }
 
         Point dropPos = new Point(chr.getPosition());
@@ -832,6 +865,7 @@ public class InventoryManipulator {
         } else if (itemId == ItemId.ARPQ_SPIRIT_JEWEL) {
             chr.updateAriantScore(quantityNow);
         }
+        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_DROP, new MapMessage().with("itm", itemId).with("cnt", quantity).with("msg", "drop"));
     }
 
     private static boolean isDroppedItemRestricted(Item it) {
@@ -840,5 +874,53 @@ public class InventoryManipulator {
 
     public static boolean isSandboxItem(Item it) {
         return (it.getFlag() & ItemConstants.SANDBOX) == ItemConstants.SANDBOX;
+    }
+
+    /**
+     * 判断物品是否值得进入找回系统
+     * 排除普通药水、杂物等低价值物品
+     */
+    public static boolean isValuableForRecovery(Item item) {
+        if (item == null) return false;
+        
+        int itemId = item.getItemId();
+        InventoryType type = ItemConstants.getInventoryType(itemId);
+        
+        // 1. 装备：通常都有价值，除非是极低级的白板
+        if (type == InventoryType.EQUIP) {
+            return true;
+        }
+        
+        // 2. 消耗品：排除普通药水，保留高级药水、卷轴等
+        if (type == InventoryType.USE) {
+            // 卷轴 (204xxxx)
+            if (itemId / 10000 == 204) return true;
+            // 技能书 (228xxxx, 229xxxx)
+            if (itemId / 10000 == 228 || itemId / 10000 == 229) return true;
+            // 排除普通药水 (200xxxx - 203xxxx)
+            if (itemId >= 2000000 && itemId < 2040000) return false;
+            
+            return true; // 默认保留其他消耗品
+        }
+        
+        // 3. 其他栏：排除普通掉落物，保留任务物品、稀有材料
+        if (type == InventoryType.ETC) {
+            // 排除普通怪物掉落 (400xxxx)
+            if (itemId / 10000 == 400) return false;
+            
+            return true;
+        }
+        
+        // 4. 设置栏：通常不丢弃，但如果有，值得找回
+        if (type == InventoryType.SETUP) {
+            return true;
+        }
+        
+        // 5. 现金物品：必须找回
+        if (type == InventoryType.CASH) {
+            return true;
+        }
+        
+        return false;
     }
 }

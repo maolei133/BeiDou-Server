@@ -26,6 +26,7 @@ import org.gms.client.inventory.ItemFactory;
 import org.gms.dao.entity.StoragesDO;
 import org.gms.dao.mapper.StoragesMapper;
 import org.gms.service.StorageService;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.provider.Data;
@@ -93,10 +94,27 @@ public class Storage {
         }
 
         Storage ret = new Storage(data.getStorageid().intValue(), data.getSlots().byteValue(), data.getMeso());
-        for (Pair<Item, InventoryType> item : ItemFactory.STORAGE.loadItems(ret.id, false)) {
-            ret.items.add(item.getLeft());
+        
+        // 使用 StorageService 加载物品，支持从新表 storage_items 加载
+        StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+        List<Item> loadedItems = storageService.loadStorageItems(ret.id);
+        
+        // 如果新表为空，尝试从旧表加载并迁移
+        if (loadedItems.isEmpty()) {
+            List<Pair<Item, InventoryType>> oldItems = ItemFactory.STORAGE.loadItems(ret.id, false);
+            if (!oldItems.isEmpty()) {
+                List<Item> itemsToMigrate = new ArrayList<>();
+                for (Pair<Item, InventoryType> pair : oldItems) {
+                    itemsToMigrate.add(pair.getLeft());
+                }
+                // 执行迁移
+                storageService.migrateOldData(ret.id, itemsToMigrate);
+                // 重新加载以获取正确的 UID 和状态
+                ret.items.addAll(storageService.loadStorageItems(ret.id));
+            }
+        } else {
+            ret.items.addAll(loadedItems);
         }
-//        log.info("已加载账号ID: {} 的仓库，物品数量: {}", accountId, ret.items.size());
 
         return ret;
     }
@@ -116,6 +134,11 @@ public class Storage {
             if (canGainSlots(slots)) {
                 slots += this.slots;
                 this.slots = (byte) slots;
+                
+                // 实时更新数据库
+                StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+                storageService.updateSlots(this.id, this.slots);
+                
                 return true;
             }
 
@@ -125,29 +148,8 @@ public class Storage {
         }
     }
 
-    public void saveToDB() {
-        lock.lock();
-        try {
-//            log.info("正在保存账号ID: {} 的仓库，物品数量: {}", this.id, items.size());
-            StorageService storageService = SpringContextUtil.getBean(StorageService.class);
-
-            StoragesDO storageToUpdate = new StoragesDO();
-            storageToUpdate.setStorageid((long) this.id);
-            storageToUpdate.setSlots((int) this.slots);
-            storageToUpdate.setMeso(this.meso);
-
-            List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
-            for (Item item : items) {
-                itemsWithType.add(new Pair<>(item, item.getInventoryType()));
-            }
-
-            storageService.saveStorage(storageToUpdate, itemsWithType, id);
-        } catch (Exception e) {
-            log.error("保存账号ID: {} 的仓库时出错", this.id, e);
-        } finally {
-            lock.unlock();
-        }
-    }
+    // saveToDB 已废弃，不再需要
+    // public void saveToDB() { ... }
 
     public Item getItem(byte slot) {
         lock.lock();
@@ -165,6 +167,12 @@ public class Storage {
 
             InventoryType type = item.getInventoryType();
             typeItems.put(type, new ArrayList<>(filterItems(type)));
+            
+            if (ret) {
+                // 实时从数据库移除
+                StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+                storageService.removeItem(this.id, item);
+            }
 
             return ret;
         } finally {
@@ -180,9 +188,16 @@ public class Storage {
             }
 
             items.add(item);
+            // 设置位置，通常是列表末尾，或者由 StorageInventory 处理
+            // 这里简单设置为当前大小 - 1
+            item.setPosition((short) (items.size() - 1));
 
             InventoryType type = item.getInventoryType();
             typeItems.put(type, new ArrayList<>(filterItems(type)));
+            
+            // 实时存入数据库
+            StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+            storageService.addItem(this.id, item);
 
             return true;
         } finally {
@@ -286,6 +301,10 @@ public class Storage {
             for (InventoryType type : InventoryType.values()) {
                 typeItems.put(type, new ArrayList<>(items));
             }
+            
+            // 整理后批量更新位置
+            StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+            storageService.updateItemsPositions(this.id, items);
 
             c.sendPacket(PacketCreator.arrangeStorage(slots, items));
         } finally {
@@ -302,6 +321,10 @@ public class Storage {
             throw new RuntimeException("仓库金币不能为负数");
         }
         this.meso = meso;
+        
+        // 实时更新金币
+        StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+        storageService.updateMeso(this.id, this.meso);
     }
 
     public void sendMeso(Client c) {

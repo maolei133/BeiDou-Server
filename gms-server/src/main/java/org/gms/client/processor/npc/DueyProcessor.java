@@ -46,6 +46,8 @@ import org.gms.dao.mapper.CharactersMapper;
 import org.gms.dao.mapper.DueypackagesMapper;
 import org.gms.model.dto.ItemInfoRtnDTO;
 import org.gms.net.server.channel.Channel;
+import org.gms.manager.ServerManager;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.DueyPackage;
@@ -53,6 +55,7 @@ import org.gms.server.ItemInformationProvider;
 import org.gms.server.Trade;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.gms.util.SnowflakeIdGenerator;
 import org.gms.util.SpringContextUtil;
 
 import java.sql.Timestamp;
@@ -68,6 +71,7 @@ public class DueyProcessor {
     private static final Logger log = LoggerFactory.getLogger(DueyProcessor.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final String DUEY_NAME = "[北斗快递] ";
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     public enum Actions {
         TOSERVER_RECV_ITEM(0x00, "接收物品"),
@@ -192,6 +196,16 @@ public class DueyProcessor {
                 } catch (Exception e) {
                     log.error("迁移包裹物品到JSON失败，包裹ID: " + packageId, e);
                 }
+            }
+        }
+        
+        // 恢复 UID
+        if (item != null) {
+            if (data.getUid() != null && data.getUid() > 0) {
+                item.setUid(data.getUid());
+            } else {
+                // 兼容旧数据，生成新 UID
+                item.setUid(SnowflakeIdGenerator.getInstance().nextId());
             }
         }
 
@@ -322,6 +336,12 @@ public class DueyProcessor {
             } catch (JsonProcessingException e) {
                 log.error("序列化快递包裹物品数据失败", e);
             }
+            
+            // Generate UID if not present
+            if (item.getUid() == 0) {
+                item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+            }
+            newPackage.setUid(item.getUid());
         }
 
         if (mapper.insert(newPackage, true) > 0) {
@@ -416,6 +436,12 @@ public class DueyProcessor {
                 
                 DueypackagesDO updateDO = new DueypackagesDO();
                 updateDO.setItemData(itemDataJson);
+                // Ensure UID is set
+                if (item.getUid() == 0) {
+                    item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+                }
+                updateDO.setUid(item.getUid());
+                
                 DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
                 mapper.updateByQuery(updateDO, QueryWrapper.create().where(DueypackagesDO::getPackageid).eq(packageId));
             } catch (JsonProcessingException e) {
@@ -575,6 +601,13 @@ public class DueyProcessor {
                 if (res == 0) {
                     c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_SUCCESSFULLY_SENT.getCode()));
                     c.getPlayer().dropMessage(5, DUEY_NAME + "您邮寄给 " + recipient + " 的普通包裹已邮寄成功，本次邮寄基本费用：" + fee + " 金币，预计送达时间：" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(deliveryTime));
+                    
+                    // 记录溯源日志
+                    // 注意：这里需要获取物品信息，但 addPackageItemFromInventory 内部处理了物品移除和添加
+                    // 我们可以通过 packageId 获取物品信息，或者在 addPackageItemFromInventory 中记录
+                    // 为了简化，我们在 addPackageItemFromInventory 中记录，或者在这里简单记录发送动作
+                    traceabilityService.log(null, c.getPlayer(), TraceabilityService.ActionType.DUEY_SEND, "快递发送", 0, "To: " + recipient, "PackageID: " + packageId);
+                    
                 } else if (res > 0) {
                     c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_ENABLE_ACTIONS.getCode()));
                 } else {
@@ -618,6 +651,9 @@ public class DueyProcessor {
                 // 同时清理关联的物品数据，因为物品已经进入玩家背包或者被删除了
                 // 恢复：清理物品数据，因为我们已经有了 JSON 备份
                 deletePackageFromInventoryDB(packageid);
+                
+                // 记录溯源日志
+                traceabilityService.log(null, c.getPlayer(), TraceabilityService.ActionType.DUEY_DELETE, "快递删除", 0, "PackageID: " + packageid, null);
 
                 c.sendPacket(PacketCreator.removeItemFromDuey(playerRemove, packageid));
             } finally {
@@ -690,6 +726,9 @@ public class DueyProcessor {
                 return;
             } else {
                 InventoryManipulator.addFromDrop(c, dpItem, false);
+                
+                // 记录溯源日志
+                traceabilityService.log(dpItem, c.getPlayer(), TraceabilityService.ActionType.DUEY_RECEIVE, "快递接收", 0, "From: " + dp.getSender(), "PackageID: " + packageId);
             }
         }
 
@@ -899,6 +938,9 @@ public class DueyProcessor {
                             if (item != null) {
                                 insertPackageItem(returnPackageId, item);
                             }
+                            
+                            // 记录溯源日志
+                            traceabilityService.log(item, null, TraceabilityService.ActionType.DUEY_RETURN, "快递退回", 0, "To: " + sender.getName(), "OriginalPackageID: " + pkg.getPackageid());
                         }
                     } else {
                         log.info("包裹 {} 已存在退回包裹，跳过创建。", pkg.getPackageid());
@@ -916,7 +958,7 @@ public class DueyProcessor {
         }
     }
 
-    private static Item restoreItemFromDTO(ItemInfoRtnDTO itemDTO) {
+    public static Item restoreItemFromDTO(ItemInfoRtnDTO itemDTO) {
         Item item;
         if (ItemConstants.getInventoryType(itemDTO.getItemId()) == InventoryType.EQUIP) {
             Equip equip = new Equip(itemDTO.getItemId(), (byte)0, -1);
@@ -949,6 +991,13 @@ public class DueyProcessor {
             if (itemDTO.getOwner() != null) item.setOwner(itemDTO.getOwner());
             if (itemDTO.getExpiration() != null) item.setExpiration(itemDTO.getExpiration());
         }
+        
+        // Restore UID if possible, or generate new one
+        // Since ItemInfoRtnDTO doesn't have UID, we generate a new one here.
+        // If we want to persist UID across Duey, we need to add UID to ItemInfoRtnDTO.
+        // For now, generating a new UID is acceptable as it's a "new" item instance in the world.
+        item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+
         return item;
     }
 }

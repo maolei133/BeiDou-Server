@@ -238,4 +238,7 @@ export default {
   'log.action.PLUGIN_STOP': '插件停止',
   'log.action.PLUGIN_USE': '插件使用',
   'log.action.PLUGIN_ERROR': '插件错误',
+  'log.action.STORAGE_IN': '存入仓库',
+  'log.action.STORAGE_OUT': '取出仓库',
+  'log.action.STORAGE_MIGRATE': '仓库迁移',
 };

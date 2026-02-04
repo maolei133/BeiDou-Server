@@ -56,4 +56,6 @@ public class InventoryitemsDO implements Serializable {
     @Column("giftFrom")
     private String giftFrom;
 
+    private Long uid;
+
 }

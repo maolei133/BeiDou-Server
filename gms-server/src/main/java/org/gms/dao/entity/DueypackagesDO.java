@@ -56,4 +56,6 @@ public class DueypackagesDO implements Serializable {
 
     private Timestamp deliveryTime;
 
+    private Long uid;
+
 }

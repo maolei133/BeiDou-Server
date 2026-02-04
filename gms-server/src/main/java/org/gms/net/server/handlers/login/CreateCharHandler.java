@@ -22,6 +22,7 @@
 package org.gms.net.server.handlers.login;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Client;
 import org.gms.client.creator.novice.BeginnerCreator;
 import org.gms.client.creator.novice.LegendCreator;
@@ -30,6 +31,9 @@ import org.gms.config.GameConfig;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.util.I18nUtil;
 import org.gms.util.PacketCreator;
 
@@ -121,6 +125,8 @@ public final class CreateCharHandler extends AbstractPacketHandler {
             c.sendPacket(PacketCreator.getLoginFailed(1));       //断开客户端请求，避免客户端假死
         } else if(status != 0) {
             c.sendPacket(PacketCreator.deleteCharResponse(0, 9));       //发送未知错误的弹窗提示
+        } else {
+            AuditLogger.info(LogModule.LOGIN, LogAction.CREATE_CHAR, new MapMessage().with("chr", name).with("job", job));
         }
     }
 }

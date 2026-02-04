@@ -49,6 +49,9 @@ public enum LogAction {
     /** 商城赠送 */ CS_GIFT,
     /** 商城充值 */ CS_CHARGE,
 
+    // --- FIELD ---
+    /** 切换地图 */ CHANGE_MAP,
+
     // --- AUTOBAN ---
     /** 检测到作弊 */ CHEAT_DETECTED,
     /** 作弊警告 */ CHEAT_WARNING,
@@ -59,5 +62,10 @@ public enum LogAction {
     /** 插件启动 */ PLUGIN_START,
     /** 插件停止 */ PLUGIN_STOP,
     /** 插件使用 */ PLUGIN_USE,
-    /** 插件错误 */ PLUGIN_ERROR
+    /** 插件错误 */ PLUGIN_ERROR,
+
+    // --- STORAGE ---
+    /** 存入仓库 */ STORAGE_IN,
+    /** 取出仓库 */ STORAGE_OUT,
+    /** 仓库迁移 */ STORAGE_MIGRATE
 }

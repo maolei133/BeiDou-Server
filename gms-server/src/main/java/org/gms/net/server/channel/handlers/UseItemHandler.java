@@ -21,6 +21,7 @@
 */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.Disease;
@@ -34,6 +35,9 @@ import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.StatEffect;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.util.I18nUtil;
 import org.gms.util.PacketCreator;
 
@@ -57,21 +61,21 @@ public final class UseItemHandler extends AbstractPacketHandler {
         if (toUse != null && toUse.getQuantity() > 0 && toUse.getItemId() == itemId) {
             if (itemId == ItemId.ALL_CURE_POTION) {
                 chr.dispelDebuffs();
-                remove(c, slot);
+                remove(c, slot, itemId);
                 return;
             } else if (itemId == ItemId.EYEDROP) {
                 chr.dispelDebuff(Disease.DARKNESS);
-                remove(c, slot);
+                remove(c, slot, itemId);
                 return;
             } else if (itemId == ItemId.TONIC) {
                 chr.dispelDebuff(Disease.WEAKEN);
                 chr.dispelDebuff(Disease.SLOW);
-                remove(c, slot);
+                remove(c, slot, itemId);
                 return;
             } else if (itemId == ItemId.HOLY_WATER) {
                 chr.dispelDebuff(Disease.SEAL);
                 chr.dispelDebuff(Disease.CURSE);
-                remove(c, slot);
+                remove(c, slot, itemId);
                 return;
             } else if (ItemConstants.isTownScroll(itemId)) {
                 int banMap = chr.getMapId();
@@ -83,19 +87,19 @@ public final class UseItemHandler extends AbstractPacketHandler {
                         chr.setBanishPlayerData(banMap, banSp, banTime);
                     }
 
-                    remove(c, slot);
+                    remove(c, slot, itemId);
                 }
                 return;
             } else if (ItemConstants.isAntibanishScroll(itemId)) {
                 if (ii.getItemEffect(toUse.getItemId()).applyTo(chr)) {
-                    remove(c, slot);
+                    remove(c, slot, itemId);
                 } else {
                     chr.dropMessage(5, I18nUtil.getMessage("UseItemHandler.message1"));
                 }
                 return;
             }
 
-            remove(c, slot);
+            remove(c, slot, itemId);
 
             if (toUse.getItemId() != ItemId.HAPPY_BIRTHDAY) {
                 ii.getItemEffect(toUse.getItemId()).applyTo(chr);
@@ -108,8 +112,9 @@ public final class UseItemHandler extends AbstractPacketHandler {
         }
     }
 
-    private void remove(Client c, short slot) {
+    private void remove(Client c, short slot, int itemId) {
         InventoryManipulator.removeFromSlot(c, InventoryType.USE, slot, (short) 1, false);
         c.sendPacket(PacketCreator.enableActions());
+        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_USE, new MapMessage().with("itm", itemId));
     }
 }

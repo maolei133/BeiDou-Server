@@ -28,10 +28,13 @@ import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.client.inventory.manipulator.KarmaManipulator;
+import org.gms.manager.ServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.server.Trade;
+import org.gms.service.TraceabilityService;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.gms.util.SnowflakeIdGenerator;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,6 +64,8 @@ public class PlayerShop extends AbstractMapObject {
     private final List<Pair<Character, String>> chatLog = new LinkedList<>();
     private final Map<Integer, Byte> chatSlot = new LinkedHashMap<>();
     private final Lock visitorLock = new ReentrantLock(true);
+    
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     public PlayerShop(Character owner, String description, int itemid) {
         this.setPosition(owner.getPosition());
@@ -213,8 +218,17 @@ public class PlayerShop extends AbstractMapObject {
             if (items.size() >= 16) {
                 return false;
             }
+            
+            // 确保 UID 存在
+            if (item.getItem().getUid() == 0) {
+                item.getItem().setUid(SnowflakeIdGenerator.getInstance().nextId());
+            }
 
             items.add(item);
+            
+            // 记录溯源日志
+            traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.PLAYER_SHOP_ADD, "个人商店上架");
+            
             return true;
         }
     }
@@ -242,6 +256,9 @@ public class PlayerShop extends AbstractMapObject {
                     }
 
                     InventoryManipulator.addFromDrop(chr.getClient(), iitem, true);
+                    
+                    // 记录溯源日志
+                    traceabilityService.log(iitem, chr, TraceabilityService.ActionType.PLAYER_SHOP_RETURN, "个人商店取回");
                 }
 
                 removeFromSlot(slot);
@@ -307,6 +324,10 @@ public class PlayerShop extends AbstractMapObject {
                                     owner.dropMessage(1, "Your items are sold out, and therefore your shop is closed.");
                                 }
                             }
+                            
+                            // 记录溯源日志
+                            traceabilityService.log(newItem, c.getPlayer(), TraceabilityService.ActionType.PLAYER_SHOP_BUY, "个人商店购买");
+                            
                         } else {
                             c.getPlayer().dropMessage(1, "Your inventory is full. Please clear a slot before buying this item.");
                             c.sendPacket(PacketCreator.enableActions());
@@ -448,6 +469,17 @@ public class PlayerShop extends AbstractMapObject {
         clearChatLog();
         removeVisitors();
         owner.getMap().broadcastMessage(PacketCreator.removePlayerShopBox(this));
+        
+        // 记录溯源日志：所有未售出的物品退回
+        synchronized (items) {
+            for (PlayerShopItem item : items) {
+                if (item.isExist() && item.getBundles() > 0) {
+                    Item iitem = item.getItem().copy();
+                    iitem.setQuantity((short) (item.getItem().getQuantity() * item.getBundles()));
+                    traceabilityService.log(iitem, owner, TraceabilityService.ActionType.PLAYER_SHOP_RETURN, "个人商店关闭退回");
+                }
+            }
+        }
     }
 
     public void sendShop(Client c) {

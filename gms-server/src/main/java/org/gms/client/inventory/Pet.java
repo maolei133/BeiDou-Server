@@ -72,6 +72,26 @@ public class Pet extends Item {
         this.pos = new Point(0, 0);
     }
 
+    @Override
+    public Item copy() {
+        Pet ret = new Pet(getItemId(), getPosition(), uniqueid);
+        ret.name = name;
+        ret.tameness = tameness;
+        ret.level = level;
+        ret.fullness = fullness;
+        ret.Fh = Fh;
+        ret.pos = pos;
+        ret.stance = stance;
+        ret.summoned = summoned;
+        ret.petAttribute = petAttribute;
+        ret.setOwner(getOwner());
+        ret.setQuantity(getQuantity());
+        ret.setExpiration(getExpiration());
+        ret.setGiftFrom(getGiftFrom());
+        ret.setUid(getUid()); // 复制 uid
+        return ret;
+    }
+
     private static PetService getPetService() {
         if (petService == null) {
             petService = ServerManager.getApplicationContext().getBean(PetService.class);
@@ -135,9 +155,9 @@ public class Pet extends Item {
         byte slot = owner.getPetIndex(this);
         boolean enjoyed;
 
-        //will NOT increase pet's tameness if tried to feed pet with 100% fullness
-        // unless forceEnjoy == true (cash shop)
-        if (fullness < 100 || incFullness == 0 || forceEnjoy) {   //incFullness == 0: command given
+        // 如果尝试在饱食度 100% 时喂食宠物，将不会增加宠物的亲密度
+        // 除非 forceEnjoy == true (商城物品)
+        if (fullness < 100 || incFullness == 0 || forceEnjoy) {   // incFullness == 0: 给出的命令
             int newFullness = fullness + incFullness;
             if (newFullness > 100) {
                 newFullness = 100;

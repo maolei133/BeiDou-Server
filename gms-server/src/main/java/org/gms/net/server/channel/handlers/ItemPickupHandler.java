@@ -21,10 +21,14 @@
  */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.maps.MapObject;
@@ -53,8 +57,9 @@ public final class ItemPickupHandler extends AbstractPacketHandler {
         Point charPos = chr.getPosition();
         Point obPos = ob.getPosition();
         if (Math.abs(charPos.getX() - obPos.getX()) > 800 || Math.abs(charPos.getY() - obPos.getY()) > 600) {
-            log.warn("Chr {} tried to pick up an item too far away. Mapid: {}, player pos: {}, object pos: {}",
+            log.warn("角色 {} 尝试拾取距离过远的物品。地图ID: {}, 玩家位置: {}, 物品位置: {}",
                     c.getPlayer().getName(), chr.getMapId(), charPos, obPos);
+            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, new MapMessage().with("msg", "拾取物品距离过远").with("map", chr.getMapId()).with("pos", charPos).with("objPos", obPos));
             return;
         }
 

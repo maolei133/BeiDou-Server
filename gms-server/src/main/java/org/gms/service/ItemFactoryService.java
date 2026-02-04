@@ -13,6 +13,9 @@ import org.gms.dao.mapper.InventoryequipmentMapper;
 import org.gms.dao.mapper.InventoryitemsMapper;
 import org.gms.dao.mapper.InventorymerchantMapper;
 import org.gms.util.Pair;
+import org.gms.util.SnowflakeIdGenerator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,9 +31,11 @@ import static org.gms.dao.entity.table.InventorymerchantDOTableDef.INVENTORYMERC
 @Service
 @AllArgsConstructor
 public class ItemFactoryService {
+    private static final Logger log = LoggerFactory.getLogger(ItemFactoryService.class);
     private final InventoryitemsMapper inventoryitemsMapper;
     private final InventoryequipmentMapper inventoryequipmentMapper;
     private final InventorymerchantMapper inventorymerchantMapper;
+    private final TraceabilityService traceabilityService;
 
     public List<Pair<Item, InventoryType>> loadItems(int typeValue, boolean isAccount, int id, boolean login) {
         QueryWrapper query = QueryWrapper.create()
@@ -54,17 +59,30 @@ public class ItemFactoryService {
 
         for (Row row : rows) {
             InventoryType mit = InventoryType.getByType((byte) getInt(row, "inventorytype"));
+            Item item;
             if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
-                items.add(new Pair<>(loadEquipFromRow(row), mit));
+                item = loadEquipFromRow(row);
             } else {
                 int petid = getInt(row, "petid", -1);
-                Item item = new Item(getInt(row, "itemid"), (byte) getInt(row, "position"), getShort(row, "quantity"), petid);
+                item = new Item(getInt(row, "itemid"), (byte) getInt(row, "position"), getShort(row, "quantity"), petid);
                 item.setOwner(getString(row, "owner"));
                 item.setExpiration(getLong(row, "expiration"));
                 item.setGiftFrom(getString(row, "giftFrom"));
                 item.setFlag(getShort(row, "flag"));
-                items.add(new Pair<>(item, mit));
             }
+            
+            // Load UID
+            Long uid = row.getLong("uid");
+            if (uid != null && uid > 0) {
+                item.setUid(uid);
+            } else {
+                // Lazy generation: if UID is missing in DB, generate a new one
+                // Note: This new UID is not persisted back to DB immediately here, 
+                // but will be when the item is saved (e.g. on logout or map change)
+                item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+            }
+            
+            items.add(new Pair<>(item, mit));
         }
         return items;
     }
@@ -89,18 +107,29 @@ public class ItemFactoryService {
             short bundles = (short) getInt(row, "bundles");
             InventoryType mit = InventoryType.getByType((byte) getInt(row, "inventorytype"));
 
+            Item item = null;
             if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
-                items.add(new Pair<>(loadEquipFromRow(row), mit));
+                item = loadEquipFromRow(row);
             } else {
                 if (bundles > 0) {
                     int petid = getInt(row, "petid", -1);
-                    Item item = new Item(getInt(row, "itemid"), (byte) getInt(row, "position"), (short) (bundles * getInt(row, "quantity")), petid);
+                    item = new Item(getInt(row, "itemid"), (byte) getInt(row, "position"), (short) (bundles * getInt(row, "quantity")), petid);
                     item.setOwner(getString(row, "owner"));
                     item.setExpiration(getLong(row, "expiration"));
                     item.setGiftFrom(getString(row, "giftFrom"));
                     item.setFlag(getShort(row, "flag"));
-                    items.add(new Pair<>(item, mit));
                 }
+            }
+            
+            if (item != null) {
+                // Load UID
+                Long uid = row.getLong("uid");
+                if (uid != null && uid > 0) {
+                    item.setUid(uid);
+                } else {
+                    item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+                }
+                items.add(new Pair<>(item, mit));
             }
         }
         return items;
@@ -141,6 +170,23 @@ public class ItemFactoryService {
         for (Pair<Item, InventoryType> pair : items) {
             Item item = pair.getLeft();
             InventoryType mit = pair.getRight();
+            
+            // 检查 UID 是否重复
+            if (item.getUid() > 0) {
+                QueryWrapper checkUidQuery = QueryWrapper.create()
+                        .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
+                        .where(INVENTORYITEMS_D_O.UID.eq(item.getUid()));
+                
+                Long existingId = inventoryitemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
+                if (existingId != null) {
+                    log.error("发现重复 UID 物品入库尝试! UID: {}, ItemID: {}, OwnerID: {}, Type: {}", 
+                            item.getUid(), item.getItemId(), id, typeValue);
+                    // 记录异常日志
+                    traceabilityService.log(item, null, TraceabilityService.ActionType.ADMIN_DELETE, 
+                            "DUPLICATE_UID_BLOCKED", 0, "Blocked save due to duplicate UID", "Type: " + typeValue);
+                    continue; // 跳过该物品的保存
+                }
+            }
 
             InventoryitemsDO itemDO = new InventoryitemsDO();
             itemDO.setType(typeValue);
@@ -158,6 +204,7 @@ public class ItemFactoryService {
             itemDO.setFlag((int) item.getFlag());
             itemDO.setExpiration(item.getExpiration());
             itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
+            itemDO.setUid(item.getUid()); // Save UID
 
             inventoryitemsMapper.insert(itemDO);
             Long genKey = itemDO.getInventoryitemid();
@@ -223,6 +270,23 @@ public class ItemFactoryService {
             Item item = pair.getLeft();
             Short bundles = bundlesList.get(i++);
             InventoryType mit = pair.getRight();
+            
+            // 检查 UID 是否重复
+            if (item.getUid() > 0) {
+                QueryWrapper checkUidQuery = QueryWrapper.create()
+                        .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
+                        .where(INVENTORYITEMS_D_O.UID.eq(item.getUid()));
+                
+                Long existingId = inventoryitemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
+                if (existingId != null) {
+                    log.error("发现重复 UID 物品入库尝试 (Merchant)! UID: {}, ItemID: {}, OwnerID: {}, Type: {}", 
+                            item.getUid(), item.getItemId(), id, typeValue);
+                    // 记录异常日志
+                    traceabilityService.log(item, null, TraceabilityService.ActionType.ADMIN_DELETE, 
+                            "DUPLICATE_UID_BLOCKED", 0, "Blocked merchant save due to duplicate UID", "Type: " + typeValue);
+                    continue; // 跳过该物品的保存
+                }
+            }
 
             InventoryitemsDO itemDO = new InventoryitemsDO();
             itemDO.setType(typeValue);
@@ -236,6 +300,7 @@ public class ItemFactoryService {
             itemDO.setFlag((int) item.getFlag());
             itemDO.setExpiration(item.getExpiration());
             itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
+            itemDO.setUid(item.getUid()); // Save UID
 
             inventoryitemsMapper.insert(itemDO);
             Long genKey = itemDO.getInventoryitemid();
@@ -300,7 +365,17 @@ public class ItemFactoryService {
 
         for (Row row : rows) {
             Integer cid = row.getInt("characterid");
-            items.add(new Pair<>(loadEquipFromRow(row), cid));
+            Equip equip = loadEquipFromRow(row);
+            
+            // Load UID
+            Long uid = row.getLong("uid");
+            if (uid != null && uid > 0) {
+                equip.setUid(uid);
+            } else {
+                equip.setUid(SnowflakeIdGenerator.getInstance().nextId());
+            }
+            
+            items.add(new Pair<>(equip, cid));
         }
         return items;
     }
@@ -314,7 +389,7 @@ public class ItemFactoryService {
         equip.setDex(getShort(row, "dex"));
         equip.setHands(getShort(row, "hands"));
         equip.setHp(getShort(row, "hp"));
-        equip.setInt(getShort(row, "int")); // <-- 改回从 "int" 列读取
+        equip.setInt(getShort(row, "inte")); // <-- 改回从 "inte" 列读取
         equip.setJump(getShort(row, "jump"));
         equip.setVicious(getShort(row, "vicious"));
         equip.setFlag(getShort(row, "flag"));

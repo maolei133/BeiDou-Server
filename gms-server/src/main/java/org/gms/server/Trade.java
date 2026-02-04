@@ -29,11 +29,15 @@ import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.server.coordinator.world.InviteCoordinator;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResult;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResultType;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteType;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
+import org.gms.util.SnowflakeIdGenerator;
+import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.util.PacketCreator;
@@ -52,6 +56,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class Trade {
     private static final Logger log = LoggerFactory.getLogger(Trade.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     public enum TradeResult {
         NO_RESPONSE(1),
@@ -127,6 +132,9 @@ public class Trade {
         for (Item item : exchangeItems) {
             KarmaManipulator.toggleKarmaFlagToUntradeable(item);
             InventoryManipulator.addFromDrop(chr.getClient(), item, show);
+            
+            // 记录溯源日志
+            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, "玩家交易", 0, "From: " + partner.getChr().getName(), null);
         }
 
         if (exchangeMeso > 0) {//此处对金币交易进行扣税处理
@@ -209,6 +217,11 @@ public class Trade {
                 if (it.getPosition() == item.getPosition()) {
                     return false;
                 }
+            }
+            
+            // 确保 UID 存在
+            if (item.getUid() == 0) {
+                item.setUid(SnowflakeIdGenerator.getInstance().nextId());
             }
 
             items.add(item);

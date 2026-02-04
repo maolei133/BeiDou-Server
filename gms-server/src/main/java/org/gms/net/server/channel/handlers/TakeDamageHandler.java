@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Client;
@@ -38,6 +39,9 @@ import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.skills.Aran;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.StatEffect;
@@ -135,6 +139,7 @@ public final class TakeDamageHandler extends AbstractPacketHandler {
                                             map.spawnItemDrop(chr, chr, new Item(loseItem.getId(), (short) 0, (short) 1), map.calcDropPos(pos, chr.getPosition()), true, true);
                                             d++;
                                         }
+                                        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_LOST, new MapMessage().with("itm", loseItem.getId()).with("cnt", qty).with("msg", "被怪物偷取"));
                                     }
                                 }
                             }

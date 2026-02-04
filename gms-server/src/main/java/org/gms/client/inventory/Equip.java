@@ -123,6 +123,7 @@ public class Equip extends Item {
         ret.setQuantity(getQuantity());
         ret.setExpiration(getExpiration());
         ret.setGiftFrom(getGiftFrom());
+        ret.setUid(getUid()); // Copy uid
         return ret;
     }
 

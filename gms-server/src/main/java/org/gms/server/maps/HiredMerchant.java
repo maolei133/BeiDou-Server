@@ -44,8 +44,10 @@ import org.gms.server.TimerManager;
 import org.gms.server.Trade;
 import org.gms.service.CharacterService;
 import org.gms.service.HiredMerchantService;
+import org.gms.service.TraceabilityService;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.gms.util.SnowflakeIdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -114,6 +116,8 @@ public class HiredMerchant extends AbstractMapObject {
     private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
     /** 雇佣商店服务 */
     private static final HiredMerchantService hiredMerchantService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
+    /** 溯源服务 */
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
     
     /** 数据库中的商店ID */
     private int merchantId;
@@ -168,6 +172,14 @@ public class HiredMerchant extends AbstractMapObject {
                 }
                 Item item = hiredMerchantService.deserializeItem(itemDO.getItemData());
                 if (item != null) {
+                    // 恢复 UID
+                    if (itemDO.getUid() != null && itemDO.getUid() > 0) {
+                        item.setUid(itemDO.getUid());
+                    } else {
+                        // 兼容旧数据，生成新 UID
+                        item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+                    }
+                    
                     short bundles = itemDO.getBundles() != null ? itemDO.getBundles().shortValue() : 0;
                     int price = itemDO.getPrice() != null ? itemDO.getPrice() : 0;
                     
@@ -391,6 +403,9 @@ public class HiredMerchant extends AbstractMapObject {
                     }
 
                     InventoryManipulator.addFromDrop(chr.getClient(), iitem, true);
+                    
+                    // 记录溯源日志
+                    traceabilityService.log(iitem, chr, TraceabilityService.ActionType.HIRED_MERCHANT_RETURN, "雇佣商店取回");
                 }
 
                 removeFromSlot(slot);
@@ -404,6 +419,7 @@ public class HiredMerchant extends AbstractMapObject {
                             .type(HiredMerchantTransactionsDO.TYPE_REMOVE)
                             .quantity((int) (shopItem.getItem().getQuantity() * shopItem.getBundles()))
                             .timestamp(System.currentTimeMillis())
+                            .uid(shopItem.getItem().getUid()) // 记录 UID
                             .build();
                     hiredMerchantService.removeItem(shopItem.getDbId(), transaction);
                 }
@@ -494,6 +510,9 @@ public class HiredMerchant extends AbstractMapObject {
                     if (GameConfig.getServerBoolean("use_announce_shop_item_sold")) {   // 创意来自 Vcoc
                         announceItemSold(newItem, price, priceLong, chr.getName(), getQuantityLeft(pItem.getItem().getItemId()));
                     }
+                    
+                    // 记录溯源日志
+                    traceabilityService.log(newItem, chr, TraceabilityService.ActionType.HIRED_MERCHANT_BUY, "雇佣商店购买");
 
                     if (merchantId > 0) {
                         // 使用 processPurchase 方法统一处理事务
@@ -679,6 +698,9 @@ public class HiredMerchant extends AbstractMapObject {
                         } else {
                             InventoryManipulator.addById(c, mpsi.getItem().getItemId(), (short) (mpsi.getBundles() * mpsi.getItem().getQuantity()), mpsi.getItem().getOwner(), -1, mpsi.getItem().getFlag(), mpsi.getItem().getExpiration());
                         }
+                        
+                        // 记录溯源日志
+                        traceabilityService.log(mpsi.getItem(), c.getPlayer(), TraceabilityService.ActionType.HIRED_MERCHANT_RETURN, "雇佣商店关闭取回");
 
                         if (merchantId > 0 && mpsi.getDbId() != null) {
                             HiredMerchantTransactionsDO transaction = HiredMerchantTransactionsDO.builder()
@@ -688,6 +710,7 @@ public class HiredMerchant extends AbstractMapObject {
                                     .type(HiredMerchantTransactionsDO.TYPE_RETURN)
                                     .quantity((int) (mpsi.getItem().getQuantity() * mpsi.getBundles()))
                                     .timestamp(System.currentTimeMillis())
+                                    .uid(mpsi.getItem().getUid()) // 记录 UID
                                     .build();
                             hiredMerchantService.removeItem(mpsi.getDbId(), transaction);
                         }
@@ -840,8 +863,19 @@ public class HiredMerchant extends AbstractMapObject {
             if (items.size() >= getOnSaleSlotMax()) {
                 return false;
             }
+            
+            // 确保 UID 存在
+            if (item.getItem().getUid() == 0) {
+                item.getItem().setUid(SnowflakeIdGenerator.getInstance().nextId());
+            }
 
             items.add(item);
+            
+            // 记录溯源日志
+            Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
+            if (owner != null) {
+                traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.HIRED_MERCHANT_ADD, "雇佣商店上架");
+            }
             
             if (merchantId > 0) {
                 // 添加物品到数据库
@@ -854,6 +888,7 @@ public class HiredMerchant extends AbstractMapObject {
                         .bundles((int) item.getBundles())
                         .status(HiredMerchantItemsDO.STATUS_ON_SALE)
                         .itemData(hiredMerchantService.serializeItem(item.getItem()))
+                        .uid(item.getItem().getUid()) // 记录 UID
                         .build();
                 
                 HiredMerchantTransactionsDO transactionDO = HiredMerchantTransactionsDO.builder()
@@ -862,6 +897,7 @@ public class HiredMerchant extends AbstractMapObject {
                         .type(HiredMerchantTransactionsDO.TYPE_ADD)
                         .quantity((int) item.getItem().getQuantity())
                         .timestamp(System.currentTimeMillis())
+                        .uid(item.getItem().getUid()) // 记录 UID
                         .build();
                 
                 hiredMerchantService.addItem(itemDO, transactionDO);
