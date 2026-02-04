@@ -302,9 +302,9 @@ public class Storage {
                 typeItems.put(type, new ArrayList<>(items));
             }
             
-            // 整理后批量更新位置
+            // 整理后全量同步数据库
             StorageService storageService = SpringContextUtil.getBean(StorageService.class);
-            storageService.updateItemsPositions(this.id, items);
+            storageService.syncStorageItems(this.id, items);
 
             c.sendPacket(PacketCreator.arrangeStorage(slots, items));
         } finally {

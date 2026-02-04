@@ -131,23 +131,64 @@ public class StorageService {
     }
 
     /**
-     * 批量更新物品位置 (用于整理仓库)
+     * 更新单个物品的数量和JSON数据
      */
     @Transactional
-    public void updateItemsPositions(int storageId, List<Item> items) {
-        // 整理仓库时，通常是全量重新排序
-        // 简单策略：全量删除后重新插入 (虽然是先删后增，但仅限于整理操作，且在事务内)
-        // 或者：批量更新 Position
-        // 考虑到整理操作不涉及物品属性变化，只变动 Position，批量更新更安全
+    public void updateItem(int storageId, Item item) {
+        ItemInfoRtnDTO itemDTO = DueyProcessor.convertItemToDTO(item);
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(itemDTO);
+        } catch (JsonProcessingException e) {
+            log.error("序列化仓库物品失败", e);
+            return;
+        }
 
+        UpdateChain.of(StorageItemsDO.class)
+                .set(StorageItemsDO::getQuantity, item.getQuantity())
+                .set(StorageItemsDO::getItemData, json)
+                .where(StorageItemsDO::getUid).eq(item.getUid())
+                .and(StorageItemsDO::getStorageId).eq(storageId)
+                .update();
+    }
+
+    /**
+     * 同步仓库物品 (用于整理仓库后，处理合并、排序和删除)
+     * 采用 Diff Sync 策略：更新存在的，删除消失的，插入新增的
+     */
+    @Transactional
+    public void syncStorageItems(int storageId, List<Item> items) {
+        // 1. 获取数据库中该仓库当前所有的物品 UID
+        QueryWrapper query = QueryWrapper.create()
+                .select(StorageItemsDO::getUid)
+                .where(StorageItemsDO::getStorageId).eq(storageId);
+        List<Long> dbUids = storageItemsMapper.selectListByQueryAs(query, Long.class);
+
+        // 2. 构建内存中物品的 UID 集合
+        List<Long> memoryUids = new ArrayList<>();
         for (Item item : items) {
-            if (item.getUid() > 0) {
-                UpdateChain.of(StorageItemsDO.class)
-                        .set(StorageItemsDO::getPosition, item.getPosition())
-                        .where(StorageItemsDO::getUid).eq(item.getUid())
-                        .and(StorageItemsDO::getStorageId).eq(storageId)
-                        .update();
+            if (item.getUid() == 0) {
+                item.setUid(SnowflakeIdGenerator.getInstance().nextId());
             }
+            memoryUids.add(item.getUid());
+
+            // 3. 更新或插入
+            if (dbUids.contains(item.getUid())) {
+                // 更新：位置、数量、ItemData (因为数量变了，JSON也变了)
+                updateItem(storageId, item);
+            } else {
+                // 插入 (理论上整理操作不应该产生新UID，除非逻辑特殊，但为了健壮性加上)
+                addItem(storageId, item);
+            }
+        }
+
+        // 4. 删除在 DB 中存在但内存中不存在的物品 (即被合并掉的物品)
+        dbUids.removeAll(memoryUids); // 此时 dbUids 仅包含需要删除的 UID
+        if (!dbUids.isEmpty()) {
+            QueryWrapper deleteQuery = QueryWrapper.create()
+                    .where(StorageItemsDO::getUid).in(dbUids)
+                    .and(StorageItemsDO::getStorageId).eq(storageId);
+            storageItemsMapper.deleteByQuery(deleteQuery);
         }
     }
 
