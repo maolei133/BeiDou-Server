@@ -163,6 +163,11 @@ public class StorageInventory {
                 continue;
             }
 
+            // 优化：如果是可充值道具，直接跳过合并检查
+            if (ItemConstants.isRechargeable(dstItem.getItemId())) {
+                continue;
+            }
+
             for (short src = (short) (dst + 1); src <= this.getSlotLimit(); src++) {
                 srcItem = this.getItem(src);
                 if (srcItem == null) {

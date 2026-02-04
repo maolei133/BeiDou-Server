@@ -463,6 +463,40 @@ public class ItemInformationProvider {
         slotMaxCache.put(itemId, ret);
         return (short) (ret + getExtraSlotMaxFromPlayer(c, itemId));
     }
+    
+    public short getSlotMax(int itemId) {
+        Short slotMax = slotMaxCache.get(itemId);
+        short itemSlotMax = (short) Math.min(32767, GameConfig.getServerInt("item_slot_max"));
+        
+        if (slotMax != null) {
+            if (slotMax > 1 && itemSlotMax != slotMax) {
+                slotMax = itemSlotMax;
+                slotMaxCache.put(itemId, slotMax);
+            }
+            return slotMax;
+        }
+        
+        short ret = 0;
+        Data item = getItemData(itemId);
+        if (item != null) {
+            Data smEntry = item.getChildByPath("info/slotMax");
+            InventoryType inventoryType = ItemConstants.getInventoryType(itemId);
+            if (smEntry == null) {
+                if (inventoryType.getType() == InventoryType.EQUIP.getType()) {
+                    ret = 1;
+                } else if (inventoryType.canChangeSlotMax() && itemSlotMax > 0) {
+                    ret = itemSlotMax;
+                } else {
+                    ret = 100;
+                }
+            } else {
+                ret = inventoryType.canChangeSlotMax() && itemSlotMax > 0 ? itemSlotMax : (short) DataTool.getInt(smEntry);
+            }
+        }
+
+        slotMaxCache.put(itemId, ret);
+        return ret;
+    }
 
     public int getMeso(int itemId) {
         if (getMesoCache.containsKey(itemId)) {
@@ -2092,7 +2126,7 @@ public class ItemInformationProvider {
                         } else if (da.getName().startsWith("incACCMin")) {
                             list.add(new Pair<>("incACC", Randomizer.rand(DataTool.getInt(da), DataTool.getInt(data2.getChildByPath("incACCMax")))));
                         } else if (da.getName().startsWith("incEVAMin")) {
-                            list.add(new Pair<>("incEVA", Randomizer.rand(DataTool.getInt(da), DataTool.getInt(data2.getChildByPath("incEVAMax")))));
+                            list.add(new Pair<>("incEVAMin", Randomizer.rand(DataTool.getInt(da), DataTool.getInt(data2.getChildByPath("incEVAMax")))));
                         } else if (da.getName().startsWith("incSpeedMin")) {
                             list.add(new Pair<>("incSpeed", Randomizer.rand(DataTool.getInt(da), DataTool.getInt(data2.getChildByPath("incSpeedMax")))));
                         } else if (da.getName().startsWith("incJumpMin")) {

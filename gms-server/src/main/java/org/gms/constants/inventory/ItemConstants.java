@@ -65,6 +65,10 @@ public final class ItemConstants {
         }
         return 0;
     }
+    
+    public static boolean isUntradeable(int flag) {
+        return (flag & UNTRADEABLE) == UNTRADEABLE;
+    }
 
     public static boolean isThrowingStar(int itemId) {
         return itemId / 10000 == 207;

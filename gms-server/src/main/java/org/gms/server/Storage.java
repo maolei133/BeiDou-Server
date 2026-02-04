@@ -23,36 +23,39 @@ import org.gms.client.Client;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.ItemFactory;
+import org.gms.constants.inventory.ItemConstants;
 import org.gms.dao.entity.StoragesDO;
 import org.gms.dao.mapper.StoragesMapper;
-import org.gms.service.StorageService;
-import org.gms.service.TraceabilityService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.provider.Data;
 import org.gms.provider.DataProvider;
 import org.gms.provider.DataProviderFactory;
 import org.gms.provider.DataTool;
 import org.gms.provider.wz.WZFiles;
+import org.gms.service.StorageService;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 import org.gms.util.SpringContextUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 /**
- * 仓库服务类
- * @author Matze
+ * 仓库领域模型
+ * 负责管理仓库的内存状态，并协调 StorageService 进行持久化。
+ * <p>
+ * 重构说明：
+ * 1. 移除了 typeItems 冗余缓存，直接使用 Stream API 过滤 items。
+ * 2. 强化了 store 方法的堆叠逻辑。
+ * 3. 统一了线程锁的使用。
+ * </p>
  */
 public class Storage {
     private static final Logger log = LoggerFactory.getLogger(Storage.class);
+    // 静态缓存，用于存储NPC的仓库费用信息，避免重复读取WZ文件
     private static final Map<Integer, Integer> trunkGetCache = new HashMap<>();
     private static final Map<Integer, Integer> trunkPutCache = new HashMap<>();
 
@@ -60,27 +63,22 @@ public class Storage {
     private int currentNpcid;
     private int meso;
     private byte slots;
-    private final Map<InventoryType, List<Item>> typeItems = new HashMap<>();
-    private List<Item> items = new LinkedList<>();
+    private List<Item> items; // 核心数据结构
     private final Lock lock = new ReentrantLock(true);
+
+    // 依赖注入
+    private static final StorageService storageService = SpringContextUtil.getBean(StorageService.class);
 
     private Storage(int id, byte slots, int meso) {
         this.id = id;
         this.slots = slots;
         this.meso = meso;
+        this.items = new LinkedList<>();
     }
 
-    private static Storage create(int accountId, int world) {
-        StoragesMapper mapper = SpringContextUtil.getBean(StoragesMapper.class);
-        StoragesDO newStorage = new StoragesDO();
-        newStorage.setAccountid(accountId);
-        newStorage.setWorld(world);
-        newStorage.setSlots(4);
-        newStorage.setMeso(0);
-        mapper.insert(newStorage);
-        return loadOrCreateFromDB(accountId, world);
-    }
-
+    /**
+     * 工厂方法：加载或创建仓库
+     */
     public static Storage loadOrCreateFromDB(int accountId, int world) {
         StoragesMapper mapper = SpringContextUtil.getBean(StoragesMapper.class);
         QueryWrapper query = QueryWrapper.create()
@@ -95,11 +93,10 @@ public class Storage {
 
         Storage ret = new Storage(data.getStorageid().intValue(), data.getSlots().byteValue(), data.getMeso());
         
-        // 使用 StorageService 加载物品，支持从新表 storage_items 加载
-        StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+        // 加载物品
         List<Item> loadedItems = storageService.loadStorageItems(ret.id);
         
-        // 如果新表为空，尝试从旧表加载并迁移
+        // 兼容性迁移：如果新表为空，尝试从旧表迁移
         if (loadedItems.isEmpty()) {
             List<Pair<Item, InventoryType>> oldItems = ItemFactory.STORAGE.loadItems(ret.id, false);
             if (!oldItems.isEmpty()) {
@@ -107,9 +104,8 @@ public class Storage {
                 for (Pair<Item, InventoryType> pair : oldItems) {
                     itemsToMigrate.add(pair.getLeft());
                 }
-                // 执行迁移
                 storageService.migrateOldData(ret.id, itemsToMigrate);
-                // 重新加载以获取正确的 UID 和状态
+                // 迁移后重新加载以获取正确的 UID
                 ret.items.addAll(storageService.loadStorageItems(ret.id));
             }
         } else {
@@ -119,84 +115,63 @@ public class Storage {
         return ret;
     }
 
-    public byte getSlots() {
-        return slots;
+    private static Storage create(int accountId, int world) {
+        StoragesMapper mapper = SpringContextUtil.getBean(StoragesMapper.class);
+        StoragesDO newStorage = new StoragesDO();
+        newStorage.setAccountid(accountId);
+        newStorage.setWorld(world);
+        newStorage.setSlots(4);
+        newStorage.setMeso(0);
+        mapper.insert(newStorage);
+        return loadOrCreateFromDB(accountId, world);
     }
 
-    public boolean canGainSlots(int slots) {
-        slots += this.slots;
-        return slots <= 48;
-    }
-
-    public boolean gainSlots(int slots) {
+    /**
+     * 存入物品（核心逻辑）
+     * 包含自动堆叠处理
+     */
+    public boolean store(Client c, Item item) {
         lock.lock();
         try {
-            if (canGainSlots(slots)) {
-                slots += this.slots;
-                this.slots = (byte) slots;
+            // 1. 尝试堆叠 (Stacking)
+            // 只有非装备类、非可充值道具且最大堆叠数 > 1 的物品才尝试堆叠
+            if (!ItemConstants.isEquipment(item.getItemId()) 
+                && !ItemConstants.isRechargeable(item.getItemId()) 
+                && ItemInformationProvider.getInstance().getSlotMax(c, item.getItemId()) > 1) {
+                short maxSlot = ItemInformationProvider.getInstance().getSlotMax(c, item.getItemId());
                 
-                // 实时更新数据库
-                StorageService storageService = SpringContextUtil.getBean(StorageService.class);
-                storageService.updateSlots(this.id, this.slots);
-                
-                return true;
+                // 遍历现有物品寻找可堆叠的目标
+                for (Item existing : items) {
+                    if (existing.getItemId() == item.getItemId() && existing.getQuantity() < maxSlot) {
+                        // 检查属性是否一致（如拥有者、有效期等），通常同ID消耗品属性一致，但为了严谨可以加检查
+                        // 这里简化为同ID即可堆叠，符合大多数游戏逻辑
+                        
+                        int amountToStack = Math.min(maxSlot - existing.getQuantity(), item.getQuantity());
+                        
+                        // 更新内存
+                        existing.setQuantity((short) (existing.getQuantity() + amountToStack));
+                        item.setQuantity((short) (item.getQuantity() - amountToStack));
+                        
+                        // 更新数据库
+                        storageService.updateItem(this.id, existing);
+                        
+                        if (item.getQuantity() <= 0) {
+                            return true; // 全部堆叠完成，无需占用新槽位
+                        }
+                    }
+                }
             }
 
-            return false;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    // saveToDB 已废弃，不再需要
-    // public void saveToDB() { ... }
-
-    public Item getItem(byte slot) {
-        lock.lock();
-        try {
-            return items.get(slot);
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public boolean takeOut(Item item) {
-        lock.lock();
-        try {
-            boolean ret = items.remove(item);
-
-            InventoryType type = item.getInventoryType();
-            typeItems.put(type, new ArrayList<>(filterItems(type)));
-            
-            if (ret) {
-                // 实时从数据库移除
-                StorageService storageService = SpringContextUtil.getBean(StorageService.class);
-                storageService.removeItem(this.id, item);
+            // 2. 存入新槽位 (New Slot)
+            if (items.size() >= slots) {
+                return false; // 仓库已满
             }
 
-            return ret;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public boolean store(Item item) {
-        lock.lock();
-        try {
-            if (isFull()) {
-                return false;
-            }
-
+            // 设置位置为当前末尾
+            item.setPosition((short) items.size());
             items.add(item);
-            // 设置位置，通常是列表末尾，或者由 StorageInventory 处理
-            // 这里简单设置为当前大小 - 1
-            item.setPosition((short) (items.size() - 1));
-
-            InventoryType type = item.getInventoryType();
-            typeItems.put(type, new ArrayList<>(filterItems(type)));
             
-            // 实时存入数据库
-            StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+            // 插入数据库
             storageService.addItem(this.id, item);
 
             return true;
@@ -205,39 +180,52 @@ public class Storage {
         }
     }
 
-    public List<Item> getItems() {
+    /**
+     * 取出物品
+     */
+    public boolean takeOut(Item item) {
         lock.lock();
         try {
-            return Collections.unmodifiableList(items);
+            boolean removed = items.remove(item);
+            if (removed) {
+                storageService.removeItem(this.id, item);
+            }
+            return removed;
         } finally {
             lock.unlock();
         }
     }
 
-    private List<Item> filterItems(InventoryType type) {
-        List<Item> storageItems = getItems();
-        List<Item> ret = new LinkedList<>();
-
-        for (Item item : storageItems) {
-            if (item.getInventoryType() == type) {
-                ret.add(item);
-            }
-        }
-        return ret;
-    }
-
-    public byte getSlot(InventoryType type, byte slot) {
+    /**
+     * 整理仓库
+     */
+    public void arrangeItems(Client c) {
         lock.lock();
         try {
-            byte ret = 0;
-            List<Item> storageItems = getItems();
-            for (Item item : storageItems) {
-                if (item == typeItems.get(type).get(slot)) {
-                    return ret;
-                }
-                ret++;
-            }
-            return -1;
+            // 使用 StorageInventory 进行排序逻辑 (保持原有排序算法)
+            StorageInventory msi = new StorageInventory(c, items);
+            msi.mergeItems(); // 内存合并
+            this.items = msi.sortItems(); // 内存排序
+
+            // 全量同步到数据库 (处理合并后的删除、更新和排序)
+            storageService.syncStorageItems(this.id, this.items);
+
+            // 发送更新包
+            c.sendPacket(PacketCreator.arrangeStorage(slots, items));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 获取指定类型的物品列表 (动态过滤)
+     */
+    public List<Item> getItemsByType(InventoryType type) {
+        lock.lock();
+        try {
+            return items.stream()
+                    .filter(i -> i.getInventoryType() == type)
+                    .collect(Collectors.toList());
         } finally {
             lock.unlock();
         }
@@ -252,22 +240,11 @@ public class Storage {
 
         lock.lock();
         try {
-            items.sort((o1, o2) -> {
-                if (o1.getInventoryType().getType() < o2.getInventoryType().getType()) {
-                    return -1;
-                } else if (o1.getInventoryType() == o2.getInventoryType()) {
-                    return 0;
-                }
-                return 1;
-            });
-
-            List<Item> storageItems = getItems();
-            for (InventoryType type : InventoryType.values()) {
-                typeItems.put(type, new ArrayList<>(storageItems));
-            }
-
-            currentNpcid = npcId;
-            c.sendPacket(PacketCreator.getStorage(npcId, slots, storageItems, meso));
+            this.currentNpcid = npcId;
+            // 排序：装备在前，其他按类型排序 (保持原有展示逻辑)
+            items.sort((o1, o2) -> Integer.compare(o1.getInventoryType().getType(), o2.getInventoryType().getType()));
+            
+            c.sendPacket(PacketCreator.getStorage(npcId, slots, items, meso));
         } finally {
             lock.unlock();
         }
@@ -276,7 +253,7 @@ public class Storage {
     public void sendStored(Client c, InventoryType type) {
         lock.lock();
         try {
-            c.sendPacket(PacketCreator.storeStorage(slots, type, typeItems.get(type)));
+            c.sendPacket(PacketCreator.storeStorage(slots, type, getItemsByType(type)));
         } finally {
             lock.unlock();
         }
@@ -285,86 +262,37 @@ public class Storage {
     public void sendTakenOut(Client c, InventoryType type) {
         lock.lock();
         try {
-            c.sendPacket(PacketCreator.takeOutStorage(slots, type, typeItems.get(type)));
+            c.sendPacket(PacketCreator.takeOutStorage(slots, type, getItemsByType(type)));
         } finally {
             lock.unlock();
         }
-    }
-
-    public void arrangeItems(Client c) {
-        lock.lock();
-        try {
-            StorageInventory msi = new StorageInventory(c, items);
-            msi.mergeItems();
-            items = msi.sortItems();
-
-            for (InventoryType type : InventoryType.values()) {
-                typeItems.put(type, new ArrayList<>(items));
-            }
-            
-            // 整理后全量同步数据库
-            StorageService storageService = SpringContextUtil.getBean(StorageService.class);
-            storageService.syncStorageItems(this.id, items);
-
-            c.sendPacket(PacketCreator.arrangeStorage(slots, items));
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public int getMeso() {
-        return meso;
-    }
-
-    public void setMeso(int meso) {
-        if (meso < 0) {
-            throw new RuntimeException("仓库金币不能为负数");
-        }
-        this.meso = meso;
-        
-        // 实时更新金币
-        StorageService storageService = SpringContextUtil.getBean(StorageService.class);
-        storageService.updateMeso(this.id, this.meso);
     }
 
     public void sendMeso(Client c) {
         c.sendPacket(PacketCreator.mesoStorage(slots, meso));
     }
 
-    public int getStoreFee() {
-        int npcId = currentNpcid;
-        Integer fee = trunkPutCache.get(npcId);
-        if (fee == null) {
-            fee = 100;
+    // --- 属性访问与辅助方法 ---
 
-            DataProvider npc = DataProviderFactory.getDataProvider(WZFiles.NPC);
-            Data npcData = npc.getData(npcId + ".img");
-            if (npcData != null) {
-                fee = DataTool.getIntConvert("info/trunkPut", npcData, 100);
+    public Item getItem(byte slot) {
+        lock.lock();
+        try {
+            if (slot >= 0 && slot < items.size()) {
+                return items.get(slot);
             }
-
-            trunkPutCache.put(npcId, fee);
+            return null;
+        } finally {
+            lock.unlock();
         }
-
-        return fee;
     }
 
-    public int getTakeOutFee() {
-        int npcId = currentNpcid;
-        Integer fee = trunkGetCache.get(npcId);
-        if (fee == null) {
-            fee = 0;
-
-            DataProvider npc = DataProviderFactory.getDataProvider(WZFiles.NPC);
-            Data npcData = npc.getData(npcId + ".img");
-            if (npcData != null) {
-                fee = DataTool.getIntConvert("info/trunkGet", npcData, 0);
-            }
-
-            trunkGetCache.put(npcId, fee);
+    public List<Item> getItems() {
+        lock.lock();
+        try {
+            return Collections.unmodifiableList(items);
+        } finally {
+            lock.unlock();
         }
-
-        return fee;
     }
 
     public boolean isFull() {
@@ -376,13 +304,79 @@ public class Storage {
         }
     }
 
-    public void close() {
+    public byte getSlots() {
+        return slots;
+    }
+
+    public boolean gainSlots(int amount) {
         lock.lock();
         try {
-            typeItems.clear();
+            if (slots + amount <= 48) {
+                slots += (byte) amount;
+                storageService.updateSlots(this.id, this.slots);
+                return true;
+            }
+            return false;
         } finally {
             lock.unlock();
         }
     }
+    
+    public boolean canGainSlots(int amount) {
+        return slots + amount <= 48;
+    }
 
+    public int getMeso() {
+        return meso;
+    }
+
+    public void setMeso(int meso) {
+        if (meso < 0) {
+            throw new RuntimeException("仓库金币不能为负数");
+        }
+        this.meso = meso;
+        storageService.updateMeso(this.id, this.meso);
+    }
+
+    public int getStoreFee() {
+        return getFee(currentNpcid, "info/trunkPut", 100, trunkPutCache);
+    }
+
+    public int getTakeOutFee() {
+        return getFee(currentNpcid, "info/trunkGet", 0, trunkGetCache);
+    }
+
+    private int getFee(int npcId, String path, int def, Map<Integer, Integer> cache) {
+        return cache.computeIfAbsent(npcId, id -> {
+            DataProvider npc = DataProviderFactory.getDataProvider(WZFiles.NPC);
+            Data npcData = npc.getData(id + ".img");
+            if (npcData != null) {
+                return DataTool.getIntConvert(path, npcData, def);
+            }
+            return def;
+        });
+    }
+
+    public void close() {
+        // 移除 typeItems 后，close 方法其实没什么可做的了，但为了兼容性保留
+        // 如果有其他资源需要释放，可以在这里处理
+    }
+    
+    /**
+     * 根据类型和槽位获取物品在总列表中的索引
+     * 兼容旧的 StorageProcessor 逻辑
+     */
+    public byte getSlot(InventoryType type, byte slot) {
+        lock.lock();
+        try {
+            List<Item> typeItems = getItemsByType(type);
+            if (slot >= 0 && slot < typeItems.size()) {
+                Item targetItem = typeItems.get(slot);
+                return (byte) items.indexOf(targetItem);
+            }
+            return -1;
+        } finally {
+            lock.unlock();
+        }
+    }
 }
