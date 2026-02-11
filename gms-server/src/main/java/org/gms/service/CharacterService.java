@@ -57,6 +57,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.mybatisflex.core.query.QueryMethods.dateDiff;
@@ -1189,117 +1190,235 @@ public class CharacterService {
 
     @Transactional
     public void saveCooldowns(int charId, List<PlayerCoolDownValueHolder> cooldowns, Map<Disease, Pair<Long, MobSkill>> diseases) {
-        // delete cooldowns
-        cooldownsMapper.deleteByQuery(QueryWrapper.create().where(COOLDOWNS_D_O.CHARID.eq(charId)));
-        // insert cooldowns
-        if (!cooldowns.isEmpty()) {
-            List<CooldownsDO> list = new ArrayList<>();
+        // Cooldowns
+        List<CooldownsDO> dbCooldowns = cooldownsMapper.selectListByQuery(QueryWrapper.create().where(COOLDOWNS_D_O.CHARID.eq(charId)));
+        Map<Integer, CooldownsDO> dbCooldownMap = dbCooldowns.stream().collect(Collectors.toMap(CooldownsDO::getSkillid, Function.identity()));
+        Set<Integer> processedSkillIds = new HashSet<>();
+
+        if (cooldowns != null) {
             for (PlayerCoolDownValueHolder cd : cooldowns) {
-                CooldownsDO doo = new CooldownsDO();
-                doo.setCharid(charId);
-                doo.setSkillid(cd.skillId);
-                doo.setStarttime(cd.startTime);
-                doo.setLength(cd.length);
-                list.add(doo);
+                processedSkillIds.add(cd.skillId);
+                if (dbCooldownMap.containsKey(cd.skillId)) {
+                    CooldownsDO existing = dbCooldownMap.get(cd.skillId);
+                    if (existing.getStarttime() != cd.startTime || existing.getLength() != cd.length) {
+                        existing.setStarttime(cd.startTime);
+                        existing.setLength(cd.length);
+                        cooldownsMapper.update(existing);
+                    }
+                } else {
+                    CooldownsDO doo = new CooldownsDO();
+                    doo.setCharid(charId);
+                    doo.setSkillid(cd.skillId);
+                    doo.setStarttime(cd.startTime);
+                    doo.setLength(cd.length);
+                    cooldownsMapper.insert(doo);
+                }
             }
-            cooldownsMapper.insertBatch(list);
+        }
+        
+        List<Integer> cdIdsToDelete = dbCooldowns.stream()
+                .filter(cd -> !processedSkillIds.contains(cd.getSkillid()))
+                .map(CooldownsDO::getId)
+                .collect(Collectors.toList());
+        if (!cdIdsToDelete.isEmpty()) {
+            cooldownsMapper.deleteByQuery(QueryWrapper.create().where(COOLDOWNS_D_O.ID.in(cdIdsToDelete)));
         }
 
-        // delete playerdiseases
-        playerdiseasesMapper.deleteByQuery(QueryWrapper.create().where(PLAYERDISEASES_D_O.CHARID.eq(charId)));
-        // insert playerdiseases
-        if (!diseases.isEmpty()) {
-            List<PlayerdiseasesDO> list = new ArrayList<>();
+        // Diseases
+        List<PlayerdiseasesDO> dbDiseases = playerdiseasesMapper.selectListByQuery(QueryWrapper.create().where(PLAYERDISEASES_D_O.CHARID.eq(charId)));
+        Map<Integer, PlayerdiseasesDO> dbDiseaseMap = dbDiseases.stream().collect(Collectors.toMap(PlayerdiseasesDO::getDisease, Function.identity()));
+        Set<Integer> processedDiseases = new HashSet<>();
+
+        if (diseases != null) {
             for (Map.Entry<Disease, Pair<Long, MobSkill>> entry : diseases.entrySet()) {
-                PlayerdiseasesDO doo = new PlayerdiseasesDO();
-                doo.setCharid(charId);
-                doo.setDisease(entry.getKey().ordinal());
+                int diseaseId = entry.getKey().ordinal();
+                processedDiseases.add(diseaseId);
                 MobSkill ms = entry.getValue().getRight();
-                doo.setMobskillid(ms.getId().type().getId());
-                doo.setMobskilllv(ms.getId().level());
-                doo.setLength(entry.getValue().getLeft());
-                list.add(doo);
+                long length = entry.getValue().getLeft();
+                
+                if (dbDiseaseMap.containsKey(diseaseId)) {
+                    PlayerdiseasesDO existing = dbDiseaseMap.get(diseaseId);
+                    if (existing.getMobskillid() != ms.getId().type().getId() || 
+                        existing.getMobskilllv() != ms.getId().level() || 
+                        existing.getLength() != length) {
+                        
+                        existing.setMobskillid(ms.getId().type().getId());
+                        existing.setMobskilllv(ms.getId().level());
+                        existing.setLength(length);
+                        playerdiseasesMapper.update(existing);
+                    }
+                } else {
+                    PlayerdiseasesDO doo = new PlayerdiseasesDO();
+                    doo.setCharid(charId);
+                    doo.setDisease(diseaseId);
+                    doo.setMobskillid(ms.getId().type().getId());
+                    doo.setMobskilllv(ms.getId().level());
+                    doo.setLength(length);
+                    playerdiseasesMapper.insert(doo);
+                }
             }
-            playerdiseasesMapper.insertBatch(list);
+        }
+
+        List<Integer> pdIdsToDelete = dbDiseases.stream()
+                .filter(pd -> !processedDiseases.contains(pd.getDisease()))
+                .map(PlayerdiseasesDO::getId)
+                .collect(Collectors.toList());
+        if (!pdIdsToDelete.isEmpty()) {
+            playerdiseasesMapper.deleteByQuery(QueryWrapper.create().where(PLAYERDISEASES_D_O.ID.in(pdIdsToDelete)));
         }
     }
 
     @Transactional
     public void saveKeymap(int charId, Map<Integer, KeyBinding> keymap) {
-        keymapMapper.deleteByQuery(QueryWrapper.create().where(KEYMAP_D_O.CHARACTERID.eq(charId)));
-        if (!keymap.isEmpty()) {
-            List<KeymapDO> list = new ArrayList<>();
+        List<KeymapDO> dbKeymaps = keymapMapper.selectListByQuery(QueryWrapper.create().where(KEYMAP_D_O.CHARACTERID.eq(charId)));
+        Map<Integer, KeymapDO> dbKeymapMap = dbKeymaps.stream().collect(Collectors.toMap(KeymapDO::getKey, Function.identity()));
+        Set<Integer> processedKeys = new HashSet<>();
+
+        if (keymap != null) {
             for (Map.Entry<Integer, KeyBinding> entry : keymap.entrySet()) {
-                KeymapDO doo = new KeymapDO();
-                doo.setCharacterid(charId);
-                doo.setKey(entry.getKey());
-                doo.setType(entry.getValue().getType());
-                doo.setAction(entry.getValue().getAction());
-                list.add(doo);
+                int key = entry.getKey();
+                KeyBinding kb = entry.getValue();
+                processedKeys.add(key);
+
+                if (dbKeymapMap.containsKey(key)) {
+                    KeymapDO existing = dbKeymapMap.get(key);
+                    if (existing.getType() != kb.getType() || existing.getAction() != kb.getAction()) {
+                        existing.setType(kb.getType());
+                        existing.setAction(kb.getAction());
+                        keymapMapper.update(existing);
+                    }
+                } else {
+                    KeymapDO doo = new KeymapDO();
+                    doo.setCharacterid(charId);
+                    doo.setKey(key);
+                    doo.setType(kb.getType());
+                    doo.setAction(kb.getAction());
+                    keymapMapper.insert(doo);
+                }
             }
-            keymapMapper.insertBatch(list);
+        }
+
+        List<Integer> idsToDelete = dbKeymaps.stream()
+                .filter(k -> !processedKeys.contains(k.getKey()))
+                .map(KeymapDO::getId)
+                .collect(Collectors.toList());
+        if (!idsToDelete.isEmpty()) {
+            keymapMapper.deleteByQuery(QueryWrapper.create().where(KEYMAP_D_O.ID.in(idsToDelete)));
         }
     }
 
     @Transactional
     public void saveSkillMacros(int charId, SkillMacro[] skillMacros) {
-        skillmacrosMapper.deleteByQuery(QueryWrapper.create().where(SKILLMACROS_D_O.CHARACTERID.eq(charId)));
-        if (skillMacros != null && skillMacros.length > 0) {
-            List<SkillmacrosDO> list = new ArrayList<>();
+        List<SkillmacrosDO> dbMacros = skillmacrosMapper.selectListByQuery(QueryWrapper.create().where(SKILLMACROS_D_O.CHARACTERID.eq(charId)));
+        Map<Integer, SkillmacrosDO> dbMacroMap = dbMacros.stream().collect(Collectors.toMap(SkillmacrosDO::getPosition, Function.identity()));
+        Set<Integer> processedPositions = new HashSet<>();
+
+        if (skillMacros != null) {
             for (int i = 0; i < skillMacros.length; i++) {
                 SkillMacro macro = skillMacros[i];
                 if (macro != null) {
-                    SkillmacrosDO doo = new SkillmacrosDO();
-                    doo.setCharacterid(charId);
-                    doo.setSkill1(macro.getSkill1());
-                    doo.setSkill2(macro.getSkill2());
-                    doo.setSkill3(macro.getSkill3());
-                    doo.setName(macro.getName() == null ? "" : macro.getName());
-                    doo.setShout(macro.getShout());
-                    doo.setPosition(i);
-                    list.add(doo);
+                    processedPositions.add(i);
+                    String name = macro.getName() == null ? "" : macro.getName();
+                    
+                    if (dbMacroMap.containsKey(i)) {
+                        SkillmacrosDO existing = dbMacroMap.get(i);
+                        if (existing.getSkill1() != macro.getSkill1() ||
+                            existing.getSkill2() != macro.getSkill2() ||
+                            existing.getSkill3() != macro.getSkill3() ||
+                            !Objects.equals(existing.getName(), name) ||
+                            existing.getShout() != macro.getShout()) {
+                            
+                            existing.setSkill1(macro.getSkill1());
+                            existing.setSkill2(macro.getSkill2());
+                            existing.setSkill3(macro.getSkill3());
+                            existing.setName(name);
+                            existing.setShout(macro.getShout());
+                            skillmacrosMapper.update(existing);
+                        }
+                    } else {
+                        SkillmacrosDO doo = new SkillmacrosDO();
+                        doo.setCharacterid(charId);
+                        doo.setSkill1(macro.getSkill1());
+                        doo.setSkill2(macro.getSkill2());
+                        doo.setSkill3(macro.getSkill3());
+                        doo.setName(name);
+                        doo.setShout(macro.getShout());
+                        doo.setPosition(i);
+                        skillmacrosMapper.insert(doo);
+                    }
                 }
             }
-            if (!list.isEmpty()) {
-                skillmacrosMapper.insertBatch(list);
-            }
+        }
+
+        List<Integer> idsToDelete = dbMacros.stream()
+                .filter(m -> !processedPositions.contains(m.getPosition()))
+                .map(SkillmacrosDO::getId)
+                .collect(Collectors.toList());
+        if (!idsToDelete.isEmpty()) {
+            skillmacrosMapper.deleteByQuery(QueryWrapper.create().where(SKILLMACROS_D_O.ID.in(idsToDelete)));
         }
     }
 
     @Transactional
     public void saveSavedLocations(int charId, SavedLocation[] savedLocations) {
-        savedlocationsMapper.deleteByQuery(QueryWrapper.create().where(SAVEDLOCATIONS_D_O.CHARACTERID.eq(charId)));
-        if (savedLocations != null && savedLocations.length > 0) {
-            List<SavedlocationsDO> list = new ArrayList<>();
+        List<SavedlocationsDO> dbLocs = savedlocationsMapper.selectListByQuery(QueryWrapper.create().where(SAVEDLOCATIONS_D_O.CHARACTERID.eq(charId)));
+        Map<String, SavedlocationsDO> dbLocMap = dbLocs.stream().collect(Collectors.toMap(SavedlocationsDO::getLocationtype, Function.identity()));
+        Set<String> processedTypes = new HashSet<>();
+
+        if (savedLocations != null) {
             for (SavedLocationType savedLocationType : SavedLocationType.values()) {
                 if (savedLocations[savedLocationType.ordinal()] != null) {
-                    SavedlocationsDO doo = new SavedlocationsDO();
-                    doo.setCharacterid(charId);
-                    doo.setLocationtype(savedLocationType.name());
-                    doo.setMap(savedLocations[savedLocationType.ordinal()].getMapId());
-                    doo.setPortal(savedLocations[savedLocationType.ordinal()].getPortal());
-                    list.add(doo);
+                    String typeName = savedLocationType.name();
+                    processedTypes.add(typeName);
+                    SavedLocation sl = savedLocations[savedLocationType.ordinal()];
+                    
+                    if (dbLocMap.containsKey(typeName)) {
+                        SavedlocationsDO existing = dbLocMap.get(typeName);
+                        if (existing.getMap() != sl.getMapId() || existing.getPortal() != sl.getPortal()) {
+                            existing.setMap(sl.getMapId());
+                            existing.setPortal(sl.getPortal());
+                            savedlocationsMapper.update(existing);
+                        }
+                    } else {
+                        SavedlocationsDO doo = new SavedlocationsDO();
+                        doo.setCharacterid(charId);
+                        doo.setLocationtype(typeName);
+                        doo.setMap(sl.getMapId());
+                        doo.setPortal(sl.getPortal());
+                        savedlocationsMapper.insert(doo);
+                    }
                 }
             }
-            if (!list.isEmpty()) {
-                savedlocationsMapper.insertBatch(list);
-            }
+        }
+
+        List<Integer> idsToDelete = dbLocs.stream()
+                .filter(l -> !processedTypes.contains(l.getLocationtype()))
+                .map(SavedlocationsDO::getId)
+                .collect(Collectors.toList());
+        if (!idsToDelete.isEmpty()) {
+            savedlocationsMapper.deleteByQuery(QueryWrapper.create().where(SAVEDLOCATIONS_D_O.ID.in(idsToDelete)));
         }
     }
 
     @Transactional
     public void saveTrockLocations(int charId, List<Integer> trockMaps, List<Integer> vipTrockMaps) {
-        trocklocationsMapper.deleteByQuery(QueryWrapper.create().where(TROCKLOCATIONS_D_O.CHARACTERID.eq(charId)));
-        List<TrocklocationsDO> list = new ArrayList<>();
+        List<TrocklocationsDO> dbLocs = trocklocationsMapper.selectListByQuery(QueryWrapper.create().where(TROCKLOCATIONS_D_O.CHARACTERID.eq(charId)));
+        // Map key: "mapId_vip"
+        Map<String, TrocklocationsDO> dbLocMap = dbLocs.stream().collect(Collectors.toMap(d -> d.getMapid() + "_" + d.getVip(), Function.identity(), (a, b) -> a));
+        Set<String> processedKeys = new HashSet<>();
 
         if (trockMaps != null) {
             for (Integer mapId : trockMaps) {
                 if (mapId != MapId.NONE) {
-                    TrocklocationsDO doo = new TrocklocationsDO();
-                    doo.setCharacterid(charId);
-                    doo.setMapid(mapId);
-                    doo.setVip(0);
-                    list.add(doo);
+                    String key = mapId + "_0";
+                    processedKeys.add(key);
+                    if (!dbLocMap.containsKey(key)) {
+                        TrocklocationsDO doo = new TrocklocationsDO();
+                        doo.setCharacterid(charId);
+                        doo.setMapid(mapId);
+                        doo.setVip(0);
+                        trocklocationsMapper.insert(doo);
+                    }
                 }
             }
         }
@@ -1307,111 +1426,219 @@ public class CharacterService {
         if (vipTrockMaps != null) {
             for (Integer mapId : vipTrockMaps) {
                 if (mapId != MapId.NONE) {
-                    TrocklocationsDO doo = new TrocklocationsDO();
-                    doo.setCharacterid(charId);
-                    doo.setMapid(mapId);
-                    doo.setVip(1);
-                    list.add(doo);
+                    String key = mapId + "_1";
+                    processedKeys.add(key);
+                    if (!dbLocMap.containsKey(key)) {
+                        TrocklocationsDO doo = new TrocklocationsDO();
+                        doo.setCharacterid(charId);
+                        doo.setMapid(mapId);
+                        doo.setVip(1);
+                        trocklocationsMapper.insert(doo);
+                    }
                 }
             }
         }
 
-        if (!list.isEmpty()) {
-            trocklocationsMapper.insertBatch(list);
+        List<Integer> idsToDelete = dbLocs.stream()
+                .filter(d -> !processedKeys.contains(d.getMapid() + "_" + d.getVip()))
+                .map(TrocklocationsDO::getTrockid)
+                .collect(Collectors.toList());
+        
+        if (!idsToDelete.isEmpty()) {
+            trocklocationsMapper.deleteByQuery(QueryWrapper.create().where(TROCKLOCATIONS_D_O.TROCKID.in(idsToDelete)));
         }
     }
 
     @Transactional
     public void saveBuddies(int charId, BuddyList buddylist) {
-        buddiesMapper.deleteByQuery(QueryWrapper.create().where(BUDDIES_D_O.CHARACTERID.eq(charId)).and(BUDDIES_D_O.PENDING.eq(0)));
+        List<BuddiesDO> dbBuddies = buddiesMapper.selectListByQuery(QueryWrapper.create().where(BUDDIES_D_O.CHARACTERID.eq(charId)).and(BUDDIES_D_O.PENDING.eq(0)));
+        Map<Integer, BuddiesDO> dbBuddyMap = dbBuddies.stream().collect(Collectors.toMap(BuddiesDO::getBuddyid, Function.identity()));
+        Set<Integer> processedBuddyIds = new HashSet<>();
+
         if (buddylist != null && !buddylist.getBuddies().isEmpty()) {
-            List<BuddiesDO> list = new ArrayList<>();
             for (BuddylistEntry entry : buddylist.getBuddies()) {
                 if (entry.isVisible()) {
-                    BuddiesDO doo = new BuddiesDO();
-                    doo.setCharacterid(charId);
-                    doo.setBuddyid(entry.getCharacterId());
-                    doo.setPending(0);
-                    doo.setGroup(entry.getGroup() == null ? "" : entry.getGroup());
-                    list.add(doo);
+                    int buddyId = entry.getCharacterId();
+                    processedBuddyIds.add(buddyId);
+                    String group = entry.getGroup() == null ? "" : entry.getGroup();
+
+                    if (dbBuddyMap.containsKey(buddyId)) {
+                        BuddiesDO existing = dbBuddyMap.get(buddyId);
+                        if (!Objects.equals(existing.getGroup(), group)) {
+                            existing.setGroup(group);
+                            buddiesMapper.update(existing);
+                        }
+                    } else {
+                        BuddiesDO doo = new BuddiesDO();
+                        doo.setCharacterid(charId);
+                        doo.setBuddyid(buddyId);
+                        doo.setPending(0);
+                        doo.setGroup(group);
+                        buddiesMapper.insert(doo);
+                    }
                 }
             }
-            if (!list.isEmpty()) {
-                buddiesMapper.insertBatch(list);
-            }
+        }
+
+        List<Integer> idsToDelete = dbBuddies.stream()
+                .filter(b -> !processedBuddyIds.contains(b.getBuddyid()))
+                .map(BuddiesDO::getId)
+                .collect(Collectors.toList());
+        if (!idsToDelete.isEmpty()) {
+            buddiesMapper.deleteByQuery(QueryWrapper.create().where(BUDDIES_D_O.ID.in(idsToDelete)));
         }
     }
 
     @Transactional
     public void saveAreaInfos(int charId, Map<Short, String> areaInfos) {
-        areaInfoMapper.deleteByQuery(QueryWrapper.create().where(AREA_INFO_D_O.CHARID.eq(charId)));
-        if (areaInfos != null && !areaInfos.isEmpty()) {
-            List<AreaInfoDO> list = new ArrayList<>();
+        List<AreaInfoDO> dbInfos = areaInfoMapper.selectListByQuery(QueryWrapper.create().where(AREA_INFO_D_O.CHARID.eq(charId)));
+        Map<Integer, AreaInfoDO> dbInfoMap = dbInfos.stream().collect(Collectors.toMap(AreaInfoDO::getArea, Function.identity()));
+        Set<Integer> processedAreas = new HashSet<>();
+
+        if (areaInfos != null) {
             for (Map.Entry<Short, String> entry : areaInfos.entrySet()) {
-                AreaInfoDO doo = new AreaInfoDO();
-                doo.setCharid(charId);
-                doo.setArea(entry.getKey().intValue());
-                doo.setInfo(entry.getValue());
-                list.add(doo);
+                int area = entry.getKey().intValue();
+                processedAreas.add(area);
+                String info = entry.getValue();
+
+                if (dbInfoMap.containsKey(area)) {
+                    AreaInfoDO existing = dbInfoMap.get(area);
+                    if (!Objects.equals(existing.getInfo(), info)) {
+                        existing.setInfo(info);
+                        areaInfoMapper.update(existing);
+                    }
+                } else {
+                    AreaInfoDO doo = new AreaInfoDO();
+                    doo.setCharid(charId);
+                    doo.setArea(area);
+                    doo.setInfo(info);
+                    areaInfoMapper.insert(doo);
+                }
             }
-            areaInfoMapper.insertBatch(list);
+        }
+
+        List<Integer> idsToDelete = dbInfos.stream()
+                .filter(a -> !processedAreas.contains(a.getArea()))
+                .map(AreaInfoDO::getId)
+                .collect(Collectors.toList());
+        if (!idsToDelete.isEmpty()) {
+            areaInfoMapper.deleteByQuery(QueryWrapper.create().where(AREA_INFO_D_O.ID.in(idsToDelete)));
         }
     }
 
     @Transactional
     public void saveEventStats(int charId, Map<String, Events> events) {
-        eventstatsMapper.deleteByQuery(QueryWrapper.create().where(EVENTSTATS_D_O.CHARACTERID.eq(charId)));
-        if (events != null && !events.isEmpty()) {
-            List<EventstatsDO> list = new ArrayList<>();
+        List<EventstatsDO> dbStats = eventstatsMapper.selectListByQuery(QueryWrapper.create().where(EVENTSTATS_D_O.CHARACTERID.eq(charId)));
+        Map<String, EventstatsDO> dbStatMap = dbStats.stream().collect(Collectors.toMap(EventstatsDO::getName, Function.identity()));
+        Set<String> processedNames = new HashSet<>();
+
+        if (events != null) {
             for (Map.Entry<String, Events> entry : events.entrySet()) {
-                EventstatsDO doo = new EventstatsDO();
-                doo.setCharacterid(charId);
-                doo.setName(entry.getKey());
-                doo.setInfo(entry.getValue().getInfo());
-                list.add(doo);
+                String name = entry.getKey();
+                processedNames.add(name);
+                int info = entry.getValue().getInfo();
+
+                if (dbStatMap.containsKey(name)) {
+                    EventstatsDO existing = dbStatMap.get(name);
+                    if (!Objects.equals(existing.getInfo(), info)) {
+                        existing.setInfo(info);
+                        eventstatsMapper.update(existing);
+                    }
+                } else {
+                    EventstatsDO doo = new EventstatsDO();
+                    doo.setCharacterid(charId);
+                    doo.setName(name);
+                    doo.setInfo(info);
+                    eventstatsMapper.insert(doo);
+                }
             }
-            eventstatsMapper.insertBatch(list);
+        }
+
+        List<String> namesToDelete = dbStats.stream()
+                .filter(e -> !processedNames.contains(e.getName()))
+                .map(EventstatsDO::getName)
+                .collect(Collectors.toList());
+        
+        if (!namesToDelete.isEmpty()) {
+            eventstatsMapper.deleteByQuery(QueryWrapper.create()
+                    .where(EVENTSTATS_D_O.CHARACTERID.eq(charId))
+                    .and(EVENTSTATS_D_O.NAME.in(namesToDelete)));
         }
     }
 
     @Transactional
     public void saveSkills(int charId, Map<Skill, SkillEntry> skills) {
-        skillsMapper.deleteByQuery(QueryWrapper.create().where(SKILLS_D_O.CHARACTERID.eq(charId)));
+        List<SkillsDO> dbSkills = skillsMapper.selectListByQuery(QueryWrapper.create().where(SKILLS_D_O.CHARACTERID.eq(charId)));
+        Map<Integer, SkillsDO> dbSkillMap = dbSkills.stream().collect(Collectors.toMap(SkillsDO::getSkillid, Function.identity()));
+        Set<Integer> processedSkillIds = new HashSet<>();
+
         if (skills != null && !skills.isEmpty()) {
-            List<SkillsDO> list = new ArrayList<>();
-            for (Map.Entry<Skill, SkillEntry> skill : skills.entrySet()) {
-                SkillsDO doo = new SkillsDO();
-                doo.setCharacterid(charId);
-                doo.setSkillid(skill.getKey().getId());
-                doo.setSkilllevel((int) skill.getValue().skillLevel);
-                doo.setMasterlevel((int) skill.getValue().masterLevel);
-                doo.setExpiration(skill.getValue().expiration);
-                list.add(doo);
+            for (Map.Entry<Skill, SkillEntry> entry : skills.entrySet()) {
+                int skillId = entry.getKey().getId();
+                SkillEntry se = entry.getValue();
+                processedSkillIds.add(skillId);
+
+                if (dbSkillMap.containsKey(skillId)) {
+                    SkillsDO existing = dbSkillMap.get(skillId);
+                    if (existing.getSkilllevel() != se.skillLevel || existing.getMasterlevel() != se.masterLevel || existing.getExpiration() != se.expiration) {
+                        existing.setSkilllevel((int) se.skillLevel);
+                        existing.setMasterlevel((int) se.masterLevel);
+                        existing.setExpiration(se.expiration);
+                        skillsMapper.update(existing);
+                    }
+                } else {
+                    SkillsDO newSkill = new SkillsDO();
+                    newSkill.setCharacterid(charId);
+                    newSkill.setSkillid(skillId);
+                    newSkill.setSkilllevel((int) se.skillLevel);
+                    newSkill.setMasterlevel((int) se.masterLevel);
+                    newSkill.setExpiration(se.expiration);
+                    skillsMapper.insert(newSkill);
+                }
             }
-            skillsMapper.insertBatch(list);
+        }
+
+        List<Integer> idsToDelete = dbSkills.stream()
+                .filter(s -> !processedSkillIds.contains(s.getSkillid()))
+                .map(SkillsDO::getId)
+                .collect(Collectors.toList());
+        
+        if (!idsToDelete.isEmpty()) {
+            skillsMapper.deleteByQuery(QueryWrapper.create().where(SKILLS_D_O.ID.in(idsToDelete)));
         }
     }
 
     @Transactional
     public void savePetIgnores(int charId, Map<Integer, Set<Integer>> excluded) {
-        // 这里逻辑不太对，因为petid是唯一的，我们应该按petid删除
-        // 然而，原始代码是按petid删除，然后再插入
-        // 问题是petignores表中没有角色id
-        // 所以我们无法按charId删除
-        // 原始代码有缺陷，应该按petid删除
-        // 暂时保持原始逻辑不变
-        // excluded映射是petId -> itemIds集合
         for (Map.Entry<Integer, Set<Integer>> es : excluded.entrySet()) {
-            petignoresMapper.deleteByQuery(QueryWrapper.create().where(PETIGNORES_D_O.PETID.eq(es.getKey())));
-            if (!es.getValue().isEmpty()) {
-                List<PetignoresDO> list = new ArrayList<>();
-                for (Integer x : es.getValue()) {
+            int petId = es.getKey();
+            Set<Integer> currentItemIds = es.getValue();
+            
+            List<PetignoresDO> dbIgnores = petignoresMapper.selectListByQuery(QueryWrapper.create().where(PETIGNORES_D_O.PETID.eq(petId)));
+            Set<Integer> dbItemIds = dbIgnores.stream().map(PetignoresDO::getItemid).collect(Collectors.toSet());
+            
+            // Insert new
+            List<PetignoresDO> toInsert = new ArrayList<>();
+            for (Integer itemId : currentItemIds) {
+                if (!dbItemIds.contains(itemId)) {
                     PetignoresDO doo = new PetignoresDO();
-                    doo.setPetid(es.getKey());
-                    doo.setItemid(x);
-                    list.add(doo);
+                    doo.setPetid(petId);
+                    doo.setItemid(itemId);
+                    toInsert.add(doo);
                 }
-                petignoresMapper.insertBatch(list);
+            }
+            if (!toInsert.isEmpty()) {
+                petignoresMapper.insertBatch(toInsert);
+            }
+            
+            // Delete removed
+            List<Long> idsToDelete = dbIgnores.stream()
+                    .filter(doo -> !currentItemIds.contains(doo.getItemid()))
+                    .map(PetignoresDO::getId)
+                    .collect(Collectors.toList());
+            
+            if (!idsToDelete.isEmpty()) {
+                petignoresMapper.deleteByQuery(QueryWrapper.create().where(PETIGNORES_D_O.ID.in(idsToDelete)));
             }
         }
     }
@@ -1421,10 +1648,17 @@ public class CharacterService {
         boolean bQuickslotEquals = quickSlotKeyMapped == null || (quickSlotLoaded != null && Arrays.equals(quickSlotKeyMapped, quickSlotLoaded));
         if (!bQuickslotEquals) {
             long nQuickslotKeymapped = NumberTool.BytesToLong(quickSlotKeyMapped);
-            QuickslotkeymappedDO doo = new QuickslotkeymappedDO();
-            doo.setAccountid(accountId);
-            doo.setKeymap(nQuickslotKeymapped);
-            quickslotkeymappedMapper.insert(doo, true);
+            
+            QuickslotkeymappedDO existing = quickslotkeymappedMapper.selectOneById(accountId);
+            if (existing != null) {
+                existing.setKeymap(nQuickslotKeymapped);
+                quickslotkeymappedMapper.update(existing);
+            } else {
+                QuickslotkeymappedDO doo = new QuickslotkeymappedDO();
+                doo.setAccountid(accountId);
+                doo.setKeymap(nQuickslotKeymapped);
+                quickslotkeymappedMapper.insert(doo);
+            }
         }
     }
 

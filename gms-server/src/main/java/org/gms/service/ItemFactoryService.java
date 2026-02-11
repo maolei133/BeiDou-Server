@@ -20,8 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
 import static org.gms.dao.entity.table.InventoryequipmentDOTableDef.INVENTORYEQUIPMENT_D_O;
@@ -77,9 +76,13 @@ public class ItemFactoryService {
                 item.setUid(uid);
             } else {
                 // Lazy generation: if UID is missing in DB, generate a new one
-                // Note: This new UID is not persisted back to DB immediately here, 
-                // but will be when the item is saved (e.g. on logout or map change)
                 item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+            }
+
+            // Set DB ID
+            Long dbId = row.getLong("inventoryitemid");
+            if (dbId != null) {
+                item.setInventoryItemId(dbId);
             }
             
             items.add(new Pair<>(item, mit));
@@ -129,6 +132,13 @@ public class ItemFactoryService {
                 } else {
                     item.setUid(SnowflakeIdGenerator.getInstance().nextId());
                 }
+
+                // Set DB ID
+                Long dbId = row.getLong("inventoryitemid");
+                if (dbId != null) {
+                    item.setInventoryItemId(dbId);
+                }
+
                 items.add(new Pair<>(item, mit));
             }
         }
@@ -136,7 +146,7 @@ public class ItemFactoryService {
     }
 
     /**
-     * 保存物品到数据库
+     * 保存物品到数据库 (增量更新)
      *
      * @param typeValue 物品存储位置类型 (1: 背包, 2: 仓库, 3: 商城, 4: 雇佣商人, 5: 结婚礼物, 6: 快递)
      * @param isAccount 是否关联到账号 (true: 关联账号, false: 关联角色)
@@ -145,201 +155,353 @@ public class ItemFactoryService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveItems(int typeValue, boolean isAccount, List<Pair<Item, InventoryType>> items, int id) {
+        // 1. 获取数据库中已存在的物品信息 (ID 和 UID)
         QueryWrapper selectQuery = QueryWrapper.create()
-                .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
+                .select(INVENTORYITEMS_D_O.INVENTORYITEMID, INVENTORYITEMS_D_O.UID)
                 .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue));
         if (isAccount) {
             selectQuery.and(INVENTORYITEMS_D_O.ACCOUNTID.eq(id));
         } else {
             selectQuery.and(INVENTORYITEMS_D_O.CHARACTERID.eq(id));
         }
+
+        List<InventoryitemsDO> existingItems = inventoryitemsMapper.selectListByQuery(selectQuery);
+        Map<Long, Long> dbUidToIdMap = new HashMap<>();
+        Set<Long> dbIds = new HashSet<>();
         
-        List<Long> itemIdsToDelete = inventoryitemsMapper.selectListByQueryAs(selectQuery, Long.class);
-        
-        if (!itemIdsToDelete.isEmpty()) {
-            inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
-            
-            // 修复死锁问题：使用ID进行删除，避免范围锁/间隙锁导致的死锁
-            inventoryitemsMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYITEMS_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
+        for (InventoryitemsDO doc : existingItems) {
+            dbIds.add(doc.getInventoryitemid());
+            if (doc.getUid() != null && doc.getUid() > 0) {
+                dbUidToIdMap.put(doc.getUid(), doc.getInventoryitemid());
+            }
         }
 
-        if (items == null || items.isEmpty()) {
-            return;
-        }
+        Set<Long> processedIds = new HashSet<>();
 
-        for (Pair<Item, InventoryType> pair : items) {
-            Item item = pair.getLeft();
-            InventoryType mit = pair.getRight();
-            
-            // 检查 UID 是否重复
-            if (item.getUid() > 0) {
-                QueryWrapper checkUidQuery = QueryWrapper.create()
-                        .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
-                        .where(INVENTORYITEMS_D_O.UID.eq(item.getUid()));
+        if (items != null) {
+            for (Pair<Item, InventoryType> pair : items) {
+                Item item = pair.getLeft();
+                InventoryType mit = pair.getRight();
                 
-                Long existingId = inventoryitemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
-                if (existingId != null) {
-                    log.error("发现重复 UID 物品入库尝试! UID: {}, ItemID: {}, OwnerID: {}, Type: {}", 
-                            item.getUid(), item.getItemId(), id, typeValue);
-                    // 记录异常日志
-                    traceabilityService.log(item, null, TraceabilityService.ActionType.ADMIN_DELETE, 
-                            "DUPLICATE_UID_BLOCKED", 0, "Blocked save due to duplicate UID", "Type: " + typeValue);
-                    continue; // 跳过该物品的保存
+                Long targetDbId = item.getInventoryItemId();
+                
+                // 如果内存中没有DB ID，尝试通过UID找回
+                if (targetDbId == null && item.getUid() > 0) {
+                    targetDbId = dbUidToIdMap.get(item.getUid());
+                    if (targetDbId != null) {
+                        item.setInventoryItemId(targetDbId);
+                    }
+                }
+
+                if (targetDbId != null && dbIds.contains(targetDbId)) {
+                    // UPDATE
+                    processedIds.add(targetDbId);
+
+                    InventoryitemsDO itemDO = new InventoryitemsDO();
+                    itemDO.setInventoryitemid(targetDbId);
+                    itemDO.setInventorytype((int) mit.getType());
+                    itemDO.setPosition((int) item.getPosition());
+                    itemDO.setQuantity((int) item.getQuantity());
+                    itemDO.setOwner(item.getOwner() == null ? "" : item.getOwner());
+                    itemDO.setPetid(item.getPetId());
+                    itemDO.setFlag((int) item.getFlag());
+                    itemDO.setExpiration(item.getExpiration());
+                    itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
+                    // UID 不更新，保持原样
+
+                    inventoryitemsMapper.update(itemDO);
+
+                    if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
+                        Equip equip = (Equip) item;
+                        InventoryequipmentDO equipDO = new InventoryequipmentDO();
+                        equipDO.setUpgradeslots((int) equip.getUpgradeSlots());
+                        equipDO.setLevel((int) equip.getLevel());
+                        equipDO.setStr((int) equip.getStr());
+                        equipDO.setDex((int) equip.getDex());
+                        equipDO.setInte((int) equip.getInt());
+                        equipDO.setLuk((int) equip.getLuk());
+                        equipDO.setHp((int) equip.getHp());
+                        equipDO.setMp((int) equip.getMp());
+                        equipDO.setWatk((int) equip.getWatk());
+                        equipDO.setMatk((int) equip.getMatk());
+                        equipDO.setWdef((int) equip.getWdef());
+                        equipDO.setMdef((int) equip.getMdef());
+                        equipDO.setAcc((int) equip.getAcc());
+                        equipDO.setAvoid((int) equip.getAvoid());
+                        equipDO.setHands((int) equip.getHands());
+                        equipDO.setSpeed((int) equip.getSpeed());
+                        equipDO.setJump((int) equip.getJump());
+                        equipDO.setLocked(0);
+                        equipDO.setVicious((int) equip.getVicious());
+                        equipDO.setItemlevel((int) equip.getItemLevel());
+                        equipDO.setItemexp(equip.getItemExp());
+                        equipDO.setRingid(equip.getRingId());
+
+                        inventoryequipmentMapper.updateByQuery(equipDO,
+                                QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.eq(targetDbId)));
+                    }
+                } else {
+                    // INSERT
+                    // Check duplicate UID
+                    if (item.getUid() > 0) {
+                        QueryWrapper checkUidQuery = QueryWrapper.create()
+                                .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
+                                .where(INVENTORYITEMS_D_O.UID.eq(item.getUid()));
+
+                        Long existingId = inventoryitemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
+                        if (existingId != null) {
+                            log.error("发现重复 UID 物品入库尝试! UID: {}, ItemID: {}, OwnerID: {}, Type: {}",
+                                    item.getUid(), item.getItemId(), id, typeValue);
+                            traceabilityService.log(item, null, TraceabilityService.ActionType.ADMIN_DELETE,
+                                    "DUPLICATE_UID_BLOCKED", 0, "Blocked save due to duplicate UID", "Type: " + typeValue);
+                            continue;
+                        }
+                    }
+
+                    InventoryitemsDO itemDO = new InventoryitemsDO();
+                    itemDO.setType(typeValue);
+                    if (isAccount) {
+                        itemDO.setAccountid(id);
+                    } else {
+                        itemDO.setCharacterid(id);
+                    }
+                    itemDO.setItemid(item.getItemId());
+                    itemDO.setInventorytype((int) mit.getType());
+                    itemDO.setPosition((int) item.getPosition());
+                    itemDO.setQuantity((int) item.getQuantity());
+                    itemDO.setOwner(item.getOwner() == null ? "" : item.getOwner());
+                    itemDO.setPetid(item.getPetId());
+                    itemDO.setFlag((int) item.getFlag());
+                    itemDO.setExpiration(item.getExpiration());
+                    itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
+                    itemDO.setUid(item.getUid());
+
+                    inventoryitemsMapper.insert(itemDO);
+                    Long genKey = itemDO.getInventoryitemid();
+                    item.setInventoryItemId(genKey); // Update memory object
+
+                    if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
+                        Equip equip = (Equip) item;
+                        InventoryequipmentDO equipDO = new InventoryequipmentDO();
+                        equipDO.setInventoryitemid(genKey);
+                        equipDO.setUpgradeslots((int) equip.getUpgradeSlots());
+                        equipDO.setLevel((int) equip.getLevel());
+                        equipDO.setStr((int) equip.getStr());
+                        equipDO.setDex((int) equip.getDex());
+                        equipDO.setInte((int) equip.getInt());
+                        equipDO.setLuk((int) equip.getLuk());
+                        equipDO.setHp((int) equip.getHp());
+                        equipDO.setMp((int) equip.getMp());
+                        equipDO.setWatk((int) equip.getWatk());
+                        equipDO.setMatk((int) equip.getMatk());
+                        equipDO.setWdef((int) equip.getWdef());
+                        equipDO.setMdef((int) equip.getMdef());
+                        equipDO.setAcc((int) equip.getAcc());
+                        equipDO.setAvoid((int) equip.getAvoid());
+                        equipDO.setHands((int) equip.getHands());
+                        equipDO.setSpeed((int) equip.getSpeed());
+                        equipDO.setJump((int) equip.getJump());
+                        equipDO.setLocked(0);
+                        equipDO.setVicious((int) equip.getVicious());
+                        equipDO.setItemlevel((int) equip.getItemLevel());
+                        equipDO.setItemexp(equip.getItemExp());
+                        equipDO.setRingid(equip.getRingId());
+
+                        inventoryequipmentMapper.insert(equipDO);
+                    }
                 }
             }
+        }
 
-            InventoryitemsDO itemDO = new InventoryitemsDO();
-            itemDO.setType(typeValue);
-            if (isAccount) {
-                itemDO.setAccountid(id);
-            } else {
-                itemDO.setCharacterid(id);
+        // DELETE
+        List<Long> idsToDelete = new ArrayList<>();
+        for (Long existingId : dbIds) {
+            if (!processedIds.contains(existingId)) {
+                idsToDelete.add(existingId);
             }
-            itemDO.setItemid(item.getItemId());
-            itemDO.setInventorytype((int) mit.getType());
-            itemDO.setPosition((int) item.getPosition());
-            itemDO.setQuantity((int) item.getQuantity());
-            itemDO.setOwner(item.getOwner() == null ? "" : item.getOwner());
-            itemDO.setPetid(item.getPetId());
-            itemDO.setFlag((int) item.getFlag());
-            itemDO.setExpiration(item.getExpiration());
-            itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
-            itemDO.setUid(item.getUid()); // Save UID
+        }
 
-            inventoryitemsMapper.insert(itemDO);
-            Long genKey = itemDO.getInventoryitemid();
-
-            if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
-                Equip equip = (Equip) item;
-                InventoryequipmentDO equipDO = new InventoryequipmentDO();
-                equipDO.setInventoryitemid(genKey);
-                equipDO.setUpgradeslots((int) equip.getUpgradeSlots());
-                equipDO.setLevel((int) equip.getLevel());
-                equipDO.setStr((int) equip.getStr());
-                equipDO.setDex((int) equip.getDex());
-                equipDO.setInte((int) equip.getInt());
-                equipDO.setLuk((int) equip.getLuk());
-                equipDO.setHp((int) equip.getHp());
-                equipDO.setMp((int) equip.getMp());
-                equipDO.setWatk((int) equip.getWatk());
-                equipDO.setMatk((int) equip.getMatk());
-                equipDO.setWdef((int) equip.getWdef());
-                equipDO.setMdef((int) equip.getMdef());
-                equipDO.setAcc((int) equip.getAcc());
-                equipDO.setAvoid((int) equip.getAvoid());
-                equipDO.setHands((int) equip.getHands());
-                equipDO.setSpeed((int) equip.getSpeed());
-                equipDO.setJump((int) equip.getJump());
-                equipDO.setLocked(0);
-                equipDO.setVicious((int) equip.getVicious());
-                equipDO.setItemlevel((int) equip.getItemLevel());
-                equipDO.setItemexp(equip.getItemExp());
-                equipDO.setRingid(equip.getRingId());
-                
-                inventoryequipmentMapper.insert(equipDO);
-            }
+        if (!idsToDelete.isEmpty()) {
+            inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(idsToDelete)));
+            inventoryitemsMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYITEMS_D_O.INVENTORYITEMID.in(idsToDelete)));
         }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveItemsMerchant(int typeValue, List<Pair<Item, InventoryType>> items, List<Short> bundlesList, int id) {
-        // 1. 先查询出该角色下所有雇佣商人的物品ID
+        // 1. 获取数据库中已存在的物品信息
         QueryWrapper selectMerchantItemsQuery = QueryWrapper.create()
-                .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
+                .select(INVENTORYITEMS_D_O.INVENTORYITEMID, INVENTORYITEMS_D_O.UID)
                 .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue))
                 .and(INVENTORYITEMS_D_O.CHARACTERID.eq(id));
 
-        List<Long> itemIdsToDelete = inventoryitemsMapper.selectListByQueryAs(selectMerchantItemsQuery, Long.class);
-
-        // 2. 如果存在旧数据，则进行级联删除
-        if (!itemIdsToDelete.isEmpty()) {
-            // 删除关联的装备信息
-            inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
-            // 删除关联的商人信息
-            inventorymerchantMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYMERCHANT_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
-            // 删除物品基础信息
-            inventoryitemsMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYITEMS_D_O.INVENTORYITEMID.in(itemIdsToDelete)));
+        List<InventoryitemsDO> existingItems = inventoryitemsMapper.selectListByQuery(selectMerchantItemsQuery);
+        Map<Long, Long> dbUidToIdMap = new HashMap<>();
+        Set<Long> dbIds = new HashSet<>();
+        
+        for (InventoryitemsDO doc : existingItems) {
+            dbIds.add(doc.getInventoryitemid());
+            if (doc.getUid() != null && doc.getUid() > 0) {
+                dbUidToIdMap.put(doc.getUid(), doc.getInventoryitemid());
+            }
         }
+        
+        Set<Long> processedIds = new HashSet<>();
 
-        if (items == null || items.isEmpty()) {
-            return;
-        }
-
-        int i = 0;
-        for (Pair<Item, InventoryType> pair : items) {
-            Item item = pair.getLeft();
-            Short bundles = bundlesList.get(i++);
-            InventoryType mit = pair.getRight();
-            
-            // 检查 UID 是否重复
-            if (item.getUid() > 0) {
-                QueryWrapper checkUidQuery = QueryWrapper.create()
-                        .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
-                        .where(INVENTORYITEMS_D_O.UID.eq(item.getUid()));
+        if (items != null) {
+            int i = 0;
+            for (Pair<Item, InventoryType> pair : items) {
+                Item item = pair.getLeft();
+                Short bundles = bundlesList.get(i++);
+                InventoryType mit = pair.getRight();
                 
-                Long existingId = inventoryitemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
-                if (existingId != null) {
-                    log.error("发现重复 UID 物品入库尝试 (Merchant)! UID: {}, ItemID: {}, OwnerID: {}, Type: {}", 
-                            item.getUid(), item.getItemId(), id, typeValue);
-                    // 记录异常日志
-                    traceabilityService.log(item, null, TraceabilityService.ActionType.ADMIN_DELETE, 
-                            "DUPLICATE_UID_BLOCKED", 0, "Blocked merchant save due to duplicate UID", "Type: " + typeValue);
-                    continue; // 跳过该物品的保存
+                Long targetDbId = item.getInventoryItemId();
+                
+                if (targetDbId == null && item.getUid() > 0) {
+                    targetDbId = dbUidToIdMap.get(item.getUid());
+                    if (targetDbId != null) {
+                        item.setInventoryItemId(targetDbId);
+                    }
+                }
+
+                if (targetDbId != null && dbIds.contains(targetDbId)) {
+                    // UPDATE
+                    processedIds.add(targetDbId);
+
+                    InventoryitemsDO itemDO = new InventoryitemsDO();
+                    itemDO.setInventoryitemid(targetDbId);
+                    itemDO.setInventorytype((int) mit.getType());
+                    itemDO.setPosition((int) item.getPosition());
+                    itemDO.setQuantity((int) item.getQuantity());
+                    itemDO.setOwner(item.getOwner() == null ? "" : item.getOwner());
+                    itemDO.setPetid(item.getPetId());
+                    itemDO.setFlag((int) item.getFlag());
+                    itemDO.setExpiration(item.getExpiration());
+                    itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
+                    
+                    inventoryitemsMapper.update(itemDO);
+
+                    InventorymerchantDO merchantDO = new InventorymerchantDO();
+                    merchantDO.setBundles(bundles.intValue());
+                    inventorymerchantMapper.updateByQuery(merchantDO,
+                            QueryWrapper.create().where(INVENTORYMERCHANT_D_O.INVENTORYITEMID.eq(targetDbId)));
+
+                    if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
+                        Equip equip = (Equip) item;
+                        InventoryequipmentDO equipDO = new InventoryequipmentDO();
+                        equipDO.setUpgradeslots((int) equip.getUpgradeSlots());
+                        equipDO.setLevel((int) equip.getLevel());
+                        equipDO.setStr((int) equip.getStr());
+                        equipDO.setDex((int) equip.getDex());
+                        equipDO.setInte((int) equip.getInt());
+                        equipDO.setLuk((int) equip.getLuk());
+                        equipDO.setHp((int) equip.getHp());
+                        equipDO.setMp((int) equip.getMp());
+                        equipDO.setWatk((int) equip.getWatk());
+                        equipDO.setMatk((int) equip.getMatk());
+                        equipDO.setWdef((int) equip.getWdef());
+                        equipDO.setMdef((int) equip.getMdef());
+                        equipDO.setAcc((int) equip.getAcc());
+                        equipDO.setAvoid((int) equip.getAvoid());
+                        equipDO.setHands((int) equip.getHands());
+                        equipDO.setSpeed((int) equip.getSpeed());
+                        equipDO.setJump((int) equip.getJump());
+                        equipDO.setLocked(0);
+                        equipDO.setVicious((int) equip.getVicious());
+                        equipDO.setItemlevel((int) equip.getItemLevel());
+                        equipDO.setItemexp(equip.getItemExp());
+                        equipDO.setRingid(equip.getRingId());
+
+                        inventoryequipmentMapper.updateByQuery(equipDO,
+                                QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.eq(targetDbId)));
+                    }
+                } else {
+                    // INSERT
+                    // Check duplicate UID
+                    if (item.getUid() > 0) {
+                        QueryWrapper checkUidQuery = QueryWrapper.create()
+                                .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
+                                .where(INVENTORYITEMS_D_O.UID.eq(item.getUid()));
+
+                        Long existingId = inventoryitemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
+                        if (existingId != null) {
+                            log.error("发现重复 UID 物品入库尝试 (Merchant)! UID: {}, ItemID: {}, OwnerID: {}, Type: {}",
+                                    item.getUid(), item.getItemId(), id, typeValue);
+                            traceabilityService.log(item, null, TraceabilityService.ActionType.ADMIN_DELETE,
+                                    "DUPLICATE_UID_BLOCKED", 0, "Blocked merchant save due to duplicate UID", "Type: " + typeValue);
+                            continue;
+                        }
+                    }
+
+                    InventoryitemsDO itemDO = new InventoryitemsDO();
+                    itemDO.setType(typeValue);
+                    itemDO.setCharacterid(id);
+                    itemDO.setItemid(item.getItemId());
+                    itemDO.setInventorytype((int) mit.getType());
+                    itemDO.setPosition((int) item.getPosition());
+                    itemDO.setQuantity((int) item.getQuantity());
+                    itemDO.setOwner(item.getOwner() == null ? "" : item.getOwner());
+                    itemDO.setPetid(item.getPetId());
+                    itemDO.setFlag((int) item.getFlag());
+                    itemDO.setExpiration(item.getExpiration());
+                    itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
+                    itemDO.setUid(item.getUid());
+
+                    inventoryitemsMapper.insert(itemDO);
+                    Long genKey = itemDO.getInventoryitemid();
+                    item.setInventoryItemId(genKey);
+
+                    InventorymerchantDO merchantDO = new InventorymerchantDO();
+                    merchantDO.setInventoryitemid(genKey);
+                    merchantDO.setCharacterid(id);
+                    merchantDO.setBundles(bundles.intValue());
+                    inventorymerchantMapper.insert(merchantDO);
+
+                    if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
+                        Equip equip = (Equip) item;
+                        InventoryequipmentDO equipDO = new InventoryequipmentDO();
+                        equipDO.setInventoryitemid(genKey);
+                        equipDO.setUpgradeslots((int) equip.getUpgradeSlots());
+                        equipDO.setLevel((int) equip.getLevel());
+                        equipDO.setStr((int) equip.getStr());
+                        equipDO.setDex((int) equip.getDex());
+                        equipDO.setInte((int) equip.getInt());
+                        equipDO.setLuk((int) equip.getLuk());
+                        equipDO.setHp((int) equip.getHp());
+                        equipDO.setMp((int) equip.getMp());
+                        equipDO.setWatk((int) equip.getWatk());
+                        equipDO.setMatk((int) equip.getMatk());
+                        equipDO.setWdef((int) equip.getWdef());
+                        equipDO.setMdef((int) equip.getMdef());
+                        equipDO.setAcc((int) equip.getAcc());
+                        equipDO.setAvoid((int) equip.getAvoid());
+                        equipDO.setHands((int) equip.getHands());
+                        equipDO.setSpeed((int) equip.getSpeed());
+                        equipDO.setJump((int) equip.getJump());
+                        equipDO.setLocked(0);
+                        equipDO.setVicious((int) equip.getVicious());
+                        equipDO.setItemlevel((int) equip.getItemLevel());
+                        equipDO.setItemexp(equip.getItemExp());
+                        equipDO.setRingid(equip.getRingId());
+
+                        inventoryequipmentMapper.insert(equipDO);
+                    }
                 }
             }
+        }
 
-            InventoryitemsDO itemDO = new InventoryitemsDO();
-            itemDO.setType(typeValue);
-            itemDO.setCharacterid(id);
-            itemDO.setItemid(item.getItemId());
-            itemDO.setInventorytype((int) mit.getType());
-            itemDO.setPosition((int) item.getPosition());
-            itemDO.setQuantity((int) item.getQuantity());
-            itemDO.setOwner(item.getOwner() == null ? "" : item.getOwner());
-            itemDO.setPetid(item.getPetId());
-            itemDO.setFlag((int) item.getFlag());
-            itemDO.setExpiration(item.getExpiration());
-            itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
-            itemDO.setUid(item.getUid()); // Save UID
-
-            inventoryitemsMapper.insert(itemDO);
-            Long genKey = itemDO.getInventoryitemid();
-
-            InventorymerchantDO merchantDO = new InventorymerchantDO();
-            merchantDO.setInventoryitemid(genKey);
-            merchantDO.setCharacterid(id);
-            merchantDO.setBundles(bundles.intValue());
-            inventorymerchantMapper.insert(merchantDO);
-
-            if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
-                Equip equip = (Equip) item;
-                InventoryequipmentDO equipDO = new InventoryequipmentDO();
-                equipDO.setInventoryitemid(genKey);
-                equipDO.setUpgradeslots((int) equip.getUpgradeSlots());
-                equipDO.setLevel((int) equip.getLevel());
-                equipDO.setStr((int) equip.getStr());
-                equipDO.setDex((int) equip.getDex());
-                equipDO.setInte((int) equip.getInt());
-                equipDO.setLuk((int) equip.getLuk());
-                equipDO.setHp((int) equip.getHp());
-                equipDO.setMp((int) equip.getMp());
-                equipDO.setWatk((int) equip.getWatk());
-                equipDO.setMatk((int) equip.getMatk());
-                equipDO.setWdef((int) equip.getWdef());
-                equipDO.setMdef((int) equip.getMdef());
-                equipDO.setAcc((int) equip.getAcc());
-                equipDO.setAvoid((int) equip.getAvoid());
-                equipDO.setHands((int) equip.getHands());
-                equipDO.setSpeed((int) equip.getSpeed());
-                equipDO.setJump((int) equip.getJump());
-                equipDO.setLocked(0);
-                equipDO.setVicious((int) equip.getVicious());
-                equipDO.setItemlevel((int) equip.getItemLevel());
-                equipDO.setItemexp(equip.getItemExp());
-                equipDO.setRingid(equip.getRingId());
-
-                inventoryequipmentMapper.insert(equipDO);
+        // DELETE
+        List<Long> idsToDelete = new ArrayList<>();
+        for (Long existingId : dbIds) {
+            if (!processedIds.contains(existingId)) {
+                idsToDelete.add(existingId);
             }
+        }
+
+        if (!idsToDelete.isEmpty()) {
+            inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(idsToDelete)));
+            inventorymerchantMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYMERCHANT_D_O.INVENTORYITEMID.in(idsToDelete)));
+            inventoryitemsMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYITEMS_D_O.INVENTORYITEMID.in(idsToDelete)));
         }
     }
 
@@ -373,6 +535,12 @@ public class ItemFactoryService {
                 equip.setUid(uid);
             } else {
                 equip.setUid(SnowflakeIdGenerator.getInstance().nextId());
+            }
+
+            // Set DB ID
+            Long dbId = row.getLong("inventoryitemid");
+            if (dbId != null) {
+                equip.setInventoryItemId(dbId);
             }
             
             items.add(new Pair<>(equip, cid));

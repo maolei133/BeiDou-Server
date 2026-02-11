@@ -48,6 +48,7 @@ public class Item implements Comparable<Item> {
     private long expiration = -1;
     private String giftFrom = "";
     private long uid;
+    private Long inventoryItemId;
 
     public Item(int id, short position, short quantity) {
         this.id = id;
@@ -81,6 +82,7 @@ public class Item implements Comparable<Item> {
         ret.expiration = expiration;
         ret.itemLog = new LinkedList<>(itemLog);
         ret.uid = this.uid; // Copy uid
+        ret.inventoryItemId = this.inventoryItemId; // Copy inventoryItemId
         return ret;
     }
 
@@ -207,5 +209,13 @@ public class Item implements Comparable<Item> {
 
     public void setUid(long uid) {
         this.uid = uid;
+    }
+
+    public Long getInventoryItemId() {
+        return inventoryItemId;
+    }
+
+    public void setInventoryItemId(Long inventoryItemId) {
+        this.inventoryItemId = inventoryItemId;
     }
 }
