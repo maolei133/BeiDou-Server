@@ -21,8 +21,13 @@
  */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
+import org.gms.client.Client;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.maps.AnimatedMapObject;
@@ -37,9 +42,17 @@ import org.gms.exception.EmptyMovementException;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public abstract class AbstractMovementPacketHandler extends AbstractPacketHandler {
     private static final Logger log = LoggerFactory.getLogger(AbstractMovementPacketHandler.class); // 日志记录器
+    
+    // 记录每个客户端最近一次未处理移动类型的时间和次数
+    // Key: Client Session ID, Value: Pair<Last Timestamp, Count>
+    private static final Map<Long, Pair<Long, Integer>> unhandledMovementCounts = new ConcurrentHashMap<>();
+    private static final long UNHANDLED_MOVEMENT_THRESHOLD_MS = 5000; // 5秒
+    private static final int UNHANDLED_MOVEMENT_MAX_COUNT = 5; // 最大允许次数
 
     /**
      * 解析移动数据包中的移动片段
@@ -48,6 +61,10 @@ public abstract class AbstractMovementPacketHandler extends AbstractPacketHandle
      * @throws EmptyMovementException 当没有有效移动数据时抛出
      */
     protected List<LifeMovementFragment> parseMovement(InPacket p) throws EmptyMovementException {
+        return parseMovement(p, null);
+    }
+
+    protected List<LifeMovementFragment> parseMovement(InPacket p, Client c) throws EmptyMovementException {
         List<LifeMovementFragment> res = new ArrayList<>(); // 存储解析结果的列表
         byte numCommands = p.readByte(); // 读取移动命令数量
         if (numCommands < 1) {
@@ -150,7 +167,13 @@ public abstract class AbstractMovementPacketHandler extends AbstractPacketHandle
                     break;
                 }
                 default:
-                    log.warn("Unhandled case: {}", command); // 记录未处理的移动类型
+                    log.warn("未处理的移动类型: {}", command); // 记录未处理的移动类型
+                    AuditLogger.info(LogModule.FIELD, LogAction.ERROR, new MapMessage().with("msg", "未处理的移动类型").with("cmd", command));
+                    
+                    if (c != null) {
+                        checkAndDisconnect(c, command);
+                    }
+                    
                     throw new EmptyMovementException(p); // 抛出异常
             }
         }
@@ -169,6 +192,14 @@ public abstract class AbstractMovementPacketHandler extends AbstractPacketHandle
      * @throws EmptyMovementException 当没有有效移动数据时抛出
      */
     protected void updatePosition(InPacket p, AnimatedMapObject target, int yOffset) throws EmptyMovementException {
+        updatePosition(p, target, yOffset, null);
+    }
+
+    protected void updatePosition(InPacket p, AnimatedMapObject target, int yOffset, Client c) throws EmptyMovementException {
+        // 尝试获取 Client 对象，如果是 Character 类型
+        if (c == null && target instanceof org.gms.client.Character) {
+            c = ((org.gms.client.Character) target).getClient();
+        }
 
         byte numCommands = p.readByte(); // 读取移动命令数量
         if (numCommands < 1) {
@@ -256,9 +287,52 @@ public abstract class AbstractMovementPacketHandler extends AbstractPacketHandle
                     break;
                 }
                 default:
-                    log.warn("Unhandled Case: {}", command); // 记录未处理的移动类型
+                    log.warn("未处理的移动类型: {}", command); // 记录未处理的移动类型
+                    AuditLogger.info(LogModule.FIELD, LogAction.ERROR, new MapMessage().with("msg", "未处理的移动类型").with("cmd", command));
+                    
+                    if (c != null) {
+                        checkAndDisconnect(c, command);
+                    }
+                    
                     throw new EmptyMovementException(p); // 抛出异常
             }
+        }
+    }
+    
+    private void checkAndDisconnect(Client c, byte command) {
+        long sessionId = c.getSessionId();
+        long currentTime = System.currentTimeMillis();
+        
+        unhandledMovementCounts.compute(sessionId, (key, val) -> {
+            if (val == null || (currentTime - val.left > UNHANDLED_MOVEMENT_THRESHOLD_MS)) {
+                // 第一次出现或超过时间阈值，重置计数
+                return new Pair<>(currentTime, 1);
+            } else {
+                // 在时间阈值内，增加计数
+                int newCount = val.right + 1;
+                if (newCount >= UNHANDLED_MOVEMENT_MAX_COUNT) {
+                    // 达到最大次数，断开连接
+                    log.warn("玩家 {} (账号: {}) 因持续发送未处理的移动类型 {} 而被断开连接。", 
+                            c.getPlayer() != null ? c.getPlayer().getName() : "Unknown", 
+                            c.getAccountName(), command);
+                    AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DISCONNECT, 
+                            new MapMessage().with("msg", "持续发送未处理移动类型").with("cmd", command));
+                    c.disconnect(false, false);
+                    return null; // 移除记录
+                }
+                return new Pair<>(currentTime, newCount);
+            }
+        });
+    }
+    
+    // 简单的 Pair 类，用于存储时间和计数
+    private static class Pair<L, R> {
+        public final L left;
+        public final R right;
+
+        public Pair(L left, R right) {
+            this.left = left;
+            this.right = right;
         }
     }
 }

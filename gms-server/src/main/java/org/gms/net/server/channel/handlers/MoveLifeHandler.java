@@ -169,7 +169,7 @@ public final class MoveLifeHandler extends AbstractMovementPacketHandler {
 
         try {
             int movementDataStart = p.getPosition();// 记录移动数据起始位置
-            updatePosition(p, monster, -2);// 更新怪物位置，-2是Y轴偏移量  // 感谢 Doodle & ZERO傑洛 注意到在未应用偏移量的情况下，基于海绵的Boss会移出舞台
+            updatePosition(p, monster, -2, c);// 更新怪物位置，-2是Y轴偏移量  // 感谢 Doodle & ZERO傑洛 注意到在未应用偏移量的情况下，基于海绵的Boss会移出舞台
             long movementDataLength = p.getPosition() - movementDataStart;// 计算移动数据长度 // updatePosition读取的字节数
             p.seek(movementDataStart);// 重新定位到移动数据起始位置
 
