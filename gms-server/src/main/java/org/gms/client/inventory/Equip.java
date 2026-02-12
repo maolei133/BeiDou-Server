@@ -121,7 +121,7 @@ public class Equip extends Item {
     /** 是否可升级 */
     private boolean isUpgradeable;
     /** 是否为元素装备 */
-    private boolean isElemental = false;    // timeless or reverse, or any equip that could levelup on GMS for all effects
+    private boolean isElemental = false;    // 永恒或逆转，或任何可以在 GMS 上升级所有效果的装备
     private static ItemInformationProvider ii = ItemInformationProvider.getInstance();
 
     public Equip(int id, short position) {
@@ -166,7 +166,7 @@ public class Equip extends Item {
         ret.setQuantity(getQuantity());
         ret.setExpiration(getExpiration());
         ret.setGiftFrom(getGiftFrom());
-        ret.setUid(getUid()); // Copy uid
+        ret.setUid(getUid()); // 复制 uid
         return ret;
     }
 
@@ -326,7 +326,7 @@ public class Equip extends Item {
     }
 
     private static int getStatModifier(boolean isAttribute) {
-        // each set of stat points grants a chance for a bonus stat point upgrade at equip level up.
+        // 每组属性点都会在装备升级时提供一次额外属性点升级的机会。
 
         if (GameConfig.getServerBoolean("use_equipment_level_up_power")) {
             if (isAttribute) {
@@ -352,7 +352,7 @@ public class Equip extends Item {
         int stat = 0;
         if (rnd >= limit) {
             rnd -= limit;
-            stat = 1 + (int) Math.floor((-1 + Math.sqrt((8 * rnd) + 1)) / 2);    // optimized randomizeStatUpgrade author: David A.
+            stat = 1 + (int) Math.floor((-1 + Math.sqrt((8 * rnd) + 1)) / 2);    // 优化的 randomizeStatUpgrade 作者：David A.
         }
 
         return stat;
@@ -364,7 +364,7 @@ public class Equip extends Item {
     }
 
     private boolean isNotWeaponAffinity(StatUpgrade name) {
-        // Vcoc's idea - WATK/MATK expected gains lessens outside of weapon affinity (physical/magic)
+        // Vcoc 的想法 - WATK/MATK 的预期收益在武器亲和度（物理/魔法）之外会减少
 
         if (ItemConstants.isWeapon(this.getItemId())) {
             if (name.equals(StatUpgrade.incPAD)) {
@@ -708,8 +708,7 @@ public class Equip extends Item {
     }
 
     private static double normalizedMasteryExp(int reqLevel) {
-        // Conversion factor between mob exp and equip exp gain. Through many calculations, the expected for equipment levelup
-        // from level 1 to 2 is killing about 100~200 mobs of the same level range, on a 1x EXP rate scenario.
+        // 怪物经验与装备经验增益之间的转换因子。经过多次计算，在 1 倍经验率的情况下，装备从 1 级升到 2 级的预期是击杀约 100~200 只同等级范围的怪物。
 
         if (reqLevel < 5) {
             return 42;
@@ -791,9 +790,9 @@ public class Equip extends Item {
         }
 
         String eqpName = ii.getName(getItemId());
-        String eqpInfo = reachedMaxLevel() ? " #e#rMAX LEVEL#k#n" : (" EXP: #e#b" + (int) itemExp + "#k#n / " + ExpTable.getEquipExpNeededForLevel(itemLevel));
+        String eqpInfo = reachedMaxLevel() ? " #e#r最高等级#k#n" : (" 经验: #e#b" + (int) itemExp + "#k#n / " + ExpTable.getEquipExpNeededForLevel(itemLevel));
 
-        return "'" + eqpName + "' -> LV: #e#b" + itemLevel + "#k#n    " + eqpInfo + "\r\n";
+        return "'" + eqpName + "' -> 等级: #e#b" + itemLevel + "#k#n    " + eqpInfo + "\r\n";
     }
 
     public void setItemExp(int exp) {
@@ -807,7 +806,7 @@ public class Equip extends Item {
     @Override
     public void setQuantity(short quantity) {
         if (quantity < 0 || quantity > 1) {
-            throw new RuntimeException("Setting the quantity to " + quantity + " on an equip (itemid: " + getItemId() + ")");
+            throw new RuntimeException("在装备（物品ID：" + getItemId() + "）上设置数量为 " + quantity);
         }
         super.setQuantity(quantity);
     }

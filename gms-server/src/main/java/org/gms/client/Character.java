@@ -1528,6 +1528,8 @@ public class Character extends AbstractCharacterObject {
         } else {
             keymap.remove(key);
         }
+        // [新增] 实时保存按键映射
+        characterService.saveKeymap(id, keymap);
     }
 
     public void changeQuickslotKeybinding(byte[] aQuickslotKeyMapped) {
@@ -2072,6 +2074,12 @@ public class Character extends AbstractCharacterObject {
             sendPacket(PacketCreator.updateSkill(skill.getId(), newLevel, newMasterlevel, -1)); //Shouldn't use expiration anymore :)
             characterService.removeSkill(SkillsDO.builder().skillid(skill.getId()).characterid(getId()).build());
         }
+        // [新增] 实时保存技能 (增量)
+        if (newLevel > -1) {
+            Map<Skill, SkillEntry> singleSkill = new HashMap<>();
+            singleSkill.put(skill, skills.get(skill));
+            characterService.saveSkills(id, singleSkill);
+        }
     }
 
     public void changeTab(int tab) {
@@ -2462,6 +2470,8 @@ public class Character extends AbstractCharacterObject {
         }
         bl.remove(otherCid);
         sendPacket(PacketCreator.updateBuddylist(getBuddylist().getBuddies()));
+        // [新增] 实时保存好友列表
+        characterService.saveBuddies(id, buddylist);
         nextPendingRequest(client);
     }
 
@@ -3461,6 +3471,8 @@ public class Character extends AbstractCharacterObject {
 
         if (gain != 0) {
             updateSingleStat(Stat.MESO, (int) nextMeso, enableActions);
+            // [新增] 实时保存金币
+            characterService.update(CharactersDO.builder().id(id).meso((int)nextMeso).build());
             if (show) {
                 sendPacket(PacketCreator.getShowMesoGain(gain, inChat));
             }
@@ -7551,6 +7563,8 @@ public class Character extends AbstractCharacterObject {
     public void saveLocation(String type) {
         Portal closest = map.findClosestPortal(getPosition());
         savedLocations[SavedLocationType.fromString(type).ordinal()] = new SavedLocation(getMapId(), closest != null ? closest.getId() : 0);
+        // [新增] 实时保存地图位置
+        characterService.saveSavedLocations(id, savedLocations);
     }
 
     public final boolean insertNewChar(CharacterFactoryRecipe recipe) {
@@ -8432,6 +8446,8 @@ public class Character extends AbstractCharacterObject {
 
     public void updateMacros(int position, SkillMacro updateMacro) {
         skillMacros[position] = updateMacro;
+        // [新增] 实时保存技能宏
+        characterService.saveSkillMacros(id, skillMacros);
     }
 
     public void updatePartyMemberHP() {
@@ -8555,6 +8571,8 @@ public class Character extends AbstractCharacterObject {
             }
             // reminder: do not reset quest progress of infoNumbers, some quests cannot backtrack
         }
+        // [新增] 实时保存任务状态
+        questService.saveQuestStatus(id, Collections.singletonList(qs));
     }
 
     public void cancelQuestExpirationTask() {

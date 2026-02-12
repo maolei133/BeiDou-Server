@@ -41,10 +41,13 @@ import org.gms.constants.skills.DawnWarrior;
 import org.gms.constants.skills.Magician;
 import org.gms.constants.skills.ThunderBreaker;
 import org.gms.constants.skills.Warrior;
+import org.gms.dao.entity.CharactersDO;
+import org.gms.manager.ServerManager;
 import org.gms.net.packet.InPacket;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
+import org.gms.service.CharacterService;
 import org.gms.util.PacketCreator;
 import org.gms.util.Randomizer;
 
@@ -62,6 +65,8 @@ import java.util.*;
  * 同时处理HP/MP的AP分配和重置逻辑
  */
 public class AssignAPProcessor {
+
+    private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
 
     // 配置参数全局变量，减少重复读取
     /** 使用HeavenMS的属性点自动分配器 */
@@ -459,6 +464,20 @@ public class AssignAPProcessor {
                 c.sendPacket(PacketCreator.enableActions());
                 AuditLogger.info(LogModule.CHARACTER, LogAction.AP_DISTRIBUTE, new MapMessage().with("str", statGain[0]).with("dex", statGain[1]).with("int", statGain[3]).with("luk", statGain[2]).with("msg", "手动分配"));
             }
+            
+            // 实时保存属性点分配结果
+            characterService.update(CharactersDO.builder()
+                    .id(chr.getId())
+                    .attrStr(chr.getStr())
+                    .attrDex(chr.getDex())
+                    .attrInt(chr.getInt())
+                    .attrLuk(chr.getLuk())
+                    .hp(chr.getHp())
+                    .maxhp(chr.getMaxHp())
+                    .mp(chr.getMp())
+                    .maxmp(chr.getMaxMp())
+                    .ap(chr.getRemainingAp())
+                    .build());
         } finally {
             c.unlockClient(); // 确保最终解锁客户端
         }
@@ -770,6 +789,21 @@ public class AssignAPProcessor {
                 return false;
             }
         }
+        
+        // 实时保存属性点分配结果
+        characterService.update(CharactersDO.builder()
+                .id(chr.getId())
+                .attrStr(chr.getStr())
+                .attrDex(chr.getDex())
+                .attrInt(chr.getInt())
+                .attrLuk(chr.getLuk())
+                .hp(chr.getHp())
+                .maxhp(chr.getMaxHp())
+                .mp(chr.getMp())
+                .maxmp(chr.getMaxMp())
+                .ap(chr.getRemainingAp())
+                .build());
+
         return true;
     }
     /**

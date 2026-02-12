@@ -35,10 +35,10 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class InviteCoordinator {
     private static final Logger log = LoggerFactory.getLogger(InviteCoordinator.class);
-
-    static {
-        log.info("InviteCoordinator initialized");
-    }
+//
+//    static {
+//        log.info("InviteCoordinator initialized");
+//    }
 
     public enum InviteResultType {
         ACCEPTED,

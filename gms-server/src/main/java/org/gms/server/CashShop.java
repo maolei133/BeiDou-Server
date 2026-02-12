@@ -253,7 +253,7 @@ public class CashShop {
          * 当sale为true时，从已下架商品列表中移除所有倍率卡商品
          */
         public static void processRateCouponItems(boolean sale) {
-            if (!sale) { // 如果状态为下架，则将倍率卡商品标记为下架并添加到 discontinuedCashItems 列表中
+            if (!sale) { // 如果状态为下架，则将倍率卡商品标记为下架并添加到已下架商品列表中
                 // 遍历所有商品，筛选出倍率卡商品并将其设置为下架状态
                 items.values().stream()
                         .filter(item -> ItemConstants.isRateCoupon(item.getItemId())) // 筛选倍率卡商品
@@ -484,7 +484,7 @@ public class CashShop {
                 gifts.add(new Pair<>(item, gift.getMessage()));
             }
 
-            if (CashItemFactory.isPackage(cItem.getItemId())) { //Packages never contains a ring
+            if (CashItemFactory.isPackage(cItem.getItemId())) { //礼包里永远不会有戒指
                 for (Item packageItem : CashItemFactory.getPackage(cItem.getItemId())) {
                     packageItem.setGiftFrom(gift.getFrom());
                     addToInventory(packageItem);

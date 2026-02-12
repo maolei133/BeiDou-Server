@@ -29,8 +29,10 @@ import org.gms.client.inventory.Equip;
 import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
+import org.gms.client.inventory.ItemFactory;
 import org.gms.client.inventory.ModifyInventory;
 import org.gms.client.inventory.Pet;
+import org.gms.manager.ServerManager;
 import org.gms.model.pojo.NewYearCardRecord;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
@@ -38,6 +40,7 @@ import org.gms.constants.inventory.ItemConstants;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
+import org.gms.service.ItemFactoryService;
 import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 import org.gms.util.SpringContextUtil;
@@ -60,6 +63,7 @@ import java.util.function.Consumer;
  */
 public class InventoryManipulator {
     private static final Logger log = LoggerFactory.getLogger(InventoryManipulator.class);
+    private static final ItemFactoryService itemFactoryService = ServerManager.getApplicationContext().getBean(ItemFactoryService.class);
 
     public static boolean addById(Client c, int itemId, short quantity) {
         return addById(c, itemId, quantity, null, -1, -1);
@@ -96,7 +100,13 @@ public class InventoryManipulator {
         Inventory inv = chr.getInventory(type);
         inv.lockInventory();
         try {
-            return addByIdInternal(c, chr, type, inv, itemId, quantity, owner, petid, flag, expiration, tracker);
+            boolean result = addByIdInternal(c, chr, type, inv, itemId, quantity, owner, petid, flag, expiration, tracker);
+            if (result) {
+                // 实时保存
+                final InventoryType finalType = type;
+                ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new org.gms.util.Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
+            }
+            return result;
         } finally {
             inv.unlockInventory();
         }
@@ -213,7 +223,13 @@ public class InventoryManipulator {
         Inventory inv = chr.getInventory(type);
         inv.lockInventory();
         try {
-            return addFromDropInternal(c, chr, type, inv, item, show, petId);
+            boolean result = addFromDropInternal(c, chr, type, inv, item, show, petId);
+            if (result) {
+                // 实时保存
+                final InventoryType finalType = type;
+                ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new org.gms.util.Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
+            }
+            return result;
         } finally {
             inv.unlockInventory();
         }
@@ -475,6 +491,10 @@ public class InventoryManipulator {
             }
         }
         AuditLogger.info(LogModule.ITEM, LogAction.ITEM_LOST, new MapMessage().with("itm", item.getItemId()).with("cnt", quantity).with("msg", "removeFromSlot"));
+        
+        // 实时保存
+        final InventoryType finalType = type;
+        ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new org.gms.util.Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
     }
 
     private static void announceModifyInventory(Client c, Item item, boolean fromDrop, boolean allowZero) {
@@ -555,6 +575,10 @@ public class InventoryManipulator {
             c.getPlayer().dropMessage(5, I18nUtil.getMessage("InventoryManipulator.handlePacket.message1")  + itemID);
         }
         AuditLogger.info(LogModule.ITEM, LogAction.ITEM_MOVE, new MapMessage().with("itm", source.getItemId()).with("src", src).with("dst", dst));
+        
+        // 实时保存
+        final InventoryType finalType = type;
+        ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new org.gms.util.Pair<>(i, finalType)).toList(), c.getPlayer().getId(), Collections.singleton(finalType));
     }
 
     /*
@@ -696,6 +720,10 @@ public class InventoryManipulator {
         mods.add(new ModifyInventory(2, source, src));
         c.sendPacket(PacketCreator.modifyInventory(true, mods));
         chr.equipChanged();
+        
+        // 实时保存
+        ItemFactory.INVENTORY.saveItems(eqpInv.list().stream().map(i -> new org.gms.util.Pair<>(i, InventoryType.EQUIP)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIP));
+        ItemFactory.INVENTORY.saveItems(eqpdInv.list().stream().map(i -> new org.gms.util.Pair<>(i, InventoryType.EQUIPPED)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIPPED));
     }
 
     public static void unequip(Client c, short src, short dst) {
@@ -738,6 +766,10 @@ public class InventoryManipulator {
         }
         c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(2, source, src))));
         chr.equipChanged();
+        
+        // 实时保存
+        ItemFactory.INVENTORY.saveItems(eqpInv.list().stream().map(i -> new org.gms.util.Pair<>(i, InventoryType.EQUIP)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIP));
+        ItemFactory.INVENTORY.saveItems(eqpdInv.list().stream().map(i -> new org.gms.util.Pair<>(i, InventoryType.EQUIPPED)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIPPED));
     }
 
     private static boolean isDisappearingItemDrop(Item it) {
@@ -866,6 +898,10 @@ public class InventoryManipulator {
             chr.updateAriantScore(quantityNow);
         }
         AuditLogger.info(LogModule.ITEM, LogAction.ITEM_DROP, new MapMessage().with("itm", itemId).with("cnt", quantity).with("msg", "drop"));
+        
+        // 实时保存
+        final InventoryType finalType = type;
+        ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new org.gms.util.Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
     }
 
     private static boolean isDroppedItemRestricted(Item it) {

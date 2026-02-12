@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.Ring;
@@ -28,6 +29,7 @@ import org.gms.client.inventory.Equip;
 import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
+import org.gms.client.inventory.ItemFactory;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
@@ -38,7 +40,11 @@ import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.service.CharacterService;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.CashShop;
@@ -49,6 +55,7 @@ import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -59,6 +66,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
     private static final Logger log = LoggerFactory.getLogger(CashOperationHandler.class);
 
     private final NoteService noteService;
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     public CashOperationHandler(NoteService noteService) {
         this.noteService = noteService;
@@ -74,10 +82,10 @@ public final class CashOperationHandler extends AbstractPacketHandler {
             return;
         }
 
-        if (c.tryacquireClient()) {     // thanks Thora for finding out an exploit within cash operations
+        if (c.tryacquireClient()) {     // 感谢 Thora 发现现金操作中的一个漏洞
             try {
                 final int action = p.readByte();
-                if (action == 0x03 || action == 0x1E) { // buy
+                if (action == 0x03 || action == 0x1E) { // 购买
                     p.readByte();
                     final int useNX = p.readInt();
                     final int snCS = p.readInt();
@@ -91,7 +99,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         return;
                     }
 
-                    if (action == 0x03) { // Item
+                    if (action == 0x03) { // 道具
                         if (ItemConstants.isCashStore(cItem.getItemId()) && chr.getLevel() < 16) {
                             c.enableCSActions();
                             return;
@@ -101,10 +109,14 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         }
 
                         Item item = cItem.toItem();
-                        cs.gainCash(useNX, cItem, chr.getWorld());  // thanks Rohenn for noticing cash operations after item acquisition
+                        cs.gainCash(useNX, cItem, chr.getWorld());  // 感谢 Rohenn 注意到道具获取后的现金操作
                         cs.addToInventory(item);
                         c.sendPacket(PacketCreator.showBoughtCashItem(item, c.getAccID()));
-                    } else { // Package
+                        
+                        // 日志记录
+                        AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("itm", item.getItemId()).with("sn", snCS).with("cost", cItem.getPrice()));
+                        traceabilityService.log(item, chr, TraceabilityService.ActionType.SHOP_BUY, "商城购买");
+                    } else { // 礼包
                         cs.gainCash(useNX, cItem, chr.getWorld());
 
                         List<Item> cashPackage = CashItemFactory.getPackage(cItem.getItemId());
@@ -115,6 +127,9 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                                 }
                             }
                             cs.addToInventory(item);
+                            
+                            // 日志记录
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.SHOP_BUY, "商城礼包购买");
                         }
                         c.sendPacket(PacketCreator.showBoughtCashPackage(cashPackage, c.getAccID()));
                         log.info("玩家 {} 购买的礼包 {} (SN {}) 内含如下道具：[\r\n{}\r\n]",
@@ -128,9 +143,11 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                                     ).toList()
                                 )
                         );
+                        AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("itm", cItem.getItemId()).with("sn", snCS).with("cost", cItem.getPrice()).with("msg", "礼包"));
                     }
                     c.sendPacket(PacketCreator.showCash(chr));
-                } else if (action == 0x04) {//TODO check for gender with gift
+                    cs.save(); // 购买后保存商城数据
+                } else if (action == 0x04) {//TODO: 赠送礼物时检查性别
                     int birthday = p.readInt();
                     ModifiedCashItemDO cItem = CashItemFactory.getItem(p.readInt());
                     CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
@@ -162,7 +179,11 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                     if (receiver != null) {
                         noteService.show(receiver);
                     }
-                } else if (action == 0x05) { // Modify wish list
+                    
+                    AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_GIFT, new MapMessage().with("itm", cItem.getItemId()).with("to", charactersDO.getName()).with("cost", cItem.getPrice()));
+                    
+                    cs.save(); // 赠送后保存商城数据
+                } else if (action == 0x05) { // 修改愿望单
                     cs.clearWishList();
                     for (byte i = 0; i < 10; i++) {
                         int sn = p.readInt();
@@ -172,7 +193,8 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         }
                     }
                     c.sendPacket(PacketCreator.showWishList(chr, true));
-                } else if (action == 0x06) { // Increase Inventory Slots
+                    cs.save(); // 修改愿望单后保存
+                } else if (action == 0x06) { // 增加背包栏位
                     p.skip(1);
                     int cash = p.readInt();
                     byte mode = p.readByte();
@@ -191,6 +213,8 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         if (chr.gainSlots(type, qty, false)) {
                             c.sendPacket(PacketCreator.showBoughtInventorySlots(type, chr.getSlots(type)));
                             c.sendPacket(PacketCreator.showCash(chr));
+                            cs.save(); // 购买格子后保存
+                            AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("msg", "增加背包栏位").with("type", type).with("qty", qty));
                         } else {
                             log.warn("无法为玩家 {} 的账号 {} 添加类型为 {} 的背包格子 {} 个", chr.getName(),Character.makeMapleReadable(chr.getName()), type, qty);
                         }
@@ -214,11 +238,13 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         if (chr.gainSlots(type, qty, false)) {
                             c.sendPacket(PacketCreator.showBoughtInventorySlots(type, chr.getSlots(type)));
                             c.sendPacket(PacketCreator.showCash(chr));
+                            cs.save(); // 购买格子后保存
+                            AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("msg", "增加背包栏位(礼包)").with("type", type).with("qty", qty));
                         } else {
                             log.warn("无法为玩家 {} 的账号 {} 添加类型为 {} 的背包格子 {} 个", chr.getName(),Character.makeMapleReadable(chr.getName()), type, qty);
                         }
                     }
-                } else if (action == 0x07) { // Increase Storage Slots
+                } else if (action == 0x07) { // 增加仓库栏位
                     p.skip(1);
                     int cash = p.readInt();
                     byte mode = p.readByte();
@@ -239,6 +265,8 @@ public final class CashOperationHandler extends AbstractPacketHandler {
 
                             c.sendPacket(PacketCreator.showBoughtStorageSlots(chr.getStorage().getSlots()));
                             c.sendPacket(PacketCreator.showCash(chr));
+                            cs.save(); // 购买格子后保存
+                            AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("msg", "增加仓库栏位").with("qty", qty));
                         } else {
                             log.warn("无法为玩家 {} 账号 {} 添加背包格子 {} 个",Character.makeMapleReadable(chr.getName()), chr.getName(), qty);
                         }
@@ -255,17 +283,19 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                             return;
                         }
                         cs.gainCash(cash, cItem, chr.getWorld());
-                        if (chr.getStorage().gainSlots(qty)) {    // thanks ABaldParrot & Thora for detecting storage issues here
+                        if (chr.getStorage().gainSlots(qty)) {    // 感谢 ABaldParrot 和 Thora 在此发现仓库问题
                             log.debug("玩家 {} 为账号 {} 购买了背包格子 {} 个",Character.makeMapleReadable(chr.getName()), chr.getName(), qty);
                             chr.setUsedStorage();
 
                             c.sendPacket(PacketCreator.showBoughtStorageSlots(chr.getStorage().getSlots()));
                             c.sendPacket(PacketCreator.showCash(chr));
+                            cs.save(); // 购买格子后保存
+                            AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("msg", "增加仓库栏位(礼包)").with("qty", qty));
                         } else {
                             log.warn("无法为玩家 {} 账号 {} 添加背包格子 {} 个",Character.makeMapleReadable(chr.getName()), chr.getName(), qty);
                         }
                     }
-                } else if (action == 0x08) { // Increase Character Slots
+                } else if (action == 0x08) { // 增加角色栏位
                     p.skip(1);
                     int cash = p.readInt();
                     ModifiedCashItemDO cItem = CashItemFactory.getItem(p.readInt());
@@ -283,18 +313,21 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                     if (c.gainCharacterSlot()) {
                         c.sendPacket(PacketCreator.showBoughtCharacterSlot(c.getCharacterSlots()));
                         c.sendPacket(PacketCreator.showCash(chr));
+                        cs.save(); // 购买角色位后保存
+                        AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("msg", "增加角色栏位"));
                     } else {
                         log.warn("无法为账号 {} 添加背包格子", Character.makeMapleReadable(chr.getName()));
                         c.enableCSActions();
                         return;
                     }
-                } else if (action == 0x0D) { // Take from Cash Inventory
+                } else if (action == 0x0D) { // 从商城仓库取出
                     Item item = cs.findByCashId(p.readInt());
                     if (item == null) {
                         c.enableCSActions();
                         return;
                     }
-                    if (chr.getInventory(item.getInventoryType()).addItem(item) != -1) {
+                    InventoryType type = item.getInventoryType();
+                    if (chr.getInventory(type).addItem(item) != -1) {
                         cs.removeFromInventory(item);
                         c.sendPacket(PacketCreator.takeFromCashInventory(item));
 
@@ -304,8 +337,20 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                                 chr.addPlayerRing(ring);
                             }
                         }
+                        
+                        // 实时保存
+                        ItemFactory.INVENTORY.saveItems(
+                            chr.getInventory(type).list().stream().map(i -> new Pair<>(i, type)).toList(),
+                            chr.getId(),
+                            Collections.singleton(type)
+                        );
+                        cs.save();
+                        
+                        // 日志记录
+                        AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_OUT, new MapMessage().with("itm", item.getItemId()).with("msg", "从商城仓库取出"));
+                        traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_OUT, "商城取出");
                     }
-                } else if (action == 0x0E) { // Put into Cash Inventory
+                } else if (action == 0x0E) { // 存入商城仓库
                     int cashId = p.readInt();
                     p.skip(4);
 
@@ -332,7 +377,19 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                     cs.addToInventory(item);
                     mi.removeSlot(item.getPosition());
                     c.sendPacket(PacketCreator.putIntoCashInventory(item, c.getAccID()));
-                } else if (action == 0x1D) { //crush ring (action 28)
+                    
+                    // 实时保存
+                    cs.save();
+                    ItemFactory.INVENTORY.saveItems(
+                        mi.list().stream().map(i -> new Pair<>(i, InventoryType.getByType(invType))).toList(),
+                        chr.getId(),
+                        Collections.singleton(InventoryType.getByType(invType))
+                    );
+                    
+                    // 日志记录
+                    AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_IN, new MapMessage().with("itm", item.getItemId()).with("msg", "存入商城仓库"));
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_IN, "商城存入");
+                } else if (action == 0x1D) { // 情侣戒指 (action 28)
                     int birthday = p.readInt();
                     if (checkBirthday(c, birthday)) {
                         int toCharge = p.readInt();
@@ -361,6 +418,9 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                                 chr.getCrushRings().add(Ring.loadFromDb(rings.getLeft()));
                                 noteService.sendWithFame(text, chr.getName(), partner.getName());
                                 noteService.show(partner);
+                                cs.save(); // 购买戒指后保存
+                                
+                                AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("itm", itemRing.getItemId()).with("msg", "情侣戒指"));
                             }
                         }
                     } else {
@@ -369,7 +429,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
 
                     c.sendPacket(PacketCreator.showCash(c.getPlayer()));
                 } else if (action == 0x20) {
-                    int serialNumber = p.readInt();  // thanks GabrielSin for detecting a potential exploit with 1 meso cash items.
+                    int serialNumber = p.readInt();  // 感谢 GabrielSin 发现一个使用1金币现金道具的潜在漏洞。
                     if (serialNumber / 10000000 != 8) {
                         c.sendPacket(PacketCreator.showCashShopMessage((byte) 0xC0));
                         return;
@@ -393,10 +453,20 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                             chr.gainMeso(-itemPrice, false);
                             InventoryManipulator.addById(c, itemId, (short) 1, "", -1);
                             c.sendPacket(PacketCreator.showBoughtQuestItem(itemId));
+                            
+                            // 实时保存
+                            InventoryType type = ItemConstants.getInventoryType(itemId);
+                            ItemFactory.INVENTORY.saveItems(
+                                chr.getInventory(type).list().stream().map(i -> new Pair<>(i, type)).toList(),
+                                chr.getId(),
+                                Collections.singleton(type)
+                            );
+
+                            AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("itm", itemId).with("msg", "任务道具"));
                         }
                     }
                     c.sendPacket(PacketCreator.showCash(c.getPlayer()));
-                } else if (action == 0x23) { //Friendship :3
+                } else if (action == 0x23) { // 友情戒指 :3
                     int birthday = p.readInt();
                     if (checkBirthday(c, birthday)) {
                         int payment = p.readByte();
@@ -409,7 +479,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         if (partner == null) {
                             c.sendPacket(PacketCreator.showCashShopMessage((byte) 0xBE));
                         } else {
-                            // Need to check to make sure its actually an equip and the right SN...
+                            // 需要检查以确保它实际上是装备和正确的SN...
                             if (itemRing.toItem() instanceof Equip eqp) {
                                 Pair<Integer, Integer> rings = Ring.createRing(itemRing.getItemId(), chr, partner);
                                 eqp.setRingId(rings.getLeft());
@@ -420,6 +490,8 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                                 chr.getFriendshipRings().add(Ring.loadFromDb(rings.getLeft()));
                                 noteService.sendWithFame(text, chr.getName(), partner.getName());
                                 noteService.show(partner);
+                                cs.save(); // 购买戒指后保存
+                                AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("itm", itemRing.getItemId()).with("msg", "友情戒指"));
                             }
                         }
                     } else {
@@ -427,7 +499,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                     }
 
                     c.sendPacket(PacketCreator.showCash(c.getPlayer()));
-                } else if (action == 0x2E) { //name change
+                } else if (action == 0x2E) { // 角色改名
                     ModifiedCashItemDO cItem = CashItemFactory.getItem(p.readInt());
                     if (cItem == null || !canBuy(chr, cItem, cs.getCash(CashShop.NX_PREPAID),CashShop.NX_PREPAID)) {
                         c.sendPacket(PacketCreator.showCashShopMessage((byte) 0));
@@ -435,9 +507,9 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         return;
                     }
                     if (cItem.getSn() == 50600000 && GameConfig.getServerBoolean("allow_cash_shop_name_change")) {
-                        p.readString(); //old name
+                        p.readString(); // 旧名字
                         String newName = p.readString();
-                        if (!Character.canCreateChar(newName) || chr.getLevel() < 10) { //(longest ban duration isn't tracked currently)
+                        if (!Character.canCreateChar(newName) || chr.getLevel() < 10) { //(目前未跟踪最长封禁持续时间)
                             c.sendPacket(PacketCreator.showCashShopMessage((byte) 0));
                             c.enableCSActions();
                             return;
@@ -446,17 +518,19 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                             c.enableCSActions();
                             return;
                         }
-                        if (chr.registerNameChange(newName)) { //success
+                        if (chr.registerNameChange(newName)) { // 成功
                             Item item = cItem.toItem();
                             c.sendPacket(PacketCreator.showNameChangeSuccess(item, c.getAccID()));
                             cs.gainCash(4, cItem, chr.getWorld());
                             cs.addToInventory(item);
+                            cs.save(); // 改名后保存
+                            AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("msg", "角色改名").with("new", newName));
                         } else {
                             c.sendPacket(PacketCreator.showCashShopMessage((byte) 0));
                         }
                     }
                     c.enableCSActions();
-                } else if (action == 0x31) { //world transfer
+                } else if (action == 0x31) { // 跨区转移
                     ModifiedCashItemDO cItem = CashItemFactory.getItem(p.readInt());
                     if (cItem == null || !canBuy(chr, cItem, cs.getCash(CashShop.NX_PREPAID),CashShop.NX_PREPAID)) {
                         c.sendPacket(PacketCreator.showCashShopMessage((byte) 0));
@@ -481,6 +555,8 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                             c.sendPacket(PacketCreator.showWorldTransferSuccess(item, c.getAccID()));
                             cs.gainCash(4, cItem, chr.getWorld());
                             cs.addToInventory(item);
+                            cs.save(); // 转服后保存
+                            AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("msg", "世界转移").with("to", newWorldSelection));
                         } else {
                             c.sendPacket(PacketCreator.showCashShopMessage((byte) 0));
                         }

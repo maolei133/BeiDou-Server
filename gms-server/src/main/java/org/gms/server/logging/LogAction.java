@@ -48,6 +48,8 @@ public enum LogAction {
     /** 商城购买 */ CS_BUY,
     /** 商城赠送 */ CS_GIFT,
     /** 商城充值 */ CS_CHARGE,
+    /** 商城取出 */ CS_OUT,
+    /** 商城存入 */ CS_IN,
 
     // --- FIELD ---
     /** 切换地图 */ CHANGE_MAP,

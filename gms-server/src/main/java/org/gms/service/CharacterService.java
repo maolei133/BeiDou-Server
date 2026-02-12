@@ -826,7 +826,7 @@ public class CharacterService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteCharFromDB(Character player, int senderAccId) {
         int cid = player.getId();
-        if (!Server.getInstance().haveCharacterEntry(senderAccId, cid)) {    // thanks zera (EpiphanyMS) for pointing the critical exploit with non-authed character deletion request
+        if (!Server.getInstance().haveCharacterEntry(senderAccId, cid)) {    // 感谢 zera (EpiphanyMS) 指出非授权角色删除请求的关键漏洞
             throw new BizException(I18nUtil.getExceptionMessage("UNKNOWN_CHARACTER"));
         }
         int world;
