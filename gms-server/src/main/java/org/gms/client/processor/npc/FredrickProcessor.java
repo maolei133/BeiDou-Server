@@ -47,6 +47,7 @@ import org.gms.manager.ServerManager;
 import org.gms.net.server.Server;
 import org.gms.net.server.world.World;
 import org.gms.service.HiredMerchantService;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.ItemInformationProvider;
@@ -76,6 +77,7 @@ public class FredrickProcessor {
 
     private final NoteService noteService;
     private static final HiredMerchantService hiredMerchantService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     public FredrickProcessor(NoteService noteService) {
         this.noteService = noteService;
@@ -297,6 +299,11 @@ public class FredrickProcessor {
                     for (HiredMerchantItemsDO itemDO : merchantItems) {
                         Item item = hiredMerchantService.deserializeItem(itemDO.getItemData());
                         if (item != null) {
+                            // 恢复 UID
+                            if (itemDO.getUid() != null && itemDO.getUid() > 0) {
+                                item.setUid(itemDO.getUid());
+                            }
+                            
                             int remaining = itemDO.getBundles() - itemDO.getSoldQuantity();
                             if (remaining > 0) {
                                 item.setQuantity((short) (item.getQuantity() * remaining));
@@ -331,6 +338,9 @@ public class FredrickProcessor {
                 for (Pair<Item, InventoryType> it : items) {
                     Item item = it.getLeft();
                     InventoryManipulator.addFromDrop(chr.getClient(), item, false);
+                    
+                    // 记录溯源日志
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.HIRED_MERCHANT_RETURN, "弗雷德里克取回");
                 }
 
                 // 更新数据库状态
@@ -350,6 +360,7 @@ public class FredrickProcessor {
                                 .type(HiredMerchantTransactionsDO.TYPE_RETURN)
                                 .quantity(itemDO.getQuantity() * (itemDO.getBundles() - itemDO.getSoldQuantity()))
                                 .timestamp(System.currentTimeMillis())
+                                .uid(itemDO.getUid()) // 记录 UID
                                 .build();
                         hiredMerchantService.addTransaction(transaction);
                     }

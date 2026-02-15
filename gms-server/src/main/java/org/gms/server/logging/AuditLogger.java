@@ -128,8 +128,20 @@ public class AuditLogger {
         error(module.name(), action.name(), message, t);
     }
 
+    public static void error(LogModule module, LogAction action, MapMessage data, Throwable t) {
+        error(module.name(), action.name(), data, t);
+    }
+
     public static void error(String module, String action, String message, Throwable t) {
+        error(module, action, new MapMessage().with("msg", message), t);
+    }
+
+    public static void error(String module, String action, MapMessage data, Throwable t) {
         moduleConfig.putIfAbsent(module, true);
+
+        if (data == null) {
+            data = new MapMessage();
+        }
 
         Map<String, Object> logMap = new LinkedHashMap<>();
         logMap.put("ts", System.currentTimeMillis());
@@ -151,7 +163,17 @@ public class AuditLogger {
         putIfPresent(logMap, contextData, "map");
         putIfPresent(logMap, contextData, "mapName"); // 新增
         
-        logMap.put("msg", message);
+        Map<String, String> rawData = data.getData();
+        for (Map.Entry<String, String> entry : rawData.entrySet()) {
+            String key = entry.getKey();
+            if (key.equals("mod") || key.equals("act") || key.equals("category") || key.equals("cat")) {
+                continue;
+            }
+            if (!logMap.containsKey(key)) {
+                logMap.put(key, entry.getValue());
+            }
+        }
+
         if (t != null) {
             logMap.put("err", t.getMessage());
         }

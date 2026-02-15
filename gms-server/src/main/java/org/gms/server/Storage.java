@@ -19,6 +19,7 @@
 package org.gms.server;
 
 import com.mybatisflex.core.query.QueryWrapper;
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Client;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
@@ -31,6 +32,9 @@ import org.gms.provider.DataProvider;
 import org.gms.provider.DataProviderFactory;
 import org.gms.provider.DataTool;
 import org.gms.provider.wz.WZFiles;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.service.StorageService;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
@@ -46,12 +50,6 @@ import java.util.stream.Collectors;
 /**
  * 仓库领域模型
  * 负责管理仓库的内存状态，并协调 StorageService 进行持久化。
- * <p>
- * 重构说明：
- * 1. 移除了 typeItems 冗余缓存，直接使用 Stream API 过滤 items。
- * 2. 强化了 store 方法的堆叠逻辑。
- * 3. 统一了线程锁的使用。
- * </p>
  */
 public class Storage {
     private static final Logger log = LoggerFactory.getLogger(Storage.class);
@@ -63,7 +61,8 @@ public class Storage {
     private int currentNpcid;
     private int meso;
     private byte slots;
-    private List<Item> items; // 核心数据结构
+    private final Map<InventoryType, List<Item>> typeItems = new HashMap<>(); // 分类缓存，用于快速响应客户端请求
+    private List<Item> items; // 核心数据结构，存储所有物品
     private final Lock lock = new ReentrantLock(true);
 
     // 依赖注入
@@ -106,11 +105,23 @@ public class Storage {
                 }
                 storageService.migrateOldData(ret.id, itemsToMigrate);
                 // 迁移后重新加载以获取正确的 UID
-                ret.items.addAll(storageService.loadStorageItems(ret.id));
+                List<Item> reloadedItems = storageService.loadStorageItems(ret.id);
+                ret.items.addAll(reloadedItems);
+                
+                // 记录迁移日志
+                AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_MIGRATE, 
+                        new MapMessage()
+                                .with("storageId", ret.id)
+                                .with("count", itemsToMigrate.size())
+                                .with("msg", "迁移旧仓库物品"));
             }
         } else {
             ret.items.addAll(loadedItems);
         }
+        
+        // 初始排序和整理
+        ret.sortItems();
+        ret.refreshTypeItems();
 
         return ret;
     }
@@ -134,29 +145,22 @@ public class Storage {
         lock.lock();
         try {
             // 1. 尝试堆叠 (Stacking)
-            // 只有非装备类、非可充值道具且最大堆叠数 > 1 的物品才尝试堆叠
             if (!ItemConstants.isEquipment(item.getItemId()) 
                 && !ItemConstants.isRechargeable(item.getItemId()) 
                 && ItemInformationProvider.getInstance().getSlotMax(c, item.getItemId()) > 1) {
                 short maxSlot = ItemInformationProvider.getInstance().getSlotMax(c, item.getItemId());
                 
-                // 遍历现有物品寻找可堆叠的目标
                 for (Item existing : items) {
                     if (existing.getItemId() == item.getItemId() && existing.getQuantity() < maxSlot) {
-                        // 检查属性是否一致（如拥有者、有效期等），通常同ID消耗品属性一致，但为了严谨可以加检查
-                        // 这里简化为同ID即可堆叠，符合大多数游戏逻辑
-                        
                         int amountToStack = Math.min(maxSlot - existing.getQuantity(), item.getQuantity());
                         
-                        // 更新内存
                         existing.setQuantity((short) (existing.getQuantity() + amountToStack));
                         item.setQuantity((short) (item.getQuantity() - amountToStack));
                         
-                        // 更新数据库
                         storageService.updateItem(this.id, existing);
                         
                         if (item.getQuantity() <= 0) {
-                            return true; // 全部堆叠完成，无需占用新槽位
+                            return true; 
                         }
                     }
                 }
@@ -167,11 +171,15 @@ public class Storage {
                 return false; // 仓库已满
             }
 
-            // 设置位置为当前末尾
-            item.setPosition((short) items.size());
-            items.add(item);
+            // 插入到列表
+            items.add(item); 
             
-            // 插入数据库
+            // 重新排序并更新 Position
+            sortItems();
+            
+            // 更新 typeItems 缓存
+            refreshTypeItems();
+            
             storageService.addItem(this.id, item);
 
             return true;
@@ -186,9 +194,36 @@ public class Storage {
     public boolean takeOut(Item item) {
         lock.lock();
         try {
-            boolean removed = items.remove(item);
+            // 使用迭代器进行引用比较删除，防止 equals() 误删同ID的其他物品
+            boolean removed = false;
+            Iterator<Item> it = items.iterator();
+            while (it.hasNext()) {
+                if (it.next() == item) { // 引用比较
+                    it.remove();
+                    removed = true;
+                    break;
+                }
+            }
+
             if (removed) {
                 storageService.removeItem(this.id, item);
+                
+                // 重新排序并更新 Position (保持内存整洁)
+                sortItems();
+                
+                // 更新 typeItems 缓存
+                refreshTypeItems();
+            } else {
+                String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
+                String msg = String.format("从列表中移除物品失败: ID=%d, Name=%s, Pos=%d, ListSize=%d", 
+                        item.getItemId(), itemName, item.getPosition(), items.size());
+                AuditLogger.error(LogModule.STORAGE, LogAction.STORAGE_OUT, 
+                        new MapMessage()
+                                .with("msg", msg)
+                                .with("itemId", item.getItemId())
+                                .with("itemName", itemName)
+                                .with("pos", item.getPosition())
+                                .with("listSize", items.size()), null);
             }
             return removed;
         } finally {
@@ -202,33 +237,69 @@ public class Storage {
     public void arrangeItems(Client c) {
         lock.lock();
         try {
-            // 使用 StorageInventory 进行排序逻辑 (保持原有排序算法)
             StorageInventory msi = new StorageInventory(c, items);
             msi.mergeItems(); // 内存合并
             this.items = msi.sortItems(); // 内存排序
 
-            // 全量同步到数据库 (处理合并后的删除、更新和排序)
+            // 重新分配 position，确保连续
+            short pos = 0;
+            for (Item item : items) {
+                item.setPosition(pos++);
+            }
+
+            // 更新所有类型的缓存
+            refreshTypeItems();
+
+            // 全量同步到数据库
             storageService.syncStorageItems(this.id, this.items);
 
-            // 发送更新包
             c.sendPacket(PacketCreator.arrangeStorage(slots, items));
         } finally {
             lock.unlock();
         }
     }
+    
+    /**
+     * 对物品列表进行排序，并重新分配 Position
+     * 排序规则：InventoryType -> ItemId -> Position
+     */
+    private void sortItems() {
+        items.sort(Comparator.comparingInt((Item i) -> i.getInventoryType().getType())
+                .thenComparingInt(Item::getItemId)
+                .thenComparingInt(Item::getPosition));
+        
+        // 重新分配 Position，确保连续且与列表索引一致
+        short pos = 0;
+        for (Item item : items) {
+            item.setPosition(pos++);
+        }
+    }
 
     /**
-     * 获取指定类型的物品列表 (动态过滤)
+     * 刷新 typeItems 缓存
+     * 保持 items 的原始顺序（插入顺序）
      */
-    public List<Item> getItemsByType(InventoryType type) {
-        lock.lock();
-        try {
-            return items.stream()
-                    .filter(i -> i.getInventoryType() == type)
-                    .collect(Collectors.toList());
-        } finally {
-            lock.unlock();
+    private void refreshTypeItems() {
+        for (InventoryType type : InventoryType.values()) {
+            List<Item> typeList = new ArrayList<>();
+            for (Item item : items) {
+                // 使用 item.getInventoryType() 确保与物品自身属性一致
+                if (item.getInventoryType() == type) {
+                    typeList.add(item);
+                }
+            }
+            typeItems.put(type, typeList);
         }
+    }
+
+    private List<Item> filterItems(InventoryType type) {
+        List<Item> ret = new LinkedList<>();
+        for (Item item : items) {
+            if (item.getInventoryType() == type) {
+                ret.add(item);
+            }
+        }
+        return ret;
     }
 
     public void sendStorage(Client c, int npcId) {
@@ -241,8 +312,12 @@ public class Storage {
         lock.lock();
         try {
             this.currentNpcid = npcId;
-            // 排序：装备在前，其他按类型排序 (保持原有展示逻辑)
-            items.sort((o1, o2) -> Integer.compare(o1.getInventoryType().getType(), o2.getInventoryType().getType()));
+            
+            // 确保发送前列表是有序的
+            sortItems();
+            
+            // 刷新缓存
+            refreshTypeItems();
             
             c.sendPacket(PacketCreator.getStorage(npcId, slots, items, meso));
         } finally {
@@ -253,7 +328,8 @@ public class Storage {
     public void sendStored(Client c, InventoryType type) {
         lock.lock();
         try {
-            c.sendPacket(PacketCreator.storeStorage(slots, type, getItemsByType(type)));
+            // 恢复为增量更新包
+            c.sendPacket(PacketCreator.storeStorage(slots, type, typeItems.get(type)));
         } finally {
             lock.unlock();
         }
@@ -262,7 +338,8 @@ public class Storage {
     public void sendTakenOut(Client c, InventoryType type) {
         lock.lock();
         try {
-            c.sendPacket(PacketCreator.takeOutStorage(slots, type, getItemsByType(type)));
+            // 恢复为增量更新包
+            c.sendPacket(PacketCreator.takeOutStorage(slots, type, typeItems.get(type)));
         } finally {
             lock.unlock();
         }
@@ -271,8 +348,6 @@ public class Storage {
     public void sendMeso(Client c) {
         c.sendPacket(PacketCreator.mesoStorage(slots, meso));
     }
-
-    // --- 属性访问与辅助方法 ---
 
     public Item getItem(byte slot) {
         lock.lock();
@@ -358,22 +433,70 @@ public class Storage {
     }
 
     public void close() {
-        // 移除 typeItems 后，close 方法其实没什么可做的了，但为了兼容性保留
-        // 如果有其他资源需要释放，可以在这里处理
+        lock.lock();
+        try {
+            typeItems.clear();
+        } finally {
+            lock.unlock();
+        }
     }
     
     /**
      * 根据类型和槽位获取物品在总列表中的索引
-     * 兼容旧的 StorageProcessor 逻辑
+     * 
+     * 智能查找逻辑：
+     * 1. 优先尝试将 slot 作为全局绝对索引查找。
+     * 2. 如果类型不匹配，降级为尝试将 slot 作为相对索引查找。
+     * 3. 这样可以兼容客户端发送全局索引或相对索引的情况，并解决排序不一致导致的问题。
      */
     public byte getSlot(InventoryType type, byte slot) {
         lock.lock();
         try {
-            List<Item> typeItems = getItemsByType(type);
-            if (slot >= 0 && slot < typeItems.size()) {
-                Item targetItem = typeItems.get(slot);
-                return (byte) items.indexOf(targetItem);
+            // 1. 尝试全局索引匹配
+            if (slot >= 0 && slot < items.size()) {
+                Item item = items.get(slot);
+                if (item.getInventoryType() == type) {
+                    return slot;
+                } else {
+                    String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
+                    String msg = String.format("全局索引类型不匹配: ReqType=%s, ActualType=%s, Slot=%d, ItemID=%d, Name=%s", 
+                            type, item.getInventoryType(), slot, item.getItemId(), itemName);
+                    AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
+                            new MapMessage()
+                                    .with("msg", msg)
+                                    .with("reqType", type)
+                                    .with("actualType", item.getInventoryType())
+                                    .with("slot", slot)
+                                    .with("itemId", item.getItemId())
+                                    .with("itemName", itemName));
+                }
+            } else {
+                String msg = String.format("全局索引越界: Slot=%d, Size=%d", slot, items.size());
+                AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
+                        new MapMessage()
+                                .with("msg", msg)
+                                .with("slot", slot)
+                                .with("size", items.size()));
             }
+            
+            // 2. 尝试相对索引匹配 (Fallback)
+            int count = 0;
+            for (int i = 0; i < items.size(); i++) {
+                if (items.get(i).getInventoryType() == type) {
+                    if (count == slot) {
+                        return (byte) i;
+                    }
+                    count++;
+                }
+            }
+            
+            String msg = String.format("未找到物品: Type=%s, Slot=%d, ListSize=%d", type, slot, items.size());
+            AuditLogger.error(LogModule.STORAGE, LogAction.STORAGE_OUT, 
+                    new MapMessage()
+                            .with("msg", msg)
+                            .with("type", type)
+                            .with("slot", slot)
+                            .with("listSize", items.size()), null);
             return -1;
         } finally {
             lock.unlock();

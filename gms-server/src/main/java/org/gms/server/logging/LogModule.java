@@ -20,5 +20,6 @@ public enum LogModule {
     /** 商城 */ CASH_SHOP,
     /** 活动 */ EVENT,
     /** 反作弊 */ AUTOBAN,
-    /** 内置辅助插件 */ PLUGIN
+    /** 内置辅助插件 */ PLUGIN,
+    /** 仓库 */ STORAGE
 }

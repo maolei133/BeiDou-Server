@@ -21,6 +21,7 @@
  */
 package org.gms.client.processor.npc;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.autoban.AutobanFactory;
@@ -33,6 +34,9 @@ import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.net.packet.InPacket;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.ItemInformationProvider;
@@ -104,19 +108,23 @@ public class StorageProcessor {
                 case 4: { // 取出物品
                     byte type = p.readByte();
                     byte slot = p.readByte();
+                    
                     if (slot < 0 || slot > storage.getSlots()) { // 索引从0开始
                         AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " 尝试通过仓库进行封包编辑。");
-                        log.warn("角色 {} 尝试操作仓库槽位 {}", c.getPlayer().getName(), slot);
+                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
+                                new MapMessage().with("msg", "检测到封包编辑").with("slot", slot));
                         c.disconnect(true, false);
                         return;
                     }
 
-                    slot = storage.getSlot(InventoryType.getByType(type), slot);
-                    Item item = storage.getItem(slot);
+                    // 1. 获取目标物品在全局列表中的索引
+                    byte globalSlot = storage.getSlot(InventoryType.getByType(type), slot);
+                    
+                    // 2. 获取物品对象
+                    Item item = storage.getItem(globalSlot);
 
                     if (hasGMRestrictions(chr)) {
                         chr.dropMessage(1, gmBlockedStorageMessage);
-                        log.info("{} GM级别不够，无法使用仓库", chr.getName());
                         c.enableActions();
                         return;
                     }
@@ -143,16 +151,30 @@ public class StorageProcessor {
                                 InventoryManipulator.addFromDrop(c, item, false);
 
                                 String itemName = ii.getName(item.getItemId());
-                                log.debug("角色 {} 取出了 {}x {} ({})", c.getPlayer().getName(), item.getQuantity(), itemName, item.getItemId());
+                                AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
+                                        new MapMessage()
+                                                .with("itm", item.getItemId())
+                                                .with("cnt", item.getQuantity())
+                                                .with("slot", globalSlot));
+                                
+                                // 发送提示消息
+                                String feeMsg = takeoutFee > 0 ? " (手续费: " + takeoutFee + " 金币)" : "";
+                                chr.dropMessage(5, "[仓库] 取出 " + itemName + " × " + item.getQuantity() + feeMsg);
 
                                 storage.sendTakenOut(c, item.getInventoryType());
                             } else {
+                                AuditLogger.error(LogModule.STORAGE, LogAction.STORAGE_OUT, "storage.takeOut 返回 false", null);
                                 c.enableActions();
                                 return;
                             }
                         } else {
                             sendStorageError(c, StorageError.INVENTORY_FULL);
                         }
+                    } else {
+                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
+                                new MapMessage().with("msg", "未找到物品").with("slot", globalSlot));
+                        chr.dropMessage(1, "仓库中没有该物品");
+                        sendStorageError(c, StorageError.ENABLE_ACTIONS); // 发送无感解锁
                     }
                     break;
                 }
@@ -160,19 +182,20 @@ public class StorageProcessor {
                     short slot = p.readShort();
                     int itemId = p.readInt();
                     short quantity = p.readShort();
+                    
                     InventoryType invType = ItemConstants.getInventoryType(itemId);
                     Inventory inv = chr.getInventory(invType);
                     if (slot < 1 || slot > inv.getSlotLimit()) { // 玩家背包从1开始
                         AutobanFactory.PACKET_EDIT.alert(c.getPlayer(),
                                 c.getPlayer().getName() + " 尝试通过仓库进行封包编辑。");
-                        log.warn("角色 {} 尝试存入物品到槽位 {}", c.getPlayer().getName(), slot);
+                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_IN, 
+                                new MapMessage().with("msg", "检测到封包编辑").with("slot", slot));
                         c.disconnect(true, false);
                         return;
                     }
 
                     if (hasGMRestrictions(chr)) {
                         chr.dropMessage(1, gmBlockedStorageMessage);
-                        log.info("{} GM级别不够，无法使用仓库", chr.getName());
                         c.enableActions();
                         return;
                     }
@@ -208,12 +231,37 @@ public class StorageProcessor {
                                     return;
                                 }
                                 
-                                // 检查：不可交易 (包括固有道具等)
-                                if (ItemConstants.isUntradeable(item.getFlag()) || ii.isDropRestricted(itemId)) {
-                                    // 这里可以预留配置开关，例如 if (!GameConfig.getServerBoolean("allow_storage_untradeable"))
-                                    c.getPlayer().dropMessage(1, "不可交易或固有道具无法存入仓库。");
-                                    sendStorageError(c, StorageError.ENABLE_ACTIONS); // 使用无感解锁
-                                    return;
+                                // 检查：不可存入的物品
+                                // 规则：
+                                // 1. 固有道具 (One-of-a-kind)
+                                // 2. 不可交易 (Untradeable)
+                                // 3. 合并不可交易 (Merge Untradeable)
+                                // 满足任意一种即不可存入，除非：
+                                // a. 有宿命剪刀 (Karma Scissors)
+                                // b. 有账号共享标记 (Account Sharing)
+                                boolean isOneOfAKind = ii.isPickupRestricted(itemId);
+                                boolean isUntradeable = ItemConstants.isUntradeable(item.getFlag());
+                                boolean isMergeUntradeable = (item.getFlag() & ItemConstants.MERGE_UNTRADEABLE) == ItemConstants.MERGE_UNTRADEABLE; // 假设有这个标记
+                                boolean isDropRestricted = ii.isDropRestricted(itemId); // 通常也意味着不可交易
+
+                                if (isOneOfAKind || isUntradeable || isMergeUntradeable || isDropRestricted) {
+                                    boolean hasKarma = KarmaManipulator.hasKarmaFlag(item);
+                                    boolean isAccountSharing = (item.getFlag() & ItemConstants.ACCOUNT_SHARING) == ItemConstants.ACCOUNT_SHARING;
+                                    
+                                    // 修正：如果不可丢弃物品标记为0，也可以存入
+                                    // 注意：isDropRestricted 已经包含了不可丢弃的判断，但这里我们需要更细致的区分
+                                    // 如果 isDropRestricted 为 true，但 flag 为 0，是否允许存入？
+                                    // 原始需求：不可丢弃物品，如果标记为0，也是可以存入到仓库里的。
+                                    // 这里的“标记为0”指的是 item.getFlag() == 0
+                                    
+                                    boolean isFlagZero = item.getFlag() == 0;
+
+                                    if (!hasKarma && !isAccountSharing && !isFlagZero) {
+                                        // 这里可以预留配置开关，例如 if (!GameConfig.getServerBoolean("allow_storage_untradeable"))
+                                        c.getPlayer().dropMessage(1, "不可交易或固有道具无法存入仓库。");
+                                        sendStorageError(c, StorageError.ENABLE_ACTIONS); // 使用无感解锁
+                                        return;
+                                    }
                                 }
                                 
                                 // 检查：任务道具
@@ -247,7 +295,15 @@ public class StorageProcessor {
                             chr.setUsedStorage();
 
                             String itemName = ii.getName(item.getItemId());
-                            log.debug("角色 {} 存入了 {}x {} ({})", c.getPlayer().getName(), item.getQuantity(), itemName, item.getItemId());
+                            AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_IN, 
+                                    new MapMessage()
+                                            .with("itm", item.getItemId())
+                                            .with("cnt", item.getQuantity()));
+                            
+                            // 发送提示消息
+                            String feeMsg = storeFee > 0 ? " (手续费: " + storeFee + " 金币)" : "";
+                            chr.dropMessage(6, "[仓库] 存入 " + itemName + " × " + item.getQuantity() + feeMsg);
+                            
                             storage.sendStored(c, ItemConstants.getInventoryType(itemId));
                         } else {
                             // 存入失败（如仓库已满），退还费用并提示
@@ -271,7 +327,6 @@ public class StorageProcessor {
 
                     if (hasGMRestrictions(chr)) {
                         chr.dropMessage(1, gmBlockedStorageMessage);
-                        log.info("{} GM级别不够，无法使用仓库", chr.getName());
                         c.enableActions();
                         return;
                     }
@@ -293,7 +348,15 @@ public class StorageProcessor {
                         storage.setMeso(storageMesos - meso);
                         chr.gainMeso(meso, false, true, false);
                         chr.setUsedStorage();
-                        log.debug("角色 {} {} {} 金币", c.getPlayer().getName(), meso > 0 ? "取出了" : "存入了", Math.abs(meso));
+                        
+                        AuditLogger.info(LogModule.STORAGE, meso > 0 ? LogAction.STORAGE_OUT : LogAction.STORAGE_IN, 
+                                new MapMessage().with("meso", Math.abs(meso)));
+                        
+                        // 发送提示消息
+                        String action = meso > 0 ? "取出" : "存入";
+                        int msgType = meso > 0 ? 5 : 6;
+                        chr.dropMessage(msgType, "[仓库] " + action + " 金币 × " + Math.abs(meso));
+                        
                         storage.sendMeso(c);
                     } else {
                         c.enableActions();
@@ -306,8 +369,9 @@ public class StorageProcessor {
                     break;
                 }
             } catch (Exception e) {
-                log.error("仓库操作失败", e);
                 sendStorageError(c, StorageError.ENABLE_ACTIONS); // 发送无感解锁
+                chr.dropMessage(1, "仓库操作失败");
+                AuditLogger.error(LogModule.STORAGE, LogAction.ERROR, "仓库操作失败", e);
             } finally {
                 c.releaseClient();
             }

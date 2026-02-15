@@ -81,7 +81,9 @@ public class HiredMerchantService {
         if (item.getUid() != null && item.getUid() > 0) {
             QueryWrapper checkUidQuery = QueryWrapper.create()
                     .select(HiredMerchantItemsDO::getId)
-                    .where(HiredMerchantItemsDO::getUid).eq(item.getUid());
+                    .where(HiredMerchantItemsDO::getUid).eq(item.getUid())
+                    // 仅检查当前正在销售或已售出但未结算的物品，忽略已归还的历史记录
+                    .and(HiredMerchantItemsDO::getStatus).in(HiredMerchantItemsDO.STATUS_ON_SALE, HiredMerchantItemsDO.STATUS_SOLD_OUT);
             
             Long existingId = hiredMerchantItemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
             if (existingId != null) {
