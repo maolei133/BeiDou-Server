@@ -97,8 +97,8 @@ public class StorageProcessor {
         byte mode = p.readByte();
 
         if (chr.getLevel() < 15) {
+            sendStorageError(c, StorageError.UNKNOWN);
             chr.dropMessage(1, "15级以后才可以使用仓库服务");
-            c.enableActions();
             return;
         }
 
@@ -124,8 +124,8 @@ public class StorageProcessor {
                     Item item = storage.getItem(globalSlot);
 
                     if (hasGMRestrictions(chr)) {
+                        sendStorageError(c, StorageError.UNKNOWN);
                         chr.dropMessage(1, gmBlockedStorageMessage);
-                        c.enableActions();
                         return;
                     }
 
@@ -164,7 +164,7 @@ public class StorageProcessor {
                                 storage.sendTakenOut(c, item.getInventoryType());
                             } else {
                                 AuditLogger.error(LogModule.STORAGE, LogAction.STORAGE_OUT, "storage.takeOut 返回 false", null);
-                                c.enableActions();
+                                sendStorageError(c, StorageError.UNKNOWN);
                                 return;
                             }
                         } else {
@@ -173,8 +173,8 @@ public class StorageProcessor {
                     } else {
                         AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
                                 new MapMessage().with("msg", "未找到物品").with("slot", globalSlot));
+                        sendStorageError(c, StorageError.UNKNOWN);
                         chr.dropMessage(1, "仓库中没有该物品");
-                        sendStorageError(c, StorageError.ENABLE_ACTIONS); // 发送无感解锁
                     }
                     break;
                 }
@@ -195,13 +195,13 @@ public class StorageProcessor {
                     }
 
                     if (hasGMRestrictions(chr)) {
+                        sendStorageError(c, StorageError.UNKNOWN);
                         chr.dropMessage(1, gmBlockedStorageMessage);
-                        c.enableActions();
                         return;
                     }
 
                     if (quantity < 1) {
-                        c.enableActions();
+                        sendStorageError(c, StorageError.UNKNOWN);
                         return;
                     }
                     if (storage.isFull()) {
@@ -220,14 +220,14 @@ public class StorageProcessor {
                             if (item != null && item.getItemId() == itemId
                                     && (item.getQuantity() >= quantity || ItemConstants.isRechargeable(itemId))) {
                                 if (ItemId.isWeddingRing(itemId) || ItemId.isWeddingToken(itemId)) {
-                                    c.enableActions();
+                                    sendStorageError(c, StorageError.UNKNOWN);
                                     return;
                                 }
                                 
                                 // 检查：现金道具
                                 if (ii.isCash(itemId)) {
+                                    sendStorageError(c, StorageError.UNKNOWN); // 使用未知错误
                                     c.getPlayer().dropMessage(1, "现金道具无法存入仓库。");
-                                    sendStorageError(c, StorageError.ENABLE_ACTIONS); // 使用无感解锁
                                     return;
                                 }
                                 
@@ -258,16 +258,16 @@ public class StorageProcessor {
 
                                     if (!hasKarma && !isAccountSharing && !isFlagZero) {
                                         // 这里可以预留配置开关，例如 if (!GameConfig.getServerBoolean("allow_storage_untradeable"))
+                                        sendStorageError(c, StorageError.UNKNOWN); // 使用未知错误
                                         c.getPlayer().dropMessage(1, "不可交易或固有道具无法存入仓库。");
-                                        sendStorageError(c, StorageError.ENABLE_ACTIONS); // 使用无感解锁
                                         return;
                                     }
                                 }
                                 
                                 // 检查：任务道具
                                 if (ii.isQuestItem(itemId)) {
+                                    sendStorageError(c, StorageError.UNKNOWN); // 使用未知错误
                                     c.getPlayer().dropMessage(1, "任务道具无法存入仓库。");
-                                    sendStorageError(c, StorageError.ENABLE_ACTIONS); // 使用无感解锁
                                     return;
                                 }
 
@@ -277,7 +277,7 @@ public class StorageProcessor {
 
                                 InventoryManipulator.removeFromSlot(c, invType, slot, quantity, false);
                             } else {
-                                c.enableActions();
+                                sendStorageError(c, StorageError.UNKNOWN);
                                 return;
                             }
 
@@ -326,8 +326,8 @@ public class StorageProcessor {
                     int playerMesos = chr.getMeso();
 
                     if (hasGMRestrictions(chr)) {
+                        sendStorageError(c, StorageError.UNKNOWN);
                         chr.dropMessage(1, gmBlockedStorageMessage);
-                        c.enableActions();
                         return;
                     }
 
@@ -335,13 +335,13 @@ public class StorageProcessor {
                         if (meso < 0 && (storageMesos - meso) < 0) {
                             meso = Integer.MIN_VALUE + storageMesos;
                             if (meso < playerMesos) {
-                                c.enableActions();
+                                sendStorageError(c, StorageError.UNKNOWN);
                                 return;
                             }
                         } else if (meso > 0 && (playerMesos + meso) < 0) {
                             meso = Integer.MAX_VALUE - playerMesos;
                             if (meso > storageMesos) {
-                                c.enableActions();
+                                sendStorageError(c, StorageError.UNKNOWN);
                                 return;
                             }
                         }
@@ -356,10 +356,10 @@ public class StorageProcessor {
                         String action = meso > 0 ? "取出" : "存入";
                         int msgType = meso > 0 ? 5 : 6;
                         chr.dropMessage(msgType, "[仓库] " + action + " 金币 × " + Math.abs(meso));
-                        
+
                         storage.sendMeso(c);
                     } else {
-                        c.enableActions();
+                        sendStorageError(c, StorageError.UNKNOWN);
                         return;
                     }
                     break;
@@ -369,7 +369,7 @@ public class StorageProcessor {
                     break;
                 }
             } catch (Exception e) {
-                sendStorageError(c, StorageError.ENABLE_ACTIONS); // 发送无感解锁
+                sendStorageError(c, StorageError.UNKNOWN);
                 chr.dropMessage(1, "仓库操作失败");
                 AuditLogger.error(LogModule.STORAGE, LogAction.ERROR, "仓库操作失败", e);
             } finally {

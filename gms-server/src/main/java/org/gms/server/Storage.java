@@ -120,6 +120,8 @@ public class Storage {
         }
         
         // 初始排序和整理
+        // 这里的排序是为了让客户端第一次打开仓库时看到整齐的列表
+        // 排序后会重置 Position，确保与列表索引一致
         ret.sortItems();
         ret.refreshTypeItems();
 
@@ -171,11 +173,17 @@ public class Storage {
                 return false; // 仓库已满
             }
 
-            // 插入到列表
+            // 计算新物品的 Position
+            // 为了保持顺序一致性，新物品总是追加到末尾
+            // Position 设为当前最大 Position + 1，或者列表大小（如果列表是紧凑的）
+            // 这里简单地使用列表大小作为新索引，因为我们不排序
+            short newPos = (short) items.size();
+            item.setPosition(newPos);
+
+            // 插入到列表末尾
             items.add(item); 
             
-            // 重新排序并更新 Position
-            sortItems();
+            // 注意：这里不再调用 sortItems()，以保持与客户端增量更新逻辑一致
             
             // 更新 typeItems 缓存
             refreshTypeItems();
@@ -208,8 +216,9 @@ public class Storage {
             if (removed) {
                 storageService.removeItem(this.id, item);
                 
-                // 重新排序并更新 Position (保持内存整洁)
-                sortItems();
+                // 注意：这里不再调用 sortItems()，也不重置 Position
+                // 移除物品后，列表索引会发生变化，但 Position 字段保持不变（直到下次整理或重载）
+                // 这符合客户端“移除指定位置物品”的逻辑
                 
                 // 更新 typeItems 缓存
                 refreshTypeItems();
@@ -242,6 +251,7 @@ public class Storage {
             this.items = msi.sortItems(); // 内存排序
 
             // 重新分配 position，确保连续
+            // 整理操作会改变列表顺序，所以必须重置 Position 并同步给客户端
             short pos = 0;
             for (Item item : items) {
                 item.setPosition(pos++);
@@ -262,6 +272,7 @@ public class Storage {
     /**
      * 对物品列表进行排序，并重新分配 Position
      * 排序规则：InventoryType -> ItemId -> Position
+     * 仅在加载和整理时调用
      */
     private void sortItems() {
         items.sort(Comparator.comparingInt((Item i) -> i.getInventoryType().getType())
@@ -314,6 +325,7 @@ public class Storage {
             this.currentNpcid = npcId;
             
             // 确保发送前列表是有序的
+            // 每次打开仓库都重新排序，确保客户端看到的是整齐的列表
             sortItems();
             
             // 刷新缓存
