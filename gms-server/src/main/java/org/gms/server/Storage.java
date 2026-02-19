@@ -111,12 +111,68 @@ public class Storage {
                 // 记录迁移日志
                 AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_MIGRATE, 
                         new MapMessage()
-                                .with("storageId", ret.id)
-                                .with("count", itemsToMigrate.size())
+                                .with("sid", ret.id)
+                                .with("cnt", itemsToMigrate.size())
                                 .with("msg", "迁移旧仓库物品"));
             }
         } else {
             ret.items.addAll(loadedItems);
+            
+            // 修复：如果新旧表都有数据（例如回档导致），尝试合并旧表数据
+            List<Pair<Item, InventoryType>> oldItems = ItemFactory.STORAGE.loadItems(ret.id, false);
+            if (!oldItems.isEmpty()) {
+                int oldItemCount = oldItems.size();
+                int newItemCount = ret.items.size();
+                int oldMeso = 0; // 旧仓库金币通常存储在 storages 表中，这里只处理物品
+                int newMeso = ret.meso;
+                
+                List<Item> itemsToMerge = new ArrayList<>();
+                for (Pair<Item, InventoryType> pair : oldItems) {
+                    itemsToMerge.add(pair.getLeft());
+                }
+                
+                // 计算合并后的起始位置
+                int startPosition = ret.items.size();
+                
+                try {
+                    // 执行合并
+                    storageService.mergeOldData(ret.id, itemsToMerge, startPosition);
+                    
+                    // 重新加载以获取完整数据
+                    List<Item> reloadedItems = storageService.loadStorageItems(ret.id);
+                    ret.items.clear();
+                    ret.items.addAll(reloadedItems);
+                    
+                    int mergedItemCount = ret.items.size();
+                    int mergedMeso = ret.meso; // 金币保持不变，因为旧金币逻辑未涉及合并
+                    
+                    String msg = String.format("合并旧仓库残留数据成功: 旧(物品:%d, 金币:%d) + 新(物品:%d, 金币:%d) -> 合并后(物品:%d, 金币:%d)",
+                            oldItemCount, oldMeso, newItemCount, newMeso, mergedItemCount, mergedMeso);
+
+                    AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_MERGE, 
+                            new MapMessage()
+                                    .with("sid", ret.id)
+                                    .with("oCnt", oldItemCount)
+                                    .with("oMeso", oldMeso)
+                                    .with("nCnt", newItemCount)
+                                    .with("nMeso", newMeso)
+                                    .with("mCnt", mergedItemCount)
+                                    .with("mMeso", mergedMeso)
+                                    .with("msg", msg));
+                                    
+                } catch (Exception e) {
+                    String errorMsg = String.format("合并旧仓库数据失败: %s. 旧(物品:%d) + 新(物品:%d)", 
+                            e.getMessage(), oldItemCount, newItemCount);
+                    log.error(errorMsg, e);
+                    
+                    AuditLogger.error(LogModule.STORAGE, LogAction.STORAGE_MERGE_FAIL, 
+                            new MapMessage()
+                                    .with("sid", ret.id)
+                                    .with("oCnt", oldItemCount)
+                                    .with("nCnt", newItemCount)
+                                    .with("msg", errorMsg), e);
+                }
+            }
         }
         
         // 初始排序和整理

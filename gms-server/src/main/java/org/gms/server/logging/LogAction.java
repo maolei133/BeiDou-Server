@@ -69,5 +69,7 @@ public enum LogAction {
     // --- STORAGE ---
     /** 存入仓库 */ STORAGE_IN,
     /** 取出仓库 */ STORAGE_OUT,
-    /** 仓库迁移 */ STORAGE_MIGRATE
+    /** 仓库迁移 */ STORAGE_MIGRATE,
+    /** 仓库合并 */ STORAGE_MERGE,
+    /** 仓库合并失败 */ STORAGE_MERGE_FAIL
 }

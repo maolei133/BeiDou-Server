@@ -260,6 +260,56 @@ public class StorageService {
                 .with("cnt", items == null ? 0 : items.size()));
     }
 
+    /**
+     * 合并旧数据到新仓库
+     * @param storageId 仓库ID
+     * @param items 旧物品列表
+     * @param startPosition 起始位置
+     */
+    @Transactional
+    public void mergeOldData(int storageId, List<Item> items, int startPosition) {
+        // 1. 插入新表
+        if (items != null && !items.isEmpty()) {
+            int position = startPosition;
+            for (Item item : items) {
+                // 确保 UID 存在
+                if (item.getUid() == 0) {
+                    item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+                }
+
+                StorageItemsDO itemDO = new StorageItemsDO();
+                itemDO.setStorageId(storageId);
+                itemDO.setItemId(item.getItemId());
+                itemDO.setQuantity((int) item.getQuantity());
+                itemDO.setPosition(position++); // 重新分配位置
+                itemDO.setCreateTime(new Timestamp(System.currentTimeMillis()));
+                itemDO.setUid(item.getUid());
+
+                ItemInfoRtnDTO itemDTO = DueyProcessor.convertItemToDTO(item);
+                try {
+                    itemDO.setItemData(objectMapper.writeValueAsString(itemDTO));
+                } catch (JsonProcessingException e) {
+                    log.error("合并时序列化仓库物品失败", e);
+                    continue;
+                }
+
+                storageItemsMapper.insert(itemDO);
+            }
+        }
+
+        // 2. 清理旧表 (inventoryitems type=2)
+        // ItemFactory.STORAGE 的 typeValue 是 2
+        itemFactoryService.saveItems(2, true, new LinkedList<>(), storageId);
+        // 记录迁移日志
+        // 注意：详细的合并日志（包含新旧数量、金币等）应在调用层（Storage.java）记录，
+        // 因为这里只知道旧物品列表，不知道新仓库的当前状态。
+        // 这里只记录简单的操作日志。
+        AuditLogger.info(LogModule.ITEM, LogAction.STORAGE_MERGE, new MapMessage()
+                .with("storageId", storageId)
+                .with("cnt", items == null ? 0 : items.size())
+                .with("type", "MERGE"));
+    }
+
     public List<Item> loadStorageItems(int storageId) {
         List<Item> items = new ArrayList<>();
         QueryWrapper query = QueryWrapper.create()
