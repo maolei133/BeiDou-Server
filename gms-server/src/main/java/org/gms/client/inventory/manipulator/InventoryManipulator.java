@@ -557,7 +557,7 @@ public class InventoryManipulator {
         short slotMax = ii.getSlotMax(c, source.getItemId());
         inv.move(src, dst, slotMax);
         final List<ModifyInventory> mods = new ArrayList<>();
-        if (!(type.equals(InventoryType.EQUIP) || type.equals(InventoryType.CASH)) && initialTarget != null && initialTarget.getItemId() == source.getItemId() && !ItemConstants.isRechargeable(source.getItemId()) && isSameOwner(source, initialTarget)) {
+        if (!(type.equals(InventoryType.EQUIP) || (type.equals(InventoryType.CASH) && slotMax <= 1)) && initialTarget != null && initialTarget.getItemId() == source.getItemId() && !ItemConstants.isRechargeable(source.getItemId()) && isSameOwner(source, initialTarget)) {
             if ((olddstQ + oldsrcQ) > slotMax) {
                 mods.add(new ModifyInventory(1, source));
                 mods.add(new ModifyInventory(1, initialTarget));
@@ -572,7 +572,7 @@ public class InventoryManipulator {
         // 添加物品代码提示
         if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) { // 假设isGM()是检查玩家是否是管理员的方法
             int itemID = source.getItemId();
-            c.getPlayer().dropMessage(5, I18nUtil.getMessage("InventoryManipulator.handlePacket.message1")  + itemID);
+            c.getPlayer().dropMessage(5, I18nUtil.getMessage("InventoryManipulator.handlePacket.message1") + itemID);
         }
         AuditLogger.info(LogModule.ITEM, LogAction.ITEM_MOVE, new MapMessage().with("itm", source.getItemId()).with("src", src).with("dst", dst));
         
