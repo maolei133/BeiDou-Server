@@ -57,7 +57,9 @@ import org.gms.util.PacketCreator;
 import org.gms.util.SnowflakeIdGenerator;
 
 import java.awt.*;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -277,6 +279,28 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                         c.getWorldServer().registerPlayerShop(shop);
                         //c.sendPacket(PacketCreator.getPlayerShopRemoveVisitor(1));
                     } else if (ItemConstants.isHiredMerchant(itemId)) {
+                        // 0. 检查是否有未领取的物品或金币
+                        List<HiredMerchantsDO> retrieveableMerchants = hiredMerchantService.getRetrieveableMerchants(chr.getId());
+                        if (!retrieveableMerchants.isEmpty()) {
+                            boolean hasItemsOrMesos = false;
+                            for (HiredMerchantsDO merchant : retrieveableMerchants) {
+                                if (merchant.getMesos() > 0) {
+                                    hasItemsOrMesos = true;
+                                    break;
+                                }
+                                List<HiredMerchantItemsDO> items = hiredMerchantService.getRetrieveableItems(merchant.getId());
+                                if (!items.isEmpty()) {
+                                    hasItemsOrMesos = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (hasItemsOrMesos) {
+                                chr.dropMessage(1, "您有未领取的物品或金币，请先前往弗雷德里克处领取。");
+                                return;
+                            }
+                        }
+
                         // 1. 检查是否有已开业的商店 (ACTIVE)
                         HiredMerchantsDO activeMerchant = hiredMerchantService.getActiveMerchantByOwnerId(chr.getId());
                         if (activeMerchant != null) {
@@ -622,6 +646,15 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                         if (merchantDO != null) {
                             merchantDO.setStatus(HiredMerchantsDO.STATUS_ACTIVE);
                             hiredMerchantService.updateMerchant(merchantDO);
+                            
+                            // 商店开办成功后，发送通知
+                            String merchantItemName = ItemInformationProvider.getInstance().getName(merchant.getItemId());
+                            long durationMillis = GameConfig.getServerInt("hired_merchant_duration", 1440) * 60 * 1000L;
+                            long endTime = System.currentTimeMillis() + durationMillis;
+                            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                            String endTimeStr = sdf.format(new Date(endTime));
+                            
+                            chr.dropMessage(6, "[雇佣商店] 您的商店开办成功，雇员为 " + merchantItemName + " ，预计最晚到期时间 " + endTimeStr);
                         }
                     }
                 }

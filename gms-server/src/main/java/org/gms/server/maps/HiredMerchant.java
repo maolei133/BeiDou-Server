@@ -51,6 +51,7 @@ import org.gms.util.SnowflakeIdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -566,10 +567,11 @@ public class HiredMerchant extends AbstractMapObject {
         String qtyStr = (item.getQuantity() > 1) ? " x " + item.getQuantity() : "";
         String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
         String remainStr = (inStore > 0) ? "剩余 " + inStore + " 件" : "已售罄";
+        String merchantItemName = ItemInformationProvider.getInstance().getName(itemId);
 
         Character player = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
         if (player != null && player.isLoggedInWorld()) {
-            player.dropMessage(6, "[雇佣商店] " + ownerName + "：您的物品 " + itemName + " 已被 " + buyerName + " 买走了 " + item.getQuantity() + "件 ，售价 " + totalSales + "金币，税后收入 " + mesos + "金币 ，【" + remainStr + "】");
+            player.dropMessage(6, "[雇佣商店] " + merchantItemName + "：您的物品 " + itemName + " 已被 " + buyerName + " 买走了 " + item.getQuantity() + "件 ，售价 " + totalSales + "金币，税后收入 " + mesos + "金币 ，【" + remainStr + "】");
         }
     }
 
@@ -620,7 +622,12 @@ public class HiredMerchant extends AbstractMapObject {
             return;
         }
 
-        Server.getInstance().getWorld(world).unregisterHiredMerchant(this);
+        try {
+            Server.getInstance().getWorld(world).unregisterHiredMerchant(this);
+            Server.getInstance().getChannel(world, channel).removeHiredMerchant(ownerId);
+        } catch (Exception e) {
+            log.warn("从频道服务器移除雇佣商店失败", e);
+        }
 
         if (serverShutdown && merchantId > 0) {
             log.info("雇佣商店 {} 因服务器关闭而从内存移除，数据库状态保持 ACTIVE。店主: {}, 店名: {}", merchantId, ownerName, description);
@@ -642,7 +649,7 @@ public class HiredMerchant extends AbstractMapObject {
             Character player = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
             if (player != null) {
                 player.setHasMerchant(false);
-                player.dropMessage(5, "您的雇佣商店已关闭，请到弗雷德里克处取回物品。");
+                player.dropMessage(6, "[雇佣商店] 您的商店已到期自动闭店，请前往弗雷德里克处领取物品和金币。");
             } else {
                 characterService.update(CharactersDO.builder()
                         .id(ownerId)
