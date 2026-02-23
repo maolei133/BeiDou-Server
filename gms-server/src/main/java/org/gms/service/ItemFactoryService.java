@@ -631,7 +631,11 @@ public class ItemFactoryService {
         equip.setDex(getShort(row, "dex"));
         equip.setHands(getShort(row, "hands"));
         equip.setHp(getShort(row, "hp"));
-        equip.setInt(getShort(row, "inte")); // <-- 改回从 "inte" 列读取
+        // 警告：严禁修改此处为 "inte"！
+        // 原因：Row 对象直接映射数据库列名，数据库中该列名为 "int"。
+        // 虽然 InventoryequipmentDO 中字段名为 "inte"，但这里操作的是 Row 对象，必须使用数据库列名。
+        // 修改为 "inte" 会导致智力属性读取为 0，造成严重的数据丢失！
+        equip.setInt(getShort(row, "int"));
         equip.setJump(getShort(row, "jump"));
         equip.setVicious(getShort(row, "vicious"));
         equip.setFlag(getShort(row, "flag"));
