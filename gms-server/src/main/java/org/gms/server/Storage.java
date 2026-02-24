@@ -178,8 +178,8 @@ public class Storage {
         // 初始排序和整理
         // 这里的排序是为了让客户端第一次打开仓库时看到整齐的列表
         // 排序后会重置 Position，确保与列表索引一致
-        ret.sortItems();
-        ret.refreshTypeItems();
+        // ret.sortItems(); // 移除：旧逻辑在 load 时不强制排序，只在 sendStorage 时排序
+        // ret.refreshTypeItems(); // 移除：旧逻辑在 load 时不初始化 typeItems
 
         return ret;
     }
@@ -239,10 +239,9 @@ public class Storage {
             // 插入到列表末尾
             items.add(item); 
             
-            // 注意：这里不再调用 sortItems()，以保持与客户端增量更新逻辑一致
-            
-            // 更新 typeItems 缓存
-            refreshTypeItems();
+            // 还原旧逻辑：刷新对应类型的缓存
+            InventoryType type = item.getInventoryType();
+            typeItems.put(type, new ArrayList<>(filterItems(type)));
             
             storageService.addItem(this.id, item);
 
@@ -259,25 +258,14 @@ public class Storage {
         lock.lock();
         try {
             // 使用迭代器进行引用比较删除，防止 equals() 误删同ID的其他物品
-            boolean removed = false;
-            Iterator<Item> it = items.iterator();
-            while (it.hasNext()) {
-                if (it.next() == item) { // 引用比较
-                    it.remove();
-                    removed = true;
-                    break;
-                }
-            }
+            boolean removed = items.remove(item);
 
             if (removed) {
                 storageService.removeItem(this.id, item);
                 
-                // 注意：这里不再调用 sortItems()，也不重置 Position
-                // 移除物品后，列表索引会发生变化，但 Position 字段保持不变（直到下次整理或重载）
-                // 这符合客户端“移除指定位置物品”的逻辑
-                
-                // 更新 typeItems 缓存
-                refreshTypeItems();
+                // 还原旧逻辑：刷新对应类型的缓存
+                InventoryType type = item.getInventoryType();
+                typeItems.put(type, new ArrayList<>(filterItems(type)));
             } else {
                 String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
                 String msg = String.format("从列表中移除物品失败: ID=%d, Name=%s, Pos=%d, ListSize=%d", 
@@ -313,8 +301,10 @@ public class Storage {
                 item.setPosition(pos++);
             }
 
-            // 更新所有类型的缓存
-            refreshTypeItems();
+            // 还原旧逻辑：刷新所有类型的缓存
+            for (InventoryType type : InventoryType.values()) {
+                typeItems.put(type, new ArrayList<>(items));
+            }
 
             // 全量同步到数据库
             storageService.syncStorageItems(this.id, this.items);
@@ -380,12 +370,21 @@ public class Storage {
         try {
             this.currentNpcid = npcId;
             
-            // 确保发送前列表是有序的
-            // 每次打开仓库都重新排序，确保客户端看到的是整齐的列表
-            sortItems();
+            // 还原旧逻辑：打开仓库时强制排序
+            items.sort((o1, o2) -> {
+                if (o1.getInventoryType().getType() < o2.getInventoryType().getType()) {
+                    return -1;
+                } else if (o1.getInventoryType() == o2.getInventoryType()) {
+                    return 0;
+                }
+                return 1;
+            });
             
-            // 刷新缓存
-            refreshTypeItems();
+            // 还原旧逻辑：初始化时将全量列表放入每个类型的缓存中
+            // 这正是旧代码“歪打正着”的关键
+            for (InventoryType type : InventoryType.values()) {
+                typeItems.put(type, new ArrayList<>(items));
+            }
             
             c.sendPacket(PacketCreator.getStorage(npcId, slots, items, meso));
         } finally {
@@ -512,59 +511,26 @@ public class Storage {
     /**
      * 根据类型和槽位获取物品在总列表中的索引
      * 
-     * 智能查找逻辑：
-     * 1. 优先尝试将 slot 作为全局绝对索引查找。
-     * 2. 如果类型不匹配，降级为尝试将 slot 作为相对索引查找。
-     * 3. 这样可以兼容客户端发送全局索引或相对索引的情况，并解决排序不一致导致的问题。
+     * 还原旧逻辑：直接使用 typeItems 缓存查找
      */
     public byte getSlot(InventoryType type, byte slot) {
         lock.lock();
         try {
-            // 1. 尝试全局索引匹配
-            if (slot >= 0 && slot < items.size()) {
-                Item item = items.get(slot);
-                if (item.getInventoryType() == type) {
-                    return slot;
-                } else {
-                    String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
-                    String msg = String.format("全局索引类型不匹配: ReqType=%s, ActualType=%s, Slot=%d, ItemID=%d, Name=%s", 
-                            type, item.getInventoryType(), slot, item.getItemId(), itemName);
-                    AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
-                            new MapMessage()
-                                    .with("msg", msg)
-                                    .with("reqType", type)
-                                    .with("actualType", item.getInventoryType())
-                                    .with("slot", slot)
-                                    .with("itemId", item.getItemId())
-                                    .with("itemName", itemName));
-                }
-            } else {
-                String msg = String.format("全局索引越界: Slot=%d, Size=%d", slot, items.size());
-                AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
-                        new MapMessage()
-                                .with("msg", msg)
-                                .with("slot", slot)
-                                .with("size", items.size()));
+            byte ret = 0;
+            // 还原旧逻辑：直接遍历全局 items，寻找与 typeItems 缓存中对应位置物品引用相同的对象
+            // 这依赖于 typeItems 缓存的正确维护（初始化全量，操作后局部刷新）
+            List<Item> typeList = typeItems.get(type);
+            if (typeList == null || slot < 0 || slot >= typeList.size()) {
+                return -1;
             }
             
-            // 2. 尝试相对索引匹配 (Fallback)
-            int count = 0;
-            for (int i = 0; i < items.size(); i++) {
-                if (items.get(i).getInventoryType() == type) {
-                    if (count == slot) {
-                        return (byte) i;
-                    }
-                    count++;
+            Item targetItem = typeList.get(slot);
+            for (Item item : items) {
+                if (item == targetItem) {
+                    return ret;
                 }
+                ret++;
             }
-            
-            String msg = String.format("未找到物品: Type=%s, Slot=%d, ListSize=%d", type, slot, items.size());
-            AuditLogger.error(LogModule.STORAGE, LogAction.STORAGE_OUT, 
-                    new MapMessage()
-                            .with("msg", msg)
-                            .with("type", type)
-                            .with("slot", slot)
-                            .with("listSize", items.size()), null);
             return -1;
         } finally {
             lock.unlock();

@@ -371,7 +371,13 @@ public class StorageProcessor {
             } catch (Exception e) {
                 sendStorageError(c, StorageError.UNKNOWN);
                 chr.dropMessage(1, "仓库操作失败");
-                AuditLogger.error(LogModule.STORAGE, LogAction.ERROR, "仓库操作失败", e);
+                // 异常日志：记录详细堆栈
+                log.error("[Storage] 仓库操作异常: Char={}, Mode={}", chr.getName(), mode, e);
+                AuditLogger.error(LogModule.STORAGE, LogAction.ERROR, 
+                        new MapMessage()
+                                .with("msg", "仓库操作异常")
+                                .with("mode", mode)
+                                .with("char", chr.getName()), e);
             } finally {
                 c.releaseClient();
             }
