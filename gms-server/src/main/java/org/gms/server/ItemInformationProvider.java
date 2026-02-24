@@ -2126,7 +2126,7 @@ public class ItemInformationProvider {
                         } else if (da.getName().startsWith("incACCMin")) {
                             list.add(new Pair<>("incACC", Randomizer.rand(DataTool.getInt(da), DataTool.getInt(data2.getChildByPath("incACCMax")))));
                         } else if (da.getName().startsWith("incEVAMin")) {
-                            list.add(new Pair<>("incEVAMin", Randomizer.rand(DataTool.getInt(da), DataTool.getInt(data2.getChildByPath("incEVAMax")))));
+                            list.add(new Pair<>("incEVA", Randomizer.rand(DataTool.getInt(da), DataTool.getInt(data2.getChildByPath("incEVAMax")))));
                         } else if (da.getName().startsWith("incSpeedMin")) {
                             list.add(new Pair<>("incSpeed", Randomizer.rand(DataTool.getInt(da), DataTool.getInt(data2.getChildByPath("incSpeedMax")))));
                         } else if (da.getName().startsWith("incJumpMin")) {
