@@ -126,9 +126,19 @@ public class InventoryManipulator {
                             short oldQ = eItem.getQuantity();
                             if (oldQ < slotMax && ((eItem.getOwner().equals(owner) || owner == null) && eItem.getFlag() == flag)) {
                                 short newQ = (short) Math.min(oldQ + quantity, slotMax);
-                                quantity -= (newQ - oldQ);
+                                short addedQty = (short) (newQ - oldQ);
+
+                                if (eItem.getExpiration() > 0) {
+                                    if (expiration > 0) {
+                                        double totalExp = (double) eItem.getExpiration() * oldQ + (double) expiration * addedQty;
+                                        eItem.setExpiration((long) (totalExp / newQ));
+                                    } else {
+                                        eItem.setExpiration(expiration);
+                                    }
+                                }
+
+                                quantity -= addedQty;
                                 eItem.setQuantity(newQ);
-                                eItem.setExpiration(expiration);
                                 c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(1, eItem))));
                                 if (tracker != null) tracker.accept(eItem);
                             }
@@ -257,7 +267,18 @@ public class InventoryManipulator {
                             short oldQ = eItem.getQuantity();
                             if (oldQ < slotMax && item.getFlag() == eItem.getFlag() && item.getOwner().equals(eItem.getOwner())) {
                                 short newQ = (short) Math.min(oldQ + quantity, slotMax);
-                                quantity -= (newQ - oldQ);
+                                short addedQty = (short) (newQ - oldQ);
+
+                                if (eItem.getExpiration() > 0) {
+                                    if (item.getExpiration() > 0) {
+                                        double totalExp = (double) eItem.getExpiration() * oldQ + (double) item.getExpiration() * addedQty;
+                                        eItem.setExpiration((long) (totalExp / newQ));
+                                    } else {
+                                        eItem.setExpiration(item.getExpiration());
+                                    }
+                                }
+
+                                quantity -= addedQty;
                                 eItem.setQuantity(newQ);
                                 item.setPosition(eItem.getPosition());
                                 c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(1, eItem))));

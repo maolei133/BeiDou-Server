@@ -331,55 +331,59 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                     InventoryType type = item.getInventoryType();
                     Inventory inv = chr.getInventory(type);
                     
-                    short slot = inv.addItem(item);
-                    if (slot != -1) {
-                        cs.removeFromInventory(item);
-                        c.sendPacket(PacketCreator.takeFromCashInventory(item));
-
-                        if (item instanceof Equip equip) {
-                            if (equip.getRingId() >= 0) {
-                                Ring ring = Ring.loadFromDb(equip.getRingId());
-                                chr.addPlayerRing(ring);
-                            }
-                        }
-                        
-                        // 尝试合并堆叠物品
-                        ItemInformationProvider ii = ItemInformationProvider.getInstance();
-                        if (!ItemConstants.isPet(item.getItemId()) && !ItemConstants.isRing(item.getItemId()) && ii.getSlotMax(c, item.getItemId()) > 1) {
-                            List<Item> items = inv.listById(item.getItemId());
-                            for (Item existing : items) {
-                                if (existing.getPosition() == slot) continue; // 跳过自己
-                                if (existing.getOwner().equals(item.getOwner()) && 
-                                    existing.getQuantity() + item.getQuantity() <= ii.getSlotMax(c, existing.getItemId())) {
-                                    
-                                    // 计算平均过期时间
-                                    if (item.getExpiration() > 0 && existing.getExpiration() > 0) {
-                                        double totalExp = (double) existing.getExpiration() * existing.getQuantity() + (double) item.getExpiration() * item.getQuantity();
-                                        existing.setExpiration((long) (totalExp / (existing.getQuantity() + item.getQuantity())));
-                                    }
-                                    
-                                    existing.setQuantity((short) (existing.getQuantity() + item.getQuantity()));
-                                    inv.removeItem(slot, item.getQuantity(), false);
-                                    
-                                    c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(1, existing))));
-                                    c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(3, item))));
-                                    c.sendPacket(PacketCreator.takeFromCashInventory(existing));
-                                    break;
+                    // 记录原始的 CashId 和 SN，以便在合并后恢复
+                    int sourceCashId = item.getCashId();
+                    int sourceSn = item.getSN();
+                    
+                    // 使用 InventoryManipulator.addById 来处理堆叠逻辑
+                    // 注意：这里我们使用 addById 而不是直接 addItem，因为 addById 封装了堆叠逻辑
+                    // 但是 addById 需要 itemId，而我们有 item 对象。
+                    // 为了保留 item 的属性（如过期时间、SN等），我们需要确保 addById 能处理这些，或者我们手动处理。
+                    // 实际上，InventoryManipulator.addFromDrop 更接近我们需要的功能，因为它接受一个 Item 对象并尝试添加到背包
+                    
+                    // 检查是否能添加到背包
+                    if (InventoryManipulator.checkSpace(c, item.getItemId(), item.getQuantity(), item.getOwner())) {
+                        if (InventoryManipulator.addFromDrop(c, item, false)) { // false 表示不显示获得物品的提示，因为商城取出通常有专门的UI反馈或不需要
+                            cs.removeFromInventory(item);
+                            
+                            // 更新 item 数量为背包中实际数量，以防止客户端显示错误（覆盖而非堆叠）
+                            Item itemInInv = inv.getItem(item.getPosition());
+                            if (itemInInv != null && itemInInv.getItemId() == item.getItemId()) {
+                                item.setQuantity(itemInInv.getQuantity());
+                                
+                                // 如果发生了合并（itemInInv 不是 item 本身，而是被合并的目标），
+                                // 且 item 被完全合并了，我们需要确保背包里的物品 ID 与客户端认为取出的物品 ID 一致。
+                                // 客户端收到 takeFromCashInventory(item) 后，会认为取出的物品是 sourceCashId。
+                                // 如果背包里的是旧物品（旧 CashId），客户端再次操作时可能会发送 sourceCashId，导致服务端找不到。
+                                if (itemInInv.getCashId() != sourceCashId) {
+                                    itemInInv.setCashId(sourceCashId);
+                                    itemInInv.setSN(sourceSn);
                                 }
                             }
+
+                            c.sendPacket(PacketCreator.takeFromCashInventory(item));
+
+                            if (item instanceof Equip equip) {
+                                if (equip.getRingId() >= 0) {
+                                    Ring ring = Ring.loadFromDb(equip.getRingId());
+                                    chr.addPlayerRing(ring);
+                                }
+                            }
+                            
+                            // 实时保存
+                            ItemFactory.INVENTORY.saveItems(
+                                chr.getInventory(type).list().stream().map(i -> new Pair<>(i, type)).toList(),
+                                chr.getId(),
+                                Collections.singleton(type)
+                            );
+                            cs.save();
+                            
+                            // 日志记录
+                            AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_OUT, new MapMessage().with("itm", item.getItemId()).with("msg", "从商城仓库取出"));
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_OUT, "商城取出");
+                        } else {
+                             c.sendPacket(PacketCreator.showCashShopMessage((byte) 0xA9)); // Inventory Full (should be caught by checkSpace but just in case)
                         }
-                        
-                        // 实时保存
-                        ItemFactory.INVENTORY.saveItems(
-                            chr.getInventory(type).list().stream().map(i -> new Pair<>(i, type)).toList(),
-                            chr.getId(),
-                            Collections.singleton(type)
-                        );
-                        cs.save();
-                        
-                        // 日志记录
-                        AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_OUT, new MapMessage().with("itm", item.getItemId()).with("msg", "从商城仓库取出"));
-                        traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_OUT, "商城取出");
                     } else {
                         c.sendPacket(PacketCreator.showCashShopMessage((byte) 0xA9)); // Inventory Full
                     }

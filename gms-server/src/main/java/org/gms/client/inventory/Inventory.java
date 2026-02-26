@@ -624,9 +624,9 @@ public class Inventory implements Iterable<Item> {
     }
 
     public Item findByCashId(int cashId) {
-        boolean isRing = false;
-        Equip equip = null;
         for (Item item : list()) {
+            boolean isRing = false;
+            Equip equip = null;
             if (item.getInventoryType().equals(InventoryType.EQUIP)) {
                 equip = (Equip) item;
                 isRing = equip.getRingId() > -1;

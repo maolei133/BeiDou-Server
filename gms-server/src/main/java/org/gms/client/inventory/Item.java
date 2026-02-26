@@ -101,6 +101,10 @@ public class Item implements Comparable<Item> {
         return id;
     }
 
+    public void setCashId(int cashId) {
+        this.cashId = cashId;
+    }
+
     public int getCashId() {
         if (cashId == 0) {
             cashId = runningCashId.getAndIncrement();
