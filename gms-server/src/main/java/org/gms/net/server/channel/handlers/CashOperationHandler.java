@@ -30,6 +30,7 @@ import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.ItemFactory;
+import org.gms.client.inventory.ModifyInventory;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
@@ -59,6 +60,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.concurrent.TimeUnit.DAYS;
 
@@ -327,7 +329,10 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         return;
                     }
                     InventoryType type = item.getInventoryType();
-                    if (chr.getInventory(type).addItem(item) != -1) {
+                    Inventory inv = chr.getInventory(type);
+                    
+                    short slot = inv.addItem(item);
+                    if (slot != -1) {
                         cs.removeFromInventory(item);
                         c.sendPacket(PacketCreator.takeFromCashInventory(item));
 
@@ -335,6 +340,32 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                             if (equip.getRingId() >= 0) {
                                 Ring ring = Ring.loadFromDb(equip.getRingId());
                                 chr.addPlayerRing(ring);
+                            }
+                        }
+                        
+                        // 尝试合并堆叠物品
+                        ItemInformationProvider ii = ItemInformationProvider.getInstance();
+                        if (!ItemConstants.isPet(item.getItemId()) && !ItemConstants.isRing(item.getItemId()) && ii.getSlotMax(c, item.getItemId()) > 1) {
+                            List<Item> items = inv.listById(item.getItemId());
+                            for (Item existing : items) {
+                                if (existing.getPosition() == slot) continue; // 跳过自己
+                                if (existing.getOwner().equals(item.getOwner()) && 
+                                    existing.getQuantity() + item.getQuantity() <= ii.getSlotMax(c, existing.getItemId())) {
+                                    
+                                    // 计算平均过期时间
+                                    if (item.getExpiration() > 0 && existing.getExpiration() > 0) {
+                                        double totalExp = (double) existing.getExpiration() * existing.getQuantity() + (double) item.getExpiration() * item.getQuantity();
+                                        existing.setExpiration((long) (totalExp / (existing.getQuantity() + item.getQuantity())));
+                                    }
+                                    
+                                    existing.setQuantity((short) (existing.getQuantity() + item.getQuantity()));
+                                    inv.removeItem(slot, item.getQuantity(), false);
+                                    
+                                    c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(1, existing))));
+                                    c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(3, item))));
+                                    c.sendPacket(PacketCreator.takeFromCashInventory(existing));
+                                    break;
+                                }
                             }
                         }
                         
@@ -349,6 +380,8 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         // 日志记录
                         AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_OUT, new MapMessage().with("itm", item.getItemId()).with("msg", "从商城仓库取出"));
                         traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_OUT, "商城取出");
+                    } else {
+                        c.sendPacket(PacketCreator.showCashShopMessage((byte) 0xA9)); // Inventory Full
                     }
                 } else if (action == 0x0E) { // 存入商城仓库
                     int cashId = p.readInt();

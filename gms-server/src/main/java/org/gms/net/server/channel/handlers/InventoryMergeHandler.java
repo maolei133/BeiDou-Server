@@ -81,6 +81,15 @@ public final class InventoryMergeHandler extends AbstractPacketHandler {
 
                     // 检查是否为现金物品，如果是，则检查是否可堆叠
                     if (inventoryType == InventoryType.CASH) {
+                        // 宠物绝对不可堆叠
+                        if (ItemConstants.isPet(dstItem.getItemId())) {
+                            continue;
+                        }
+                        // 戒指不可堆叠
+                        if (ItemConstants.isRing(dstItem.getItemId())) {
+                            continue;
+                        }
+
                         if (!ItemConstants.isRechargeable(dstItem.getItemId()) && ii.getSlotMax(c, dstItem.getItemId()) <= 1) {
                             continue;
                         }

@@ -483,6 +483,15 @@ public final class ItemConstants {
         return itemType == PREFIX_HAIR_1 || itemType == PREFIX_HAIR_2 || itemType == PREFIX_HAIR_3;
     }
 
+    /**
+     * 判断是否为戒指
+     * @param itemId 物品ID
+     * @return true 如果是戒指
+     */
+    public static boolean isRing(int itemId) {
+        return itemId >= 1110000 && itemId < 1120000;
+    }
+
     // --- 商店与特殊道具 ---
 
     /**
