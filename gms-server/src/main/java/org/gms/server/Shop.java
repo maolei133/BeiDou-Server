@@ -36,6 +36,7 @@ import org.gms.dao.entity.ShopitemsDO;
 import org.gms.dao.entity.ShopsDO;
 import org.gms.dao.mapper.ShopitemsMapper;
 import org.gms.dao.mapper.ShopsMapper;
+import org.gms.manager.ServerManager;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
@@ -56,6 +57,7 @@ import java.util.Set;
  */
 public class Shop {
     private static final Logger log = LoggerFactory.getLogger(Shop.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
     private static final Set<Integer> rechargeableItems = new LinkedHashSet<>();
 
     private final int id;
@@ -113,11 +115,20 @@ public class Shop {
                 if (c.getPlayer().getMeso() >= amount) {
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
                         if (!ItemConstants.isRechargeable(itemId)) { //宠物无法从商店购买
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1);
+                            short finalQuantity = quantity;
+                            int finalAmount = amount;
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
+                                // 溯源日志：商店购买
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店购买", finalQuantity, "商店ID: " + id, "花费: " + finalAmount + "金币");
+                            });
                             c.getPlayer().gainMeso(-amount, false);
                         } else {
                             quantity = ii.getSlotMax(c, item.getItemId());
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1);
+                            short finalQuantity = quantity;
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
+                                // 溯源日志：商店购买 (充值类)
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店购买", finalQuantity, "商店ID: " + id, "花费: " + item.getPrice() + "金币");
+                            });
                             c.getPlayer().gainMeso(-item.getPrice(), false);
                         }
                         c.sendPacket(PacketCreator.shopTransaction((byte) 0));
@@ -136,12 +147,20 @@ public class Shop {
                 if (c.getPlayer().getInventory(InventoryType.ETC).countById(ItemId.PERFECT_PITCH) >= amount) {
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
                         if (!ItemConstants.isRechargeable(itemId)) {
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1);
+                            short finalQuantity = quantity;
+                            int finalAmount = amount;
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店兑换(Pitch)", finalQuantity, "商店ID: " + id, "花费: " + finalAmount + " Pitch");
+                            });
                             InventoryManipulator.removeById(c, InventoryType.ETC, ItemId.PERFECT_PITCH, amount, false, false);
                         } else {
                             short slotMax = ii.getSlotMax(c, item.getItemId());
                             quantity = slotMax;
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1);
+                            short finalQuantity = quantity;
+                            int finalAmount = amount;
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店兑换(Pitch)", finalQuantity, "商店ID: " + id, "花费: " + finalAmount + " Pitch");
+                            });
                             InventoryManipulator.removeById(c, InventoryType.ETC, ItemId.PERFECT_PITCH, amount, false, false);
                         }
                         c.sendPacket(PacketCreator.shopTransaction((byte) 0));
@@ -159,11 +178,17 @@ public class Shop {
                     int cardreduce = value - cost;
                     int diff = cardreduce + c.getPlayer().getMeso();
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
+                        short finalQuantity = quantity;
+                        int finalCost = cost;
                         if (ItemConstants.isPet(itemId)) {
                             int petid = Pet.createPet(itemId);
-                            InventoryManipulator.addById(c, itemId, quantity, "", petid, -1);
+                            InventoryManipulator.addById(c, itemId, quantity, "", petid, -1, (addedItem) -> {
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店购买(Token)", finalQuantity, "商店ID: " + id, "花费: " + finalCost + " Token");
+                            });
                         } else {
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1, -1);
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, -1, (addedItem) -> {
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店购买(Token)", finalQuantity, "商店ID: " + id, "花费: " + finalCost + " Token");
+                            });
                         }
                         c.getPlayer().gainMeso(diff, false);
                     } else {
@@ -230,6 +255,10 @@ public class Shop {
                 }
 
                 quantity = getSellingQuantity(item, quantity);
+                
+                // 溯源日志：商店出售
+                traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.SHOP_SELL, "NPC商店出售", -quantity, "商店ID: " + id, null);
+
                 InventoryManipulator.removeFromSlot(c, type, (byte) slot, quantity, false);
 
                 ItemInformationProvider ii = ItemInformationProvider.getInstance();

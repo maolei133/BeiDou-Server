@@ -64,6 +64,7 @@ import java.util.function.Consumer;
 public class InventoryManipulator {
     private static final Logger log = LoggerFactory.getLogger(InventoryManipulator.class);
     private static final ItemFactoryService itemFactoryService = ServerManager.getApplicationContext().getBean(ItemFactoryService.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     public static boolean addById(Client c, int itemId, short quantity) {
         return addById(c, itemId, quantity, null, -1, -1);
@@ -127,6 +128,9 @@ public class InventoryManipulator {
                             if (oldQ < slotMax && ((eItem.getOwner().equals(owner) || owner == null) && eItem.getFlag() == flag)) {
                                 short newQ = (short) Math.min(oldQ + quantity, slotMax);
                                 short addedQty = (short) (newQ - oldQ);
+
+                                // 溯源日志：记录合并
+                                traceabilityService.log(eItem, chr, TraceabilityService.ActionType.MERGE, "背包内合并", addedQty, "合并前数量: " + oldQ, null);
 
                                 if (eItem.getExpiration() > 0) {
                                     if (expiration > 0) {
@@ -268,6 +272,9 @@ public class InventoryManipulator {
                             if (oldQ < slotMax && item.getFlag() == eItem.getFlag() && item.getOwner().equals(eItem.getOwner())) {
                                 short newQ = (short) Math.min(oldQ + quantity, slotMax);
                                 short addedQty = (short) (newQ - oldQ);
+
+                                // 溯源日志：记录合并
+                                traceabilityService.log(item, chr, TraceabilityService.ActionType.MERGE, "拾取合并", addedQty, "合并前数量: " + oldQ, "合并到UID: " + eItem.getUid());
 
                                 if (eItem.getExpiration() > 0) {
                                     if (item.getExpiration() > 0) {

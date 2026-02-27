@@ -27,6 +27,8 @@ import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +54,7 @@ import static java.util.concurrent.TimeUnit.MINUTES;
  */
 public class ItemAction extends AbstractQuestAction {
     private static final Logger log = LoggerFactory.getLogger(ItemAction.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
     List<ItemData> items = new ArrayList<>();
 
     public ItemAction(Quest quest, Data data) {
@@ -149,6 +152,15 @@ public class ItemAction extends AbstractQuestAction {
                     }
                 }
             }
+            
+            // 记录溯源日志：任务消耗
+            // 注意：这里我们只能记录消耗的意图，因为 removeById 内部处理了具体的槽位移除
+            // 为了更精确，我们可以在 removeById 之前获取物品信息，或者在 removeById 内部记录
+            // 这里我们简单记录一下
+            Item item = chr.getInventory(type).findById(itemid);
+            if (item != null) {
+                traceabilityService.log(item, chr, TraceabilityService.ActionType.QUEST_CONSUME, "任务消耗", count, "QuestID: " + questID, null);
+            }
 
             InventoryManipulator.removeById(chr.getClient(), type, itemid, quantity, true, false);
             chr.sendPacket(PacketCreator.getShowItemGain(itemid, (short) count, true));
@@ -157,7 +169,10 @@ public class ItemAction extends AbstractQuestAction {
         for (ItemData iEntry : giveItem) {
             int itemid = iEntry.getId(), count = iEntry.getCount(), period = iEntry.getPeriod();    // thanks Vcoc for noticing quest milestone item not getting removed from inventory after a while
 
-            InventoryManipulator.addById(chr.getClient(), itemid, (short) count, "", -1, period > 0 ? (System.currentTimeMillis() + MINUTES.toMillis(period)) : -1);
+            InventoryManipulator.addById(chr.getClient(), itemid, (short) count, "", -1, period > 0 ? (System.currentTimeMillis() + MINUTES.toMillis(period)) : -1, (addedItem) -> {
+                // 记录溯源日志：任务奖励
+                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.QUEST_REWARD, "任务奖励", count, "QuestID: " + questID, null);
+            });
             chr.sendPacket(PacketCreator.getShowItemGain(itemid, (short) count, true));
         }
     }

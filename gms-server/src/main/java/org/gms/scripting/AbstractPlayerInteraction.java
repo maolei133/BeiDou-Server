@@ -34,6 +34,7 @@ import org.gms.constants.id.NpcId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.string.ExtendType;
 import org.gms.dao.entity.ExtendValueDO;
+import org.gms.manager.ServerManager;
 import org.gms.model.pojo.SkillEntry;
 import org.gms.net.server.Server;
 import org.gms.net.server.guild.Guild;
@@ -54,6 +55,7 @@ import org.gms.server.maps.MapleMap;
 import org.gms.server.partyquest.PartyQuest;
 import org.gms.server.partyquest.Pyramid;
 import org.gms.server.quest.Quest;
+import org.gms.service.TraceabilityService;
 import org.gms.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,6 +69,7 @@ import static java.util.concurrent.TimeUnit.DAYS;
 public class AbstractPlayerInteraction {
 
     private static final Logger log = LoggerFactory.getLogger(AbstractPlayerInteraction.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     public Client c;
 
@@ -661,7 +664,17 @@ public class AbstractPlayerInteraction {
             } else {
                 InventoryManipulator.addFromDrop(c, item, false, petId);
             }
+            
+            // 记录溯源日志：脚本给予物品
+            traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.REWARD, "脚本给予", quantity, null, null);
+            
         } else {
+            // 记录溯源日志：脚本移除物品
+            Item toRemove = c.getPlayer().getInventory(ItemConstants.getInventoryType(id)).findById(id);
+            if (toRemove != null) {
+                traceabilityService.log(toRemove, c.getPlayer(), TraceabilityService.ActionType.CONSUME, "脚本移除", quantity, null, null);
+            }
+            
             InventoryManipulator.removeById(c, ItemConstants.getInventoryType(id), id, -quantity, true, false);
         }
         if (showMessage) {
@@ -748,7 +761,17 @@ public class AbstractPlayerInteraction {
             } else {
                 InventoryManipulator.addFromDrop(c, item, false, petId);
             }
+            
+            // 记录溯源日志：脚本给予物品
+            traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.REWARD, "脚本给予", quantity, null, null);
+            
         } else {
+            // 记录溯源日志：脚本移除物品
+            Item toRemove = c.getPlayer().getInventory(ItemConstants.getInventoryType(id)).findById(id);
+            if (toRemove != null) {
+                traceabilityService.log(toRemove, c.getPlayer(), TraceabilityService.ActionType.CONSUME, "脚本移除", quantity, null, null);
+            }
+            
             InventoryManipulator.removeById(c, ItemConstants.getInventoryType(id), id, -quantity, true, false);
         }
         if (showMessage) {
@@ -1424,6 +1447,9 @@ public class AbstractPlayerInteraction {
             message(I18nUtil.getMessage("AbstractPlayerInteraction.gainEquip.message2", InventoryType.EQUIP.getName()));
         }
         InventoryManipulator.addFromDrop(getClient(), equip, false);
+        
+        // 记录溯源日志：脚本给予装备
+        traceabilityService.log(equip, getPlayer(), TraceabilityService.ActionType.REWARD, "脚本给予(装备)", 1, null, null);
     }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////

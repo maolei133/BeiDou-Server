@@ -48,10 +48,12 @@ import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.id.MapId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.packet.out.SendNoteSuccessPacket;
 import org.gms.net.server.Server;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,6 +83,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 public final class UseCashItemHandler extends AbstractPacketHandler {
     private static final Logger log = LoggerFactory.getLogger(UseCashItemHandler.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     private final NoteService noteService;
 
@@ -728,6 +731,11 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                 if (it != null) { // 如果找到物品
                     position = it.getPosition(); // 更新位置为找到物品的位置
                 }
+            }
+            
+            // 记录溯源日志
+            if (it != null) {
+                traceabilityService.log(it, c.getPlayer(), TraceabilityService.ActionType.USE, "现金道具使用", -1);
             }
 
             InventoryManipulator.removeFromSlot(c, InventoryType.CASH, position, (short) 1, true, false); // 从指定位置移除一个物品

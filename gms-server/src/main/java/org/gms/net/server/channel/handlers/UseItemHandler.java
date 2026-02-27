@@ -31,6 +31,7 @@ import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.server.ItemInformationProvider;
@@ -38,6 +39,7 @@ import org.gms.server.StatEffect;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 import org.gms.util.PacketCreator;
 
@@ -45,6 +47,8 @@ import org.gms.util.PacketCreator;
  * @author Matze
  */
 public final class UseItemHandler extends AbstractPacketHandler {
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+
     @Override
     public final void handlePacket(InPacket p, Client c) {
         Character chr = c.getPlayer();
@@ -113,6 +117,12 @@ public final class UseItemHandler extends AbstractPacketHandler {
     }
 
     private void remove(Client c, short slot, int itemId) {
+        // 记录溯源日志
+        Item item = c.getPlayer().getInventory(InventoryType.USE).getItem(slot);
+        if (item != null) {
+            traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.USE, "物品使用", -1);
+        }
+
         InventoryManipulator.removeFromSlot(c, InventoryType.USE, slot, (short) 1, false);
         c.sendPacket(PacketCreator.enableActions());
         AuditLogger.info(LogModule.ITEM, LogAction.ITEM_USE, new MapMessage().with("itm", itemId));

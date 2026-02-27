@@ -227,7 +227,7 @@ public class PlayerShop extends AbstractMapObject {
             items.add(item);
             
             // 记录溯源日志
-            traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.PLAYER_SHOP_ADD, "个人商店上架");
+            traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.PLAYER_SHOP_ADD, "个人商店上架", (int) (item.getItem().getQuantity() * item.getBundles()), null, "价格: " + item.getPrice());
             
             return true;
         }
@@ -326,7 +326,7 @@ public class PlayerShop extends AbstractMapObject {
                             }
                             
                             // 记录溯源日志
-                            traceabilityService.log(newItem, c.getPlayer(), TraceabilityService.ActionType.PLAYER_SHOP_BUY, "个人商店购买");
+                            traceabilityService.log(newItem, c.getPlayer(), TraceabilityService.ActionType.PLAYER_SHOP_BUY, "个人商店购买", newItem.getQuantity(), "店主: " + owner.getName(), "价格: " + price);
                             
                         } else {
                             c.getPlayer().dropMessage(1, "Your inventory is full. Please clear a slot before buying this item.");

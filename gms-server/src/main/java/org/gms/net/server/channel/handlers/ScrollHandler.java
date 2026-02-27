@@ -34,9 +34,11 @@ import org.gms.client.inventory.ModifyInventory;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.server.ItemInformationProvider;
+import org.gms.service.TraceabilityService;
 import org.gms.util.PacketCreator;
 
 import java.util.ArrayList;
@@ -47,6 +49,7 @@ import java.util.List;
  * @author Frz
  */
 public final class ScrollHandler extends AbstractPacketHandler {
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     @Override
     public final void handlePacket(InPacket p, Client c) {
@@ -127,9 +130,13 @@ public final class ScrollHandler extends AbstractPacketHandler {
                         }
 
                         InventoryManipulator.removeFromSlot(c, InventoryType.USE, wscroll.getPosition(), (short) 1, false, false); // 移除一个白色卷轴
+                        // 记录溯源日志：白色卷轴消耗
+                        traceabilityService.log(wscroll, chr, TraceabilityService.ActionType.SCROLL, "白色卷轴消耗", -1);
                     }
 
                     InventoryManipulator.removeFromSlot(c, InventoryType.USE, scroll.getPosition(), (short) 1, false); // 移除一个卷轴
+                    // 记录溯源日志：卷轴消耗
+                    traceabilityService.log(scroll, chr, TraceabilityService.ActionType.SCROLL, "卷轴消耗", -1, "目标装备: " + toScroll.getItemId(), "结果: " + scrollSuccess);
                 } finally {
                     useInventory.unlockInventory(); // 解锁使用栏库存
                 }
@@ -158,6 +165,8 @@ public final class ScrollHandler extends AbstractPacketHandler {
                                 inv.unlockInventory();
                             }
                         }
+                        // 记录溯源日志：装备损毁
+                        traceabilityService.log(toScroll, chr, TraceabilityService.ActionType.SCROLL, "装备损毁", -1, "卷轴: " + scroll.getItemId(), null);
                     } else {
                         scrolled = toScroll;
                         scrollSuccess = Equip.ScrollResult.FAIL;

@@ -134,7 +134,7 @@ public class Trade {
             InventoryManipulator.addFromDrop(chr.getClient(), item, show);
             
             // 记录溯源日志
-            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, "玩家交易", 0, "From: " + partner.getChr().getName(), null);
+            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, "玩家交易", item.getQuantity(), "From: " + partner.getChr().getName(), null);
         }
 
         if (exchangeMeso > 0) {//此处对金币交易进行扣税处理

@@ -513,7 +513,7 @@ public class HiredMerchant extends AbstractMapObject {
                     }
                     
                     // 记录溯源日志
-                    traceabilityService.log(newItem, chr, TraceabilityService.ActionType.HIRED_MERCHANT_BUY, "雇佣商店购买");
+                    traceabilityService.log(newItem, chr, TraceabilityService.ActionType.HIRED_MERCHANT_BUY, "雇佣商店购买", newItem.getQuantity(), "店主: " + ownerName, "价格: " + price);
 
                     if (merchantId > 0) {
                         // 使用 processPurchase 方法统一处理事务
@@ -881,7 +881,7 @@ public class HiredMerchant extends AbstractMapObject {
             // 记录溯源日志
             Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
             if (owner != null) {
-                traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.HIRED_MERCHANT_ADD, "雇佣商店上架");
+                traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.HIRED_MERCHANT_ADD, "雇佣商店上架", (int) (item.getItem().getQuantity() * item.getBundles()), null, "价格: " + item.getPrice());
             }
             
             if (merchantId > 0) {

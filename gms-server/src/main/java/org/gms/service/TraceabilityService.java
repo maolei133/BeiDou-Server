@@ -33,16 +33,65 @@ public class TraceabilityService {
     private final ItemRecoveryLogsMapper itemRecoveryLogsMapper;
 
     public enum ActionType {
-        CREATE, DROP, SELL, TRADE, STORAGE_IN, STORAGE_OUT, 
+        // 基础操作
+        CREATE, DROP, SELL, TRADE, 
+        
+        // 仓库与商城
+        STORAGE_IN, STORAGE_OUT, CS_IN, CS_OUT,
+        
+        // 雇佣商人与个人商店
         HIRED_MERCHANT_ADD, HIRED_MERCHANT_BUY, HIRED_MERCHANT_RETURN,
         PLAYER_SHOP_ADD, PLAYER_SHOP_BUY, PLAYER_SHOP_RETURN,
+        
+        // NPC商店
         SHOP_BUY, SHOP_SELL,
+        
+        // 快递
         DUEY_SEND, DUEY_RECEIVE, DUEY_RETURN, DUEY_DELETE,
-        USE, CONSUME, SCROLL, UPGRADE, REWARD, LOOT, ADMIN_CREATE, ADMIN_DELETE
+        
+        // 消耗与使用
+        USE, CONSUME, SCROLL, UPGRADE, 
+        
+        // 获取来源
+        REWARD, LOOT, GACHAPON_REWARD, QUEST_REWARD, QUEST_CONSUME,
+        
+        // 制作与合成
+        CRAFT_CREATE, CRAFT_CONSUME, MERGE,
+        
+        // 地图生成与消失
+        SPAWN, DESPAWN_EXPIRED, PICKUP,
+        
+        // 管理员操作
+        ADMIN_CREATE, ADMIN_DELETE, GM_CREATE, GM_MODIFY
     }
 
     /**
      * 记录物品流转日志
+     *
+     * @param item           涉及的物品对象
+     * @param character      操作的角色
+     * @param actionType     行为类型
+     * @param actionSource   行为来源 (如 "NPC商店", "玩家交易")
+     */
+    public void log(Item item, Character character, ActionType actionType, String actionSource) {
+        log(item, character, actionType, actionSource, 0, null, null);
+    }
+
+    /**
+     * 记录物品流转日志 (带数量变化)
+     *
+     * @param item           涉及的物品对象
+     * @param character      操作的角色
+     * @param actionType     行为类型
+     * @param actionSource   行为来源
+     * @param quantityChange 数量变化
+     */
+    public void log(Item item, Character character, ActionType actionType, String actionSource, int quantityChange) {
+        log(item, character, actionType, actionSource, quantityChange, null, null);
+    }
+
+    /**
+     * 记录物品流转日志 (全参数)
      *
      * @param item           涉及的物品对象
      * @param character      操作的角色
@@ -70,7 +119,7 @@ public class TraceabilityService {
         // 异步写入数据库，避免阻塞主线程
         logExecutor.submit(() -> {
             try {
-                ItemTraceLogsDO logDO = ItemTraceLogsDO.builder()
+                ItemTraceLogsDO.ItemTraceLogsDOBuilder builder = ItemTraceLogsDO.builder()
                         .uid(item.getUid())
                         .accountId(accountId)
                         .characterId(characterId)
@@ -82,22 +131,14 @@ public class TraceabilityService {
                         .targetInfo(targetInfo)
                         .itemSnapshot(JSON.toJSONString(item)) // 序列化物品快照
                         .timestamp(System.currentTimeMillis())
-                        .memo(memo)
-                        .build();
+                        .memo(memo);
 
-                itemTraceLogsMapper.insert(logDO);
+                itemTraceLogsMapper.insert(builder.build());
 
             } catch (Exception e) {
                 log.error("插入物品溯源日志失败，物品UID: " + item.getUid(), e);
             }
         });
-    }
-
-    /**
-     * 简化的日志记录方法
-     */
-    public void log(Item item, Character character, ActionType actionType, String actionSource) {
-        log(item, character, actionType, actionSource, 0, null, null);
     }
 
     /**

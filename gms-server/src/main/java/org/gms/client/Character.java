@@ -499,6 +499,7 @@ public class Character extends AbstractCharacterObject {
     private static final HpMpAlertService hpMpAlertService = ServerManager.getApplicationContext().getBean(HpMpAlertService.class);
     private static final InventoryService inventoryService = ServerManager.getApplicationContext().getBean(InventoryService.class);
     private static final QuestService questService = ServerManager.getApplicationContext().getBean(QuestService.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     private Character() {
         super.setListener(new CharacterListener(this));
@@ -2297,10 +2298,12 @@ public class Character extends AbstractCharacterObject {
                                     for (Character partymem : mpcs) {   // 遍历队友
                                         if (partymem.isLoggedInWorld()) { // 检查是否在线
                                             partymem.gainMeso(mesosamm, true, true, false); // 分配金币
+                                            traceabilityService.log(null, this, TraceabilityService.ActionType.PICKUP, "拾取金币-分配(特殊地图)", mapitem.getMeso(), "地图: " + mapId, null);
                                         }
                                     }
                                 } else {
                                     this.gainMeso(mapitem.getMeso(), true, true, false); // 自己获得全部金币
+                                    traceabilityService.log(null, this, TraceabilityService.ActionType.PICKUP, "拾取金币(特殊地图)", mapitem.getMeso(), "地图: " + mapId, null);
                                 }
 
                                 this.getMap().pickItemDrop(pickupPacket, mapitem); // 从地图移除物品
@@ -2315,8 +2318,11 @@ public class Character extends AbstractCharacterObject {
                                 }
 
                                 this.getMap().pickItemDrop(pickupPacket, mapitem); // 从地图移除物品
+                                traceabilityService.log(mItem, this, TraceabilityService.ActionType.PICKUP, "拾取NX卡(特殊地图)", mItem.getQuantity(), "地图: " + mapId, null);
                             } else if (InventoryManipulator.addFromDrop(client, mItem, true)) { // 尝试添加物品到背包
                                 this.getMap().pickItemDrop(pickupPacket, mapitem); // 从地图移除物品
+                                traceabilityService.log(mItem, this, TraceabilityService.ActionType.PICKUP, "拾取物品(特殊地图)", mItem.getQuantity(), "地图: " + mapId, null);
+
                             } else {
                                 enableActions();                        // 启用玩家动作
                                 return;                                 // 返回
@@ -2342,10 +2348,12 @@ public class Character extends AbstractCharacterObject {
                             for (Character partymem : mpcs) {           // 遍历队友
                                 if (partymem.isLoggedInWorld()) {       // 检查是否在线
                                     partymem.gainMeso(mesosamm, true, true, false); // 分配金币
+                                    traceabilityService.log(null, this, TraceabilityService.ActionType.PICKUP, "拾取金币-分配", mapitem.getMeso(), "地图: " + mapId, null);
                                 }
                             }
                         } else {
                             this.gainMeso(mapitem.getMeso(), true, true, false); // 自己获得全部金币
+                            traceabilityService.log(null, this, TraceabilityService.ActionType.PICKUP, "拾取金币", mapitem.getMeso(), "地图: " + mapId, null);
                         }
                     } else if (mItem.getItemId() / 10000 == 243) {      // 处理脚本物品
                         ScriptedItem info = ii.getScriptedItemInfo(mItem.getItemId()); // 获取脚本信息
@@ -2361,6 +2369,7 @@ public class Character extends AbstractCharacterObject {
                         // Add NX to account, show effect and make item disappear
                         int nxGain = (mapitem.getItemId() == ItemId.NX_CARD_100 ? 100 : 250) * mItem.getQuantity(); //计算点券数量
                         this.getCashShop().gainCash(CashShop.NX_CREDIT, nxGain); // 增加点券
+                        traceabilityService.log(mItem, this, TraceabilityService.ActionType.PICKUP, "拾取NX卡", mItem.getQuantity(), "地图: " + mapId, null);
 
                         if (GameConfig.getServerBoolean("use_announce_nx_coupon_loot")) { // 检查是否广播
                             showHint(I18nUtil.getMessage("Character.pickupItem.message1", nxGain, this.getCashShop().getCash(CashShop.NX_CREDIT)), 300); // 显示提示
@@ -2368,6 +2377,7 @@ public class Character extends AbstractCharacterObject {
                         }
                     } else if (applyConsumeOnPickup(mItem.getItemId())) {//此段判断为处理捡取治疗道具和怪物卡加入图鉴
                     } else if (InventoryManipulator.addFromDrop(client, mItem, true)) { // 尝试添加普通物品到背包
+                        traceabilityService.log(mItem, this, TraceabilityService.ActionType.PICKUP, "拾取物品", mItem.getQuantity(), "地图: " + mapId, null);
                         if (mItem.getItemId() == ItemId.ARPQ_SPIRIT_JEWEL) { // 检查是否是特殊物品
                             updateAriantScore();                        // 更新分数
                         }

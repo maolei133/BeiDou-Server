@@ -36,6 +36,7 @@ import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.MapId;
 import org.gms.constants.id.MobId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.Server;
 import org.gms.net.server.channel.Channel;
@@ -45,7 +46,9 @@ import org.gms.net.server.services.task.channel.OverallService;
 import org.gms.net.server.services.type.ChannelServices;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.World;
+import org.gms.service.TraceabilityService;
 import org.gms.util.NumberTool;
+import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.EventInstanceManager;
@@ -106,6 +109,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class MapleMap {
     private static final Logger log = LoggerFactory.getLogger(MapleMap.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
     private static final List<MapObjectType> rangedMapobjectTypes = Arrays.asList(MapObjectType.SHOP, MapObjectType.ITEM, MapObjectType.NPC, MapObjectType.MONSTER, MapObjectType.DOOR, MapObjectType.SUMMON, MapObjectType.REACTOR, MapObjectType.HIRED_MERCHANT);
     private static final Map<Integer, Pair<Integer, Integer>> dropBoundsCache = new HashMap<>(100);
 
@@ -996,6 +1000,11 @@ public class MapleMap {
 
         for (MapItem mmi : toDisappear) {
             makeDisappearItemFromMap(mmi);
+            
+            // 溯源日志：过期清除
+            if (mmi.getItem() != null) {
+                traceabilityService.log(mmi.getItem(), -1, -1, this.getId(), TraceabilityService.ActionType.DESPAWN_EXPIRED, "系统清除", 0, "地图: " + this.getId(), "物品过期");
+            }
         }
 
         objectWLock.lock();
@@ -1184,6 +1193,20 @@ public class MapleMap {
 
         instantiateItemDrop(mdrop);
         activateItemReactors(mdrop, chr.getClient());
+        
+        // 溯源日志：物品生成
+        String sourceInfo;
+        if (dropper instanceof Character) {
+            sourceInfo = "玩家丢弃: " + ((Character) dropper).getName();
+        } else if (dropper instanceof Monster) {
+            sourceInfo = "怪物掉落: " + ((Monster) dropper).getId();
+        } else if (dropper instanceof Reactor) {
+            sourceInfo = "反应堆掉落: " + ((Reactor) dropper).getId();
+        } else {
+            sourceInfo = "系统生成";
+        }
+        
+        traceabilityService.log(idrop, chr != null ? chr.getAccountId() : -1, chr != null ? chr.getId() : -1, this.getId(), TraceabilityService.ActionType.SPAWN, sourceInfo, idrop.getQuantity(), "地图: " + this.getId(), null);
     }
 
     public final void spawnMesoDrop(final int meso, final Point position, final MapObject dropper, final Character owner, final boolean playerDrop, final byte droptype) {
@@ -2252,6 +2275,20 @@ public class MapleMap {
 
         instantiateItemDrop(mdrop);
         activateItemReactors(mdrop, owner.getClient());
+        
+        // 溯源日志：物品生成
+        String sourceInfo;
+        if (dropper instanceof Character) {
+            sourceInfo = "玩家丢弃: " + ((Character) dropper).getName();
+        } else if (dropper instanceof Monster) {
+            sourceInfo = "怪物掉落: " + ((Monster) dropper).getId();
+        } else if (dropper instanceof Reactor) {
+            sourceInfo = "反应堆掉落: " + ((Reactor) dropper).getId();
+        } else {
+            sourceInfo = "系统生成";
+        }
+        
+        traceabilityService.log(item, owner != null ? owner.getAccountId() : -1, owner != null ? owner.getId() : -1, this.getId(), TraceabilityService.ActionType.SPAWN, sourceInfo, item.getQuantity(), "地图: " + this.getId(), null);
     }
 
     public final void spawnItemDropList(List<Integer> list, final MapObject dropper, final Character owner, Point pos) {
