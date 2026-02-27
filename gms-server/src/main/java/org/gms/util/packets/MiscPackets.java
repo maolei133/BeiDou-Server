@@ -8,7 +8,9 @@ import org.gms.client.Mount;
 import org.gms.client.QuestStatus;
 import org.gms.client.SkillMacro;
 import org.gms.client.Stat;
+import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
+import org.gms.client.inventory.Pet;
 import org.gms.client.keybind.KeyBinding;
 import org.gms.client.keybind.QuickslotBinding;
 import org.gms.client.status.MonsterStatus;
@@ -22,6 +24,10 @@ import org.gms.net.opcodes.SendOpcode;
 import org.gms.net.packet.ByteBufOutPacket;
 import org.gms.net.packet.OutPacket;
 import org.gms.net.packet.Packet;
+import org.gms.net.server.Server;
+import org.gms.net.server.guild.Alliance;
+import org.gms.net.server.guild.Guild;
+import org.gms.server.ItemInformationProvider;
 import org.gms.server.events.gm.Snowball;
 import org.gms.server.life.MobSkill;
 import org.gms.util.HexTool;
@@ -71,7 +77,7 @@ public class MiscPackets {
     public static Packet sendTV(Character chr, List<String> messages, int type, Character partner) {
         final OutPacket p = OutPacket.create(SendOpcode.SEND_TV);
         p.writeByte(partner != null ? 3 : 1);
-        p.writeByte(type); //Heart = 2  Star = 1  Normal = 0
+        p.writeByte(type); // 心 = 2  星 = 1  普通 = 0
         PacketHelper.addCharLook(p, chr, false);
         p.writeString(chr.getName());
         if (partner != null) {
@@ -184,34 +190,77 @@ public class MiscPackets {
         String guildName = "";
         String allianceName = "";
         if (chr.getGuildId() > 0) {
-            // 这里需要获取 Guild 和 Alliance，假设 Character 对象中有相关引用或通过 Server 获取
-            // 为了简化，这里假设 chr.getGuild() 可用，或者需要重构
-            // 原代码: Guild mg = Server.getInstance().getGuild(chr.getGuildId());
-            // 由于 Server 类在 net.server 包，可以访问
-            // 但为了避免循环依赖，最好通过 chr 获取
-            // 这里暂时保留原逻辑，需要导入 Server
-            // 假设 Server 类可用
-            // Guild mg = org.gms.net.server.Server.getInstance().getGuild(chr.getGuildId());
-            // guildName = mg.getName();
-            // Alliance alliance = org.gms.net.server.Server.getInstance().getAlliance(chr.getGuild().getAllianceId());
-            // if (alliance != null) { allianceName = alliance.getName(); }
-            // 由于无法直接访问 Server (未导入)，这里简化处理，实际迁移时需要导入
-            // 暂时写入空字符串，或者需要导入 Server 类
-            // 导入 org.gms.net.server.Server;
+            Guild mg = Server.getInstance().getGuild(chr.getGuildId());
+            if (mg != null) {
+                guildName = mg.getName();
+                if (mg.getAllianceId() > 0) {
+                    Alliance alliance = Server.getInstance().getAlliance(mg.getAllianceId());
+                    if (alliance != null) {
+                        allianceName = alliance.getName();
+                    }
+                }
+            }
         }
         p.writeString(guildName);
         p.writeString(allianceName);
         p.writeByte(0);
 
-        // ... 宠物信息 ...
-        // ... 坐骑信息 ...
-        // ... 怪物图鉴 ...
-        // ... 勋章 ...
-        // 这里逻辑较多，且依赖 Server，建议在 PacketCreator 中保留或完整迁移
-        // 为了演示，这里只迁移部分简单逻辑，复杂逻辑建议保留在 PacketCreator 或拆分更细
-        // 鉴于时间，我将简化这部分，或者假设 PacketHelper 有辅助方法
-        // 实际上 PacketHelper 已经有 addPetInfo 等
-        // 让我们完整迁移 charInfo
+        Pet[] pets = chr.getPets();
+        Item inv = chr.getInventory(InventoryType.EQUIPPED).getItem((short) -114);
+        for (int i = 0; i < 3; i++) {
+            if (pets[i] != null) {
+                p.writeByte(pets[i].getUniqueId());
+                p.writeInt(pets[i].getItemId()); // 宠物ID
+                p.writeString(pets[i].getName());
+                p.writeByte(pets[i].getLevel()); // 宠物等级
+                p.writeShort(pets[i].getTameness()); // 宠物亲密度
+                p.writeByte(pets[i].getFullness()); // 宠物饱食度
+                p.writeShort(0);
+                p.writeInt(inv != null ? inv.getItemId() : 0);
+            }
+        }
+        p.writeByte(0); // 宠物结束
+
+        Item mount;
+        if (chr.getMapleMount() != null && (mount = chr.getInventory(InventoryType.EQUIPPED).getItem((short) -18)) != null && ItemInformationProvider.getInstance().getEquipLevelReq(mount.getItemId()) <= chr.getLevel()) {
+            Mount mmount = chr.getMapleMount();
+            p.writeByte(mmount.getId()); // 坐骑
+            p.writeInt(mmount.getLevel()); // 等级
+            p.writeInt(mmount.getExp()); // 经验
+            p.writeInt(mmount.getTiredness()); // 疲劳度
+        } else {
+            p.writeByte(0);
+        }
+        p.writeByte(chr.getCashShop().getWishList().size());
+        for (int sn : chr.getCashShop().getWishList()) {
+            p.writeInt(sn);
+        }
+
+        MonsterBook book = chr.getMonsterBook();
+        p.writeInt(book.getBookLevel());
+        p.writeInt(book.getNormalCard());
+        p.writeInt(book.getSpecialCard());
+        p.writeInt(book.getTotalCards());
+        p.writeInt(chr.getMonsterBookCover() > 0 ? ItemInformationProvider.getInstance().getCardMobId(chr.getMonsterBookCover()) : 0);
+        Item medal = chr.getInventory(InventoryType.EQUIPPED).getItem((short) -49);
+        if (medal != null) {
+            p.writeInt(medal.getItemId());
+        } else {
+            p.writeInt(0);
+        }
+        ArrayList<Short> medalQuests = new ArrayList<>();
+        List<QuestStatus> completed = chr.getCompletedQuests();
+        for (QuestStatus qs : completed) {
+            if (qs.getQuest().getId() >= 29000) {
+                medalQuests.add(qs.getQuest().getId());
+            }
+        }
+
+        Collections.sort(medalQuests);
+        p.writeShort(medalQuests.size());
+        for (Short s : medalQuests) {
+            p.writeShort(s);
+        }
         return p;
     }
 
