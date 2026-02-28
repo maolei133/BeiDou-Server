@@ -35,7 +35,6 @@ import org.gms.constants.id.NpcId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.string.LanguageConstants;
 import org.gms.dao.entity.HiredMerchantsDO;
-import org.gms.dao.entity.ItemRecoveryLogsDO;
 import org.gms.manager.ServerManager;
 import org.gms.model.pojo.NextLevelContext;
 import org.gms.net.server.Server;
@@ -49,7 +48,6 @@ import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.World;
 import org.gms.service.GachaponService;
 import org.gms.service.HiredMerchantService;
-import org.gms.service.ItemRecoveryService;
 import org.gms.util.packets.WeddingPackets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,7 +96,6 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
     private List<PartyCharacter> otherParty;
     private static final GachaponService gachaponService = ServerManager.getApplicationContext().getBean(GachaponService.class);
     private static final HiredMerchantService hiredMerchantService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
-    private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
 
     private final Map<Integer, String> npcDefaultTalks = new HashMap<>();
     @Getter
@@ -1486,38 +1483,5 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
         nextLevelContext.setLevelType(NextLevelType.SEND_YES_NO);
         nextLevelContext.setLastLevel(noLevel);
         nextLevelContext.setNextLevel(yesLevel);
-    }
-
-    /**
-     * 打开物品找回界面
-     */
-    public void openItemRecovery() {
-        List<ItemRecoveryLogsDO> items = itemRecoveryService.getRecoverableItems(getPlayer().getId());
-        if (items.isEmpty()) {
-            sendOk("您目前没有可找回的物品。");
-            dispose();
-            return;
-        }
-
-        StringBuilder sb = new StringBuilder("请选择您要找回的物品（需支付手续费）：\r\n");
-        SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm");
-        for (ItemRecoveryLogsDO log : items) {
-            String itemName = ItemInformationProvider.getInstance().getName(log.getItemId());
-            String time = sdf.format(new Date(log.getDisposalTime()));
-            sb.append("#L").append(log.getId()).append("#")
-              .append(itemName)
-              .append(" (").append(time).append(")")
-              .append("#l\r\n");
-        }
-        
-        sendSimple(sb.toString());
-    }
-
-    /**
-     * 处理物品找回选择
-     */
-    public void recoverItem(int selection) {
-        itemRecoveryService.recoverItem(getClient(), selection);
-        dispose();
     }
 }

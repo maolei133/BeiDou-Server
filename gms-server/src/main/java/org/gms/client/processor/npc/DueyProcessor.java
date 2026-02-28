@@ -1000,4 +1000,8 @@ public class DueyProcessor {
 
         return item;
     }
+
+    public static void showDueyNotification(Character player) {
+        showDueyNotification(player.getClient(), player);
+    }
 }

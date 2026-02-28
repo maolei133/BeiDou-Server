@@ -1,6 +1,7 @@
 package org.gms.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.gms.client.Character;
 import org.gms.client.inventory.Item;
@@ -13,10 +14,14 @@ import org.gms.dao.mapper.ItemTraceLogsMapper;
 import org.gms.model.dto.ItemInfoRtnDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_D_O;
 
 /**
  * 物品溯源服务
@@ -179,5 +184,43 @@ public class TraceabilityService {
                 log.error("插入物品找回日志失败，物品UID: " + item.getUid(), e);
             }
         });
+    }
+
+    /**
+     * 定时清理过期溯源日志
+     * 每天凌晨 3 点执行
+     */
+    @Scheduled(cron = "0 0 3 * * ?")
+    public void cleanupTraceLogs() {
+        long now = System.currentTimeMillis();
+
+        // 1. 清理常规日志 (默认保留30天)
+        int retentionDays = GameConfig.getServerInt("trace_log_retention_days", 30);
+        long retentionMillis = TimeUnit.DAYS.toMillis(retentionDays);
+        long deleteDeadline = now - retentionMillis;
+
+        QueryWrapper deleteQuery = QueryWrapper.create()
+                .where(ITEM_TRACE_LOGS_D_O.TIMESTAMP.lt(deleteDeadline));
+
+        int deletedCount = itemTraceLogsMapper.deleteByQuery(deleteQuery);
+        if (deletedCount > 0) {
+            log.info("已物理删除 {} 条超过 {} 天保留期的物品溯源日志。", deletedCount, retentionDays);
+        }
+
+        // 2. 清理短期日志 (如自然消失的物品，默认保留3天)
+        int shortRetentionDays = GameConfig.getServerInt("trace_log_short_retention_days", 3);
+        long shortRetentionMillis = TimeUnit.DAYS.toMillis(shortRetentionDays);
+        long shortDeleteDeadline = now - shortRetentionMillis;
+
+        // 定义短期日志类型：SPAWN (生成), DESPAWN_EXPIRED (自然消失)
+        // 这些日志通常量大且价值较低，可以更早清理
+        QueryWrapper shortDeleteQuery = QueryWrapper.create()
+                .where(ITEM_TRACE_LOGS_D_O.TIMESTAMP.lt(shortDeleteDeadline))
+                .and(ITEM_TRACE_LOGS_D_O.ACTION_TYPE.in(ActionType.SPAWN.name(), ActionType.DESPAWN_EXPIRED.name()));
+
+        int shortDeletedCount = itemTraceLogsMapper.deleteByQuery(shortDeleteQuery);
+        if (shortDeletedCount > 0) {
+            log.info("已物理删除 {} 条超过 {} 天保留期的短期物品溯源日志 (SPAWN/DESPAWN)。", shortDeletedCount, shortRetentionDays);
+        }
     }
 }

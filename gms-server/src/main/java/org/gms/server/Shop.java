@@ -248,13 +248,18 @@ public class Shop {
         inventory.lockInventory();
         try {
             if (canSell(item, quantity)) {
+                quantity = getSellingQuantity(item, quantity);
+
                 // 物品找回系统拦截点
                 if (InventoryManipulator.isValuableForRecovery(item)) {
                     TraceabilityService traceabilityService = SpringContextUtil.getBean(TraceabilityService.class);
-                    traceabilityService.logRecovery(item, c.getPlayer(), "SELL");
+                    
+                    // 创建副本并设置实际卖出的数量，确保找回时数量正确
+                    Item recoveryItem = item.copy();
+                    recoveryItem.setQuantity(quantity);
+                    
+                    traceabilityService.logRecovery(recoveryItem, c.getPlayer(), "SELL");
                 }
-
-                quantity = getSellingQuantity(item, quantity);
                 
                 // 溯源日志：商店出售
                 traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.SHOP_SELL, "NPC商店出售", -quantity, "商店ID: " + id, null);

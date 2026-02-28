@@ -1,23 +1,6 @@
-/*
- This file is part of the OdinMS Maple Story Server
- Copyright (C) 2008 Patrick Huy <patrick.huy@frz.cc>
- Matthias Butz <matze@odinms.de>
- Jan Christian Meyer <vimes@odinms.de>
-
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU Affero General Public License as
- published by the Free Software Foundation version 3 as published by
- the Free Software Foundation. You may not use, modify or distribute
- this program under any other version of the GNU Affero General Public
- License.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU Affero General Public License for more details.
-
- You should have received a copy of the GNU Affero General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+/**
+ * @author Matze
+ * @author Ronan - improved check space feature and removed redundant object calls
  */
 package org.gms.client.inventory.manipulator;
 
@@ -25,42 +8,33 @@ import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Client;
-import org.gms.client.inventory.Equip;
-import org.gms.client.inventory.Inventory;
-import org.gms.client.inventory.InventoryType;
-import org.gms.client.inventory.Item;
-import org.gms.client.inventory.ItemFactory;
-import org.gms.client.inventory.ModifyInventory;
-import org.gms.client.inventory.Pet;
-import org.gms.manager.ServerManager;
-import org.gms.model.pojo.NewYearCardRecord;
+import org.gms.client.inventory.*;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
+import org.gms.model.pojo.NewYearCardRecord;
+import org.gms.server.ItemInformationProvider;
+import org.gms.server.StatEffect;
+import org.gms.server.ThreadManager;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
+import org.gms.server.maps.MapleMap;
 import org.gms.service.ItemFactoryService;
 import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
+import org.gms.util.PacketCreator;
+import org.gms.util.Pair;
 import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.server.ItemInformationProvider;
-import org.gms.server.maps.MapleMap;
-import org.gms.util.PacketCreator;
 
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
+import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * @author Matze
- * @author Ronan - improved check space feature and removed redundant object calls
- */
 public class InventoryManipulator {
     private static final Logger log = LoggerFactory.getLogger(InventoryManipulator.class);
     private static final ItemFactoryService itemFactoryService = ServerManager.getApplicationContext().getBean(ItemFactoryService.class);
@@ -942,49 +916,130 @@ public class InventoryManipulator {
 
     /**
      * 判断物品是否值得进入找回系统
-     * 排除普通药水、杂物等低价值物品
+     * 策略：白名单(高价值ID段) + 价格阈值 + 黑名单(垃圾ID段)
      */
     public static boolean isValuableForRecovery(Item item) {
         if (item == null) return false;
-        
+
         int itemId = item.getItemId();
         InventoryType type = ItemConstants.getInventoryType(itemId);
-        
-        // 1. 装备：通常都有价值，除非是极低级的白板
+        ItemInformationProvider ii = ItemInformationProvider.getInstance();
+
+        // 0. 现金物品：必须找回
+        // 检查 Cash 标志或 ID 范围 (5xxxxxx)
+        if (type == InventoryType.CASH || ii.isCash(itemId)) {
+            return true;
+        }
+
+        // 1. 装备：默认全部找回
+        // 除非是极低级的白板（可选：增加价格判断，例如售价<10金币的不找回）
         if (type == InventoryType.EQUIP) {
             return true;
         }
-        
-        // 2. 消耗品：排除普通药水，保留高级药水、卷轴等
+
+        // 2. 消耗品 (USE)
         if (type == InventoryType.USE) {
-            // 卷轴 (204xxxx)
+            // [保留] 卷轴 (204xxxx)
             if (itemId / 10000 == 204) return true;
-            // 技能书 (228xxxx, 229xxxx)
+            
+            // [保留] 技能书/母书 (228xxxx, 229xxxx)
             if (itemId / 10000 == 228 || itemId / 10000 == 229) return true;
-            // 排除普通药水 (200xxxx - 203xxxx)
-            if (itemId >= 2000000 && itemId < 2040000) return false;
             
-            return true; // 默认保留其他消耗品
+            // [保留] 飞镖/子弹 (207xxxx, 233xxxx) - 只有高价值的才保留
+            if (ItemConstants.isThrowingStar(itemId) || ItemConstants.isBullet(itemId)) {
+                // 排除普通子弹(2330000)和普通海星(2070000)等，这里简单判断售价
+                // 或者直接全部保留，因为飞镖通常比较贵重
+                // 修改：改为检测攻击力，攻击力 >= 20 的视为有价值
+                // 使用 getWatkForProjectile 获取飞镖/子弹的攻击力
+                int watk = ii.getWatkForProjectile(itemId);
+                
+                // 如果是子弹，攻击力 >= 15 视为有价值
+                if (ItemConstants.isBullet(itemId)) {
+                    return watk >= 15;
+                }
+                
+                // 飞镖保持 >= 20
+                return watk >= 20;
+            }
+
+            // [保留] 坐骑食物/特殊道具 (21xxxx, 22xxxx, 23xxxx, 24xxxx)
+            // 210: 召唤包, 221: 宠物食物, 243: 礼包/箱子
+            if (itemId >= 2100000 && itemId < 2500000) return true;
+
+            // [过滤] 普通药水/回城符 (200xxxx - 203xxxx)
+            if (itemId >= 2000000 && itemId < 2040000) {
+                // 特例：高价值药水（如玛瑙苹果 2022179, 红色怪兽秘药 2022003）
+                // 策略：如果商店售价高于 5000 金币，或者无法卖给商店（售价<=0，通常是稀有品），则视为有价值
+                // 修改：改为判断药水属性总和 > 50
+                org.gms.server.StatEffect effect = ii.getItemEffect(itemId);
+                if (effect != null) {
+                    int totalStats = 0;
+                    List<org.gms.util.Pair<BuffStat, Integer>> statups = effect.getStatups();
+                    if (statups != null) {
+                        for (org.gms.util.Pair<BuffStat, Integer> stat : statups) {
+                            if (stat.getLeft() == BuffStat.WATK || stat.getLeft() == BuffStat.MATK ||
+                                stat.getLeft() == BuffStat.WDEF || stat.getLeft() == BuffStat.MDEF ||
+                                stat.getLeft() == BuffStat.ACC || stat.getLeft() == BuffStat.AVOID ||
+                                stat.getLeft() == BuffStat.SPEED || stat.getLeft() == BuffStat.JUMP) {
+                                totalStats += stat.getRight();
+                            }
+                        }
+                    }
+                    
+                    if (totalStats > 50) return true;
+                }
+                
+                // 保留原有的价格兜底逻辑，防止漏掉非属性类的高价物品
+                double price = ii.getPrice(itemId, 1);
+                if (price > 5000 || price <= 0) return true;
+                
+                return false; // 其他普通药水视为垃圾
+            }
+            // 过滤弩矢，箭矢
+            if (ItemConstants.isArrow(itemId)) {
+                return false;
+            }
+            return true; // 默认保留其他未覆盖的消耗品
         }
-        
-        // 3. 其他栏：排除普通掉落物，保留任务物品、稀有材料
-        if (type == InventoryType.ETC) {
-            // 排除普通怪物掉落 (400xxxx)
-            if (itemId / 10000 == 400) return false;
+
+        // 3. 其它/设置 (ETC / SETUP)
+        if (type == InventoryType.ETC || type == InventoryType.SETUP) {
+            // [设置] 椅子 (301xxxx) - 必须找回
+            if (itemId / 10000 == 301) return true;
             
-            return true;
+            // [设置] 其它设置道具 - 默认找回
+            if (type == InventoryType.SETUP) return true;
+
+            // --- 以下为 ETC 判断 ---
+
+            // [保留] 任务道具 (403xxxx)
+            if (itemId / 10000 == 403) return true;
+            // 或者使用 ii.isQuestItem(itemId)
+
+            // [保留] 召唤物/特殊 (408xxxx, 422xxxx 等)
+            if (itemId / 10000 == 408 || itemId / 10000 == 422) return true;
+
+            // [过滤] 普通掉落物/矿石 (400xxxx, 401xxxx, 402xxxx)
+            if (itemId >= 4000000 && itemId < 4030000) {
+                // 特例：高价值掉落物（如火焰的眼 4001017, 魔法石 4006000, 召回石 4006001）
+                // 策略：检查是否为特定贵重物品 ID，或售价较高
+                
+                // 魔法石、召回石
+                if (itemId == 4006000 || itemId == 4006001) return true;
+                // 火焰的眼
+                if (itemId == 4001017) return true;
+                // 梦幻石头 (4021009) 等稀有矿石
+                if (itemId == 4021009) return true;
+
+                // 价格兜底：如果卖店价超过 2000 金币，视为有价值
+                if (ii.getPrice(itemId, 1) > 2000) return true;
+
+                return false; // 其他视为垃圾
+            }
+
+            return true; // 默认保留其他 ETC
         }
-        
-        // 4. 设置栏：通常不丢弃，但如果有，值得找回
-        if (type == InventoryType.SETUP) {
-            return true;
-        }
-        
-        // 5. 现金物品：必须找回
-        if (type == InventoryType.CASH) {
-            return true;
-        }
-        
+
         return false;
     }
 }
