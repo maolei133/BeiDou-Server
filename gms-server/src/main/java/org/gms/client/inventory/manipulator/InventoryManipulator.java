@@ -224,6 +224,34 @@ public class InventoryManipulator {
     }
 
     private static boolean addFromDropInternal(Client c, Character chr, InventoryType type, Inventory inv, Item item, boolean show, int petId) {
+        // ----------------------------------------------------------------
+        // 核心防复制检查：检查背包中是否已存在相同 UID 的物品
+        // ----------------------------------------------------------------
+        if (item.getUid() > 0) {
+            Item existingItem = inv.findByUid(item.getUid());
+            if (existingItem != null) {
+                // 如果是不可堆叠物品（如装备），或者虽然是可堆叠物品但ID不同（严重异常），则拒绝入包
+                if (!type.equals(InventoryType.EQUIP) && existingItem.getItemId() == item.getItemId()) {
+                    // 可堆叠物品且ID相同，允许合并逻辑继续执行
+                    // 注意：下面的合并逻辑会处理数量增加，这里不需要额外操作
+                    // 但为了安全，我们可以记录一条日志
+                    log.info("检测到相同 UID 的可堆叠物品合并: UID={}, ItemID={}, Char={}", item.getUid(), item.getItemId(), chr.getName());
+                } else {
+                    // 严重冲突：装备重复，或者不同ID的物品使用了相同UID
+                    log.error("严重安全警告：检测到物品复制尝试！玩家: {}, 物品ID: {}, UID: {}, 现有物品ID: {}", 
+                            chr.getName(), item.getItemId(), item.getUid(), existingItem.getItemId());
+                    
+                    // 记录异常日志
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.ADMIN_DELETE, 
+                            "DUPLICATE_UID_BLOCKED", item.getQuantity(), "由于背包中存在重复的UID，阻止了addFromDrop操作", "现有物品ID: " + existingItem.getItemId());
+                    
+                    c.sendPacket(PacketCreator.serverNotice(1, "操作失败：检测到物品数据异常 (E01)。"));
+                    c.sendPacket(PacketCreator.enableActions());
+                    return false;
+                }
+            }
+        }
+
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
         int itemid = item.getItemId();
         if (ii.isPickupRestricted(itemid) && chr.haveItemWithId(itemid, true)) {
@@ -276,6 +304,40 @@ public class InventoryManipulator {
                     nItem.setExpiration(item.getExpiration());
                     nItem.setOwner(item.getOwner());
                     nItem.setFlag(item.getFlag());
+                    // 如果是拆分出来的新堆叠，必须生成新 UID
+                    // 如果是完全移动（quantity == 0），则保留原 UID
+                    if (quantity > 0) {
+                         // 拆分情况：新堆叠生成新 UID
+                         // 注意：这里 nItem 是新创建的对象，构造函数里已经生成了新 UID
+                         // 但为了明确逻辑，如果 item 有 UID 且我们正在拆分它，
+                         // 我们应该保留原 UID 给其中一部分（通常是留在原地的，或者这里是新进入背包的）
+                         // 这里情况比较复杂：item 是来源物品。
+                         // 如果 item 是整个放入背包，nItem 应该继承 item 的 UID。
+                         // 如果 item 被拆分成多个 nItem（因为堆叠限制），第一个 nItem 继承 UID，后续的生成新 UID？
+                         // 或者全部生成新 UID？
+                         // 为了安全和简化，对于可堆叠物品的新堆叠，我们总是生成新 UID，除非是完全恢复（如从仓库取出整个堆叠）
+                         // 但 addFromDrop 的 item 参数通常是一个临时对象（copy），它的 UID 可能是原物品的。
+                         // 如果我们在这里生成新 UID，那么原物品的 UID 历史就断了。
+                         // 考虑到这是“新进入背包”的物品，如果它没有合并到现有堆叠，它就是一个新的堆叠。
+                         // 如果 item.getUid() > 0，我们应该尝试保留它。
+                         // 但如果 quantity > 0，说明我们正在循环创建多个堆叠（因为超过 slotMax）。
+                         // 这种情况下，只有第一个堆叠可以继承 UID，后续的必须是新的。
+                         // 或者，为了避免 UID 冲突（如果背包里已经有这个 UID 的物品但满了），我们应该生成新的。
+                         // 鉴于我们前面已经检查了 UID 冲突，这里如果能走到这，说明背包里没有这个 UID。
+                         // 所以，第一个 nItem 可以继承 item.getUid()。
+                         if (item.getUid() > 0 && nItem.getUid() != item.getUid()) {
+                             // 只有当这是第一个分堆时才继承，但这里很难判断是第几个。
+                             // 简单策略：总是生成新 UID，除非是装备。
+                             // 这样虽然断了 UID 链，但绝对安全。
+                             // 改进策略：对于可堆叠物品，入包即视为新实例（除非合并）。
+                         }
+                    } else {
+                        // 刚好放完，或者最后一部分
+                        if (item.getUid() > 0) {
+                            nItem.setUid(item.getUid());
+                        }
+                    }
+                    
                     short newSlot = inv.addItem(nItem);
                     if (newSlot == -1) {
                         c.sendPacket(PacketCreator.getInventoryFull());
@@ -294,6 +356,9 @@ public class InventoryManipulator {
                 Item nItem = new Item(itemid, (short) 0, quantity, petId);
                 nItem.setExpiration(item.getExpiration());
                 nItem.setFlag(item.getFlag());
+                if (item.getUid() > 0) {
+                    nItem.setUid(item.getUid());
+                }
 
                 short newSlot = inv.addItem(nItem);
                 if (newSlot == -1) {

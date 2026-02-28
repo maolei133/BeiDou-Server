@@ -88,11 +88,11 @@ public class HiredMerchantService {
             
             Long existingId = hiredMerchantItemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
             if (existingId != null) {
-                log.error("发现重复 UID 物品入库尝试 (HiredMerchant)! UID: {}, ItemID: {}, MerchantID: {}", 
+                log.error("发现重复 UID 物品入库尝试 (雇佣商店)! UID: {}, 物品ID: {}, 商店ID: {}", 
                         item.getUid(), item.getItemId(), item.getMerchantId());
                 // 记录异常日志
                 traceabilityService.log(null, null, TraceabilityService.ActionType.ADMIN_DELETE, 
-                        "DUPLICATE_UID_BLOCKED", 0, "Blocked hired merchant add due to duplicate UID: " + item.getUid(), "MerchantID: " + item.getMerchantId());
+                        "DUPLICATE_UID_BLOCKED", 0, "由于重复的UID阻止了雇佣商店添加: " + item.getUid(), "商店ID: " + item.getMerchantId());
                 // 抛出异常以回滚事务
                 throw new RuntimeException("检测到重复 UID: " + item.getUid());
             }

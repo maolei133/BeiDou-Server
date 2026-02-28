@@ -119,6 +119,16 @@ public class Inventory implements Iterable<Item> {
         }
         return null;
     }
+    
+    public Item findByUid(long uid) {
+        if (uid <= 0) return null;
+        for (Item item : list()) {
+            if (item.getUid() == uid) {
+                return item;
+            }
+        }
+        return null;
+    }
 
     public Item findByName(String name) {
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
