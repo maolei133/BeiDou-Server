@@ -876,39 +876,46 @@ public class HiredMerchant extends AbstractMapObject {
                 item.getItem().setUid(SnowflakeIdGenerator.getInstance().nextId());
             }
 
-            items.add(item);
+            // items.add(item); // 移动到数据库操作之后
+            
+            if (merchantId > 0) {
+                try {
+                    // 添加物品到数据库
+                    HiredMerchantItemsDO itemDO = HiredMerchantItemsDO.builder()
+                            .merchantId(merchantId)
+                            .itemId(item.getItem().getItemId())
+                            .quantity((int) item.getItem().getQuantity())
+                            .soldQuantity(0)
+                            .price(item.getPrice())
+                            .bundles((int) item.getBundles())
+                            .status(HiredMerchantItemsDO.STATUS_ON_SALE)
+                            .itemData(hiredMerchantService.serializeItem(item.getItem()))
+                            .uid(item.getItem().getUid()) // 记录 UID
+                            .build();
+                    
+                    HiredMerchantTransactionsDO transactionDO = HiredMerchantTransactionsDO.builder()
+                            .merchantId(merchantId)
+                            .buyerId(ownerId)
+                            .type(HiredMerchantTransactionsDO.TYPE_ADD)
+                            .quantity((int) item.getItem().getQuantity())
+                            .timestamp(System.currentTimeMillis())
+                            .uid(item.getItem().getUid()) // 记录 UID
+                            .build();
+                    
+                    hiredMerchantService.addItem(itemDO, transactionDO);
+                    item.setDbId(itemDO.getId());
+                } catch (Exception e) {
+                    log.error("添加物品到雇佣商店失败: merchantId={}, itemId={}, uid={}", merchantId, item.getItem().getItemId(), item.getItem().getUid(), e);
+                    return false; // 数据库操作失败，返回 false，不更新内存，不移除背包物品
+                }
+            }
+
+            items.add(item); // 数据库操作成功后，再添加到内存
             
             // 记录溯源日志
             Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
             if (owner != null) {
                 traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.HIRED_MERCHANT_ADD, "雇佣商店上架", (int) (item.getItem().getQuantity() * item.getBundles()), null, "价格: " + item.getPrice());
-            }
-            
-            if (merchantId > 0) {
-                // 添加物品到数据库
-                HiredMerchantItemsDO itemDO = HiredMerchantItemsDO.builder()
-                        .merchantId(merchantId)
-                        .itemId(item.getItem().getItemId())
-                        .quantity((int) item.getItem().getQuantity())
-                        .soldQuantity(0)
-                        .price(item.getPrice())
-                        .bundles((int) item.getBundles())
-                        .status(HiredMerchantItemsDO.STATUS_ON_SALE)
-                        .itemData(hiredMerchantService.serializeItem(item.getItem()))
-                        .uid(item.getItem().getUid()) // 记录 UID
-                        .build();
-                
-                HiredMerchantTransactionsDO transactionDO = HiredMerchantTransactionsDO.builder()
-                        .merchantId(merchantId)
-                        .buyerId(ownerId)
-                        .type(HiredMerchantTransactionsDO.TYPE_ADD)
-                        .quantity((int) item.getItem().getQuantity())
-                        .timestamp(System.currentTimeMillis())
-                        .uid(item.getItem().getUid()) // 记录 UID
-                        .build();
-                
-                hiredMerchantService.addItem(itemDO, transactionDO);
-                item.setDbId(itemDO.getId());
             }
             
             return true;

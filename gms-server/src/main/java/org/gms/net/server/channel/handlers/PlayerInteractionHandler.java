@@ -936,12 +936,14 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                         return;
                     }
 
-                    if (merchant.isOpen() || !merchant.addItem(shopItem)) { // thanks Vcoc for pointing an exploit with unlimited shop slots    //感谢Vcoc指出了一个具有无限商店插槽的漏洞
+                    // 尝试添加到商店（包括数据库操作）
+                    if (merchant.isOpen() || !merchant.addItem(shopItem)) { 
                         c.sendPacket(PacketCreator.serverNotice(1, I18nUtil.getMessage("PlayerInteractionHandler.message11")));
                         c.getPlayer().enableActions();
                         return;
                     }
 
+                    // 只有在 addItem 成功后，才从背包移除物品
                     if (ItemConstants.isRechargeable(ivItem.getItemId())) {
                         InventoryManipulator.removeFromSlot(c, ivType, slot, ivItem.getQuantity(), true);
                     } else {
