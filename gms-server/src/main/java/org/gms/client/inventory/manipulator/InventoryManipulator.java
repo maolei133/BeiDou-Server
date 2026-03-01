@@ -224,29 +224,34 @@ public class InventoryManipulator {
     }
 
     private static boolean addFromDropInternal(Client c, Character chr, InventoryType type, Inventory inv, Item item, boolean show, int petId) {
+        ItemInformationProvider ii = ItemInformationProvider.getInstance();
         // ----------------------------------------------------------------
         // 核心防复制检查：检查背包中是否已存在相同 UID 的物品
         // ----------------------------------------------------------------
         if (item.getUid() > 0) {
             Item existingItem = inv.findByUid(item.getUid());
             if (existingItem != null) {
-                // 无论是否可堆叠，只要 UID 相同且不是同一个对象，就视为复制风险，拒绝入包
-                // 注意：如果是同一个对象引用（极少见），理论上可以，但为了安全，这里一律拒绝
-                
-                log.warn("拦截到重复UID物品入包请求 (可能是重复包或复制尝试)。玩家: {}, 物品ID: {}, UID: {}, 现有物品ID: {}", 
-                        chr.getName(), item.getItemId(), item.getUid(), existingItem.getItemId());
-                
-                // 记录异常日志
-                traceabilityService.log(item, chr, TraceabilityService.ActionType.ADMIN_DELETE, 
-                        "DUPLICATE_UID_BLOCKED", item.getQuantity(), "由于背包中存在重复的UID，阻止了addFromDrop操作", "现有物品ID: " + existingItem.getItemId());
-                
-                c.sendPacket(PacketCreator.serverNotice(1, "操作失败：检测到物品数据异常 (E01)。"));
-                c.sendPacket(PacketCreator.enableActions());
-                return false;
+                // 检查是否为可堆叠物品的合法合并操作
+                boolean isStackable = !ItemConstants.isRechargeable(item.getItemId()) && ii.getSlotMax(c, item.getItemId()) > 1;
+                if (existingItem.getItemId() == item.getItemId() && isStackable) {
+                    // 是合法的堆叠物品合并，不应阻止。日志记录为调试信息。
+                    log.debug("允许重复UID的堆叠物品合并。玩家: {}, 物品ID: {}, UID: {}", chr.getName(), item.getItemId(), item.getUid());
+                } else {
+                    // 否则，视为复制风险，拒绝入包
+                    log.warn("拦截到重复UID物品入包请求 (可能是重复包或复制尝试)。玩家: {}, 物品ID: {}, UID: {}, 现有物品ID: {}",
+                            chr.getName(), item.getItemId(), item.getUid(), existingItem.getItemId());
+
+                    // 记录异常日志
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.ADMIN_DELETE,
+                            "DUPLICATE_UID_BLOCKED", item.getQuantity(), "由于背包中存在重复的UID，阻止了addFromDrop操作", "现有物品ID: " + existingItem.getItemId());
+
+                    c.sendPacket(PacketCreator.serverNotice(1, "操作失败：检测到物品数据异常 (E01)。"));
+                    c.sendPacket(PacketCreator.enableActions());
+                    return false;
+                }
             }
         }
 
-        ItemInformationProvider ii = ItemInformationProvider.getInstance();
         int itemid = item.getItemId();
         if (ii.isPickupRestricted(itemid) && chr.haveItemWithId(itemid, true)) {
             c.sendPacket(PacketCreator.getInventoryFull());
