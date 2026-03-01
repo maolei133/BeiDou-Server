@@ -34,7 +34,7 @@ public class PlayernpcsFieldDO implements Serializable {
 
     private Integer map;
 
-    private Integer step;
+    private Integer step = 0;
 
     private Integer podium;
 
