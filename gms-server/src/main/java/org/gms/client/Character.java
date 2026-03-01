@@ -2079,7 +2079,7 @@ public class Character extends AbstractCharacterObject {
         if (newLevel > -1) {
             Map<Skill, SkillEntry> singleSkill = new HashMap<>();
             singleSkill.put(skill, skills.get(skill));
-            characterService.saveSkills(id, singleSkill);
+            characterService.saveSkills(id, singleSkill,false);
         }
     }
 

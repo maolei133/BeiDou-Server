@@ -1568,6 +1568,11 @@ public class CharacterService {
 
     @Transactional
     public void saveSkills(int charId, Map<Skill, SkillEntry> skills) {
+        saveSkills(charId, skills, true);
+    }
+
+    @Transactional
+    public void saveSkills(int charId, Map<Skill, SkillEntry> skills, boolean deleteOthers) {
         List<SkillsDO> dbSkills = skillsMapper.selectListByQuery(QueryWrapper.create().where(SKILLS_D_O.CHARACTERID.eq(charId)));
         Map<Integer, SkillsDO> dbSkillMap = dbSkills.stream().collect(Collectors.toMap(SkillsDO::getSkillid, Function.identity()));
         Set<Integer> processedSkillIds = new HashSet<>();
@@ -1598,13 +1603,15 @@ public class CharacterService {
             }
         }
 
-        List<Integer> idsToDelete = dbSkills.stream()
-                .filter(s -> !processedSkillIds.contains(s.getSkillid()))
-                .map(SkillsDO::getId)
-                .collect(Collectors.toList());
-        
-        if (!idsToDelete.isEmpty()) {
-            skillsMapper.deleteByQuery(QueryWrapper.create().where(SKILLS_D_O.ID.in(idsToDelete)));
+        if (deleteOthers) {
+            List<Integer> idsToDelete = dbSkills.stream()
+                    .filter(s -> !processedSkillIds.contains(s.getSkillid()))
+                    .map(SkillsDO::getId)
+                    .collect(Collectors.toList());
+
+            if (!idsToDelete.isEmpty()) {
+                skillsMapper.deleteByQuery(QueryWrapper.create().where(SKILLS_D_O.ID.in(idsToDelete)));
+            }
         }
     }
 
