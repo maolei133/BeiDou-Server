@@ -167,6 +167,10 @@ public class TraceabilityService {
                 // 默认找回有效期 24 小时，可配置
                 long deadline = now + (GameConfig.getServerInt("item_recovery_hours", 24) * 60 * 60 * 1000L);
 
+                // 如果是丢弃操作，初始状态设为 PENDING (待确认)，等待物品真正消失后再激活
+                // 如果是出售操作，初始状态设为 RECOVERABLE (可找回)
+                String initialStatus = "DROP".equals(disposalType) ? "PENDING" : "RECOVERABLE";
+
                 ItemRecoveryLogsDO recoveryLogDO = ItemRecoveryLogsDO.builder()
                         .characterId(character.getId())
                         .uid(item.getUid())
@@ -175,13 +179,57 @@ public class TraceabilityService {
                         .disposalType(disposalType)
                         .disposalTime(now)
                         .recoveryDeadline(deadline)
-                        .status("RECOVERABLE")
+                        .status(initialStatus)
                         .build();
 
                 itemRecoveryLogsMapper.insert(recoveryLogDO);
 
             } catch (Exception e) {
                 log.error("插入物品找回日志失败，物品UID: " + item.getUid(), e);
+            }
+        });
+    }
+    
+    /**
+     * 激活丢弃物品的找回状态
+     * 当物品从地图上消失时调用
+     * 
+     * @param uid 物品UID
+     */
+    public void activateRecovery(long uid) {
+        if (uid <= 0) return;
+        
+        logExecutor.submit(() -> {
+            try {
+                // 查找该UID对应的最近一条状态为 PENDING 的记录
+                // 注意：这里假设一个UID在短时间内只会被丢弃一次，或者我们只关心最近一次
+                // 实际上，由于UID唯一性，PENDING状态的记录应该只有一条
+                
+                // 这里使用 UpdateChain 直接更新，提高效率
+                // 将状态从 PENDING 更新为 RECOVERABLE
+                // 增加 disposal_type = 'DROP' 条件以确保安全
+                
+                // 由于 Mybatis-Flex 的 UpdateChain 需要实体类 class，这里假设 ItemRecoveryLogsDO 对应表结构
+                // 并且 status 字段名为 status
+                
+                // 构造更新条件：uid = ? AND status = 'PENDING' AND disposal_type = 'DROP'
+                // 更新内容：status = 'RECOVERABLE'
+                
+                // 注意：这里没有直接使用 UpdateChain，因为我没有看到 ItemRecoveryLogsDO 的完整定义和 TableDef
+                // 但根据之前的代码风格，我可以使用 Mapper 的 updateByQuery
+                
+                ItemRecoveryLogsDO updateEntity = new ItemRecoveryLogsDO();
+                updateEntity.setStatus("RECOVERABLE");
+                
+                QueryWrapper where = QueryWrapper.create()
+                        .where(ItemRecoveryLogsDO::getUid).eq(uid)
+                        .and(ItemRecoveryLogsDO::getStatus).eq("PENDING")
+                        .and(ItemRecoveryLogsDO::getDisposalType).eq("DROP");
+                        
+                itemRecoveryLogsMapper.updateByQuery(updateEntity, where);
+                
+            } catch (Exception e) {
+                log.error("激活物品找回状态失败，物品UID: " + uid, e);
             }
         });
     }

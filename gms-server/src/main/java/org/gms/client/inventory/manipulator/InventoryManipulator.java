@@ -230,25 +230,19 @@ public class InventoryManipulator {
         if (item.getUid() > 0) {
             Item existingItem = inv.findByUid(item.getUid());
             if (existingItem != null) {
-                // 如果是不可堆叠物品（如装备），或者虽然是可堆叠物品但ID不同（严重异常），则拒绝入包
-                if (!type.equals(InventoryType.EQUIP) && existingItem.getItemId() == item.getItemId()) {
-                    // 可堆叠物品且ID相同，允许合并逻辑继续执行
-                    // 注意：下面的合并逻辑会处理数量增加，这里不需要额外操作
-                    // 但为了安全，我们可以记录一条日志
-                    log.info("检测到相同 UID 的可堆叠物品合并: UID={}, ItemID={}, Char={}", item.getUid(), item.getItemId(), chr.getName());
-                } else {
-                    // 严重冲突：装备重复，或者不同ID的物品使用了相同UID
-                    log.error("严重安全警告：检测到物品复制尝试！玩家: {}, 物品ID: {}, UID: {}, 现有物品ID: {}", 
-                            chr.getName(), item.getItemId(), item.getUid(), existingItem.getItemId());
-                    
-                    // 记录异常日志
-                    traceabilityService.log(item, chr, TraceabilityService.ActionType.ADMIN_DELETE, 
-                            "DUPLICATE_UID_BLOCKED", item.getQuantity(), "由于背包中存在重复的UID，阻止了addFromDrop操作", "现有物品ID: " + existingItem.getItemId());
-                    
-                    c.sendPacket(PacketCreator.serverNotice(1, "操作失败：检测到物品数据异常 (E01)。"));
-                    c.sendPacket(PacketCreator.enableActions());
-                    return false;
-                }
+                // 无论是否可堆叠，只要 UID 相同且不是同一个对象，就视为复制风险，拒绝入包
+                // 注意：如果是同一个对象引用（极少见），理论上可以，但为了安全，这里一律拒绝
+                
+                log.warn("拦截到重复UID物品入包请求 (可能是重复包或复制尝试)。玩家: {}, 物品ID: {}, UID: {}, 现有物品ID: {}", 
+                        chr.getName(), item.getItemId(), item.getUid(), existingItem.getItemId());
+                
+                // 记录异常日志
+                traceabilityService.log(item, chr, TraceabilityService.ActionType.ADMIN_DELETE, 
+                        "DUPLICATE_UID_BLOCKED", item.getQuantity(), "由于背包中存在重复的UID，阻止了addFromDrop操作", "现有物品ID: " + existingItem.getItemId());
+                
+                c.sendPacket(PacketCreator.serverNotice(1, "操作失败：检测到物品数据异常 (E01)。"));
+                c.sendPacket(PacketCreator.enableActions());
+                return false;
             }
         }
 
@@ -891,6 +885,8 @@ public class InventoryManipulator {
         }
 
         // 物品找回系统拦截点
+        // 修改：在丢弃时记录找回，但状态设为 PENDING (待确认)，防止“丢弃->找回->拾取”的复制漏洞
+        // 只有当物品真正从地图上消失时，才会激活为 RECOVERABLE
         if (isValuableForRecovery(source)) {
             TraceabilityService traceabilityService = SpringContextUtil.getBean(TraceabilityService.class);
             traceabilityService.logRecovery(source, chr, "DROP");

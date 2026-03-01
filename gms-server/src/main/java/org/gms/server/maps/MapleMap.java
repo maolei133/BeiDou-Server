@@ -29,6 +29,7 @@ import org.gms.client.inventory.Equip;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.Pet;
+import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.client.status.MonsterStatus;
 import org.gms.client.status.MonsterStatusEffect;
 import org.gms.config.GameConfig;
@@ -3630,6 +3631,21 @@ public class MapleMap {
                 }
 
                 MapleMap.this.pickItemDrop(PacketCreator.removeItemFromMap(mapitem.getObjectId(), 0, 0), mapitem);
+                
+                // 物品找回系统拦截点：物品从地图上消失时记录找回
+                if (mapitem.getItem() != null && InventoryManipulator.isValuableForRecovery(mapitem.getItem())) {
+                    Character owner = null;
+                    if (mapitem.getOwnerClient() != null) {
+                        owner = mapitem.getOwnerClient().getPlayer();
+                    }
+                    if (owner == null) {
+                        owner = getCharacterById(mapitem.getOwnerId());
+                    }
+                    if (owner != null) {
+                        traceabilityService.logRecovery(mapitem.getItem(), owner, "EXPIRED");
+                    }
+                }
+
                 return true;
             } finally {
                 mapitem.unlockItem();

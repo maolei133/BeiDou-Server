@@ -24,6 +24,11 @@ var selectedItem = null;
 var selectedFee = null;
 
 function start() {
+    if (!GameConfig.getServerBoolean("item_recovery_enabled", true)) {
+        cm.sendOk("物品找回系统当前未开启。");
+        cm.dispose();
+        return;
+    }
     levelMain();
 }
 
