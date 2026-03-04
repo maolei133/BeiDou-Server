@@ -1123,7 +1123,7 @@ public class InventoryManipulator {
                 
                 // 保留原有的价格兜底逻辑，防止漏掉非属性类的高价物品
                 double price = ii.getPrice(itemId, 1);
-                if (price > 5000 || price <= 0) return true;
+                if (price > 50000 || price <= 0) return true;
                 
                 return false; // 其他普通药水视为垃圾
             }
