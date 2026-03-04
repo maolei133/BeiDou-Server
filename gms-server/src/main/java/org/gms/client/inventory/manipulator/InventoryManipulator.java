@@ -786,7 +786,7 @@ public class InventoryManipulator {
         mods.add(new ModifyInventory(2, source, src));
         c.sendPacket(PacketCreator.modifyInventory(true, mods));
         chr.equipChanged();
-        
+
         // 实时保存
         ItemFactory.INVENTORY.saveItems(eqpInv.list().stream().map(i -> new org.gms.util.Pair<>(i, InventoryType.EQUIP)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIP));
         ItemFactory.INVENTORY.saveItems(eqpdInv.list().stream().map(i -> new org.gms.util.Pair<>(i, InventoryType.EQUIPPED)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIPPED));
@@ -916,6 +916,11 @@ public class InventoryManipulator {
 
             if (isDisappearingItemDrop(target)) {
                 map.disappearingItemDrop(chr, chr, target, dropPos);
+                // 修复：对于直接消失的物品，立即激活找回状态，并记录溯源日志
+                if (isValuableForRecovery(target)) {
+                    traceabilityService.activateRecovery(target.getUid());
+                    traceabilityService.log(target, chr, TraceabilityService.ActionType.DROP, "玩家丢弃(直接销毁)", quantity);
+                }
             } else {
                 map.spawnItemDrop(chr, chr, target, dropPos, true, true);
             }
@@ -947,6 +952,11 @@ public class InventoryManipulator {
 
             if (isDisappearingItemDrop(source)) {
                 map.disappearingItemDrop(chr, chr, source, dropPos);
+                // 修复：对于直接消失的物品，立即激活找回状态，并记录溯源日志
+                if (isValuableForRecovery(source)) {
+                    traceabilityService.activateRecovery(source.getUid());
+                    traceabilityService.log(source, chr, TraceabilityService.ActionType.DROP, "玩家丢弃(直接销毁)", quantity);
+                }
             } else {
                 map.spawnItemDrop(chr, chr, source, dropPos, true, true);
             }
