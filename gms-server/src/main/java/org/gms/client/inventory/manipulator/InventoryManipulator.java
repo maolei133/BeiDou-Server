@@ -623,7 +623,7 @@ public class InventoryManipulator {
         short slotMax = ii.getSlotMax(c, source.getItemId());
         inv.move(src, dst, slotMax);
         final List<ModifyInventory> mods = new ArrayList<>();
-        if (!(type.equals(InventoryType.EQUIP) || (type.equals(InventoryType.CASH) && slotMax <= 1)) && initialTarget != null && initialTarget.getItemId() == source.getItemId() && !ItemConstants.isRechargeable(source.getItemId()) && isSameOwner(source, initialTarget)) {
+        if (!(type.equals(InventoryType.EQUIP) || (type.equals(InventoryType.CASH) && (slotMax <= 1 || ItemConstants.isPet(source.getItemId()) || ItemConstants.isRing(source.getItemId())))) && initialTarget != null && initialTarget.getItemId() == source.getItemId() && !ItemConstants.isRechargeable(source.getItemId()) && isSameOwner(source, initialTarget)) {
             if ((olddstQ + oldsrcQ) > slotMax) {
                 mods.add(new ModifyInventory(1, source));
                 mods.add(new ModifyInventory(1, initialTarget));

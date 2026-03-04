@@ -264,7 +264,7 @@ public class Inventory implements Iterable<Item> {
                 inventory.put(dSlot, source);
                 inventory.remove(sSlot);
             } else if (target.getItemId() == source.getItemId() && !ItemConstants.isRechargeable(source.getItemId()) && isSameOwner(source, target)) {
-                if (type.getType() == InventoryType.EQUIP.getType() || (type.getType() == InventoryType.CASH.getType() && slotMax <= 1)) {
+                if (type.getType() == InventoryType.EQUIP.getType() || (type.getType() == InventoryType.CASH.getType() && (slotMax <= 1 || ItemConstants.isPet(source.getItemId()) || ItemConstants.isRing(source.getItemId())))) {
                     swap(target, source);
                 } else if (source.getQuantity() + target.getQuantity() > slotMax) {
                     short movedQty = (short) (slotMax - target.getQuantity());
