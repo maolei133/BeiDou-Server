@@ -21,6 +21,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.client.inventory;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.server.ItemInformationProvider;
@@ -40,6 +43,7 @@ public class Item implements Comparable<Item> {
     private int sn;
     private short position;
     private short quantity;
+    @JsonIgnore
     private int petid = -1;
     private Pet pet = null;
     private String owner = "";
@@ -139,8 +143,15 @@ public class Item implements Comparable<Item> {
         this.owner = owner;
     }
 
+    @JsonIgnore
     public int getPetId() {
         return petid;
+    }
+
+    @JsonProperty("petId")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Integer getPetIdForJson() {
+        return petid == -1 ? null : petid;
     }
 
     @Override
