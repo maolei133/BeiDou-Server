@@ -5,6 +5,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.gms.client.Character;
 import org.gms.client.inventory.Item;
+import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.client.processor.npc.DueyProcessor;
 import org.gms.config.GameConfig;
 import org.gms.dao.entity.ItemRecoveryLogsDO;
@@ -121,6 +122,13 @@ public class TraceabilityService {
             return;
         }
 
+        // 新增：价值判断过滤
+        // 在记录日志前，首先判断物品是否为“有价值的物品”，如果不是，则直接返回，不进行记录。
+        // 这是为了防止数据库因记录大量低价值物品（如白板装备、药水）而过度膨胀。
+        if (!InventoryManipulator.isValuableForRecovery(item)) {
+            return;
+        }
+
         // 异步写入数据库，避免阻塞主线程
         logExecutor.submit(() -> {
             try {
@@ -155,6 +163,12 @@ public class TraceabilityService {
      */
     public void logRecovery(Item item, Character character, String disposalType) {
         if (item == null || character == null) {
+            return;
+        }
+
+        // 新增：价值判断过滤
+        // 只有“有价值”的物品才会被记录到找回系统中，防止滥用。
+        if (!InventoryManipulator.isValuableForRecovery(item)) {
             return;
         }
 

@@ -981,7 +981,33 @@ public class InventoryManipulator {
     }
 
     /**
-     * 判断物品是否值得进入找回系统
+     * 计算装备的属性总和（不包括HP/MP），用于价值判断。
+     * @param equip 要计算的装备对象
+     * @return 属性总和
+     */
+    private static long calculateEquipStatsSum(Equip equip) {
+        if (equip == null) {
+            return 0;
+        }
+        long sum = 0;
+        sum += equip.getStr();
+        sum += equip.getDex();
+        sum += equip.getInt();
+        sum += equip.getLuk();
+        sum += equip.getWatk();
+        sum += equip.getMatk();
+        sum += equip.getWdef();
+        sum += equip.getMdef();
+        sum += equip.getAcc();
+        sum += equip.getAvoid();
+        sum += equip.getHands();
+        sum += equip.getSpeed();
+        sum += equip.getJump();
+        return sum;
+    }
+
+    /**
+     * 判断物品是否值得进入找回系统或溯源系统
      * 策略：白名单(高价值ID段) + 价格阈值 + 黑名单(垃圾ID段)
      */
     public static boolean isValuableForRecovery(Item item) {
@@ -997,11 +1023,41 @@ public class InventoryManipulator {
             return true;
         }
 
-        // 1. 装备：默认全部找回
+        // 1. 装备：默认全部找回 -> 修改为更详细的价值判断
         // 除非是极低级的白板（可选：增加价格判断，例如售价<10金币的不找回）
-        if (type == InventoryType.EQUIP) {
-            return true;
+        if (item instanceof Equip) { // 使用 instanceof 判断，比 type == EQUIP 更准确
+            Equip equip = (Equip) item;
+
+            // 新增逻辑：条件1：高级装备 (穿戴等级 >= 120)
+            // 说明：这是新增的价值判断标准，高级装备无论属性如何都应被记录。
+            if (ii.getEquipLevelReq(itemId) >= 120) {
+                return true;
+            }
+
+            // 新增逻辑：条件2：已升级或已成长 (已砸卷次数 > 1 或 成长等级 > 1)
+            // 说明：这覆盖了被玩家强化过的装备。
+            if (equip.getLevel() > 1 || equip.getItemLevel() > 1) {
+                return true;
+            }
+
+            // 新增逻辑：条件3：属性总和超过默认值
+            // 说明：这覆盖了天生属性较好（俗称“满属性”）或通过卷轴强化后属性提升的装备。
+            Item defaultItem = ii.getEquipById(itemId);
+            if (defaultItem instanceof Equip) {
+                Equip defaultEquip = (Equip) defaultItem;
+                long currentStatsSum = calculateEquipStatsSum(equip);
+                long defaultStatsSum = calculateEquipStatsSum(defaultEquip);
+                if (currentStatsSum > defaultStatsSum) {
+                    return true;
+                }
+            }
+            // 如果以上装备的特定价值条件都不满足，则不再默认返回true，而是让它走到函数末尾返回false。
+        } else if (type == InventoryType.EQUIP) {
+            // 对于非Equip实例但类型为EQUIP的罕见情况（理论上不应发生），保留一个基本判断
+            // 或者直接认为这种情况下的装备无价值，因为无法获取详细属性
+            // 此处选择不处理，让其自然走到末尾返回false
         }
+
 
         // 2. 消耗品 (USE)
         if (type == InventoryType.USE) {
