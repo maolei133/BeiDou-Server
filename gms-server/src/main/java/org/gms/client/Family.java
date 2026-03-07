@@ -29,6 +29,8 @@ import org.gms.net.server.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.util.PacketCreator;
+
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -147,6 +149,14 @@ public class Family {
 
     public FamilyEntry getEntryByID(int cid) {
         return members.get(cid);
+    }
+
+    /**
+     * 获取学院所有成员的集合。
+     * @return 成员集合
+     */
+    public Collection<FamilyEntry> getMembers() {
+        return members.values();
     }
 
     public void broadcast(Packet packet) {

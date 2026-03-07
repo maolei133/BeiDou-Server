@@ -13,6 +13,8 @@ import org.gms.dao.mapper.FamilyEntitlementMapper;
 import org.gms.net.server.Server;
 import org.gms.net.server.world.World;
 import org.gms.util.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -23,6 +25,8 @@ import static org.gms.dao.entity.table.FamilyEntitlementDOTableDef.FAMILY_ENTITL
 @Service
 @AllArgsConstructor
 public class FamilyService {
+    private static final Logger log = LoggerFactory.getLogger(FamilyService.class);
+
     private final FamilyCharacterMapper familyCharacterMapper;
     private final FamilyEntitlementMapper familyEntitlementMapper;
     private final CharacterService characterService;
@@ -78,6 +82,21 @@ public class FamilyService {
         }
         for (World world : Server.getInstance().getWorlds()) {
             for (Family family : world.getFamilies()) {
+                // 如果学院没有院长(领袖)，并且学院里有成员
+                if (family.getLeader() == null && !family.getMembers().isEmpty()) {
+                    // 将第一位成员设为新院长
+                    FamilyEntry newLeader = family.getMembers().iterator().next();
+                    family.setLeader(newLeader);
+
+                    // 更新数据库，将新院长的seniorid设为0
+                    FamilyCharacterDO newLeaderDO = new FamilyCharacterDO();
+                    newLeaderDO.setCid(newLeader.getChrId());
+                    newLeaderDO.setSeniorid(0);
+                    familyCharacterMapper.update(newLeaderDO, true);
+                    
+                    log.info("学院 {} 没有院长，已自动指派 {} 为新院长。", family.getID(), newLeader.getName());
+                }
+
                 if (family.getLeader() != null) {
                     family.getLeader().doFullCount();
                 }

@@ -123,11 +123,11 @@ public class FamilyEntry {
                 }
                 if (!success) {
                     status.setRollbackOnly();
-                    log.error("无法将 {} 的家族合并到 {} 的家族中。(SQL 错误)", oldFamily.getName(), newFamily.getName());
+                    log.error("无法将 {} 的学院合并到 {} 的学院中。(SQL 错误)", oldFamily.getName(), newFamily.getName());
                 }
             } catch (Exception e) {
                 status.setRollbackOnly();
-                log.error("合并家族时无法连接到数据库", e);
+                log.error("合并学院时无法连接到数据库", e);
             }
         });
     }
@@ -137,6 +137,12 @@ public class FamilyEntry {
         FamilyEntry oldSenior = getSenior();
         family = new Family(-1, oldFamily.getWorld());
         Server.getInstance().getWorld(family.getWorld()).addFamily(family.getID(), family);
+
+        // 【关键修复】同步更新当前 Character 对象的内存中的 familyId，防止数据不一致
+        if (character != null) {
+            character.setFamilyId(family.getID());
+        }
+
         setSenior(null, false);
         family.setLeader(this);
         addSeniorCount(-getTotalSeniors(), family);
@@ -168,11 +174,11 @@ public class FamilyEntry {
                 }
                 if (!success) {
                     status.setRollbackOnly();
-                    log.error("无法使用新族长 {} 分离家族。(旧长辈: {}, 族长: {})", getName(), oldSenior.getName(), oldFamily.getLeader().getName());
+                    log.error("无法使用新院长 {} 分离学院。(旧老师: {}, 院长: {})", getName(), oldSenior.getName(), oldFamily.getLeader().getName());
                 }
             } catch (Exception e) {
                 status.setRollbackOnly();
-                log.error("分离家族时无法连接到数据库", e);
+                log.error("分离学院时无法连接到数据库", e);
             }
         });
     }
@@ -202,13 +208,13 @@ public class FamilyEntry {
                     .where(FamilyCharacterDO::getCid).eq(cid)
                     .update();
         } catch (Exception e) {
-            log.error("无法更新角色ID {} 在 'family_character' 表中的家族ID。(分离)", cid, e);
+            log.error("无法更新角色ID {} 在 'family_character' 表中的学院ID。(分离)", cid, e);
             return false;
         }
         return true;
     }
 
-    private synchronized void addSeniorCount(int seniorCount, Family newFamily) { // 遍历树并减去长辈数并更新家族
+    private synchronized void addSeniorCount(int seniorCount, Family newFamily) { // 遍历树并减去老师数并更新学院
         if (newFamily != null) {
             this.family = newFamily;
         }
@@ -368,7 +374,7 @@ public class FamilyEntry {
             return false;
         }
         if (senior != null && (senior == this || isDescendant(senior))) {
-            log.warn("检测到家族树循环: {} 不能成为 {} 的长辈", senior.getName(), getName());
+            log.warn("检测到学院树循环: {} 不能成为 {} 的老师", senior.getName(), getName());
             return false;
         }
         FamilyEntry oldSenior = this.senior;
@@ -403,7 +409,7 @@ public class FamilyEntry {
                     .where(FamilyCharacterDO::getCid).eq(cid)
                     .update();
         } catch (Exception e) {
-            log.error("无法更新角色ID {} 在 'family_character' 表中的长辈ID", cid, e);
+            log.error("无法更新角色ID {} 在 'family_character' 表中的老师ID", cid, e);
             return false;
         }
         return updateCharacterFamilyDB(cid, familyid, false);
@@ -416,7 +422,7 @@ public class FamilyEntry {
                     .where(CharactersDO::getId).eq(charid)
                     .update();
         } catch (Exception e) {
-            log.error("更改家族时无法更新角色ID {} 在 'characters' 表中的家族ID。{}", charid, fork ? "(分离)" : "", e);
+            log.error("更改学院时无法更新角色ID {} 在 'characters' 表中的学院ID。{}", charid, fork ? "(分离)" : "", e);
             return false;
         }
         return true;
@@ -448,7 +454,7 @@ public class FamilyEntry {
 
     public synchronized boolean addJunior(FamilyEntry newJunior) {
         for (int i = 0; i < juniors.length; i++) {
-            if (juniors[i] == null) { // 成功添加新晚辈到家族
+            if (juniors[i] == null) { // 成功添加新晚辈到学院
                 juniors[i] = newJunior;
                 addJuniorCount(1);
                 getFamily().addEntry(newJunior);
@@ -527,14 +533,14 @@ public class FamilyEntry {
     }
 
     /**
-     * 遍历整个家族树以更新长辈/晚辈计数。在族长上调用。
+     * 遍历整个学院树以更新老师/晚辈计数。在院长上调用。
      */
     public synchronized void doFullCount() {
         Pair<Integer, Integer> counts = this.traverseAndUpdateCounts(0);
         getFamily().setTotalGenerations(counts.getLeft() + 1);
     }
 
-    private Pair<Integer, Integer> traverseAndUpdateCounts(int seniors) { // 递归可能会限制家族大小，但它应该能处理几千的深度
+    private Pair<Integer, Integer> traverseAndUpdateCounts(int seniors) { // 递归可能会限制学院大小，但它应该能处理几千的深度
         setTotalSeniors(seniors);
         this.generation = seniors;
         int juniorCount = 0;
@@ -581,7 +587,7 @@ public class FamilyEntry {
             entitlements[id] = 0;
             return true;
         } else {
-            log.error("无法为角色 {} 退还家族特权 \"{}\"", getName(), entitlement.getName());
+            log.error("无法为角色 {} 退还学院特权 \"{}\"", getName(), entitlement.getName());
             return false;
         }
     }
