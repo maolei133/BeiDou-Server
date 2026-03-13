@@ -108,7 +108,7 @@ public class Family {
     }
 
     public void setMessage(String message, boolean save) {
-        this.preceptsMessage = message;
+        this.preceptsMessage = message != null ? message : "";
         if (save) {
             try {
                 UpdateChain.of(FamilyCharacterDO.class)
@@ -122,7 +122,7 @@ public class Family {
     }
 
     public String getMessage() {
-        return preceptsMessage;
+        return preceptsMessage != null ? preceptsMessage : "";
     }
 
     public void addEntry(FamilyEntry entry) {
