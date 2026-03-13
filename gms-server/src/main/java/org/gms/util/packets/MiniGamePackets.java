@@ -460,7 +460,7 @@ public class MiniGamePackets {
      * 7, 20 = 不允许再交易 9 = 只能在同一地图交易 10 = 不能在传送门附近开店
      * 11, 14 = 无法在此处开始游戏 12 = 无法在此频道开店 13 = 无法建立迷你房间
      * 15 = 商店只能在自由市场 16 = 列出自由市场的房间 (?) 17 = 您不能进入此商店
-     * 18 = 店主正在维护商店 19 = 无法进入锦标赛房间 21 = 金币不足无法进入
+     * 18 = 店主正在进行商店维护 19 = 无法进入锦标赛房间 21 = 金币不足无法进入
      * 22 = 密码错误
      *
      * @param status 状态码
@@ -1176,7 +1176,8 @@ public class MiniGamePackets {
             totalMesos += merchant.getMesos();
             List<HiredMerchantItemsDO> merchantItems = hmService.getRetrieveableItems(merchant.getId());
             for (HiredMerchantItemsDO itemDO : merchantItems) {
-                Item item = hmService.deserializeItem(itemDO.getItemData());
+                short quantity = itemDO.getQuantity() != null ? itemDO.getQuantity().shortValue() : 1;
+                Item item = hmService.deserializeItem(itemDO.getItemData(), itemDO.getItemId(), quantity);
                 if (item != null) {
                     int remaining = itemDO.getBundles() - itemDO.getSoldQuantity();
                     if (remaining > 0) {

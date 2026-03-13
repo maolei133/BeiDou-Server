@@ -5,38 +5,39 @@ import com.mybatisflex.core.query.QueryWrapper;
 import lombok.AllArgsConstructor;
 import org.gms.client.Character;
 import org.gms.client.Client;
-import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
-import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.client.processor.npc.DueyProcessor;
 import org.gms.config.GameConfig;
-import org.gms.constants.inventory.ItemConstants;
 import org.gms.dao.entity.ItemRecoveryLogsDO;
 import org.gms.dao.mapper.ItemRecoveryLogsMapper;
 import org.gms.model.dto.ItemInfoRtnDTO;
 import org.gms.server.CashShop;
 import org.gms.server.ItemInformationProvider;
-import org.gms.util.PacketCreator;
+import org.gms.util.ItemConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 物品找回服务
+ */
 @Service
 @AllArgsConstructor
 public class ItemRecoveryService {
     private static final Logger log = LoggerFactory.getLogger(ItemRecoveryService.class);
     private final ItemRecoveryLogsMapper itemRecoveryLogsMapper;
     private final TraceabilityService traceabilityService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     /**
      * 获取玩家可找回的物品列表
+     * @param characterId 角色ID
+     * @return 可找回物品的日志列表
      */
     public List<ItemRecoveryLogsDO> getRecoverableItems(int characterId) {
         QueryWrapper query = QueryWrapper.create()
@@ -105,7 +106,12 @@ public class ItemRecoveryService {
         try {
             // 反序列化物品
             ItemInfoRtnDTO itemDTO = objectMapper.readValue(logEntry.getItemData(), ItemInfoRtnDTO.class);
-            Item item = DueyProcessor.restoreItemFromDTO(itemDTO);
+            
+            // TODO: 长期建议: 为 item_recovery_logs 表增加 quantity 字段，以支持可堆叠物品的正确数量找回。
+            // 当前临时修复：假设数量为1。
+            short quantity = 1; 
+            Item item = ItemConverter.restoreItemFromDTO(logEntry.getItemId(), quantity, itemDTO);
+
             // 恢复原始 UID
             item.setUid(logEntry.getUid());
 
@@ -139,18 +145,11 @@ public class ItemRecoveryService {
 
             // 通过快递发送物品
             String message = "您找回的物品已送达，请查收。";
-            // 9010000 是失物招领管理员的 NPC ID，作为发件人 ID
-            // 使用 dueySendItem 逻辑，但由于 dueySendItem 是处理客户端请求的，包含了很多检查和扣费逻辑
-            // 这里我们直接调用 createPackage 和 insertPackageItem，并手动触发通知
-            // 修正：根据要求，应尽可能复用 DueyProcessor 的逻辑，但 dueySendItem 包含扣费和客户端交互，不适合直接调用
-            // 因此保持 createPackage + insertPackageItem + showDueyNotification 的组合是正确的底层调用方式
-            // 如果必须使用 dueySendItem，需要重构 DueyProcessor 将核心逻辑分离
-            // 鉴于当前上下文，我们直接使用底层方法组合来模拟系统发送
             
-            int packageId = DueyProcessor.createPackage(0, message, "找回系统", chr.getId(), false, item, 9010000, -1);
+            int packageId = DueyProcessor.createPackage(0, message, "找回系统", chr.getId(), true, item, 9010000, -1);
             
             if (packageId != -1) {
-                DueyProcessor.insertPackageItem(packageId, item);
+                // 物品数据已在 createPackage 中处理，这里无需额外操作
                 
                 // 发送快递通知
                 DueyProcessor.showDueyNotification(chr);
@@ -162,9 +161,8 @@ public class ItemRecoveryService {
                 logEntry.setStatus("RECOVERED");
                 itemRecoveryLogsMapper.update(logEntry);
 
-                // 提示信息已在脚本中处理
             } else {
-                // 如果快递发送失败，回滚费用扣除（虽然事务会回滚，但手动提示更友好）
+                // 如果快递发送失败，回滚费用扣除
                 throw new RuntimeException("创建快递包裹失败");
             }
 

@@ -61,8 +61,8 @@ public class Storage {
     private int currentNpcid;
     private int meso;
     private byte slots;
-    private final Map<InventoryType, List<Item>> typeItems = new HashMap<>(); // 分类缓存，用于快速响应客户端请求
-    private List<Item> items; // 核心数据结构，存储所有物品
+    private final Map<InventoryType, List<Item>> typeItems = new HashMap<>();
+    private List<Item> items;
     private final Lock lock = new ReentrantLock(true);
 
     // 依赖注入
@@ -99,16 +99,11 @@ public class Storage {
         if (loadedItems.isEmpty()) {
             List<Pair<Item, InventoryType>> oldItems = ItemFactory.STORAGE.loadItems(ret.id, false);
             if (!oldItems.isEmpty()) {
-                List<Item> itemsToMigrate = new ArrayList<>();
-                for (Pair<Item, InventoryType> pair : oldItems) {
-                    itemsToMigrate.add(pair.getLeft());
-                }
+                List<Item> itemsToMigrate = oldItems.stream().map(Pair::getLeft).collect(Collectors.toList());
                 storageService.migrateOldData(ret.id, itemsToMigrate);
-                // 迁移后重新加载以获取正确的 UID
                 List<Item> reloadedItems = storageService.loadStorageItems(ret.id);
                 ret.items.addAll(reloadedItems);
                 
-                // 记录迁移日志
                 AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_MIGRATE, 
                         new MapMessage()
                                 .with("sid", ret.id)
@@ -126,10 +121,7 @@ public class Storage {
                 int oldMeso = 0; // 旧仓库金币通常存储在 storages 表中，这里只处理物品
                 int newMeso = ret.meso;
                 
-                List<Item> itemsToMerge = new ArrayList<>();
-                for (Pair<Item, InventoryType> pair : oldItems) {
-                    itemsToMerge.add(pair.getLeft());
-                }
+                List<Item> itemsToMerge = oldItems.stream().map(Pair::getLeft).collect(Collectors.toList());
                 
                 // 计算合并后的起始位置
                 int startPosition = ret.items.size();
@@ -203,7 +195,7 @@ public class Storage {
         lock.lock();
         try {
             // 1. 尝试堆叠 (Stacking)
-            if (!ItemConstants.isEquipment(item.getItemId()) 
+            if (!ItemConstants.isEquipment(item.getItemId())
                 && !ItemConstants.isRechargeable(item.getItemId()) 
                 && ItemInformationProvider.getInstance().getSlotMax(c, item.getItemId()) > 1) {
                 short maxSlot = ItemInformationProvider.getInstance().getSlotMax(c, item.getItemId());
@@ -217,17 +209,12 @@ public class Storage {
                         
                         storageService.updateItem(this.id, existing);
                         
-                        if (item.getQuantity() <= 0) {
-                            return true; 
-                        }
+                        if (item.getQuantity() <= 0) return true; 
                     }
                 }
             }
 
-            // 2. 存入新槽位 (New Slot)
-            if (items.size() >= slots) {
-                return false; // 仓库已满
-            }
+            if (items.size() >= slots) return false;
 
             // 计算新物品的 Position
             // 为了保持顺序一致性，新物品总是追加到末尾
@@ -237,7 +224,7 @@ public class Storage {
             item.setPosition(newPos);
 
             // 插入到列表末尾
-            items.add(item); 
+            items.add(item);
             
             // 还原旧逻辑：刷新对应类型的缓存
             InventoryType type = item.getInventoryType();
@@ -262,7 +249,7 @@ public class Storage {
 
             if (removed) {
                 storageService.removeItem(this.id, item);
-                
+
                 // 还原旧逻辑：刷新对应类型的缓存
                 InventoryType type = item.getInventoryType();
                 typeItems.put(type, new ArrayList<>(filterItems(type)));
@@ -350,13 +337,7 @@ public class Storage {
     }
 
     private List<Item> filterItems(InventoryType type) {
-        List<Item> ret = new LinkedList<>();
-        for (Item item : items) {
-            if (item.getInventoryType() == type) {
-                ret.add(item);
-            }
-        }
-        return ret;
+        return items.stream().filter(item -> item.getInventoryType() == type).collect(Collectors.toList());
     }
 
     public void sendStorage(Client c, int npcId) {
@@ -370,15 +351,7 @@ public class Storage {
         try {
             this.currentNpcid = npcId;
             
-            // 还原旧逻辑：打开仓库时强制排序
-            items.sort((o1, o2) -> {
-                if (o1.getInventoryType().getType() < o2.getInventoryType().getType()) {
-                    return -1;
-                } else if (o1.getInventoryType() == o2.getInventoryType()) {
-                    return 0;
-                }
-                return 1;
-            });
+            items.sort(Comparator.comparingInt(o -> o.getInventoryType().getType()));
             
             // 还原旧逻辑：初始化时将全量列表放入每个类型的缓存中
             // 这正是旧代码“歪打正着”的关键
@@ -419,10 +392,7 @@ public class Storage {
     public Item getItem(byte slot) {
         lock.lock();
         try {
-            if (slot >= 0 && slot < items.size()) {
-                return items.get(slot);
-            }
-            return null;
+            return (slot >= 0 && slot < items.size()) ? items.get(slot) : null;
         } finally {
             lock.unlock();
         }
@@ -473,9 +443,7 @@ public class Storage {
     }
 
     public void setMeso(int meso) {
-        if (meso < 0) {
-            throw new RuntimeException("仓库金币不能为负数");
-        }
+        if (meso < 0) throw new RuntimeException("仓库金币不能为负数");
         this.meso = meso;
         storageService.updateMeso(this.id, this.meso);
     }
@@ -492,10 +460,7 @@ public class Storage {
         return cache.computeIfAbsent(npcId, id -> {
             DataProvider npc = DataProviderFactory.getDataProvider(WZFiles.NPC);
             Data npcData = npc.getData(id + ".img");
-            if (npcData != null) {
-                return DataTool.getIntConvert(path, npcData, def);
-            }
-            return def;
+            return (npcData != null) ? DataTool.getIntConvert(path, npcData, def) : def;
         });
     }
 
@@ -510,7 +475,7 @@ public class Storage {
     
     /**
      * 根据类型和槽位获取物品在总列表中的索引
-     * 
+     *
      * 还原旧逻辑：直接使用 typeItems 缓存查找
      */
     public byte getSlot(InventoryType type, byte slot) {
@@ -520,15 +485,11 @@ public class Storage {
             // 还原旧逻辑：直接遍历全局 items，寻找与 typeItems 缓存中对应位置物品引用相同的对象
             // 这依赖于 typeItems 缓存的正确维护（初始化全量，操作后局部刷新）
             List<Item> typeList = typeItems.get(type);
-            if (typeList == null || slot < 0 || slot >= typeList.size()) {
-                return -1;
-            }
+            if (typeList == null || slot < 0 || slot >= typeList.size()) return -1;
             
             Item targetItem = typeList.get(slot);
             for (Item item : items) {
-                if (item == targetItem) {
-                    return ret;
-                }
+                if (item == targetItem) return ret;
                 ret++;
             }
             return -1;

@@ -2,6 +2,7 @@ import axios from 'axios';
 import { PageState } from '@/store/page';
 import { ResultBody } from '@/types/global';
 
+// 定义物品的数据结构，这个接口保持不变
 export interface DueyItem {
   itemId: number;
   quantity: number;
@@ -31,6 +32,7 @@ export interface DueyItem {
   vicious?: number;
 }
 
+// 快递包裹的数据结构
 export interface DueyPackage {
   packageId: number;
   receiverId: number;
@@ -41,12 +43,16 @@ export interface DueyPackage {
   message: string;
   checked: number;
   type: number;
-  items: DueyItem[];
+  // --- 核心修改 ---
+  // 后端返回的是单个物品对象，而不是数组
+  // 将 'items: DueyItem[]' 修改为 'item?: DueyItem'
+  item?: DueyItem;
   expireTime: string;
   deliveryTime: string;
   statusTime: string;
 }
 
+// 列表查询参数接口，保持不变
 export interface DueyListParams {
   pageNo: number;
   pageSize: number;
@@ -60,8 +66,9 @@ export interface DueyListParams {
   checked?: number;
 }
 
+// 发送快递的请求体结构
 export interface SendDueyReq {
-  packageId?: number; // 新增：用于更新
+  packageId?: number; // 用于更新
   receiverIds?: number[];
   isAll?: boolean;
   mesos?: number;
@@ -72,10 +79,11 @@ export interface SendDueyReq {
   expireDays?: number;
   deliveryTime?: number;
 
-  // 批量物品
+  // 批量物品列表
+  // 虽然发送时可以批量，但后端会拆分成多个包裹
   items?: DueyItem[];
 
-  // 兼容旧字段（单个物品）
+  // 兼容旧字段（单个物品），保持不变
   itemId?: number;
   quantity?: number;
   owner?: string;

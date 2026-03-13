@@ -202,7 +202,7 @@
                 </template>
               </a-button>
               <a-input-number
-                v-model="item.quantity"
+                v-model="item.qty"
                 :placeholder="$t('duey.send.quantity')"
                 :min="1"
                 :max="32767"
@@ -522,13 +522,13 @@
     if (!form.items) form.items = [];
     form.items.push({
       itemId: undefined as unknown as number, // 初始为空
-      quantity: 1,
+      qty: 1,
     });
   };
 
   watch(
     () => props.visible,
-    (val) => {
+    async (val) => {
       if (val) {
         // Reset form
         formRef.value?.resetFields();
@@ -573,9 +573,22 @@
           form.message = data.message;
           form.quick = data.type === 1;
 
-          // 处理物品
-          if (data.items && data.items.length > 0) {
-            form.items = data.items.map((item) => ({ ...item }));
+          // **关键修复**：从 data.item (单个对象) 中获取物品信息
+          if (data.item) {
+            const itemToEdit = { ...data.item };
+
+            // **关键修复**：将后端返回的 `id` 和 `qty` 字段重命名以匹配表单 v-model
+            itemToEdit.itemId = itemToEdit.id || itemToEdit.itemId;
+            itemToEdit.qty = itemToEdit.qty || itemToEdit.quantity;
+            if ('id' in itemToEdit) delete itemToEdit.id;
+            if ('quantity' in itemToEdit) delete itemToEdit.quantity;
+
+            form.items = [itemToEdit];
+
+            // **关键修复**：主动触发一次物品信息查询，以确保显示完整信息
+            if (itemToEdit.itemId) {
+              await handleIdBlur(0);
+            }
           }
 
           // 处理过期时间

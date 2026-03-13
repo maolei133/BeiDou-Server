@@ -23,10 +23,12 @@ package org.gms.client.inventory;
 
 import com.alibaba.fastjson2.JSONObject;
 import lombok.Getter;
+import lombok.Setter;
 import org.gms.client.Client;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.ExpTable;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.model.dto.ItemInfoRtnDTO;
 import org.gms.util.I18nUtil;
 import org.gms.util.PacketCreator;
 import org.gms.util.Randomizer;
@@ -39,7 +41,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-
+@Getter
+@Setter
 public class Equip extends Item {
     private static final Logger log = LoggerFactory.getLogger(Equip.class);
 
@@ -73,10 +76,8 @@ public class Equip extends Item {
     /** 可升级次数 */
     private byte upgradeSlots;
     /** 装备等级 */
-    @Getter
     private short level;
     /** 物品等级 */
-    @Getter
     private short itemLevel;
     /** 标志位 */
     private short flag;
@@ -171,190 +172,34 @@ public class Equip extends Item {
     }
 
     @Override
-    public short getFlag() {
-        return flag;
-    }
-
-    @Override
     public byte getItemType() {
         return 1;
-    }
-
-    public byte getUpgradeSlots() {
-        return upgradeSlots;
-    }
-
-    public short getStr() {
-        return str;
-    }
-
-    public short getDex() {
-        return dex;
-    }
-
-    public short getInt() {
-        return _int;
-    }
-
-    public short getLuk() {
-        return luk;
-    }
-
-    public short getHp() {
-        return hp;
-    }
-
-    public short getMp() {
-        return mp;
-    }
-
-    public short getWatk() {
-        return watk;
-    }
-
-    public short getMatk() {
-        return matk;
-    }
-
-    public short getWdef() {
-        return wdef;
-    }
-
-    public short getMdef() {
-        return mdef;
-    }
-
-    public short getAcc() {
-        return acc;
-    }
-
-    public short getAvoid() {
-        return avoid;
-    }
-
-    public short getHands() {
-        return hands;
-    }
-
-    public short getSpeed() {
-        return speed;
-    }
-
-    public short getJump() {
-        return jump;
-    }
-
-    public short getVicious() {
-        return vicious;
-    }
-
-    @Override
-    public void setFlag(short flag) {
-        this.flag = flag;
-    }
-
-    public void setStr(short str) {
-        this.str = str;
-    }
-
-    public void setDex(short dex) {
-        this.dex = dex;
     }
 
     public void setInt(short _int) {
         this._int = _int;
     }
 
-    public void setLuk(short luk) {
-        this.luk = luk;
+    public short getInt() {
+        return _int;
     }
-
-    public void setHp(short hp) {
-        this.hp = hp;
-    }
-
-    public void setMp(short mp) {
-        this.mp = mp;
-    }
-
-    public void setWatk(short watk) {
-        this.watk = watk;
-    }
-
-    public void setMatk(short matk) {
-        this.matk = matk;
-    }
-
-    public void setWdef(short wdef) {
-        this.wdef = wdef;
-    }
-
-    public void setMdef(short mdef) {
-        this.mdef = mdef;
-    }
-
-    public void setAcc(short acc) {
-        this.acc = acc;
-    }
-
-    public void setAvoid(short avoid) {
-        this.avoid = avoid;
-    }
-
-    public void setHands(short hands) {
-        this.hands = hands;
-    }
-
-    public void setSpeed(short speed) {
-        this.speed = speed;
-    }
-
-    public void setJump(short jump) {
-        this.jump = jump;
-    }
-
-    public void setVicious(short vicious) {
-        this.vicious = vicious;
-    }
-
-    public void setUpgradeSlots(byte upgradeSlots) {
-        this.upgradeSlots = upgradeSlots;
-    }
-
-    public void setLevel(short level) {
-        this.level = level;
-    }
-
     private static int getStatModifier(boolean isAttribute) {
-        // 每组属性点都会在装备升级时提供一次额外属性点升级的机会。
-
         if (GameConfig.getServerBoolean("use_equipment_level_up_power")) {
-            if (isAttribute) {
-                return 2;
-            } else {
-                return 4;
-            }
+            return isAttribute ? 2 : 4;
         } else {
-            if (isAttribute) {
-                return 4;
-            } else {
-                return 16;
-            }
+            return isAttribute ? 4 : 16;
         }
     }
 
     private static int randomizeStatUpgrade(int top) {
         int limit = Math.min(top, GameConfig.getServerInt("max_equipment_level_up_stat_up"));
-
         int poolCount = (limit * (limit + 1) / 2) + limit;
         int rnd = Randomizer.rand(0, poolCount);
-
         int stat = 0;
         if (rnd >= limit) {
             rnd -= limit;
             stat = 1 + (int) Math.floor((-1 + Math.sqrt((8 * rnd) + 1)) / 2);    // 优化的 randomizeStatUpgrade 作者：David A.
         }
-
         return stat;
     }
 
@@ -373,19 +218,15 @@ public class Equip extends Item {
                 return isPhysicalWeapon(this.getItemId());
             }
         }
-
         return false;
     }
 
     private void getUnitStatUpgrade(List<Pair<StatUpgrade, Integer>> stats, StatUpgrade name, int curStat, boolean isAttribute) {
         isUpgradeable = true;
-
         int maxUpgrade = randomizeStatUpgrade((int) (1 + (curStat / (getStatModifier(isAttribute) * (isNotWeaponAffinity(name) ? 2.7 : 1)))));
-        if (maxUpgrade == 0) {
-            return;
+        if (maxUpgrade > 0) {
+            stats.add(new Pair<>(name, maxUpgrade));
         }
-
-        stats.add(new Pair<>(name, maxUpgrade));
     }
 
     /**
@@ -431,105 +272,47 @@ public class Equip extends Item {
                 }
             }
             for(double[] obj : chanceList) {
-                double minLevel = obj[0],maxLevel = obj[1], chance = obj[2];
-                if(equipLevel >= minLevel && equipLevel <= maxLevel) {
-                    getUnitSlotUpgrade(stats, StatUpgrade.incVicious,chance); // 减少金锤子
+                if(equipLevel >= obj[0] && equipLevel <= obj[1]) {
+                    getUnitSlotUpgrade(stats, StatUpgrade.incVicious, obj[2]);  // 减少金锤子
                     break;
                 }
             }
         }
     }
+
     private void improveDefaultStats(List<Pair<StatUpgrade, Integer>> stats) {
-        if (dex > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incDEX, dex, true);
-        }
-        if (str > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incSTR, str, true);
-        }
-        if (_int > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incINT, _int, true);
-        }
-        if (luk > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incLUK, luk, true);
-        }
-        if (hp > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incMHP, hp, false);
-        }
-        if (mp > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incMMP, mp, false);
-        }
-        if (watk > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incPAD, watk, false);
-        }
-        if (matk > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incMAD, matk, false);
-        }
-        if (wdef > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incPDD, wdef, false);
-        }
-        if (mdef > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incMDD, mdef, false);
-        }
-        if (avoid > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incEVA, avoid, false);
-        }
-        if (acc > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incACC, acc, false);
-        }
-        if (speed > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incSpeed, speed, false);
-        }
-        if (jump > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incJump, jump, false);
-        }
+        if (dex > 0) getUnitStatUpgrade(stats, StatUpgrade.incDEX, dex, true);
+        if (str > 0) getUnitStatUpgrade(stats, StatUpgrade.incSTR, str, true);
+        if (_int > 0) getUnitStatUpgrade(stats, StatUpgrade.incINT, _int, true);
+        if (luk > 0) getUnitStatUpgrade(stats, StatUpgrade.incLUK, luk, true);
+        if (hp > 0) getUnitStatUpgrade(stats, StatUpgrade.incMHP, hp, false);
+        if (mp > 0) getUnitStatUpgrade(stats, StatUpgrade.incMMP, mp, false);
+        if (watk > 0) getUnitStatUpgrade(stats, StatUpgrade.incPAD, watk, false);
+        if (matk > 0) getUnitStatUpgrade(stats, StatUpgrade.incMAD, matk, false);
+        if (wdef > 0) getUnitStatUpgrade(stats, StatUpgrade.incPDD, wdef, false);
+        if (mdef > 0) getUnitStatUpgrade(stats, StatUpgrade.incMDD, mdef, false);
+        if (avoid > 0) getUnitStatUpgrade(stats, StatUpgrade.incEVA, avoid, false);
+        if (acc > 0) getUnitStatUpgrade(stats, StatUpgrade.incACC, acc, false);
+        if (speed > 0) getUnitStatUpgrade(stats, StatUpgrade.incSpeed, speed, false);
+        if (jump > 0) getUnitStatUpgrade(stats, StatUpgrade.incJump, jump, false);
     }
 
     public Map<StatUpgrade, Short> getStats() {
         Map<StatUpgrade, Short> stats = new HashMap<>(5);
-
-        if (dex > 0) {
-            stats.put(StatUpgrade.incDEX, dex);
-        }
-        if (str > 0) {
-            stats.put(StatUpgrade.incSTR, str);
-        }
-        if (_int > 0) {
-            stats.put(StatUpgrade.incINT, _int);
-        }
-        if (luk > 0) {
-            stats.put(StatUpgrade.incLUK, luk);
-        }
-        if (hp > 0) {
-            stats.put(StatUpgrade.incMHP, hp);
-        }
-        if (mp > 0) {
-            stats.put(StatUpgrade.incMMP, mp);
-        }
-        if (watk > 0) {
-            stats.put(StatUpgrade.incPAD, watk);
-        }
-        if (matk > 0) {
-            stats.put(StatUpgrade.incMAD, matk);
-        }
-        if (wdef > 0) {
-            stats.put(StatUpgrade.incPDD, wdef);
-        }
-        if (mdef > 0) {
-            stats.put(StatUpgrade.incMDD, mdef);
-        }
-        if (avoid > 0) {
-            stats.put(StatUpgrade.incEVA, avoid);
-        }
-        if (acc > 0) {
-            stats.put(StatUpgrade.incACC, acc);
-        }
-        if (speed > 0) {
-            stats.put(StatUpgrade.incSpeed, speed);
-        }
-        if (jump > 0) {
-            stats.put(StatUpgrade.incJump, jump);
-        }
-
+        if (dex > 0) stats.put(StatUpgrade.incDEX, dex);
+        if (str > 0) stats.put(StatUpgrade.incSTR, str);
+        if (_int > 0) stats.put(StatUpgrade.incINT, _int);
+        if (luk > 0) stats.put(StatUpgrade.incLUK, luk);
+        if (hp > 0) stats.put(StatUpgrade.incMHP, hp);
+        if (mp > 0) stats.put(StatUpgrade.incMMP, mp);
+        if (watk > 0) stats.put(StatUpgrade.incPAD, watk);
+        if (matk > 0) stats.put(StatUpgrade.incMAD, matk);
+        if (wdef > 0) stats.put(StatUpgrade.incPDD, wdef);
+        if (mdef > 0) stats.put(StatUpgrade.incMDD, mdef);
+        if (avoid > 0) stats.put(StatUpgrade.incEVA, avoid);
+        if (acc > 0) stats.put(StatUpgrade.incACC, acc);
+        if (speed > 0) stats.put(StatUpgrade.incSpeed, speed);
+        if (jump > 0) stats.put(StatUpgrade.incJump, jump);
         return stats;
     }
 
@@ -559,13 +342,10 @@ public class Equip extends Item {
                     break;
                 default: // 处理普通属性
                     int statUp = handleStatUpgrade(type, value, maxStat);
-                    if (statUp > 0) {
-                        lvupStr.append(getStatMessage(type, statUp)).append("; ");
-                    }
+                    if (statUp > 0) lvupStr.append(getStatMessage(type, statUp)).append("; ");
                     break;
             }
         }
-
         return new Pair<>(lvupStr.toString(), new Pair<>(gotSlot, gotVicious));
     }
 
@@ -835,4 +615,32 @@ public class Equip extends Item {
         wear = yes;
     }
 
+    public void setUpgradeSlots(byte i) {
+        this.upgradeSlots = i;
+    }
+
+    @Override
+    public ItemInfoRtnDTO toInfoRtnDTO(boolean includeQuantity) {
+        ItemInfoRtnDTO dto = super.toInfoRtnDTO(includeQuantity);
+        if (getUpgradeSlots() > 0) dto.setUpgradeSlots(getUpgradeSlots() & 0xFF);
+        if (getLevel() > 0) dto.setLevel(getLevel());
+        if (getItemLevel() > 1) dto.setItemLevel(getItemLevel());
+        if (getStr() > 0) dto.setStr(getStr());
+        if (getDex() > 0) dto.setDex(getDex());
+        if (getInt() > 0) dto.setInt_(getInt());
+        if (getLuk() > 0) dto.setLuk(getLuk());
+        if (getHp() > 0) dto.setHp(getHp());
+        if (getMp() > 0) dto.setMp(getMp());
+        if (getWatk() > 0) dto.setWatk(getWatk());
+        if (getMatk() > 0) dto.setMatk(getMatk());
+        if (getWdef() > 0) dto.setWdef(getWdef());
+        if (getMdef() > 0) dto.setMdef(getMdef());
+        if (getAcc() > 0) dto.setAcc(getAcc());
+        if (getAvoid() > 0) dto.setAvoid(getAvoid());
+        if (getHands() > 0) dto.setHands(getHands());
+        if (getSpeed() > 0) dto.setSpeed(getSpeed());
+        if (getJump() > 0) dto.setJump(getJump());
+        if (getVicious() > 0) dto.setVicious(getVicious());
+        return dto;
+    }
 }

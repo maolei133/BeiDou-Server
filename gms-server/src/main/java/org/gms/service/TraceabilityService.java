@@ -1,12 +1,11 @@
 package org.gms.service;
 
-import com.alibaba.fastjson2.JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.gms.client.Character;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
-import org.gms.client.processor.npc.DueyProcessor;
 import org.gms.config.GameConfig;
 import org.gms.dao.entity.ItemRecoveryLogsDO;
 import org.gms.dao.entity.ItemTraceLogsDO;
@@ -37,6 +36,7 @@ public class TraceabilityService {
     
     private final ItemTraceLogsMapper itemTraceLogsMapper;
     private final ItemRecoveryLogsMapper itemRecoveryLogsMapper;
+    private final ObjectMapper objectMapper;
 
     public enum ActionType {
         // 基础操作
@@ -73,11 +73,10 @@ public class TraceabilityService {
 
     /**
      * 记录物品流转日志
-     *
-     * @param item           涉及的物品对象
-     * @param character      操作的角色
-     * @param actionType     行为类型
-     * @param actionSource   行为来源 (如 "NPC商店", "玩家交易")
+     * @param item 涉及的物品对象
+     * @param character 操作的角色
+     * @param actionType 行为类型
+     * @param actionSource 行为来源 (如 "NPC商店", "玩家交易")
      */
     public void log(Item item, Character character, ActionType actionType, String actionSource) {
         log(item, character, actionType, actionSource, 0, null, null);
@@ -85,11 +84,10 @@ public class TraceabilityService {
 
     /**
      * 记录物品流转日志 (带数量变化)
-     *
-     * @param item           涉及的物品对象
-     * @param character      操作的角色
-     * @param actionType     行为类型
-     * @param actionSource   行为来源
+     * @param item 涉及的物品对象
+     * @param character 操作的角色
+     * @param actionType 行为类型
+     * @param actionSource 行为来源
      * @param quantityChange 数量变化
      */
     public void log(Item item, Character character, ActionType actionType, String actionSource, int quantityChange) {
@@ -98,38 +96,37 @@ public class TraceabilityService {
 
     /**
      * 记录物品流转日志 (全参数)
-     *
-     * @param item           涉及的物品对象
-     * @param character      操作的角色
-     * @param actionType     行为类型
-     * @param actionSource   行为来源 (如 "NPC商店", "玩家交易")
+     * @param item 涉及的物品对象
+     * @param character 操作的角色
+     * @param actionType 行为类型
+     * @param actionSource 行为来源 (如 "NPC商店", "玩家交易")
      * @param quantityChange 数量变化 (正数增加，负数减少，0表示状态变更)
-     * @param targetInfo     交互对象信息 (如交易对手角色名)
-     * @param memo           备注
+     * @param targetInfo 交互对象信息 (如交易对手角色名)
+     * @param memo 备注
      */
     public void log(Item item, Character character, ActionType actionType, String actionSource, int quantityChange, String targetInfo, String memo) {
-        if (item == null || character == null) {
-            return;
-        }
+        if (item == null || character == null) return;
         log(item, character.getAccountId(), character.getId(), character.getMapId(), actionType, actionSource, quantityChange, targetInfo, memo);
     }
 
     /**
      * 记录物品流转日志 (通过ID)
+     * @param item 涉及的物品对象
+     * @param accountId 账号ID
+     * @param characterId 角色ID
+     * @param mapId 地图ID
+     * @param actionType 行为类型
+     * @param actionSource 行为来源
+     * @param quantityChange 数量变化
+     * @param targetInfo 交互对象信息
+     * @param memo 备注
      */
     public void log(Item item, int accountId, int characterId, int mapId, ActionType actionType, String actionSource, int quantityChange, String targetInfo, String memo) {
-        if (item == null) {
-            return;
-        }
+        if (item == null) return;
 
-        // 新增：价值判断过滤
-        // 在记录日志前，首先判断物品是否为“有价值的物品”，如果不是，则直接返回，不进行记录。
-        // 这是为了防止数据库因记录大量低价值物品（如白板装备、药水）而过度膨胀。
-        if (!InventoryManipulator.isValuableForRecovery(item)) {
-            return;
-        }
+        // 价值判断过滤，防止记录大量低价值物品
+        if (!InventoryManipulator.isValuableForRecovery(item)) return;
 
-        // 异步写入数据库，避免阻塞主线程
         logExecutor.submit(() -> {
             try {
                 ItemTraceLogsDO.ItemTraceLogsDOBuilder builder = ItemTraceLogsDO.builder()
@@ -142,12 +139,10 @@ public class TraceabilityService {
                         .itemId(item.getItemId())
                         .quantityChange(quantityChange)
                         .targetInfo(targetInfo)
-                        .itemSnapshot(JSON.toJSONString(item)) // 序列化物品快照
+                        .itemSnapshot(objectMapper.writeValueAsString(item.toInfoRtnDTO(true))) // **修正**: 确保包含数量
                         .timestamp(System.currentTimeMillis())
                         .memo(memo);
-
                 itemTraceLogsMapper.insert(builder.build());
-
             } catch (Exception e) {
                 log.error("插入物品溯源日志失败，物品UID: " + item.getUid(), e);
             }
@@ -156,48 +151,33 @@ public class TraceabilityService {
 
     /**
      * 记录物品找回日志
-     *
-     * @param item         被处理的物品
-     * @param character    所属角色
+     * @param item 被处理的物品
+     * @param character 所属角色
      * @param disposalType 处理方式 (SELL, DROP)
      */
     public void logRecovery(Item item, Character character, String disposalType) {
-        if (item == null || character == null) {
-            return;
-        }
-
-        // 新增：价值判断过滤
-        // 只有“有价值”的物品才会被记录到找回系统中，防止滥用。
-        if (!InventoryManipulator.isValuableForRecovery(item)) {
-            return;
-        }
+        if (item == null || character == null) return;
+        if (!InventoryManipulator.isValuableForRecovery(item)) return;
 
         logExecutor.submit(() -> {
             try {
-                // 使用 DueyProcessor 的转换逻辑来序列化物品，保证格式统一
-                ItemInfoRtnDTO itemDTO = DueyProcessor.convertItemToDTO(item);
-                
+                // **核心修正**: 调用 toInfoRtnDTO(true) 以确保包含 quantity 字段
+                ItemInfoRtnDTO itemDTO = item.toInfoRtnDTO(true);
                 long now = System.currentTimeMillis();
-                // 默认找回有效期 24 小时，可配置
                 long deadline = now + (GameConfig.getServerInt("item_recovery_hours", 24) * 60 * 60 * 1000L);
-
-                // 如果是丢弃操作，初始状态设为 PENDING (待确认)，等待物品真正消失后再激活
-                // 如果是出售操作，初始状态设为 RECOVERABLE (可找回)
                 String initialStatus = "DROP".equals(disposalType) ? "PENDING" : "RECOVERABLE";
 
                 ItemRecoveryLogsDO recoveryLogDO = ItemRecoveryLogsDO.builder()
                         .characterId(character.getId())
                         .uid(item.getUid())
                         .itemId(item.getItemId())
-                        .itemData(JSON.toJSONString(itemDTO))
+                        .itemData(objectMapper.writeValueAsString(itemDTO))
                         .disposalType(disposalType)
                         .disposalTime(now)
                         .recoveryDeadline(deadline)
                         .status(initialStatus)
                         .build();
-
                 itemRecoveryLogsMapper.insert(recoveryLogDO);
-
             } catch (Exception e) {
                 log.error("插入物品找回日志失败，物品UID: " + item.getUid(), e);
             }
@@ -206,42 +186,19 @@ public class TraceabilityService {
     
     /**
      * 激活丢弃物品的找回状态
-     * 当物品从地图上消失时调用
-     * 
      * @param uid 物品UID
      */
     public void activateRecovery(long uid) {
         if (uid <= 0) return;
-        
         logExecutor.submit(() -> {
             try {
-                // 查找该UID对应的最近一条状态为 PENDING 的记录
-                // 注意：这里假设一个UID在短时间内只会被丢弃一次，或者我们只关心最近一次
-                // 实际上，由于UID唯一性，PENDING状态的记录应该只有一条
-                
-                // 这里使用 UpdateChain 直接更新，提高效率
-                // 将状态从 PENDING 更新为 RECOVERABLE
-                // 增加 disposal_type = 'DROP' 条件以确保安全
-                
-                // 由于 Mybatis-Flex 的 UpdateChain 需要实体类 class，这里假设 ItemRecoveryLogsDO 对应表结构
-                // 并且 status 字段名为 status
-                
-                // 构造更新条件：uid = ? AND status = 'PENDING' AND disposal_type = 'DROP'
-                // 更新内容：status = 'RECOVERABLE'
-                
-                // 注意：这里没有直接使用 UpdateChain，因为我没有看到 ItemRecoveryLogsDO 的完整定义和 TableDef
-                // 但根据之前的代码风格，我可以使用 Mapper 的 updateByQuery
-                
                 ItemRecoveryLogsDO updateEntity = new ItemRecoveryLogsDO();
                 updateEntity.setStatus("RECOVERABLE");
-                
                 QueryWrapper where = QueryWrapper.create()
                         .where(ItemRecoveryLogsDO::getUid).eq(uid)
                         .and(ItemRecoveryLogsDO::getStatus).eq("PENDING")
                         .and(ItemRecoveryLogsDO::getDisposalType).eq("DROP");
-                        
                 itemRecoveryLogsMapper.updateByQuery(updateEntity, where);
-                
             } catch (Exception e) {
                 log.error("激活物品找回状态失败，物品UID: " + uid, e);
             }
@@ -249,40 +206,21 @@ public class TraceabilityService {
     }
 
     /**
-     * 定时清理过期溯源日志
-     * 每天凌晨 3 点执行
+     * 定时清理过期溯源日志 (每天凌晨3点)
      */
     @Scheduled(cron = "0 0 3 * * ?")
     public void cleanupTraceLogs() {
         long now = System.currentTimeMillis();
-
-        // 1. 清理常规日志 (默认保留30天)
         int retentionDays = GameConfig.getServerInt("trace_log_retention_days", 30);
-        long retentionMillis = TimeUnit.DAYS.toMillis(retentionDays);
-        long deleteDeadline = now - retentionMillis;
+        long deleteDeadline = now - TimeUnit.DAYS.toMillis(retentionDays);
+        int deletedCount = itemTraceLogsMapper.deleteByQuery(QueryWrapper.create().where(ITEM_TRACE_LOGS_D_O.TIMESTAMP.lt(deleteDeadline)));
+        if (deletedCount > 0) log.info("已物理删除 {} 条超过 {} 天保留期的物品溯源日志。", deletedCount, retentionDays);
 
-        QueryWrapper deleteQuery = QueryWrapper.create()
-                .where(ITEM_TRACE_LOGS_D_O.TIMESTAMP.lt(deleteDeadline));
-
-        int deletedCount = itemTraceLogsMapper.deleteByQuery(deleteQuery);
-        if (deletedCount > 0) {
-            log.info("已物理删除 {} 条超过 {} 天保留期的物品溯源日志。", deletedCount, retentionDays);
-        }
-
-        // 2. 清理短期日志 (如自然消失的物品，默认保留3天)
         int shortRetentionDays = GameConfig.getServerInt("trace_log_short_retention_days", 3);
-        long shortRetentionMillis = TimeUnit.DAYS.toMillis(shortRetentionDays);
-        long shortDeleteDeadline = now - shortRetentionMillis;
-
-        // 定义短期日志类型：SPAWN (生成), DESPAWN_EXPIRED (自然消失)
-        // 这些日志通常量大且价值较低，可以更早清理
-        QueryWrapper shortDeleteQuery = QueryWrapper.create()
+        long shortDeleteDeadline = now - TimeUnit.DAYS.toMillis(shortRetentionDays);
+        int shortDeletedCount = itemTraceLogsMapper.deleteByQuery(QueryWrapper.create()
                 .where(ITEM_TRACE_LOGS_D_O.TIMESTAMP.lt(shortDeleteDeadline))
-                .and(ITEM_TRACE_LOGS_D_O.ACTION_TYPE.in(ActionType.SPAWN.name(), ActionType.DESPAWN_EXPIRED.name()));
-
-        int shortDeletedCount = itemTraceLogsMapper.deleteByQuery(shortDeleteQuery);
-        if (shortDeletedCount > 0) {
-            log.info("已物理删除 {} 条超过 {} 天保留期的短期物品溯源日志 (SPAWN/DESPAWN)。", shortDeletedCount, shortRetentionDays);
-        }
+                .and(ITEM_TRACE_LOGS_D_O.ACTION_TYPE.in(ActionType.SPAWN.name(), ActionType.DESPAWN_EXPIRED.name())));
+        if (shortDeletedCount > 0) log.info("已物理删除 {} 条超过 {} 天保留期的短期物品溯源日志 (SPAWN/DESPAWN)。", shortDeletedCount, shortRetentionDays);
     }
 }

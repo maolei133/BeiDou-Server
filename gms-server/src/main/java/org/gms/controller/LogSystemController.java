@@ -35,10 +35,14 @@ import java.util.stream.Collectors;
 @RequestMapping("/log")
 public class LogSystemController {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    
+    private final ObjectMapper objectMapper;
+    private final AccountService accountService;
+
     @Autowired
-    private AccountService accountService;
+    public LogSystemController(ObjectMapper objectMapper, AccountService accountService) {
+        this.objectMapper = objectMapper;
+        this.accountService = accountService;
+    }
 
     // --- 1. 进程管理 ---
 

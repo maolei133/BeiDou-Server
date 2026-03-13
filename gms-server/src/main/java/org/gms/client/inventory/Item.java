@@ -22,10 +22,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package org.gms.client.inventory;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.model.dto.ItemInfoRtnDTO;
 import org.gms.server.ItemInformationProvider;
 import org.gms.util.SnowflakeIdGenerator;
 
@@ -36,9 +35,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Item implements Comparable<Item> {
 
-    private static final AtomicInteger runningCashId = new AtomicInteger(777000000);  // pets & rings shares cashid values
+    private static final AtomicInteger runningCashId = new AtomicInteger(777000000);  // 宠物和戒指共享现金ID值
 
-    private final int id;
+    private int id;
     private int cashId;
     private int sn;
     private short position;
@@ -51,6 +50,10 @@ public class Item implements Comparable<Item> {
     private short flag;
     private long expiration = -1;
     private String giftFrom = "";
+    /**
+     * 物品唯一ID (不序列化到JSON)
+     */
+    @JsonIgnore
     private long uid;
     private Long inventoryItemId;
 
@@ -67,7 +70,7 @@ public class Item implements Comparable<Item> {
         this.id = id;
         this.position = position;
         this.quantity = quantity;
-        if (petid > -1) {   // issue with null "pet" having petid > -1 found thanks to MedicOP
+        if (petid > -1) {
             this.pet = Pet.loadFromDb(id, position, petid);
             if (this.pet == null) {
                 petid = -1;
@@ -85,8 +88,8 @@ public class Item implements Comparable<Item> {
         ret.owner = owner;
         ret.expiration = expiration;
         ret.itemLog = new LinkedList<>(itemLog);
-        ret.uid = this.uid; // Copy uid
-        ret.inventoryItemId = this.inventoryItemId; // Copy inventoryItemId
+        ret.uid = this.uid;
+        ret.inventoryItemId = this.inventoryItemId;
         return ret;
     }
 
@@ -103,6 +106,10 @@ public class Item implements Comparable<Item> {
 
     public int getItemId() {
         return id;
+    }
+    
+    public void setItemId(int id) {
+        this.id = id;
     }
 
     public void setCashId(int cashId) {
@@ -128,10 +135,8 @@ public class Item implements Comparable<Item> {
         return ItemConstants.getInventoryType(id);
     }
 
-    public byte getItemType() { // 1: equip, 3: pet, 2: other
-        if (getPetId() > -1) {
-            return 3;
-        }
+    public byte getItemType() {
+        if (getPetId() > -1) return 3;
         return 2;
     }
 
@@ -148,25 +153,14 @@ public class Item implements Comparable<Item> {
         return petid;
     }
 
-    @JsonProperty("petId")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public Integer getPetIdForJson() {
-        return petid == -1 ? null : petid;
-    }
-
     @Override
     public int compareTo(Item other) {
-        if (this.id < other.getItemId()) {
-            return -1;
-        } else if (this.id > other.getItemId()) {
-            return 1;
-        }
-        return 0;
+        return Integer.compare(this.id, other.getItemId());
     }
 
     @Override
     public String toString() {
-        return "Item: " + id + " quantity: " + quantity;
+        return "物品: " + id + " 数量: " + quantity;
     }
 
     public List<String> getItemLog() {
@@ -180,9 +174,8 @@ public class Item implements Comparable<Item> {
     public void setFlag(short b) {
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
         if (ii.isAccountRestricted(id)) {
-            b |= ItemConstants.ACCOUNT_SHARING; // thanks Shinigami15 for noticing ACCOUNT_SHARING flag not being applied properly to items server-side
+            b |= ItemConstants.ACCOUNT_SHARING;
         }
-
         this.flag = b;
     }
 
@@ -232,5 +225,46 @@ public class Item implements Comparable<Item> {
 
     public void setInventoryItemId(Long inventoryItemId) {
         this.inventoryItemId = inventoryItemId;
+    }
+
+    /**
+     * 将物品的核心属性转换为DTO对象, 用于JSON序列化。
+     * 默认不包含数量, 以支持仓库、商店等大多数场景。
+     * @return ItemInfoRtnDTO
+     */
+    public ItemInfoRtnDTO toInfoRtnDTO() {
+        return toInfoRtnDTO(false);
+    }
+
+    /**
+     * 将物品的核心属性转换为DTO对象, 用于JSON序列化。
+     * @param includeQuantity 是否在DTO中包含quantity字段。
+     *                        - true: (用于快递系统) DTO中会包含quantity，如果值不为0，将被序列化到JSON中。
+     *                        - false: (用于其他系统) DTO中quantity字段为null，将被序列化器忽略。
+     * @return ItemInfoRtnDTO
+     */
+    public ItemInfoRtnDTO toInfoRtnDTO(boolean includeQuantity) {
+        ItemInfoRtnDTO dto = new ItemInfoRtnDTO();
+        
+        if (includeQuantity) {
+            dto.setQuantity((int) this.getQuantity());
+        }
+
+        if (this.getOwner() != null && !this.getOwner().isEmpty()) {
+            dto.setOwner(this.getOwner());
+        }
+        if (this.getExpiration() != -1) {
+            dto.setExpiration(this.getExpiration());
+        }
+        if (this.getFlag() != 0) {
+            dto.setFlag(this.getFlag());
+        }
+        if (this.getSN() > 0) {
+            dto.setSn((long) this.getSN());
+        }
+        if (this.getPetId() > -1) {
+            dto.setPetId(this.getPetId());
+        }
+        return dto;
     }
 }

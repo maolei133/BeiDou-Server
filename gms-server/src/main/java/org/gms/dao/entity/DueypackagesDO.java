@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 import java.io.Serial;
 
 /**
- *  实体类。
+ *  快递包裹表 实体类。
  *
  * @author sleep
  * @since 2024-05-24
@@ -57,5 +57,7 @@ public class DueypackagesDO implements Serializable {
     private Timestamp deliveryTime;
 
     private Long uid;
+
+    private Integer itemId;
 
 }

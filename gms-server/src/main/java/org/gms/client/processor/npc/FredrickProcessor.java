@@ -140,17 +140,14 @@ public class FredrickProcessor {
     public static void insertFredrickLog(int cid) {
         FredstorageMapper mapper = SpringContextUtil.getBean(FredstorageMapper.class);
         
-        // 先检查是否存在
         QueryWrapper query = QueryWrapper.create()
                 .where(FredstorageDO::getCid).eq(cid);
         FredstorageDO existing = mapper.selectOneByQuery(query);
         
         if (existing != null) {
-            // 如果存在，更新时间戳
             existing.setTimestamp(new Timestamp(System.currentTimeMillis()));
             mapper.update(existing);
         } else {
-            // 如果不存在，插入新记录
             FredstorageDO logEntry = new FredstorageDO();
             logEntry.setCid((long) cid);
             logEntry.setDaynotes(0L);
@@ -243,7 +240,6 @@ public class FredrickProcessor {
 
             removeFredrickReminders(expiredCids);
             
-            // 使用 QueryWrapper 删除，避免直接使用 deleteBatchByIds 可能导致的问题（如果 id 不是主键）
             QueryWrapper deleteFredstorageQuery = QueryWrapper.create()
                     .where(FredstorageDO::getCid).in(cidsToRemove);
             fredstorageMapper.deleteByQuery(deleteFredstorageQuery);
@@ -275,11 +271,9 @@ public class FredrickProcessor {
             try {
                 Character chr = c.getPlayer();
 
-                // 1. 检查并修复僵尸商店 (状态为 ACTIVE 但内存中不存在)
                 List<HiredMerchantsDO> zombieMerchants = hiredMerchantService.getZombieMerchants(chr.getId());
                 for (HiredMerchantsDO zombie : zombieMerchants) {
                     World world = Server.getInstance().getWorld(zombie.getWorldId());
-                    // 如果世界不存在或者世界中没有该商店实例，则视为僵尸商店
                     if (world == null || world.getHiredMerchant(chr.getId()) == null) {
                         zombie.setStatus(HiredMerchantsDO.STATUS_CLOSED);
                         zombie.setCloseTime(System.currentTimeMillis());
@@ -288,7 +282,6 @@ public class FredrickProcessor {
                     }
                 }
 
-                // 2. 从 hired_merchant_items 检索 (现在包括刚刚修复的商店)
                 List<HiredMerchantsDO> merchants = hiredMerchantService.getRetrieveableMerchants(chr.getId());
                 List<Pair<Item, InventoryType>> items = new ArrayList<>();
                 long totalMesos = 0;
@@ -297,9 +290,9 @@ public class FredrickProcessor {
                     totalMesos += merchant.getMesos();
                     List<HiredMerchantItemsDO> merchantItems = hiredMerchantService.getRetrieveableItems(merchant.getId());
                     for (HiredMerchantItemsDO itemDO : merchantItems) {
-                        Item item = hiredMerchantService.deserializeItem(itemDO.getItemData());
+                        short quantity = itemDO.getQuantity() != null ? itemDO.getQuantity().shortValue() : 1;
+                        Item item = hiredMerchantService.deserializeItem(itemDO.getItemData(), itemDO.getItemId(), quantity);
                         if (item != null) {
-                            // 恢复 UID
                             if (itemDO.getUid() != null && itemDO.getUid() > 0) {
                                 item.setUid(itemDO.getUid());
                             }
@@ -313,37 +306,30 @@ public class FredrickProcessor {
                     }
                 }
                 
-                // 同时检查旧系统以实现向后兼容
                 List<Pair<Item, InventoryType>> oldItems = ItemFactory.MERCHANT.loadItems(chr.getId(), false);
                 items.addAll(oldItems);
                 totalMesos += chr.getMerchantNetMeso();
 
-                // 检查玩家是否可以持有物品和金币
                 if (!Inventory.checkSpotsAndOwnership(chr, items)) {
-                    chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x20)); // 背包已满
+                    chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x20));
                     return;
                 }
                 
                 if (totalMesos > 0 && !chr.canHoldMeso((int) totalMesos)) {
-                    chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x1F)); // 金币限制
+                    chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x1F));
                     return;
                 }
 
-                // 发放金币
                 if (totalMesos > 0) {
                     chr.gainMeso((int) totalMesos, false);
                 }
                 
-                // 发放物品
                 for (Pair<Item, InventoryType> it : items) {
                     Item item = it.getLeft();
                     InventoryManipulator.addFromDrop(chr.getClient(), item, false);
-                    
-                    // 记录溯源日志
                     traceabilityService.log(item, chr, TraceabilityService.ActionType.HIRED_MERCHANT_RETURN, "弗雷德里克取回");
                 }
 
-                // 更新数据库状态
                 for (HiredMerchantsDO merchant : merchants) {
                     merchant.setMesos(0L);
                     hiredMerchantService.updateMerchant(merchant);
@@ -352,7 +338,7 @@ public class FredrickProcessor {
                     for (HiredMerchantItemsDO itemDO : merchantItems) {
                         itemDO.setStatus(HiredMerchantItemsDO.STATUS_RETURNED);
                         hiredMerchantService.updateItem(itemDO);
-                        
+
                         HiredMerchantTransactionsDO transaction = HiredMerchantTransactionsDO.builder()
                                 .merchantId(merchant.getId())
                                 .itemId(itemDO.getItemId())
@@ -360,20 +346,19 @@ public class FredrickProcessor {
                                 .type(HiredMerchantTransactionsDO.TYPE_RETURN)
                                 .quantity(itemDO.getQuantity() * (itemDO.getBundles() - itemDO.getSoldQuantity()))
                                 .timestamp(System.currentTimeMillis())
-                                .uid(itemDO.getUid()) // 记录 UID
+                                .uid(itemDO.getUid())
                                 .build();
                         hiredMerchantService.addTransaction(transaction);
                     }
                 }
                 
-                // 清除旧系统数据
                 if (!oldItems.isEmpty()) {
                     deleteFredrickItems(chr.getId());
                 }
                 chr.setMerchantMeso(0);
                 removeFredrickLog(chr.getId());
 
-                chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x1E)); // 成功
+                chr.sendPacket(PacketCreator.fredrickMessage((byte) 0x1E));
 
             } catch (Exception e) {
                 log.error("从弗雷德里克处检索物品时发生错误", e);

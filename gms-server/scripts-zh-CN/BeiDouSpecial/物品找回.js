@@ -8,19 +8,22 @@ const GameConfig = Java.type('org.gms.config.GameConfig');
 const ItemRecoveryService = Java.type('org.gms.manager.ServerManager').getApplicationContext().getBean(Java.type('org.gms.service.ItemRecoveryService'));
 const ItemInformationProvider = Java.type('org.gms.server.ItemInformationProvider').getInstance();
 const DueyProcessor = Java.type('org.gms.client.processor.npc.DueyProcessor');
-const ItemInfoRtnDTO = Java.type('org.gms.model.dto.ItemInfoRtnDTO');
-const ObjectMapper = Java.type('com.fasterxml.jackson.databind.ObjectMapper');
 const SimpleDateFormat = Java.type('java.text.SimpleDateFormat');
 const Date = Java.type('java.util.Date');
 const ItemConstants = Java.type('org.gms.constants.inventory.ItemConstants');
 const InventoryType = Java.type('org.gms.client.inventory.InventoryType');
+const ItemConverter = Java.type('org.gms.util.ItemConverter');
+// **新增**: 导入Java的JSON处理库和目标DTO类
+const JSON_JAVA = Java.type('com.alibaba.fastjson2.JSON');
+const ItemInfoRtnDTO = Java.type('org.gms.model.dto.ItemInfoRtnDTO');
+
 
 var status = -1;
 var selection = -1;
-var recoverableItems = [];
-var currentCategoryItems = [];
-var selectedLog = null;
-var selectedItem = null;
+var recoverableItems = []; // 将存储 ItemRecoveryLogsDO 列表
+var currentCategoryItems = []; // 将存储过滤后的 ItemRecoveryLogsDO
+var selectedRecoveryLog = null; // 存储选中的 ItemRecoveryLogsDO
+var selectedItemData = null; // 存储从log中获取的物品JSON数据(JS对象)
 var selectedFee = null;
 
 function start() {
@@ -42,7 +45,6 @@ function levelMain() {
 
 function levelshowRecoveryMenu(selection) {
     if (selection == 0) {
-        // 动态生成分类
         recoverableItems = ItemRecoveryService.getRecoverableItems(cm.getPlayer().getId());
         
         if (recoverableItems.isEmpty()) {
@@ -52,8 +54,8 @@ function levelshowRecoveryMenu(selection) {
 
         var categories = new java.util.ArrayList();
         for (var i = 0; i < recoverableItems.size(); i++) {
-            var log = recoverableItems.get(i);
-            var type = ItemConstants.getInventoryType(log.getItemId());
+            var logEntry = recoverableItems.get(i);
+            var type = ItemConstants.getInventoryType(logEntry.getItemId());
             if (!categories.contains(type)) {
                 categories.add(type);
             }
@@ -73,7 +75,7 @@ function levelshowRecoveryMenu(selection) {
         ruleText += "2. 找回物品需要支付一定的手续费（金币或点券）。\r\n";
         ruleText += "3. 手续费 = 基础费用 + 物品评估价值 * 倍率。\r\n";
         ruleText += "4. 普通垃圾物品（如怪物掉落的杂物、普通药水）无法找回。\r\n";
-        ruleText += "5. 请确保背包有足够的空间接收找回的物品。";
+        ruleText += "5. 找回的物品将通过快递发送给您。";
         
         cm.sendOkLevel("Main", ruleText);
     }
@@ -90,42 +92,30 @@ function levelselectCategory(selection) {
         default: cm.dispose(); return;
     }
 
-    // recoverableItems 已经在 levelshowRecoveryMenu 中获取了，无需再次获取
     currentCategoryItems = [];
-    var objectMapper = new ObjectMapper();
     var sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-
     var sb = "请选择您要找回的物品：\r\n\r\n";
     var hasItem = false;
 
     for (var i = 0; i < recoverableItems.size(); i++) {
-        var log = recoverableItems.get(i);
-        var itemId = log.getItemId();
+        var logEntry = recoverableItems.get(i);
+        var itemId = logEntry.getItemId();
         
-        // 过滤类型
         if (ItemConstants.getInventoryType(itemId) != targetType) {
             continue;
         }
 
-        // 尝试解析物品以获取更多信息（如果需要）
-        var item = null;
-        try {
-            var itemDTO = objectMapper.readValue(log.getItemData(), ItemInfoRtnDTO.class);
-            item = DueyProcessor.restoreItemFromDTO(itemDTO);
-        } catch (e) {
-            continue;
-        }
-
-        currentCategoryItems.push({log: log, item: item});
+        currentCategoryItems.push(logEntry);
         hasItem = true;
         
+        var itemData = JSON.parse(logEntry.getItemData());
         var itemIco = `#i${itemId}:#`;
         var itemName = ItemInformationProvider.getName(itemId);
-        var time = sdf.format(new Date(log.getDisposalTime()));
-        var reason = log.getDisposalType() == "SELL" ? "出售" : "丢弃";
+        var time = sdf.format(new Date(logEntry.getDisposalTime()));
+        var reason = logEntry.getDisposalType() == "SELL" ? "出售" : "丢弃";
         
-        sb += `#L${currentCategoryItems.length - 1}# ${itemIco} #b${itemName}#k\r\n`;
-        sb += `   丢失时间：${time} (${reason})#l\r\n`;
+        sb += `#L${currentCategoryItems.length - 1}# ${itemIco} #b${itemName}#k × #r${itemData.qty || 1}#k\r\n`;
+        sb += `   丢失时间：${time}  [${reason}]#l\r\n`;
     }
 
     if (!hasItem) {
@@ -141,43 +131,36 @@ function levelshowItemDetail(selection) {
         return;
     }
 
-    var data = currentCategoryItems[selection];
-    selectedLog = data.log;
-    selectedItem = data.item;
+    selectedRecoveryLog = currentCategoryItems[selection];
+    var jsonString = selectedRecoveryLog.getItemData();
+    
+    // 用于界面显示
+    selectedItemData = JSON.parse(jsonString);
+    
+    var itemId = selectedRecoveryLog.getItemId();
+    var itemName = ItemInformationProvider.getName(itemId);
+    var quantity = selectedItemData.qty || 1;
+
+    // **核心修正**: 
+    // 1. 获取原始JSON字符串。
+    // 2. 使用Java的JSON库将其直接反序列化为ItemInfoRtnDTO.class类型的Java对象。
+    var itemDtoForJava = JSON_JAVA.parseObject(jsonString, ItemInfoRtnDTO.class);
+    
+    // 3. 将类型正确的Java DTO对象传递给ItemConverter。
+    var itemForFeeCalc = ItemConverter.restoreItemFromDTO(itemId, itemDtoForJava);
+
+    var fees = ItemRecoveryService.calculateRecoveryFee(itemForFeeCalc);
+    selectedFee = fees;
     
     var sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-    var time = sdf.format(new Date(selectedLog.getDisposalTime()));
-    var reason = selectedLog.getDisposalType() == "SELL" ? "出售" : "丢弃";
-    var itemId = selectedItem.getItemId();
-    var itemName = ItemInformationProvider.getName(itemId);
-
-    // 计算费用
-    var fees = ItemRecoveryService.calculateRecoveryFee(selectedItem);
-    selectedFee = fees;
+    var time = sdf.format(new Date(selectedRecoveryLog.getDisposalTime()));
+    var reason = selectedRecoveryLog.getDisposalType() == "SELL" ? "出售" : "丢弃";
     
     var feeStr = "";
     var costType = GameConfig.getServerInt("item_recovery_cost_type", 0);
     
-    // 详细费用计算展示
-    var baseMeso = GameConfig.getServerLong("item_recovery_base_fee_meso", 50000);
-    var baseNx = GameConfig.getServerLong("item_recovery_base_fee_nx", 0);
-    var rate = GameConfig.getServerDouble("item_recovery_valuation_rate", 1.5);
-    
-    var itemPrice = fees[0] - baseMeso; // 估算出的物品价值部分费用
-    
-    if (costType == 0 || costType == 2) {
-        feeStr += fees[0] + " 金币";
-        if (itemPrice > 0) {
-            feeStr += " (基础:" + baseMeso + " + 估值:" + itemPrice + ")";
-        }
-        feeStr += " ";
-    }
-    if (costType == 1 || costType == 2) {
-        feeStr += fees[1] + " 点券";
-        if (baseNx > 0) {
-             feeStr += " (基础:" + baseNx + ")";
-        }
-    }
+    if (costType == 0 || costType == 2) feeStr += fees[0] + " 金币 ";
+    if (costType == 1 || costType == 2) feeStr += ` && ${fees[1]} 点券`;
 
     var detail = `#e#b[物品详细信息]#k#n\r\n\r\n`;
     detail += `#i${itemId}:# #r${itemName}#k\r\n`;
@@ -186,44 +169,26 @@ function levelshowItemDetail(selection) {
     detail += `找回费用：#r${feeStr}#k\r\n`;
     detail += `------------------------------\r\n`;
 
-    // 显示装备详细属性
     if (ItemConstants.getInventoryType(itemId) == InventoryType.EQUIP) {
-        var equip = selectedItem; 
+        var equipData = selectedItemData; 
         
-        // 定义属性映射：显示名称 -> 方法名
         var statMap = {
-            "等级": "getItemLevel",
-            "经验": "getItemExp",
-            "力量": "getStr",
-            "敏捷": "getDex",
-            "智力": "getInt",
-            "运气": "getLuk",
-            "HP": "getHp",
-            "MP": "getMp",
-            "攻击力": "getWatk",
-            "魔法力": "getMatk",
-            "物理防御": "getWdef",
-            "魔法防御": "getMdef",
-            "命中率": "getAcc",
-            "回避率": "getAvoid",
-            "手技": "getHands",
-            "移动速度": "getSpeed",
-            "跳跃力": "getJump",
-            "升级次数": "getLevel",
-            "可升级次数": "getUpgradeSlots",
-            "金锤子已强化次数": "getVicious"
+            "成长等级": "il", "成长经验": "exp", "力量": "s", "敏捷": "d", "智力": "i",
+            "运气": "l", "HP": "h", "MP": "m", "攻击力": "wa", "魔法力": "ma",
+            "物理防御": "wd", "魔法防御": "md", "命中率": "ac", "回避率": "av",
+            "手技": "hd", "移动速度": "sp", "跳跃力": "jp", "已强化次数": "lv",
+            "可升级次数": "us", "金锤子已用": "vc"
         };
 
         for (var name in statMap) {
-            var method = statMap[name];
-            // 动态调用方法
-            var value = equip[method](); 
+            var key = statMap[name];
+            var value = equipData[key];
             if (value > 0) {
                 detail += name + "：" + value + "\r\n";
             }
         }
     } else {
-        detail += `数量：${selectedItem.getQuantity()}\r\n`;
+        detail += `数量：${quantity}\r\n`;
     }
 
     detail += `\r\n#e是否确认找回该物品？#n`;
@@ -232,21 +197,20 @@ function levelshowItemDetail(selection) {
 }
 
 function levelconfirmRecovery(selection) {
-    // 再次检查费用（虽然服务端会检查，但前端也做个预判更好，或者直接调用服务端）
-    // 这里直接调用服务端逻辑
+    var logId = selectedRecoveryLog.getId();
+    
     try {
-        ItemRecoveryService.recoverItem(cm.getClient(), selectedLog.getId());
+        ItemRecoveryService.recoverItem(cm.getClient(), logId);
         
-        // 构造成功提示信息
-        var itemId = selectedItem.getItemId();
+        var itemId = selectedRecoveryLog.getItemId();
         var itemName = ItemInformationProvider.getName(itemId);
         var costType = GameConfig.getServerInt("item_recovery_cost_type", 0);
         var feeMsg = "";
         if (costType == 0 || costType == 2) feeMsg += selectedFee[0] + " 金币 ";
         if (costType == 1 || costType == 2) feeMsg += selectedFee[1] + " 点券";
 
-        var msg = `成功找回 #i${itemId}:# #b${itemName}#k x${selectedItem.getQuantity() || 1}，花费：#r${feeMsg}#k。物品已发送至快递。`;
-        cm.getPlayer().dropMessage(6, `[找回系统] 成功找回  ${itemName}  x${selectedItem.getQuantity() || 1}，花费：${feeMsg}。物品已发送至快递。`);
+        var msg = `成功找回 #i${itemId}:# #b${itemName}#k x${selectedItemData.qty || 1}，花费：#r${feeMsg}#k。物品已发送至快递。`;
+        cm.getPlayer().dropMessage(6, `[找回系统] 成功找回  ${itemName}  x${selectedItemData.qty || 1}，花费：${feeMsg}。物品已发送至快递。`);
         
         cm.sendOkLevel("Main", msg);
         

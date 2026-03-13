@@ -195,7 +195,7 @@
     max-width: 320px;
     background-color: rgba(0, 0, 0, 0.85);
     border-radius: 6px;
-    padding: 10px;
+    padding: 10px 0 20px 10px;
     color: #fff;
     font-family: 'Arial', sans-serif;
     font-size: 12px;

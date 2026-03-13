@@ -21,4 +21,6 @@ public class DueySearchReqDTO extends BasePageDTO {
     private Integer itemType;
     /** 状态 */
     private Integer checked;
+    /** 物品ID */
+    private Integer itemId;
 }

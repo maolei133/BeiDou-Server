@@ -2,10 +2,9 @@ package org.gms.model.dto;
 
 import lombok.Data;
 import java.sql.Timestamp;
-import java.util.List;
 
 /**
- * 快递包裹返回DTO
+ * 快递包裹返回DTO (用于Web API)
  */
 @Data
 public class DueyPackageRtnDTO {
@@ -27,8 +26,8 @@ public class DueyPackageRtnDTO {
     private Integer checked;
     /** 类型 */
     private Integer type;
-    /** 物品列表 */
-    private List<ItemInfoRtnDTO> items;
+    /** 物品 (每个包裹最多一个) */
+    private ItemInfoRtnDTO item;
     
     // 新增字段
     /** 过期时间 */

@@ -155,41 +155,42 @@
         >
           <template #items="{ record }">
             <div class="items-cell-content">
-              <a-space wrap>
-                <div
-                  v-for="item in record.items"
-                  :key="item.itemId"
-                  class="item-cell"
+              <!-- **关键修复**: 恢复 v-for 循环，以兼容旧的复数物品逻辑 -->
+              <div
+                v-for="item in record.items"
+                :key="item.itemId"
+                class="item-cell"
+              >
+                <a-popover
+                  position="right"
+                  :content-style="{
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    boxShadow: 'none',
+                  }"
+                  :arrow-style="{ display: 'none' }"
                 >
-                  <a-popover
-                    position="right"
-                    :content-style="{
-                      padding: 0,
-                      border: 'none',
-                      background: 'transparent',
-                      boxShadow: 'none',
-                    }"
-                    :arrow-style="{ display: 'none' }"
-                  >
-                    <img
-                      :src="getIconUrl('item', item.itemId)"
-                      class="item-icon"
-                    />
-                    <template #content>
-                      <keep-alive>
-                        <component
-                          :is="getTooltipComponent(item.itemId)"
-                          :item="item"
-                        />
-                      </keep-alive>
-                    </template>
-                  </a-popover>
-                  <div class="item-info">
-                    <div class="item-name">{{ item.name || item.itemId }}</div>
-                    <div class="item-quantity">x {{ item.quantity }}</div>
+                  <img
+                    :src="getIconUrl('item', item.itemId)"
+                    class="item-icon"
+                  />
+                  <template #content>
+                    <keep-alive>
+                      <component
+                        :is="getTooltipComponent(item.itemId)"
+                        :item="item"
+                      />
+                    </keep-alive>
+                  </template>
+                </a-popover>
+                <div class="item-info">
+                  <div class="item-name">
+                    {{ item.name || item.itemId }}
                   </div>
+                  <div class="item-quantity">x {{ item.quantity }}</div>
                 </div>
-              </a-space>
+              </div>
               <div v-if="record.mesos > 0" class="mesos-info">
                 {{ $t('duey.list.mesos') }}: {{ record.mesos }}
               </div>
@@ -287,7 +288,7 @@
               :col-gap="16"
               :row-gap="16"
             >
-              <a-grid-item v-for="item in renderData" :key="item.packageId">
+              <a-grid-item v-for="pkg in renderData" :key="pkg.packageId">
                 <a-card class="duey-card" hoverable>
                   <template #actions>
                     <a-dropdown trigger="click">
@@ -295,11 +296,11 @@
                         {{ $t('duey.list.operation') }} <icon-down />
                       </span>
                       <template #content>
-                        <a-doption @click="handleEdit(item)">
+                        <a-doption @click="handleEdit(pkg)">
                           <template #icon><icon-edit /></template>
                           {{ $t('button.edit') }}
                         </a-doption>
-                        <a-doption @click="handleDelete(item)">
+                        <a-doption @click="handleDelete(pkg)">
                           <template #icon><icon-delete /></template>
                           <span style="color: rgb(var(--danger-6))">{{
                             $t('button.delete')
@@ -311,10 +312,10 @@
                   <a-card-meta>
                     <template #title>
                       <div class="card-title">
-                        <span class="sender-name">{{ item.senderName }}</span>
+                        <span class="sender-name">{{ pkg.senderName }}</span>
                         <icon-right />
                         <span class="receiver-name">{{
-                          item.receiverName
+                          pkg.receiverName
                         }}</span>
                       </div>
                     </template>
@@ -323,63 +324,63 @@
                         <div class="card-info-row">
                           <a-tag
                             size="small"
-                            :color="item.type === 1 ? 'red' : 'green'"
+                            :color="pkg.type === 1 ? 'red' : 'green'"
                           >
                             {{
-                              item.type === 1
+                              pkg.type === 1
                                 ? $t('duey.list.type.quick')
                                 : $t('duey.list.type.normal')
                             }}
                           </a-tag>
                           <a-tag
-                            v-if="item.checked === 1"
+                            v-if="pkg.checked === 1"
                             size="small"
                             color="orange"
                           >
                             {{ $t('duey.list.status.unread') }}
                           </a-tag>
                           <a-tag
-                            v-else-if="item.checked === 0"
+                            v-else-if="pkg.checked === 0"
                             size="small"
                             color="gray"
                           >
                             {{ $t('duey.list.status.read') }}
                           </a-tag>
                           <a-tag
-                            v-else-if="item.checked === 2"
+                            v-else-if="pkg.checked === 2"
                             size="small"
                             color="blue"
                           >
                             {{ $t('duey.list.status.claimed') }}
                           </a-tag>
                           <a-tag
-                            v-else-if="item.checked === 3"
+                            v-else-if="pkg.checked === 3"
                             size="small"
                             color="red"
                           >
                             {{ $t('duey.list.status.expired') }}
                           </a-tag>
                           <a-tag
-                            v-else-if="item.checked === 4"
+                            v-else-if="pkg.checked === 4"
                             size="small"
                             color="magenta"
                           >
                             {{ $t('duey.list.status.deleted') }}
                           </a-tag>
                         </div>
-                        <div v-if="item.mesos > 0" class="card-info-row">
+                        <div v-if="pkg.mesos > 0" class="card-info-row">
                           <span class="label"
                             >{{ $t('duey.list.mesos') }}:</span
                           >
-                          <span class="value">{{ item.mesos }}</span>
+                          <span class="value">{{ pkg.mesos }}</span>
                         </div>
                         <div
-                          v-if="item.items && item.items.length > 0"
+                          v-if="pkg.items && pkg.items.length > 0"
                           class="card-items"
                         >
                           <div
-                            v-for="i in item.items"
-                            :key="i.itemId"
+                            v-for="item in pkg.items"
+                            :key="item.itemId"
                             class="mini-item"
                           >
                             <a-popover
@@ -393,29 +394,29 @@
                               :arrow-style="{ display: 'none' }"
                             >
                               <img
-                                :src="getIconUrl('item', i.itemId)"
-                                :title="(i.name || i.itemId).toString()"
+                                :src="getIconUrl('item', item.itemId)"
+                                :title="item.name || item.itemId"
                               />
                               <template #content>
                                 <keep-alive>
                                   <component
-                                    :is="getTooltipComponent(i.itemId)"
-                                    :item="i"
+                                    :is="getTooltipComponent(item.itemId)"
+                                    :item="item"
                                   />
                                 </keep-alive>
                               </template>
                             </a-popover>
-                            <span class="qty">x{{ i.quantity }}</span>
+                            <span class="qty">x{{ item.quantity }}</span>
                           </div>
                         </div>
                         <div class="card-time">
                           <div>
                             {{ $t('duey.list.sendTime') }}:
-                            {{ formatDate(item.timestamp) }}
+                            {{ formatDate(pkg.timestamp) }}
                           </div>
                           <div>
                             {{ $t('duey.list.expire') }}:
-                            {{ formatDate(item.expireTime) }}
+                            {{ formatDate(pkg.expireTime) }}
                           </div>
                         </div>
                       </div>
@@ -587,7 +588,27 @@
     setLoading(true);
     try {
       const { data } = await getDueyList(params);
-      renderData.value = data.records;
+      // **关键修复**: 在将数据赋值给 renderData 之前，进行数据转换以适配模板
+      const processedRecords = data.records.map((record: any) => {
+        // 1. 将单个 item 对象转换为 items 数组
+        if (record.item && !record.items) {
+          record.items = [record.item];
+        }
+
+        // 2. 标准化 items 数组内每个对象的字段名
+        if (record.items && Array.isArray(record.items)) {
+          record.items = record.items.map((item: any) => {
+            return {
+              ...item,
+              itemId: item.id || item.itemId,
+              quantity: item.qty || item.quantity,
+              name: item.nm || item.name,
+            };
+          });
+        }
+        return record;
+      });
+      renderData.value = processedRecords;
       pagination.current = params.pageNo;
       pagination.total = data.totalRow;
     } catch (err) {
