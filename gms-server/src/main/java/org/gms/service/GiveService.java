@@ -84,7 +84,8 @@ public class GiveService {
     private void giveChr(GiveResourceReqDTO submitData) {
         Integer wId = submitData.getWorldId();
         Integer cId = submitData.getPlayerId();
-        if (wId == null || wId < 0 || cId == null || cId < 1) {
+        if (wId == null) wId = 0;   // 默认为大区0
+        if (wId < 0 || cId == null || cId < 1) {
             throw new BizException(I18nUtil.getExceptionMessage("CHR_OR_WORLD_ID_ERROR"));
         }
         
