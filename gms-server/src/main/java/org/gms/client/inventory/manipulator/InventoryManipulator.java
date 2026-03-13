@@ -1144,8 +1144,8 @@ public class InventoryManipulator {
 
             // --- 以下为 ETC 判断 ---
 
-            // [保留] 任务道具 (403xxxx)
-            if (itemId / 10000 == 403) return true;
+            // [不保留] 任务道具 (403xxxx)
+            if (itemId / 10000 == 403) return false;
             // 或者使用 ii.isQuestItem(itemId)
 
             // [保留] 召唤物/特殊 (408xxxx, 422xxxx 等)
