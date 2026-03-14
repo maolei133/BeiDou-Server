@@ -108,9 +108,8 @@ public class ItemRecoveryService {
             ItemInfoRtnDTO itemDTO = objectMapper.readValue(logEntry.getItemData(), ItemInfoRtnDTO.class);
             
             // TODO: 长期建议: 为 item_recovery_logs 表增加 quantity 字段，以支持可堆叠物品的正确数量找回。
-            // 当前临时修复：假设数量为1。
-            short quantity = 1; 
-            Item item = ItemConverter.restoreItemFromDTO(logEntry.getItemId(), quantity, itemDTO);
+            int quantity = itemDTO.getQuantity();
+            Item item = ItemConverter.restoreItemFromDTO(logEntry.getItemId(), (short) quantity, itemDTO);
 
             // 恢复原始 UID
             item.setUid(logEntry.getUid());
