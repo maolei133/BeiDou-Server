@@ -1336,7 +1336,7 @@ public class Monster extends AbstractLoadedLife {
             case WEAK:
                 break;
             default: {
-                log.warn("Unknown elemental effectiveness: {}", getMonsterEffectiveness(status.getSkill().getElement()));
+                log.warn("未知的元素效果：{}", getMonsterEffectiveness(status.getSkill().getElement()));
                 return false;
             }
         }

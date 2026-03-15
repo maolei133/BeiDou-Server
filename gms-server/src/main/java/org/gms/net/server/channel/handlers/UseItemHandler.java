@@ -125,6 +125,5 @@ public final class UseItemHandler extends AbstractPacketHandler {
 
         InventoryManipulator.removeFromSlot(c, InventoryType.USE, slot, (short) 1, false);
         c.sendPacket(PacketCreator.enableActions());
-        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_USE, new MapMessage().with("itm", itemId));
     }
 }

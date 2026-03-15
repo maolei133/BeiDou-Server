@@ -77,7 +77,8 @@ public class StorageService {
 
         storageItemsMapper.insert(itemDO);
 
-        AuditLogger.info(LogModule.ITEM, LogAction.STORAGE_IN, new MapMessage().with("storageId", storageId).with("itm", item.getItemId()).with("cnt", item.getQuantity()).with("uid", item.getUid()));
+        // 统一在 TraceabilityService.log 中记录，防止重复
+        // AuditLogger.info(LogModule.ITEM, LogAction.STORAGE_IN, new MapMessage().with("storageId", storageId).with("itm", item.getItemId()).with("cnt", item.getQuantity()).with("uid", item.getUid()));
         traceabilityService.log(item, 0, 0, 0, TraceabilityService.ActionType.STORAGE_IN, "仓库存入", 0, "StorageID: " + storageId, null);
     }
 
@@ -98,7 +99,8 @@ public class StorageService {
             throw new RuntimeException("无法移除没有UID的物品");
         }
 
-        AuditLogger.info(LogModule.ITEM, LogAction.STORAGE_OUT, new MapMessage().with("storageId", storageId).with("itm", item.getItemId()).with("cnt", item.getQuantity()).with("uid", item.getUid()));
+        // 统一在 TraceabilityService.log 中记录，防止重复
+        // AuditLogger.info(LogModule.ITEM, LogAction.STORAGE_OUT, new MapMessage().with("storageId", storageId).with("itm", item.getItemId()).with("cnt", item.getQuantity()).with("uid", item.getUid()));
         traceabilityService.log(item, 0, 0, 0, TraceabilityService.ActionType.STORAGE_OUT, "仓库取出", 0, "StorageID: " + storageId, null);
     }
 

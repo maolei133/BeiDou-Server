@@ -136,7 +136,7 @@ public final class ScrollHandler extends AbstractPacketHandler {
 
                     InventoryManipulator.removeFromSlot(c, InventoryType.USE, scroll.getPosition(), (short) 1, false); // 移除一个卷轴
                     // 记录溯源日志：卷轴消耗
-                    traceabilityService.log(scroll, chr, TraceabilityService.ActionType.SCROLL, "卷轴消耗", -1, "目标装备: " + toScroll.getItemId(), "结果: " + scrollSuccess);
+                    traceabilityService.log(scroll, chr, TraceabilityService.ActionType.SCROLL, "卷轴消耗", -1, String.format("目标装备: [%d] %s" , toScroll.getItemId(), ItemInformationProvider.getInstance().getName(toScroll.getItemId())), "结果: " + scrollSuccess);
                 } finally {
                     useInventory.unlockInventory(); // 解锁使用栏库存
                 }
@@ -166,7 +166,7 @@ public final class ScrollHandler extends AbstractPacketHandler {
                             }
                         }
                         // 记录溯源日志：装备损毁
-                        traceabilityService.log(toScroll, chr, TraceabilityService.ActionType.SCROLL, "装备损毁", -1, "卷轴: " + scroll.getItemId(), null);
+                        traceabilityService.log(toScroll, chr, TraceabilityService.ActionType.SCROLL, "装备损毁", -1, String.format("目标装备: [%d] %s" , toScroll.getItemId(), ItemInformationProvider.getInstance().getName(toScroll.getItemId())), null);
                     } else {
                         scrolled = toScroll;
                         scrollSuccess = Equip.ScrollResult.FAIL;

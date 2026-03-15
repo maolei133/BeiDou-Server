@@ -116,8 +116,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         c.sendPacket(PacketCreator.showBoughtCashItem(item, c.getAccID()));
                         
                         // 日志记录
-                        AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("itm", item.getItemId()).with("sn", snCS).with("cost", cItem.getPrice()));
-                        traceabilityService.log(item, chr, TraceabilityService.ActionType.SHOP_BUY, "商城购买");
+                        traceabilityService.log(item, chr, TraceabilityService.ActionType.CS_IN, "从商城购买", 1);
                     } else { // 礼包
                         cs.gainCash(useNX, cItem, chr.getWorld());
 
@@ -131,7 +130,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                             cs.addToInventory(item);
                             
                             // 日志记录
-                            traceabilityService.log(item, chr, TraceabilityService.ActionType.SHOP_BUY, "商城礼包购买");
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.CS_IN, "商城礼包购买", 1);
                         }
                         c.sendPacket(PacketCreator.showBoughtCashPackage(cashPackage, c.getAccID()));
                         log.info("玩家 {} 购买的礼包 {} (SN {}) 内含如下道具：[\r\n{}\r\n]",
@@ -379,8 +378,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                             cs.save();
                             
                             // 日志记录
-                            AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_OUT, new MapMessage().with("itm", item.getItemId()).with("msg", "从商城仓库取出"));
-                            traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_OUT, "商城取出");
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.CS_OUT, "从商城取出", 1);
                         } else {
                              c.sendPacket(PacketCreator.showCashShopMessage((byte) 0xA9)); // Inventory Full (should be caught by checkSpace but just in case)
                         }
@@ -424,8 +422,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                     );
                     
                     // 日志记录
-                    AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_IN, new MapMessage().with("itm", item.getItemId()).with("msg", "存入商城仓库"));
-                    traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_IN, "商城存入");
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.CS_IN, "存入商城保管箱", -1);
                 } else if (action == 0x1D) { // 情侣戒指 (action 28)
                     int birthday = p.readInt();
                     if (checkBirthday(c, birthday)) {

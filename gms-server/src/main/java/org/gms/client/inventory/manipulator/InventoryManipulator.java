@@ -104,7 +104,7 @@ public class InventoryManipulator {
                                 short addedQty = (short) (newQ - oldQ);
 
                                 // 溯源日志：记录合并
-                                traceabilityService.log(eItem, chr, TraceabilityService.ActionType.MERGE, "背包内合并", addedQty, "合并前数量: " + oldQ, null);
+                                traceabilityService.log(eItem, chr, TraceabilityService.ActionType.MERGE, "背包内合并", addedQty, String.format("数量: %d -> %d", oldQ, newQ), "合并到UID: " + eItem.getUid());
 
                                 if (eItem.getExpiration() > 0) {
                                     if (expiration > 0) {
@@ -192,7 +192,6 @@ public class InventoryManipulator {
         } else {
             throw new RuntimeException("试图创建一件数量不为 1 的装备");
         }
-        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_GAIN, new MapMessage().with("itm", itemId).with("cnt", quantity).with("msg", "addById"));
         return true;
     }
 
@@ -275,7 +274,7 @@ public class InventoryManipulator {
                                 short addedQty = (short) (newQ - oldQ);
 
                                 // 溯源日志：记录合并
-                                traceabilityService.log(item, chr, TraceabilityService.ActionType.MERGE, "拾取合并", addedQty, "合并前数量: " + oldQ, "合并到UID: " + eItem.getUid());
+                                traceabilityService.log(item, chr, TraceabilityService.ActionType.MERGE, "拾取合并", addedQty, String.format("数量: %d -> %d", oldQ, newQ), "合并到UID: " + eItem.getUid());
 
                                 if (eItem.getExpiration() > 0) {
                                     if (item.getExpiration() > 0) {
@@ -394,7 +393,6 @@ public class InventoryManipulator {
         if (show) {
             c.sendPacket(PacketCreator.getShowItemGain(itemid, item.getQuantity()));
         }
-        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_PICKUP, new MapMessage().with("itm", itemid).with("cnt", quantity).with("msg", "addFromDrop"));
         return true;
     }
 
@@ -556,7 +554,6 @@ public class InventoryManipulator {
                 }
             }
         }
-        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_LOST, new MapMessage().with("itm", item.getItemId()).with("cnt", quantity).with("msg", "removeFromSlot"));
         
         // 实时保存
         final InventoryType finalType = type;
@@ -640,7 +637,6 @@ public class InventoryManipulator {
             int itemID = source.getItemId();
             c.getPlayer().dropMessage(5, I18nUtil.getMessage("InventoryManipulator.handlePacket.message1") + itemID);
         }
-        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_MOVE, new MapMessage().with("itm", source.getItemId()).with("src", src).with("dst", dst));
         
         // 实时保存
         final InventoryType finalType = type;
@@ -889,13 +885,16 @@ public class InventoryManipulator {
             }
         }
 
-        // 物品找回系统拦截点
+        // 物品找回系统拦截点，单纯丢出到地图上无需记录
         // 修改：在丢弃时记录找回，但状态设为 PENDING (待确认)，防止“丢弃->找回->拾取”的复制漏洞
         // 只有当物品真正从地图上消失时，才会激活为 RECOVERABLE
-        if (isValuableForRecovery(source)) {
+/*        if (isValuableForRecovery(source)) {
             TraceabilityService traceabilityService = SpringContextUtil.getBean(TraceabilityService.class);
             traceabilityService.logRecovery(source, chr, "DROP");
-        }
+        }*/
+        
+        // 准备溯源日志信息
+        String dropSource = String.format("玩家丢弃于地图: %s(%d)", map.getMapName(), map.getId());
 
         Point dropPos = new Point(chr.getPosition());
         if (quantity < source.getQuantity() && !ItemConstants.isRechargeable(itemId)) {
@@ -916,13 +915,15 @@ public class InventoryManipulator {
 
             if (isDisappearingItemDrop(target)) {
                 map.disappearingItemDrop(chr, chr, target, dropPos);
-                // 修复：对于直接消失的物品，立即激活找回状态，并记录溯源日志
+                // 对于直接消失的物品，立即激活找回状态，并记录溯源日志
                 if (isValuableForRecovery(target)) {
                     traceabilityService.activateRecovery(target.getUid());
-                    traceabilityService.log(target, chr, TraceabilityService.ActionType.DROP, "玩家丢弃(直接销毁)", quantity);
+                    traceabilityService.log(target, chr, TraceabilityService.ActionType.DROP, dropSource, -quantity, null, "直接销毁");
                 }
             } else {
                 map.spawnItemDrop(chr, chr, target, dropPos, true, true);
+                // 溯源日志：记录丢弃到地图的物品
+//                traceabilityService.log(target, chr, TraceabilityService.ActionType.DROP, dropSource, -quantity);
             }
         } else {
             if (type == InventoryType.EQUIPPED) {
@@ -952,13 +953,15 @@ public class InventoryManipulator {
 
             if (isDisappearingItemDrop(source)) {
                 map.disappearingItemDrop(chr, chr, source, dropPos);
-                // 修复：对于直接消失的物品，立即激活找回状态，并记录溯源日志
+                // 对于直接消失的物品，立即激活找回状态，并记录溯源日志
                 if (isValuableForRecovery(source)) {
                     traceabilityService.activateRecovery(source.getUid());
-                    traceabilityService.log(source, chr, TraceabilityService.ActionType.DROP, "玩家丢弃(直接销毁)", quantity);
+                    traceabilityService.log(source, chr, TraceabilityService.ActionType.DROP, dropSource, -quantity, null, "直接销毁");
                 }
             } else {
                 map.spawnItemDrop(chr, chr, source, dropPos, true, true);
+                // 溯源日志：记录丢弃到地图的物品
+//                traceabilityService.log(source, chr, TraceabilityService.ActionType.DROP, dropSource, -quantity);
             }
         }
 
@@ -975,7 +978,6 @@ public class InventoryManipulator {
         } else if (itemId == ItemId.ARPQ_SPIRIT_JEWEL) {
             chr.updateAriantScore(quantityNow);
         }
-        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_DROP, new MapMessage().with("itm", itemId).with("cnt", quantity).with("msg", "drop"));
         
         // 实时保存
         final InventoryType finalType = type;

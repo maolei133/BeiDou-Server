@@ -201,6 +201,8 @@ export default {
   'log.module.EVENT': 'Event',
   'log.module.AUTOBAN': 'AutoBan',
   'log.module.PLUGIN': 'Plugin',
+  'log.module.STORAGE': 'Storage',
+  'log.module.ITEM_RECOVERY': 'Item Recovery',
 
   // Action translations
   'log.action.SERVER_START': 'Server Start',
@@ -244,4 +246,6 @@ export default {
   'log.action.STORAGE_IN': 'Storage In',
   'log.action.STORAGE_OUT': 'Storage Out',
   'log.action.STORAGE_MIGRATE': 'Storage Migrate',
+  'log.action.STORAGE_MERGE': 'Storage Merge',
+  'log.action.STORAGE_MERGE_FAIL': 'Storage Merge Fail',
 };

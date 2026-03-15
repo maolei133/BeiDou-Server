@@ -15,6 +15,7 @@ public enum LogAction {
     /** 登录失败 */ LOGIN_FAIL,
     /** 登出 */ LOGOUT,
     /** 创建角色 */ CREATE_CHAR,
+    /** 选择角色 */ SELECT_CHAR,
     /** 删除角色 */ DELETE_CHAR,
 
     // --- CHARACTER ---

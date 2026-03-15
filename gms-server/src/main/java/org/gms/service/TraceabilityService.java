@@ -11,12 +11,18 @@ import org.gms.dao.entity.ItemRecoveryLogsDO;
 import org.gms.dao.entity.ItemTraceLogsDO;
 import org.gms.dao.mapper.ItemRecoveryLogsMapper;
 import org.gms.dao.mapper.ItemTraceLogsMapper;
+import org.gms.server.logging.AuditContext;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogModule;
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.model.dto.ItemInfoRtnDTO;
+import org.gms.server.ItemInformationProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -33,40 +39,40 @@ public class TraceabilityService {
 
     private static final Logger log = LoggerFactory.getLogger(TraceabilityService.class);
     private static final ExecutorService logExecutor = Executors.newSingleThreadExecutor();
-    
+
     private final ItemTraceLogsMapper itemTraceLogsMapper;
     private final ItemRecoveryLogsMapper itemRecoveryLogsMapper;
     private final ObjectMapper objectMapper;
 
     public enum ActionType {
         // 基础操作
-        CREATE, DROP, SELL, TRADE, 
-        
+        CREATE, DROP, SELL, TRADE,
+
         // 仓库与商城
         STORAGE_IN, STORAGE_OUT, CS_IN, CS_OUT,
-        
+
         // 雇佣商人与个人商店
         HIRED_MERCHANT_ADD, HIRED_MERCHANT_BUY, HIRED_MERCHANT_RETURN,
         PLAYER_SHOP_ADD, PLAYER_SHOP_BUY, PLAYER_SHOP_RETURN,
-        
+
         // NPC商店
         SHOP_BUY, SHOP_SELL,
-        
+
         // 快递
         DUEY_SEND, DUEY_RECEIVE, DUEY_RETURN, DUEY_DELETE,
-        
+
         // 消耗与使用
-        USE, CONSUME, SCROLL, UPGRADE, 
-        
+        USE, CONSUME, SCROLL, UPGRADE,
+
         // 获取来源
         REWARD, LOOT, GACHAPON_REWARD, QUEST_REWARD, QUEST_CONSUME,
-        
+
         // 制作与合成
         CRAFT_CREATE, CRAFT_CONSUME, MERGE,
-        
+
         // 地图生成与消失
         SPAWN, DESPAWN_EXPIRED, PICKUP,
-        
+
         // 管理员操作
         ADMIN_CREATE, ADMIN_DELETE, GM_CREATE, GM_MODIFY
     }
@@ -127,8 +133,12 @@ public class TraceabilityService {
         // 价值判断过滤，防止记录大量低价值物品
         if (!InventoryManipulator.isValuableForRecovery(item)) return;
 
+        // 在主线程中获取上下文，传递给异步线程
+        Map<String, String> contextData = AuditContext.get();
+
         logExecutor.submit(() -> {
             try {
+                // 1. 写入数据库
                 ItemTraceLogsDO.ItemTraceLogsDOBuilder builder = ItemTraceLogsDO.builder()
                         .uid(item.getUid())
                         .accountId(accountId)
@@ -143,8 +153,39 @@ public class TraceabilityService {
                         .timestamp(System.currentTimeMillis())
                         .memo(memo);
                 itemTraceLogsMapper.insert(builder.build());
+
+                // 2. 写入Loki日志
+                MapMessage logData = new MapMessage()
+                        .with("msg", actionSource)
+                        .with("itm", item.getItemId())
+                        .with("itemName", ItemInformationProvider.getInstance().getName(item.getItemId()))
+                        .with("cnt", quantityChange)
+                        .with("itemData", objectMapper.writeValueAsString(item.toInfoRtnDTO(true)));
+
+                logData.with("msg", actionSource + String.format(": [%s] %s × %s",
+                        logData.get("itm"),
+                        logData.get("itemName"),
+                        logData.get("cnt")
+                ));
+
+                // 手动注入主线程的上下文，避免 ThreadLocal 在线程池中丢失
+                for (Map.Entry<String, String> entry : contextData.entrySet()) {
+                    logData.with(entry.getKey(), entry.getValue());
+                }
+
+                // 防止传入 null 导致 IllegalArgumentException
+                if (targetInfo != null && !targetInfo.isEmpty()) {
+                    logData.with("targetChr", targetInfo);
+                    logData.with("msg",logData.get("msg") + ": " + targetInfo);
+                }
+
+                AuditLogger.info(
+                        LogModule.ITEM.name(),
+                        actionType.name(),
+                        logData
+                );
             } catch (Exception e) {
-                log.error("插入物品溯源日志失败，物品UID: " + item.getUid(), e);
+                log.error("写入物品溯源双重日志失败，物品UID: " + item.getUid(), e);
             }
         });
     }
@@ -159,6 +200,8 @@ public class TraceabilityService {
         if (item == null || character == null) return;
         if (!InventoryManipulator.isValuableForRecovery(item)) return;
 
+        Map<String, String> contextData = AuditContext.get();
+
         logExecutor.submit(() -> {
             try {
                 // **核心修正**: 调用 toInfoRtnDTO(true) 以确保包含 quantity 字段
@@ -167,6 +210,7 @@ public class TraceabilityService {
                 long deadline = now + (GameConfig.getServerInt("item_recovery_hours", 24) * 60 * 60 * 1000L);
                 String initialStatus = "DROP".equals(disposalType) ? "PENDING" : "RECOVERABLE";
 
+                // 1. 写入数据库
                 ItemRecoveryLogsDO recoveryLogDO = ItemRecoveryLogsDO.builder()
                         .characterId(character.getId())
                         .uid(item.getUid())
@@ -178,12 +222,36 @@ public class TraceabilityService {
                         .status(initialStatus)
                         .build();
                 itemRecoveryLogsMapper.insert(recoveryLogDO);
+
+                // 2. 写入Loki日志
+                MapMessage logData = new MapMessage()
+                        .with("itm", item.getItemId())
+                        .with("itemName", ItemInformationProvider.getInstance().getName(item.getItemId()))
+                        .with("itemData", objectMapper.writeValueAsString(itemDTO))
+                        .with("status", initialStatus);
+
+                logData.with("msg", String.format("物品 [%s] %s × %d 进入找回系统: %s",
+                        logData.get("itm"),
+                        logData.get("itemName"),
+                        itemDTO.getQuantity(),
+                        disposalType)
+                );
+
+                for (Map.Entry<String, String> entry : contextData.entrySet()) {
+                    logData.with(entry.getKey(), entry.getValue());
+                }
+
+                AuditLogger.info(
+                        LogModule.ITEM_RECOVERY.name(),
+                        disposalType,
+                        logData
+                );
             } catch (Exception e) {
-                log.error("插入物品找回日志失败，物品UID: " + item.getUid(), e);
+                log.error("写入物品找回双重日志失败，物品UID: " + item.getUid(), e);
             }
         });
     }
-    
+
     /**
      * 激活丢弃物品的找回状态
      * @param uid 物品UID

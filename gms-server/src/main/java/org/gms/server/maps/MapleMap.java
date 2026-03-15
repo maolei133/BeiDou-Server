@@ -1004,7 +1004,7 @@ public class MapleMap {
             
             // 溯源日志：过期清除
             if (mmi.getItem() != null) {
-                traceabilityService.log(mmi.getItem(), -1, -1, this.getId(), TraceabilityService.ActionType.DESPAWN_EXPIRED, "系统清除", 0, "地图: " + this.getId(), "物品过期");
+                traceabilityService.log(mmi.getItem(), -1, -1, this.getId(), TraceabilityService.ActionType.DESPAWN_EXPIRED, "系统清除", mmi.getItem().getQuantity(), "地图: " + this.getId(), "物品过期");
             }
         }
 
@@ -1194,20 +1194,6 @@ public class MapleMap {
 
         instantiateItemDrop(mdrop);
         activateItemReactors(mdrop, chr.getClient());
-        
-        // 溯源日志：物品生成
-        String sourceInfo;
-        if (dropper instanceof Character) {
-            sourceInfo = "玩家丢弃: " + ((Character) dropper).getName();
-        } else if (dropper instanceof Monster) {
-            sourceInfo = "怪物掉落: " + ((Monster) dropper).getId();
-        } else if (dropper instanceof Reactor) {
-            sourceInfo = "反应堆掉落: " + ((Reactor) dropper).getId();
-        } else {
-            sourceInfo = "系统生成";
-        }
-        
-        traceabilityService.log(idrop, chr != null ? chr.getAccountId() : -1, chr != null ? chr.getId() : -1, this.getId(), TraceabilityService.ActionType.SPAWN, sourceInfo, idrop.getQuantity(), "地图: " + this.getId(), null);
     }
 
     public final void spawnMesoDrop(final int meso, final Point position, final MapObject dropper, final Character owner, final boolean playerDrop, final byte droptype) {
@@ -2280,16 +2266,17 @@ public class MapleMap {
         // 溯源日志：物品生成
         String sourceInfo;
         if (dropper instanceof Character) {
-            sourceInfo = "玩家丢弃: " + ((Character) dropper).getName();
+            sourceInfo = String.format("玩家丢弃: %s", ((Character) dropper).getName());
         } else if (dropper instanceof Monster) {
-            sourceInfo = "怪物掉落: " + ((Monster) dropper).getId();
+            Monster monster = (Monster) dropper;
+            sourceInfo = String.format("怪物掉落: %s(%d)", monster.getName(), monster.getId());
         } else if (dropper instanceof Reactor) {
-            sourceInfo = "反应堆掉落: " + ((Reactor) dropper).getId();
+            sourceInfo = String.format("反应堆掉落: %d", ((Reactor) dropper).getId());
         } else {
             sourceInfo = "系统生成";
         }
         
-        traceabilityService.log(item, owner != null ? owner.getAccountId() : -1, owner != null ? owner.getId() : -1, this.getId(), TraceabilityService.ActionType.SPAWN, sourceInfo, item.getQuantity(), "地图: " + this.getId(), null);
+        traceabilityService.log(item, owner != null ? owner.getAccountId() : -1, owner != null ? owner.getId() : -1, this.getId(), TraceabilityService.ActionType.DROP, sourceInfo, item.getQuantity(), "地图: " + this.getMapName(), null);
     }
 
     public final void spawnItemDropList(List<Integer> list, final MapObject dropper, final Character owner, Point pos) {
@@ -2656,25 +2643,6 @@ public class MapleMap {
             }
         }
         chr.commitExcludedItems();  // thanks OishiiKawaiiDesu for noticing pet item ignore registry erasing upon changing maps
-
-        if (chr.getMonsterCarnival() != null) {
-            chr.sendPacket(PacketCreator.getClock(chr.getMonsterCarnival().getTimeLeftSeconds()));
-            if (isCPQMap()) {
-                int team = -1;
-                int oposition = -1;
-                if (chr.getTeam() == 0) {
-                    team = 0;
-                    oposition = 1;
-                }
-                if (chr.getTeam() == 1) {
-                    team = 1;
-                    oposition = 0;
-                }
-                chr.sendPacket(PacketCreator.startMonsterCarnival(chr, team, oposition));
-            }
-        }
-
-        chr.removeSandboxItems();
 
         if (chr.getChalkboard() != null) {
             if (!GameConstants.isFreeMarketRoom(mapid)) {

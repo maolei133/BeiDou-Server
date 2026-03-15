@@ -126,6 +126,17 @@ public class Trade {
     private void completeTrade() {
         byte result;
         boolean show = GameConfig.getServerBoolean("use_debug");
+        
+        // 对方玩家信息
+        Character partnerChr = partner.getChr();
+        
+        // 记录对方失去的物品
+        for (Item item : items) {
+            // 溯源日志：记录对方失去物品
+            String sourceForPartner = String.format("与玩家 %s(%d) 交易失去", chr.getName(), chr.getId());
+            traceabilityService.log(item, partnerChr, TraceabilityService.ActionType.TRADE, sourceForPartner, -item.getQuantity());
+        }
+
         items.clear();
         meso = 0;
 
@@ -133,8 +144,9 @@ public class Trade {
             KarmaManipulator.toggleKarmaFlagToUntradeable(item);
             InventoryManipulator.addFromDrop(chr.getClient(), item, show);
             
-            // 记录溯源日志
-            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, "玩家交易", item.getQuantity(), "From: " + partner.getChr().getName(), null);
+            // 溯源日志：记录我方获得物品
+            String sourceForLocal = String.format("与玩家 %s(%d) 交易获得", partnerChr.getName(), partnerChr.getId());
+            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, sourceForLocal, item.getQuantity());
         }
 
         if (exchangeMeso > 0) {//此处对金币交易进行扣税处理

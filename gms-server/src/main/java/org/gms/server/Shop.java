@@ -37,6 +37,7 @@ import org.gms.dao.entity.ShopsDO;
 import org.gms.dao.mapper.ShopitemsMapper;
 import org.gms.dao.mapper.ShopsMapper;
 import org.gms.manager.ServerManager;
+import org.gms.server.life.LifeFactory;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
@@ -108,18 +109,27 @@ public class Shop {
         InventoryType type = ItemConstants.getInventoryType(itemId);
         Character chr = c.getPlayer();
         Inventory inv = chr.getInventory(type);
+        
+        // 获取NPC名称用于日志记录
+        String npcName = LifeFactory.getNPCName(npcId);
+        if (npcName == null || npcName.isEmpty()) {
+            npcName = String.valueOf(npcId);
+        }
+        final String finalNpcName = npcName;
+
         inv.lockInventory();
         try {
             if (item.getPrice() > 0) {
                 int amount = (int) Math.min((float) item.getPrice() * quantity, Integer.MAX_VALUE);
                 if (c.getPlayer().getMeso() >= amount) {
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
+                        String source = String.format("从NPC(%s)商店购买", finalNpcName);
                         if (!ItemConstants.isRechargeable(itemId)) { //宠物无法从商店购买
                             short finalQuantity = quantity;
                             int finalAmount = amount;
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
                                 // 溯源日志：商店购买
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店购买", finalQuantity, "商店ID: " + id, "花费: " + finalAmount + "金币");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalAmount + "金币");
                             });
                             c.getPlayer().gainMeso(-amount, false);
                         } else {
@@ -127,12 +137,12 @@ public class Shop {
                             short finalQuantity = quantity;
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
                                 // 溯源日志：商店购买 (充值类)
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店购买", finalQuantity, "商店ID: " + id, "花费: " + item.getPrice() + "金币");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + item.getPrice() + "金币");
                             });
                             c.getPlayer().gainMeso(-item.getPrice(), false);
                         }
                         c.sendPacket(PacketCreator.shopTransaction((byte) 0));
-                        AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", amount));
+                        //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", amount));
                     } else {
                         c.sendPacket(PacketCreator.shopTransaction((byte) 3));
                     }
@@ -146,11 +156,12 @@ public class Shop {
 
                 if (c.getPlayer().getInventory(InventoryType.ETC).countById(ItemId.PERFECT_PITCH) >= amount) {
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
+                        String source = String.format("从NPC(%s)商店兑换(Pitch)", finalNpcName);
                         if (!ItemConstants.isRechargeable(itemId)) {
                             short finalQuantity = quantity;
                             int finalAmount = amount;
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店兑换(Pitch)", finalQuantity, "商店ID: " + id, "花费: " + finalAmount + " Pitch");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalAmount + " Pitch");
                             });
                             InventoryManipulator.removeById(c, InventoryType.ETC, ItemId.PERFECT_PITCH, amount, false, false);
                         } else {
@@ -159,12 +170,12 @@ public class Shop {
                             short finalQuantity = quantity;
                             int finalAmount = amount;
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店兑换(Pitch)", finalQuantity, "商店ID: " + id, "花费: " + finalAmount + " Pitch");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalAmount + " Pitch");
                             });
                             InventoryManipulator.removeById(c, InventoryType.ETC, ItemId.PERFECT_PITCH, amount, false, false);
                         }
                         c.sendPacket(PacketCreator.shopTransaction((byte) 0));
-                        AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", amount).with("currency", "PITCH"));
+                        //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", amount).with("currency", "PITCH"));
                     } else {
                         c.sendPacket(PacketCreator.shopTransaction((byte) 3));
                     }
@@ -178,16 +189,17 @@ public class Shop {
                     int cardreduce = value - cost;
                     int diff = cardreduce + c.getPlayer().getMeso();
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
+                        String source = String.format("从NPC(%s)商店购买(Token)", finalNpcName);
                         short finalQuantity = quantity;
                         int finalCost = cost;
                         if (ItemConstants.isPet(itemId)) {
                             int petid = Pet.createPet(itemId);
                             InventoryManipulator.addById(c, itemId, quantity, "", petid, -1, (addedItem) -> {
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店购买(Token)", finalQuantity, "商店ID: " + id, "花费: " + finalCost + " Token");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalCost + " Token");
                             });
                         } else {
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, -1, (addedItem) -> {
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, "NPC商店购买(Token)", finalQuantity, "商店ID: " + id, "花费: " + finalCost + " Token");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalCost + " Token");
                             });
                         }
                         c.getPlayer().gainMeso(diff, false);
@@ -195,7 +207,7 @@ public class Shop {
                         c.sendPacket(PacketCreator.shopTransaction((byte) 3));
                     }
                     c.sendPacket(PacketCreator.shopTransaction((byte) 0));
-                    AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", cost).with("currency", "TOKEN"));
+                    //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", cost).with("currency", "TOKEN"));
                 } else {
                     c.sendPacket(PacketCreator.shopTransaction((byte) 2));
                 }
@@ -245,6 +257,13 @@ public class Shop {
 
         Inventory inventory = c.getPlayer().getInventory(type);
         Item item = inventory.getItem(slot);
+        
+        // 获取NPC名称用于日志记录
+        String npcName = LifeFactory.getNPCName(npcId);
+        if (npcName == null || npcName.isEmpty()) {
+            npcName = String.valueOf(npcId);
+        }
+
         inventory.lockInventory();
         try {
             if (canSell(item, quantity)) {
@@ -262,7 +281,7 @@ public class Shop {
                 }
                 
                 // 溯源日志：商店出售
-                traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.SHOP_SELL, "NPC商店出售", -quantity, "商店ID: " + id, null);
+                traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.SHOP_SELL, "出售给NPC商店", -quantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), null);
 
                 InventoryManipulator.removeFromSlot(c, type, (byte) slot, quantity, false);
 
@@ -272,7 +291,7 @@ public class Shop {
                     c.getPlayer().gainMeso(recvMesos, false);
                 }
                 c.sendPacket(PacketCreator.shopTransaction((byte) 0x8));
-                AuditLogger.info(LogModule.SHOP, LogAction.SHOP_SELL, new MapMessage().with("itm", item.getItemId()).with("cnt", quantity).with("gain", recvMesos));
+                //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_SELL, new MapMessage().with("itm", item.getItemId()).with("cnt", quantity).with("gain", recvMesos));
             } else {
                 c.sendPacket(PacketCreator.shopTransaction((byte) 0x5));
             }
@@ -301,7 +320,7 @@ public class Shop {
                     c.getPlayer().forceUpdateItem(item);
                     c.getPlayer().gainMeso(-price, false, true, false);
                     c.sendPacket(PacketCreator.shopTransaction((byte) 0x8));
-                    AuditLogger.info(LogModule.SHOP, LogAction.SHOP_RECHARGE, new MapMessage().with("itm", item.getItemId()).with("cost", price));
+                    //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_RECHARGE, new MapMessage().with("itm", item.getItemId()).with("cost", price));
                 } else {
                     c.sendPacket(PacketCreator.shopTransaction((byte) 0x2));
                 }

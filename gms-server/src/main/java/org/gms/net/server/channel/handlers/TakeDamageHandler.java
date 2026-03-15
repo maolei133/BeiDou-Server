@@ -37,11 +37,13 @@ import org.gms.config.GameConfig;
 import org.gms.constants.id.MapId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.skills.Aran;
+import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.StatEffect;
@@ -65,6 +67,7 @@ import java.util.Optional;
 
 public final class TakeDamageHandler extends AbstractPacketHandler {
     private static final Logger log = LoggerFactory.getLogger(TakeDamageHandler.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     @Override
     public void handlePacket(InPacket p, Client c) {
@@ -125,6 +128,13 @@ public final class TakeDamageHandler extends AbstractPacketHandler {
                                         inv.lockInventory();
                                         try {
                                             qty = Math.min(chr.countItem(loseItem.getId()), dropCount);
+                                            
+                                            // 溯源日志：被怪物偷取
+                                            Item item = inv.findById(loseItem.getId());
+                                            if (item != null) {
+                                                traceabilityService.log(item, chr, TraceabilityService.ActionType.DROP, String.format("被怪物偷取: %s(%d)", attacker.getName(), attacker.getId()), -qty);
+                                            }
+                                            
                                             InventoryManipulator.removeById(c, type, loseItem.getId(), qty, false, false);
                                         } finally {
                                             inv.unlockInventory();
@@ -139,7 +149,6 @@ public final class TakeDamageHandler extends AbstractPacketHandler {
                                             map.spawnItemDrop(chr, chr, new Item(loseItem.getId(), (short) 0, (short) 1), map.calcDropPos(pos, chr.getPosition()), true, true);
                                             d++;
                                         }
-                                        AuditLogger.info(LogModule.ITEM, LogAction.ITEM_LOST, new MapMessage().with("itm", loseItem.getId()).with("cnt", qty).with("msg", "被怪物偷取"));
                                     }
                                 }
                             }

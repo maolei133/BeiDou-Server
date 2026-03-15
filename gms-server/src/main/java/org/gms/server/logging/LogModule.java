@@ -21,5 +21,6 @@ public enum LogModule {
     /** 活动 */ EVENT,
     /** 反作弊 */ AUTOBAN,
     /** 内置辅助插件 */ PLUGIN,
-    /** 仓库 */ STORAGE
+    /** 仓库 */ STORAGE,
+    /** 物品找回 */ ITEM_RECOVERY
 }

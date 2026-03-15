@@ -33,10 +33,12 @@ import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.packet.InPacket;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.ItemInformationProvider;
@@ -49,6 +51,7 @@ import org.gms.util.PacketCreator;
  */
 public class StorageProcessor {
     private static final Logger log = LoggerFactory.getLogger(StorageProcessor.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     /**
      * 仓库操作错误码枚举
@@ -111,7 +114,7 @@ public class StorageProcessor {
                     
                     if (slot < 0 || slot > storage.getSlots()) { // 索引从0开始
                         AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " 尝试通过仓库进行封包编辑。");
-                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
+                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT,
                                 new MapMessage().with("msg", "检测到封包编辑").with("slot", slot));
                         c.disconnect(true, false);
                         return;
@@ -144,19 +147,15 @@ public class StorageProcessor {
                         }
 
                         if (InventoryManipulator.checkSpace(c, item.getItemId(), item.getQuantity(), item.getOwner())) {
-                            if (storage.takeOut(item)) {
+                            if (storage.takeOut(c, item)) {
                                 chr.setUsedStorage();
 
                                 KarmaManipulator.toggleKarmaFlagToUntradeable(item);
                                 InventoryManipulator.addFromDrop(c, item, false);
 
+                                traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_OUT, "从仓库取出", item.getQuantity());
+
                                 String itemName = ii.getName(item.getItemId());
-                                AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
-                                        new MapMessage()
-                                                .with("itm", item.getItemId())
-                                                .with("cnt", item.getQuantity())
-                                                .with("slot", globalSlot));
-                                
                                 // 发送提示消息
                                 String feeMsg = takeoutFee > 0 ? " (手续费: " + takeoutFee + " 金币)" : "";
                                 chr.dropMessage(5, "[仓库] 取出 " + itemName + " × " + item.getQuantity() + feeMsg);
@@ -171,7 +170,7 @@ public class StorageProcessor {
                             sendStorageError(c, StorageError.INVENTORY_FULL);
                         }
                     } else {
-                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT, 
+                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT,
                                 new MapMessage().with("msg", "未找到物品").with("slot", globalSlot));
                         sendStorageError(c, StorageError.UNKNOWN);
                         chr.dropMessage(1, "仓库中没有该物品");
@@ -188,7 +187,7 @@ public class StorageProcessor {
                     if (slot < 1 || slot > inv.getSlotLimit()) { // 玩家背包从1开始
                         AutobanFactory.PACKET_EDIT.alert(c.getPlayer(),
                                 c.getPlayer().getName() + " 尝试通过仓库进行封包编辑。");
-                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_IN, 
+                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_IN,
                                 new MapMessage().with("msg", "检测到封包编辑").with("slot", slot));
                         c.disconnect(true, false);
                         return;
@@ -294,12 +293,9 @@ public class StorageProcessor {
                         if (storage.store(c, item)) { // 在临界区内，"!(storage.isFull())" 仍然有效...
                             chr.setUsedStorage();
 
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_IN, "存入仓库", -quantity);
+
                             String itemName = ii.getName(item.getItemId());
-                            AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_IN, 
-                                    new MapMessage()
-                                            .with("itm", item.getItemId())
-                                            .with("cnt", item.getQuantity()));
-                            
                             // 发送提示消息
                             String feeMsg = storeFee > 0 ? " (手续费: " + storeFee + " 金币)" : "";
                             chr.dropMessage(6, "[仓库] 存入 " + itemName + " × " + item.getQuantity() + feeMsg);
@@ -348,10 +344,10 @@ public class StorageProcessor {
                         storage.setMeso(storageMesos - meso);
                         chr.gainMeso(meso, false, true, false);
                         chr.setUsedStorage();
-                        
-                        AuditLogger.info(LogModule.STORAGE, meso > 0 ? LogAction.STORAGE_OUT : LogAction.STORAGE_IN, 
+
+                        AuditLogger.info(LogModule.STORAGE, meso > 0 ? LogAction.STORAGE_OUT : LogAction.STORAGE_IN,
                                 new MapMessage().with("meso", Math.abs(meso)));
-                        
+
                         // 发送提示消息
                         String action = meso > 0 ? "取出" : "存入";
                         int msgType = meso > 0 ? 5 : 6;
@@ -373,7 +369,7 @@ public class StorageProcessor {
                 chr.dropMessage(1, "仓库操作失败");
                 // 异常日志：记录详细堆栈
                 log.error("[Storage] 仓库操作异常: Char={}, Mode={}", chr.getName(), mode, e);
-                AuditLogger.error(LogModule.STORAGE, LogAction.ERROR, 
+                AuditLogger.error(LogModule.STORAGE, LogAction.ERROR,
                         new MapMessage()
                                 .with("msg", "仓库操作异常")
                                 .with("mode", mode)

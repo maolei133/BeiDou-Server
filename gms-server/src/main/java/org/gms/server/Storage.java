@@ -36,6 +36,7 @@ import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
 import org.gms.service.StorageService;
+import org.gms.service.TraceabilityService;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 import org.gms.util.SpringContextUtil;
@@ -67,6 +68,7 @@ public class Storage {
 
     // 依赖注入
     private static final StorageService storageService = SpringContextUtil.getBean(StorageService.class);
+    private static final TraceabilityService traceabilityService = SpringContextUtil.getBean(TraceabilityService.class);
 
     private Storage(int id, byte slots, int meso) {
         this.id = id;
@@ -194,6 +196,9 @@ public class Storage {
     public boolean store(Client c, Item item) {
         lock.lock();
         try {
+            // 溯源日志：记录存入操作
+            traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.STORAGE_IN, "存入仓库", item.getQuantity());
+
             // 1. 尝试堆叠 (Stacking)
             if (!ItemConstants.isEquipment(item.getItemId())
                 && !ItemConstants.isRechargeable(item.getItemId()) 
@@ -241,9 +246,12 @@ public class Storage {
     /**
      * 取出物品
      */
-    public boolean takeOut(Item item) {
+    public boolean takeOut(Client c, Item item) {
         lock.lock();
         try {
+            // 溯源日志：记录取出操作
+            traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.STORAGE_OUT, "从仓库取出", -item.getQuantity());
+
             // 使用迭代器进行引用比较删除，防止 equals() 误删同ID的其他物品
             boolean removed = items.remove(item);
 

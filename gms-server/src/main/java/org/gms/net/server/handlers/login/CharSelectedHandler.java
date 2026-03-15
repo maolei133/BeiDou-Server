@@ -135,7 +135,7 @@ public final class CharSelectedHandler extends AbstractPacketHandler {
                 log.warn("在 Client 缓存中未找到角色 ID: {}，无法记录详细审计日志", charId);
             }
 
-            AuditLogger.info(LogModule.LOGIN, LogAction.LOGIN_SUCCESS, "选择角色: " + charId);
+            AuditLogger.info(LogModule.LOGIN, LogAction.SELECT_CHAR, "选择角色: " + charId);
 
         } catch (UnknownHostException | NumberFormatException e) {
             e.printStackTrace();

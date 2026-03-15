@@ -198,6 +198,8 @@ export default {
   'log.module.EVENT': '活动',
   'log.module.AUTOBAN': '反作弊',
   'log.module.PLUGIN': '辅助插件',
+  'log.module.STORAGE': '仓库',
+  'log.module.ITEM_RECOVERY': '物品找回',
 
   // 动作翻译
   'log.action.SERVER_START': '服务器启动',
@@ -241,4 +243,6 @@ export default {
   'log.action.STORAGE_IN': '存入仓库',
   'log.action.STORAGE_OUT': '取出仓库',
   'log.action.STORAGE_MIGRATE': '仓库迁移',
+  'log.action.STORAGE_MERGE': '仓库合并',
+  'log.action.STORAGE_MERGE_FAIL': '仓库合并失败',
 };

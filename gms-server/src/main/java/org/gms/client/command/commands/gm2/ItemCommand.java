@@ -26,11 +26,14 @@ package org.gms.client.command.commands.gm2;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.command.Command;
+import org.gms.client.inventory.Item;
 import org.gms.client.inventory.Pet;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.server.ItemInformationProvider;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 
 import static java.util.concurrent.TimeUnit.DAYS;
@@ -66,15 +69,19 @@ public class ItemCommand extends Command {
             player.yellowMessage(I18nUtil.getMessage("ItemCommand.message4"));
             return;
         }
+        
+        TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
         if (ItemConstants.isPet(itemId)) {
             if (params.length >= 2) {   // thanks to istreety & TacoBell
-                quantity = 1;
+                short finalQuantity = 1;
                 long days = Math.max(1, Integer.parseInt(params[1]));
                 long expiration = System.currentTimeMillis() + DAYS.toMillis(days);
                 int petid = Pet.createPet(itemId);
 
-                InventoryManipulator.addById(c, itemId, quantity, player.getName(), petid, expiration);
+                InventoryManipulator.addById(c, itemId, finalQuantity, player.getName(), petid, expiration, (Item item) -> {
+                    traceabilityService.log(item, player, TraceabilityService.ActionType.ADMIN_CREATE, String.format("由GM %s 通过命令(item)创建", player.getName()), finalQuantity);
+                });
                 return;
             } else {
                 player.yellowMessage(I18nUtil.getMessage("ItemCommand.message5"));
@@ -88,7 +95,10 @@ public class ItemCommand extends Command {
             flag |= ItemConstants.UNTRADEABLE;
         }
 
-        if (!InventoryManipulator.addById(c, itemId, quantity, player.getName(), -1, flag, -1)) {
+        short finalQuantity = quantity;
+        if (!InventoryManipulator.addById(c, itemId, quantity, player.getName(), -1, flag, -1, (Item item) -> {
+            traceabilityService.log(item, player, TraceabilityService.ActionType.ADMIN_CREATE, String.format("由GM %s 通过命令(item)创建", player.getName()), finalQuantity);
+        })) {
             player.yellowMessage(I18nUtil.getMessage("ItemCommand.message3", params[0]));
         }
     }

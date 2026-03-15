@@ -292,46 +292,56 @@ public class DueyProcessor {
         return -1;
     }
 
-    private static int addPackageItemFromInventory(int packageId, Client c, byte invTypeId, short itemPos, short amount) {
-        if (invTypeId > 0) {
-            ItemInformationProvider ii = ItemInformationProvider.getInstance();
-            InventoryType invType = InventoryType.getByType(invTypeId);
-            Inventory inv = c.getPlayer().getInventory(invType);
+    private static Item addPackageItemFromInventory(int packageId, Client c, byte invTypeId, short itemPos, short amount, String recipient) {
+        if (invTypeId <= 0) return null;
 
-            Item item;
-            inv.lockInventory();
-            try {
-                item = inv.getItem(itemPos);
-                if (item != null && item.getQuantity() >= amount) {
-                    if (item.isUntradeable() || ii.isUnmerchable(item.getItemId())) return -1;
-                    InventoryManipulator.removeFromSlot(c, invType, itemPos, ItemConstants.isRechargeable(item.getItemId()) ? item.getQuantity() : amount, true, false);
-                    item = item.copy();
-                } else {
-                    return -2;
-                }
-            } finally {
-                inv.unlockInventory();
+        ItemInformationProvider ii = ItemInformationProvider.getInstance();
+        InventoryType invType = InventoryType.getByType(invTypeId);
+        Inventory inv = c.getPlayer().getInventory(invType);
+
+        Item item;
+        inv.lockInventory();
+        try {
+            item = inv.getItem(itemPos);
+            if (item == null || item.getQuantity() < amount) {
+                return null;
             }
+            if (item.isUntradeable() || ii.isUnmerchable(item.getItemId())) {
+                return null;
+            }
+            
+            Item itemToSend = item.copy();
+            itemToSend.setQuantity(amount);
 
-            KarmaManipulator.toggleKarmaFlagToUntradeable(item);
-            item.setQuantity(amount);
+            // 溯源日志：记录发送操作
+            String source = String.format("通过快递发送给 %s", recipient);
+            traceabilityService.log(itemToSend, c.getPlayer(), TraceabilityService.ActionType.DUEY_SEND, source, -amount, "PackageID: " + packageId, null);
+
+            InventoryManipulator.removeFromSlot(c, invType, itemPos, ItemConstants.isRechargeable(item.getItemId()) ? item.getQuantity() : amount, true, false);
+            
+            KarmaManipulator.toggleKarmaFlagToUntradeable(itemToSend);
             
             try {
-                // 快递系统，调用 toInfoRtnDTO(true) 以包含数量
-                String itemDataJson = objectMapper.writeValueAsString(item.toInfoRtnDTO(true));
-                if (item.getUid() <= 0) item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+                String itemDataJson = objectMapper.writeValueAsString(itemToSend.toInfoRtnDTO(true));
+                if (itemToSend.getUid() <= 0) itemToSend.setUid(SnowflakeIdGenerator.getInstance().nextId());
                 
                 UpdateChain.of(DueypackagesDO.class)
                         .set(DueypackagesDO::getItemData, itemDataJson)
-                        .set(DueypackagesDO::getUid, item.getUid())
-                        .set(DueypackagesDO::getItemId, item.getItemId())
+                        .set(DueypackagesDO::getUid, itemToSend.getUid())
+                        .set(DueypackagesDO::getItemId, itemToSend.getItemId())
                         .where(DueypackagesDO::getPackageid).eq(packageId)
                         .update();
+                
+                return itemToSend;
             } catch (JsonProcessingException e) {
                 log.error("更新快递包裹物品数据失败", e);
+                // 如果序列化失败，需要将物品还给玩家
+                InventoryManipulator.addFromDrop(c, itemToSend, false);
+                return null;
             }
+        } finally {
+            inv.unlockInventory();
         }
-        return 0;
     }
 
     private static int getNormalDeliveryTime() {
@@ -420,12 +430,18 @@ public class DueyProcessor {
                 }
                 c.getPlayer().gainMeso(-(sendMesos + fee), true);
 
-                if (addPackageItemFromInventory(packageId, c, invTypeId, itemPos, amount) == 0) {
+                Item sentItem = addPackageItemFromInventory(packageId, c, invTypeId, itemPos, amount, recipient);
+                if (sentItem != null) {
                     c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_SUCCESSFULLY_SENT.getCode()));
                     if (!quick) c.getPlayer().dropMessage(5, DUEY_NAME + "您邮寄给 " + recipient + " 的普通包裹已邮寄成功，本次邮寄基本费用：" + fee + " 金币，预计送达时间：" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(deliveryTime));
-                    traceabilityService.log(null, c.getPlayer(), TraceabilityService.ActionType.DUEY_SEND, "快递发送", 0, "To: " + recipient, "PackageID: " + packageId);
-                } else {
+                } else if (invTypeId > 0) {
+                    // 如果发送物品失败，需要回滚金币和费用
+                    c.getPlayer().gainMeso(sendMesos + fee, true);
+                    if (quick) InventoryManipulator.addById(c, ItemId.QUICK_DELIVERY_TICKET, (short) 1);
                     c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_INCORRECT_REQUEST.getCode()));
+                } else {
+                    // 仅发送金币
+                    c.sendPacket(PacketCreator.sendDueyMSG(Actions.TOCLIENT_SEND_SUCCESSFULLY_SENT.getCode()));
                 }
 
                 int channel = c.getWorldServer().find(recipient);
@@ -499,7 +515,10 @@ public class DueyProcessor {
                 return;
             }
             InventoryManipulator.addFromDrop(c, dpItem, false);
-            traceabilityService.log(dpItem, c.getPlayer(), TraceabilityService.ActionType.DUEY_RECEIVE, "快递接收", 0, "From: " + dp.getSender(), "PackageID: " + packageId);
+            
+            // 溯源日志：记录接收操作
+            String source = String.format("从快递接收 (%s)", dp.getSender());
+            traceabilityService.log(dpItem, c.getPlayer(), TraceabilityService.ActionType.DUEY_RECEIVE, source, dpItem.getQuantity(), "PackageID: " + packageId, null);
         }
 
         c.getPlayer().gainMeso(dp.getMesos(), false);
