@@ -19,6 +19,7 @@ import org.gms.util.ItemConverter;
 import org.gms.util.SnowflakeIdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +32,6 @@ import java.util.List;
  * 仓库服务
  */
 @Service
-@AllArgsConstructor
 public class StorageService {
     private static final Logger log = LoggerFactory.getLogger(StorageService.class);
     private final StoragesMapper storagesMapper;
@@ -39,6 +39,20 @@ public class StorageService {
     private final ItemFactoryService itemFactoryService;
     private final TraceabilityService traceabilityService;
     private final ObjectMapper objectMapper;
+
+    public StorageService(
+            StoragesMapper storagesMapper,
+            StorageItemsMapper storageItemsMapper,
+            ItemFactoryService itemFactoryService,
+            TraceabilityService traceabilityService,
+            @Qualifier("sparseItemObjectMapper") ObjectMapper objectMapper
+    ) {
+        this.storagesMapper = storagesMapper;
+        this.storageItemsMapper = storageItemsMapper;
+        this.itemFactoryService = itemFactoryService;
+        this.traceabilityService = traceabilityService;
+        this.objectMapper = objectMapper;
+    }
 
     /**
      * 存入单个物品 (增量更新)

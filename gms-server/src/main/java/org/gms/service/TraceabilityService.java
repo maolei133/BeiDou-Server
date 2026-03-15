@@ -19,6 +19,7 @@ import org.gms.model.dto.ItemInfoRtnDTO;
 import org.gms.server.ItemInformationProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -34,7 +35,6 @@ import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_D
  * 负责记录物品的全生命周期流转日志
  */
 @Service
-@RequiredArgsConstructor
 public class TraceabilityService {
 
     private static final Logger log = LoggerFactory.getLogger(TraceabilityService.class);
@@ -43,6 +43,16 @@ public class TraceabilityService {
     private final ItemTraceLogsMapper itemTraceLogsMapper;
     private final ItemRecoveryLogsMapper itemRecoveryLogsMapper;
     private final ObjectMapper objectMapper;
+
+    public TraceabilityService(
+            ItemTraceLogsMapper itemTraceLogsMapper,
+            ItemRecoveryLogsMapper itemRecoveryLogsMapper,
+            @Qualifier("sparseItemObjectMapper") ObjectMapper objectMapper
+    ) {
+        this.itemTraceLogsMapper = itemTraceLogsMapper;
+        this.itemRecoveryLogsMapper = itemRecoveryLogsMapper;
+        this.objectMapper = objectMapper;
+    }
 
     public enum ActionType {
         // 基础操作

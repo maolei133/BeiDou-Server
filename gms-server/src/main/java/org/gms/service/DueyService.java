@@ -22,6 +22,7 @@ import org.gms.server.ItemInformationProvider;
 import org.gms.util.ItemConverter;
 import org.gms.util.Pair;
 import org.gms.util.SnowflakeIdGenerator;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,12 +35,21 @@ import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
 import static org.gms.dao.entity.table.DueypackagesDOTableDef.DUEYPACKAGES_D_O;
 
 @Service
-@AllArgsConstructor
 public class DueyService {
 
     private final DueypackagesMapper dueypackagesMapper;
     private final CharactersMapper charactersMapper;
     private final ObjectMapper objectMapper;
+
+    public DueyService(
+            DueypackagesMapper dueypackagesMapper,
+            CharactersMapper charactersMapper,
+            @Qualifier("sparseItemObjectMapper") ObjectMapper objectMapper
+    ) {
+        this.dueypackagesMapper = dueypackagesMapper;
+        this.charactersMapper = charactersMapper;
+        this.objectMapper = objectMapper;
+    }
 
     public Page<DueyPackageRtnDTO> getDueyList(DueySearchReqDTO req) {
         QueryWrapper query = QueryWrapper.create()

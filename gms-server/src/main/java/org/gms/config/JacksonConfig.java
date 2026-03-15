@@ -2,6 +2,7 @@ package org.gms.config;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -16,28 +17,37 @@ import org.springframework.context.annotation.Primary;
 public class JacksonConfig {
 
     /**
-     * 配置全局 ObjectMapper, 用于统一项目的 JSON 序列化行为。
+     * 提供一个标准的、全局的 ObjectMapper 实例。
      * <p>
-     * 核心配置:
-     * 1.  {@code JsonInclude.Include.NON_DEFAULT}:
-     *     这是实现"稀疏存储"的关键。它告诉 Jackson 在序列化时：
-     *     <ul>
-     *         <li>如果字段值为 {@code null}，则不包含该字段。</li>
-     *         <li>如果字段是原始类型（如 {@code int}, {@code boolean}），且其值为该类型的默认值（{@code 0}, {@code false}），则不包含该字段。</li>
-     *         <li>对于包装类型（如 {@code Integer}, {@code Boolean}），此配置等同于 {@code NON_NULL}，即只过滤 {@code null} 值。</li>
-     *     </ul>
-     *     为了确保包装类型中的 {@code 0} 或 {@code false} 也能被过滤，业务逻辑中（如 {@code toInfoRtnDTO} 方法）必须避免为这些默认值字段赋值，从而使其保持为 {@code null}。
-     * <p>
-     * 2.  {@code @Primary}:
-     *     确保 Spring 在进行依赖注入时，会优先使用我们自定义的这个 {@code ObjectMapper} 实例，而不是默认的实例。
+     * 这个 Bean 被标记为 {@code @Primary}，意味着它将是 Spring 依赖注入时的首选。
+     * 它不包含任何特殊的序列化规则，以确保项目大部分功能的 JSON 行为保持默认和可预测。
      *
-     * @return 配置好的 ObjectMapper 实例
+     * @return 一个标准的 ObjectMapper 实例
      */
     @Bean
     @Primary
     public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+
+    /**
+     * 提供一个专用于“稀疏存储”场景的 ObjectMapper 实例。
+     * <p>
+     * 核心配置: {@code JsonInclude.Include.NON_DEFAULT}
+     * <ul>
+     *     <li>如果字段值为 {@code null}，则不包含该字段。</li>
+     *     <li>如果字段是原始类型（如 {@code int}, {@code boolean}），且其值为该类型的默认值（{@code 0}, {@code false}），则不包含该字段。</li>
+     * </ul>
+     * 这个 Bean 有一个特定的名称 "sparseItemObjectMapper"，只能通过 {@code @Qualifier("sparseItemObjectMapper")} 进行注入。
+     * 它专门用于文档规定的五个系统（快递、仓库、雇佣商店、物品溯源、物品找回）中的物品序列化。
+     *
+     * @return 一个配置了 NON_DEFAULT 序列化规则的 ObjectMapper 实例
+     */
+    @Bean
+    @Qualifier("sparseItemObjectMapper")
+    public ObjectMapper sparseItemObjectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
-        // 设置全局序列化规则：不包含值为默认值的字段 (null, 0, false 等)
+        // 设置序列化规则：不包含值为默认值的字段 (null, 0, false 等)
         objectMapper.setSerializationInclusion(JsonInclude.Include.NON_DEFAULT);
         return objectMapper;
     }
