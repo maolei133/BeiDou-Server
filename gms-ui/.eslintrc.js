@@ -26,7 +26,7 @@ module.exports = {
     'plugin:import/recommended',
     'plugin:import/typescript',
     'plugin:vue/vue3-recommended',
-    'plugin:prettier/recommended',
+    'plugin:prettier/recommended', // 确保这个在最后
   ],
   settings: {
     'import/resolver': {
@@ -36,7 +36,7 @@ module.exports = {
     },
   },
   rules: {
-    'prettier/prettier': ["error", { endOfLine: "auto" }],
+    // 'prettier/prettier': ["error", { endOfLine: "auto" }], // 移除此行，让 Prettier 读取 .prettierrc.js 文件
     // Vue: Recommended rules to be closed or modify
     'vue/require-default-prop': 0,
     'vue/singleline-html-element-content-newline': 0,
@@ -53,7 +53,7 @@ module.exports = {
     '@typescript-eslint/no-empty-function': 1,
     '@typescript-eslint/no-explicit-any': 0,
     'import/extensions': [
-      2,
+      'error', // 将警告级别改为错误，以强制遵守
       'ignorePackages',
       {
         js: 'never',
