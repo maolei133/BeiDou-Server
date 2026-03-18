@@ -260,7 +260,7 @@
       petId: raw.pid || raw.petId,
       str: raw.s || raw.str || 0,
       dex: raw.d || raw.dex || 0,
-      int: raw.i || raw.int || 0, // **关键修复**: 使用方括号表示法
+      int: raw.i || raw.int || 0,
       luk: raw.l || raw.luk || 0,
       hp: raw.h || raw.hp || 0,
       mp: raw.m || raw.mp || 0,
@@ -279,13 +279,13 @@
       itemExp: raw.itemExp || 0,
       flag: raw.f || raw.flag || 0,
       vicious: raw.vc || raw.vicious || 0,
-      reqLevel: raw.reqLevel || 0,
-      reqJob: raw.reqJob || 0,
-      reqStr: raw.reqStr || 0,
-      reqDex: raw.reqDex || 0,
-      reqInt: raw.reqInt || 0,
-      reqLuk: raw.reqLuk || 0,
-      reqPop: raw.reqPop || 0,
+      reqLevel: raw.reqLevel, // **关键优化**: 直接传递，不做 `|| 0` 处理
+      reqJob: raw.reqJob,
+      reqStr: raw.reqStr,
+      reqDex: raw.reqDex,
+      reqInt: raw.reqInt,
+      reqLuk: raw.reqLuk,
+      reqPop: raw.reqPop,
     };
   });
 
@@ -353,22 +353,40 @@
   const reqPop = ref(0);
   const reqJob = ref(0);
 
+  /**
+   * @zh-CN 获取装备的静态穿戴要求信息
+   * @description 优先使用 props 传入的值。如果 props 中缺少该值，则通过网络请求获取并使用缓存。
+   */
   const fetchInitialInfo = async () => {
-    // 如果 props 中已经有数据，直接使用
+    const { itemId } = normalizedItem.value;
+    if (!itemId) return;
+
+    // **关键优化**: 检查 props 中是否已定义穿戴要求。
+    // `undefined` 表示该字段未在传入的 item 对象中提供。
     if (normalizedItem.value.reqLevel !== undefined) {
-      reqLevel.value = normalizedItem.value.reqLevel || 0;
-      reqStr.value = normalizedItem.value.reqStr || 0;
-      reqDex.value = normalizedItem.value.reqDex || 0;
-      reqInt.value = normalizedItem.value.reqInt || 0;
-      reqLuk.value = normalizedItem.value.reqLuk || 0;
-      reqPop.value = normalizedItem.value.reqPop || 0;
-      reqJob.value = normalizedItem.value.reqJob || 0;
-      return;
+      return; // 如果 props 中有值（即使是 0），则直接使用，不发起请求
     }
 
-    // 检查缓存
-    if (equipCache.has(normalizedItem.value.itemId)) {
-      const equipData = equipCache.get(normalizedItem.value.itemId);
+    // 先从缓存获取 Promise，不存在则创建新的
+    let fetchPromise = equipInfoPromiseCache.get(itemId);
+    if (!fetchPromise) {
+      fetchPromise = getEquInitialInfo(itemId)
+        .then(({ data }) => {
+          if (!data) {
+            throw new Error(`找不到 ID 为 ${itemId} 的装备初始信息`);
+          }
+          return data;
+        })
+        .catch((err) => {
+          equipInfoPromiseCache.delete(itemId);
+          throw err;
+        });
+      equipInfoPromiseCache.set(itemId, fetchPromise);
+    }
+
+    // 等待 Promise 完成并更新 ref
+    try {
+      const equipData = await fetchPromise;
       reqLevel.value = equipData.reqLevel || 0;
       reqStr.value = equipData.reqSTR || 0;
       reqDex.value = equipData.reqDEX || 0;
@@ -376,77 +394,53 @@
       reqLuk.value = equipData.reqLUK || 0;
       reqPop.value = equipData.reqPOP || 0;
       reqJob.value = equipData.reqJob || 0;
-      return;
-    }
-
-    // 否则尝试异步获取 (兜底逻辑)
-    try {
-      const { data } = await getEquInitialInfo(normalizedItem.value.itemId);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const equipData = data as any;
-      if (equipData) {
-        // 存入缓存
-        equipCache.set(normalizedItem.value.itemId, equipData);
-
-        reqLevel.value = equipData.reqLevel || 0;
-        reqStr.value = equipData.reqSTR || 0;
-        reqDex.value = equipData.reqDEX || 0;
-        reqInt.value = equipData.reqINT || 0;
-        reqLuk.value = equipData.reqLUK || 0;
-        reqPop.value = equipData.reqPOP || 0;
-        reqJob.value = equipData.reqJob || 0;
-      }
     } catch (e) {
-      // ignore
+      // 忽略错误
     }
   };
 
+  /**
+   * @zh-CN 获取装备的描述信息
+   * @description 优先使用 props 传入的值。如果 props 中缺少，则通过网络请求获取并使用缓存。
+   */
   const fetchItemDesc = async () => {
-    // 如果 props 中已经有描述，直接使用
-    if (normalizedItem.value.desc) {
-      itemDesc.value = normalizedItem.value.desc;
-      return;
+    const { desc, itemId } = normalizedItem.value;
+    if (desc) {
+      return; // 如果 props 中有值，直接使用
     }
+    if (!itemId) return;
 
-    // 检查缓存
-    if (equipDescCache.has(normalizedItem.value.itemId)) {
-      itemDesc.value = equipDescCache.get(normalizedItem.value.itemId) || '';
-      return;
-    }
-
-    // 否则尝试异步获取
-    try {
-      const { data } = await informationSearch({
+    let fetchPromise = equipDescPromiseCache.get(itemId);
+    if (!fetchPromise) {
+      fetchPromise = informationSearch({
         types: ['eqp'],
-        filter: normalizedItem.value.itemId.toString(),
+        filter: itemId.toString(),
         page: 1,
         pageSize: 1,
         fullMatch: true,
-      });
-      if (data && data.records && data.records.length > 0) {
-        const record = data.records[0];
-        if (record.desc) {
-          equipDescCache.set(normalizedItem.value.itemId, record.desc);
-          itemDesc.value = record.desc;
-        } else {
-          // 如果没有描述，也缓存空字符串，避免重复请求
-          equipDescCache.set(normalizedItem.value.itemId, '');
-          itemDesc.value = '';
-        }
-      } else {
-        // 如果没有找到记录，也缓存空字符串
-        equipDescCache.set(normalizedItem.value.itemId, '');
-        itemDesc.value = '';
-      }
+      })
+        .then(({ data }) => {
+          const { records } = data || {};
+          return records?.[0]?.desc || '';
+        })
+        .catch((err) => {
+          equipDescPromiseCache.delete(itemId);
+          throw err;
+        });
+      equipDescPromiseCache.set(itemId, fetchPromise);
+    }
+
+    try {
+      itemDesc.value = await fetchPromise;
     } catch (e) {
-      // ignore
+      itemDesc.value = '';
     }
   };
 
   // 职业判断逻辑
   const canWearJob = (jobFlag: number) => {
-    if (reqJob.value === 0 || reqJob.value === -1) return true; // 0 通常代表全职业
-    if (jobFlag === 0) return false; // Beginner check (usually excluded if reqJob > 0)
+    if (reqJob.value === 0 || reqJob.value === -1) return true;
+    if (jobFlag === 0) return false;
     // eslint-disable-next-line no-bitwise
     return (reqJob.value & jobFlag) !== 0;
   };
@@ -461,21 +455,40 @@
     }
   };
 
+  // **关键优化**: 侦听器现在负责同步更新数据和触发异步获取
   watch(
-    () => props.item,
-    () => {
+    () => normalizedItem.value,
+    (currentItem) => {
+      if (!currentItem.itemId) return;
+
+      // 1. **立即响应**: 立即使用 props 传入的所有数据更新视图
+      itemDesc.value = currentItem.desc || '';
+      reqLevel.value = currentItem.reqLevel ?? 0; // 使用 ?? 确保 undefined 被转为 0
+      reqStr.value = currentItem.reqStr ?? 0;
+      reqDex.value = currentItem.reqDex ?? 0;
+      reqInt.value = currentItem.reqInt ?? 0;
+      reqLuk.value = currentItem.reqLuk ?? 0;
+      reqPop.value = currentItem.reqPop ?? 0;
+      reqJob.value = currentItem.reqJob ?? 0;
+
+      // 2. **异步补充**: 如果数据不完整，则在后台发起请求补充
       fetchInitialInfo();
       fetchItemDesc();
     },
-    { immediate: true, deep: true }
+    { immediate: true, deep: true } // deep is needed to detect changes within the item object
   );
 </script>
 
 <script lang="ts">
-  // 模块级缓存，所有组件实例共享
+  /**
+   * @zh-CN 模块级缓存
+   * @description 将 Promise 实例在所有组件间共享。
+   * 这确保了对于同一个 itemId，网络请求只会被触发一次，后续所有请求都会等待同一个 Promise 的结果。
+   * 这是解决并发请求和竞态条件的核心。
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const equipCache = new Map<number, any>();
-  const equipDescCache = new Map<number, string>();
+  const equipInfoPromiseCache = new Map<number, Promise<any>>();
+  const equipDescPromiseCache = new Map<number, Promise<string>>();
 </script>
 
 <style scoped lang="less">
