@@ -12,6 +12,7 @@ import inventory from '@/views/game/inventory/locale/en-US';
 import duey from '@/views/game/duey/locale/en-US';
 import tooltip from '@/components/ToolTip/locale/en-US';
 import log from '@/views/log/locale/en-US';
+import traceability from '@/views/traceability/locale/en-US';
 import base from './en-US/base';
 
 export default {
@@ -38,6 +39,10 @@ export default {
   'menu.log.dashboard': 'Status',
   'menu.log.query': 'Query',
   'menu.log.config': 'Config',
+  'menu.traceability': 'Traceability System',
+  'menu.traceability.dashboard': 'Dashboard',
+  'menu.traceability.config': 'Config',
+  'menu.traceability.query': 'Log Query',
   'menu.arco': 'UI Doc',
   'menu.beiDou': 'About BeiDou',
   'message.success': 'Success',
@@ -54,6 +59,7 @@ export default {
   'settings.logout': 'Logout',
   'settings.version': 'Version',
   'playerSelector.title': 'Select Player',
+
   ...base,
   ...workplace,
   ...login,
@@ -69,4 +75,5 @@ export default {
   ...duey,
   ...tooltip,
   ...log,
+  ...traceability,
 };

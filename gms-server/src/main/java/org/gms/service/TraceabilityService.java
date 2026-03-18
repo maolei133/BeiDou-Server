@@ -1,8 +1,9 @@
 package org.gms.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
-import lombok.RequiredArgsConstructor;
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
@@ -11,28 +12,41 @@ import org.gms.dao.entity.ItemRecoveryLogsDO;
 import org.gms.dao.entity.ItemTraceLogsDO;
 import org.gms.dao.mapper.ItemRecoveryLogsMapper;
 import org.gms.dao.mapper.ItemTraceLogsMapper;
+import org.gms.model.dto.ItemInfoRtnDTO;
+import org.gms.model.dto.TraceabilityQueryDTO;
+import org.gms.model.pojo.TraceabilityRules;
+import org.gms.net.server.Server;
+import org.gms.server.ItemInformationProvider;
 import org.gms.server.logging.AuditContext;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogModule;
-import org.apache.logging.log4j.message.MapMessage;
-import org.gms.model.dto.ItemInfoRtnDTO;
-import org.gms.server.ItemInformationProvider;
+import org.gms.server.maps.MapFactory;
+import org.gms.util.RequireUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_D_O;
 
 /**
- * 物品溯源服务
- * 负责记录物品的全生命周期流转日志
+ * 物品溯源服务 (V2.9 - 完善数据，移除角色名称获取).
+ * <p>
+ * 负责记录物品的全生命周期流转日志，其行为由 TraceabilityConfigService 提供的动态配置驱动。
+ * 查询结果中将包含物品名称和地图名称，并使用带缓存的方法获取。
+ * 移除角色名称的获取，以避免潜在的性能问题。
+ * </p>
  */
 @Service
 public class TraceabilityService {
@@ -43,15 +57,118 @@ public class TraceabilityService {
     private final ItemTraceLogsMapper itemTraceLogsMapper;
     private final ItemRecoveryLogsMapper itemRecoveryLogsMapper;
     private final ObjectMapper objectMapper;
+    private final TraceabilityConfigService configService;
+    // private final MapFactory mapFactory; // 移除 MapFactory 字段
+    @Lazy
+    private final CharacterService characterService; // 注入CharacterService
 
+    @Autowired
     public TraceabilityService(
             ItemTraceLogsMapper itemTraceLogsMapper,
             ItemRecoveryLogsMapper itemRecoveryLogsMapper,
-            @Qualifier("sparseItemObjectMapper") ObjectMapper objectMapper
+            @Qualifier("sparseItemObjectMapper") ObjectMapper objectMapper,
+            TraceabilityConfigService configService,
+            // MapFactory mapFactory, // 移除 MapFactory 注入
+            @Lazy CharacterService characterService
     ) {
         this.itemTraceLogsMapper = itemTraceLogsMapper;
         this.itemRecoveryLogsMapper = itemRecoveryLogsMapper;
         this.objectMapper = objectMapper;
+        this.configService = configService;
+        // this.mapFactory = mapFactory; // 移除 MapFactory 赋值
+        this.characterService = characterService;
+    }
+
+    /**
+     * 根据条件分页查询物品溯源日志。
+     *
+     * @param queryDTO 查询条件和分页参数
+     * @return 分页后的日志数据
+     */
+    public Page<ItemTraceLogsDO> queryLogs(TraceabilityQueryDTO queryDTO) {
+        // [FIXED] Parse String UID from frontend to Long for database query
+        Long uidForQuery = null;
+        if (queryDTO.getUid() != null && !queryDTO.getUid().isEmpty()) {
+            try {
+                uidForQuery = Long.parseLong(queryDTO.getUid());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid UID format received from frontend: {}", queryDTO.getUid());
+                // 如果UID格式不正确，返回空页面，避免查询错误
+                return new Page<>();
+            }
+        }
+
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .where(ITEM_TRACE_LOGS_D_O.UID.eq(uidForQuery, uidForQuery != null)) // Use parsed Long UID
+                .and(ITEM_TRACE_LOGS_D_O.ITEM_ID.eq(queryDTO.getItemId(), queryDTO.getItemId() != null))
+                .and(ITEM_TRACE_LOGS_D_O.CHARACTER_ID.eq(queryDTO.getCharacterId(), queryDTO.getCharacterId() != null))
+                .and(ITEM_TRACE_LOGS_D_O.ACTION_TYPE.like(queryDTO.getActionType(), RequireUtil.isNotEmpty(queryDTO.getActionType())))
+                .and(ITEM_TRACE_LOGS_D_O.ACTION_SOURCE.like(queryDTO.getActionSource(), RequireUtil.isNotEmpty(queryDTO.getActionSource())))
+                .and(ITEM_TRACE_LOGS_D_O.TIMESTAMP.ge(queryDTO.getStartTime(), queryDTO.getStartTime() != null))
+                .and(ITEM_TRACE_LOGS_D_O.TIMESTAMP.le(queryDTO.getEndTime(), queryDTO.getEndTime() != null))
+                .orderBy(ITEM_TRACE_LOGS_D_O.TIMESTAMP.desc());
+
+        Page<ItemTraceLogsDO> page = itemTraceLogsMapper.paginate(queryDTO.getPageNumber(), queryDTO.getPageSize(), queryWrapper);
+
+        if (page.getRecords().isEmpty()) {
+            return page;
+        }
+
+        // 1. 收集所有需要查询的角色ID
+        Set<Integer> characterIds = page.getRecords().stream()
+                .map(ItemTraceLogsDO::getCharacterId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // 2. 批量查询角色名称
+        Map<Integer, String> characterNames = characterService.getChrNamesByIds(characterIds);
+
+        // 3. 使用带缓存的方法填充物品名称、地图名称和角色名称
+        ItemInformationProvider ii = ItemInformationProvider.getInstance();
+        for (ItemTraceLogsDO record : page.getRecords()) {
+            record.setItemName(ii.getName(record.getItemId()));
+            if (record.getMapId() != null) {
+                record.setMapName(MapFactory.loadPlaceName(record.getMapId()));
+            }
+            if (record.getCharacterId() != null) {
+                record.setCharacterName(characterNames.getOrDefault(record.getCharacterId(), "未知角色"));
+            }
+        }
+
+        return page;
+    }
+
+    /**
+     * 获取溯源系统状态看板的统计数据。
+     *
+     * @return 包含多维度统计数据的Map
+     */
+    public Map<String, Object> getTraceabilityStats() {
+        Map<String, Object> stats = new HashMap<>();
+
+        // 1. 核心指标
+        long totalRecords = itemTraceLogsMapper.selectCountByQuery(new QueryWrapper());
+        long todayAdded = itemTraceLogsMapper.countToday();
+        stats.put("totalRecords", totalRecords);
+        stats.put("todayAdded", todayAdded);
+        stats.put("avgPerHour", todayAdded > 0 ? todayAdded / 24.0 : 0);
+        // 数据库表大小难以通过JDBC通用方式获取，暂时返回0，或需要特定数据库的查询
+        stats.put("dbTableSizeMB", 0.0);
+
+        // 2. 过去24小时每小时记录数 (用于折线图)
+        long twentyFourHoursAgo = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(24);
+        List<Map<String, Object>> hourlyCounts = itemTraceLogsMapper.countHourlyLast24h(twentyFourHoursAgo);
+        stats.put("hourlyCounts", hourlyCounts);
+
+        // 3. ActionType占比 (用于饼图)
+        List<Map<String, Object>> actionTypeCounts = itemTraceLogsMapper.countByActionType();
+        stats.put("actionTypeCounts", actionTypeCounts);
+
+        // 4. 记录最多的物品Top 10
+        List<Map<String, Object>> topItems = itemTraceLogsMapper.findTopItems();
+        stats.put("topItems", topItems);
+
+        return stats;
     }
 
     public enum ActionType {
@@ -140,60 +257,109 @@ public class TraceabilityService {
     public void log(Item item, int accountId, int characterId, int mapId, ActionType actionType, String actionSource, int quantityChange, String targetInfo, String memo) {
         if (item == null) return;
 
-        // 价值判断过滤，防止记录大量低价值物品
-        if (!InventoryManipulator.isValuableForRecovery(item)) return;
+        TraceabilityRules config = configService.getTraceabilityConfig();
+        TraceabilityRules.Enabled enabled = config.getEnabled();
 
-        // 在主线程中获取上下文，传递给异步线程
+        if (enabled == null || (!enabled.isDatabase() && !enabled.isLoki())) {
+            return;
+        }
+
+        TraceabilityRules.LogActionSwitches logActionSwitches = config.getLogActionSwitches();
+        if (logActionSwitches != null) {
+            boolean isActionEnabled = false;
+            switch (actionType) {
+                case TRADE: isActionEnabled = logActionSwitches.isTRADE(); break;
+                case DROP: isActionEnabled = logActionSwitches.isDROP(); break;
+                case SELL: isActionEnabled = logActionSwitches.isSELL(); break;
+                case STORAGE_IN: isActionEnabled = logActionSwitches.isSTORAGE_IN(); break;
+                case STORAGE_OUT: isActionEnabled = logActionSwitches.isSTORAGE_OUT(); break;
+                case GM_CREATE: isActionEnabled = logActionSwitches.isGM_CREATE(); break;
+                default: isActionEnabled = true; // 如果不在开关列表里，默认认为是开启的或者根据其他逻辑处理
+            }
+            if (!isActionEnabled) {
+                return;
+            }
+        }
+
+        TraceabilityRules.TemporaryDisables temporaryDisables = config.getTemporaryDisables();
+        if (temporaryDisables != null) {
+            TraceabilityRules.DisableDetail disableRule = null;
+            if (actionType == ActionType.LOOT) disableRule = temporaryDisables.getLOOT();
+            else if (actionType == ActionType.SHOP_BUY) disableRule = temporaryDisables.getSHOP_BUY();
+
+            if (disableRule != null && disableRule.isEnabled() && disableRule.getDisableUntil() != null) {
+                try {
+                    // ISO 8601 format
+                    Date disableUntil = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").parse(disableRule.getDisableUntil());
+                    if (new Date().before(disableUntil)) {
+                        return;
+                    }
+                } catch (ParseException e) {
+                    log.warn("解析临时禁用时间失败: {}", disableRule.getDisableUntil());
+                }
+            }
+        }
+
+        TraceabilityRules.Performance performance = config.getPerformance();
+        if (performance != null && performance.getIgnoredMapIds() != null) {
+            if (performance.getIgnoredMapIds().contains(mapId)) {
+                return;
+            }
+        }
+
+        boolean isValuable = InventoryManipulator.isValuableForRecovery(item);
+        TraceabilityRules.RecordingTargets recordingTargets = config.getRecordingTargets();
+        if (recordingTargets == null) return;
+        
+        TraceabilityRules.Target target = isValuable ? recordingTargets.getValuable() : recordingTargets.getNonValuable();
+
+        boolean recordToDb = enabled.isDatabase() && target != null && target.isDatabase();
+        boolean recordToLoki = enabled.isLoki() && target != null && target.isLoki();
+
+        if (!recordToDb && !recordToLoki) {
+            return;
+        }
+
         Map<String, String> contextData = AuditContext.get();
 
         logExecutor.submit(() -> {
             try {
-                // 1. 写入数据库
-                ItemTraceLogsDO.ItemTraceLogsDOBuilder builder = ItemTraceLogsDO.builder()
-                        .uid(item.getUid())
-                        .accountId(accountId)
-                        .characterId(characterId)
-                        .actionType(actionType.name())
-                        .actionSource(actionSource)
-                        .mapId(mapId)
-                        .itemId(item.getItemId())
-                        .quantityChange(quantityChange)
-                        .targetInfo(targetInfo)
-                        .itemSnapshot(objectMapper.writeValueAsString(item.toInfoRtnDTO(true))) // **修正**: 确保包含数量
-                        .timestamp(System.currentTimeMillis())
-                        .memo(memo);
-                itemTraceLogsMapper.insert(builder.build());
+                String itemSnapshotJson = objectMapper.writeValueAsString(item.toInfoRtnDTO(true));
 
-                // 2. 写入Loki日志
-                MapMessage logData = new MapMessage()
-                        .with("msg", actionSource)
-                        .with("itm", item.getItemId())
-                        .with("itemName", ItemInformationProvider.getInstance().getName(item.getItemId()))
-                        .with("cnt", quantityChange)
-                        .with("itemData", objectMapper.writeValueAsString(item.toInfoRtnDTO(true)));
-
-                logData.with("msg", actionSource + String.format(": [%s] %s × %s",
-                        logData.get("itm"),
-                        logData.get("itemName"),
-                        logData.get("cnt")
-                ));
-
-                // 手动注入主线程的上下文，避免 ThreadLocal 在线程池中丢失
-                for (Map.Entry<String, String> entry : contextData.entrySet()) {
-                    logData.with(entry.getKey(), entry.getValue());
+                if (recordToDb) {
+                    ItemTraceLogsDO.ItemTraceLogsDOBuilder builder = ItemTraceLogsDO.builder()
+                            .uid(item.getUid())
+                            .accountId(accountId)
+                            .characterId(characterId)
+                            .actionType(actionType.name())
+                            .actionSource(actionSource)
+                            .mapId(mapId)
+                            .itemId(item.getItemId())
+                            .quantityChange(quantityChange)
+                            .targetInfo(targetInfo)
+                            .itemSnapshot(itemSnapshotJson)
+                            .timestamp(System.currentTimeMillis())
+                            .memo(memo);
+                    itemTraceLogsMapper.insert(builder.build());
                 }
 
-                // 防止传入 null 导致 IllegalArgumentException
-                if (targetInfo != null && !targetInfo.isEmpty()) {
-                    logData.with("targetChr", targetInfo);
-                    logData.with("msg",logData.get("msg") + ": " + targetInfo);
-                }
+                if (recordToLoki) {
+                    MapMessage logData = new MapMessage()
+                            .with("msg", actionSource)
+                            .with("itm", item.getItemId())
+                            .with("itemName", ItemInformationProvider.getInstance().getName(item.getItemId()))
+                            .with("cnt", quantityChange)
+                            .with("itemData", itemSnapshotJson);
+                    
+                    for (Map.Entry<String, String> entry : contextData.entrySet()) {
+                        logData.with(entry.getKey(), entry.getValue());
+                    }
+                    if (targetInfo != null && !targetInfo.isEmpty()) {
+                        logData.with("targetChr", targetInfo);
+                    }
 
-                AuditLogger.info(
-                        LogModule.ITEM.name(),
-                        actionType.name(),
-                        logData
-                );
+                    AuditLogger.info(LogModule.ITEM.name(), actionType.name(), logData);
+                }
             } catch (Exception e) {
                 log.error("写入物品溯源双重日志失败，物品UID: " + item.getUid(), e);
             }
@@ -210,17 +376,15 @@ public class TraceabilityService {
         if (item == null || character == null) return;
         if (!InventoryManipulator.isValuableForRecovery(item)) return;
 
-        Map<String, String> contextData = AuditContext.get();
-
         logExecutor.submit(() -> {
             try {
-                // **核心修正**: 调用 toInfoRtnDTO(true) 以确保包含 quantity 字段
+                int recoveryHours = GameConfig.getServerInt("item_recovery_hours", 72);
+
                 ItemInfoRtnDTO itemDTO = item.toInfoRtnDTO(true);
                 long now = System.currentTimeMillis();
-                long deadline = now + (GameConfig.getServerInt("item_recovery_hours", 24) * 60 * 60 * 1000L);
+                long deadline = now + TimeUnit.HOURS.toMillis(recoveryHours);
                 String initialStatus = "DROP".equals(disposalType) ? "PENDING" : "RECOVERABLE";
 
-                // 1. 写入数据库
                 ItemRecoveryLogsDO recoveryLogDO = ItemRecoveryLogsDO.builder()
                         .characterId(character.getId())
                         .uid(item.getUid())
@@ -233,31 +397,8 @@ public class TraceabilityService {
                         .build();
                 itemRecoveryLogsMapper.insert(recoveryLogDO);
 
-                // 2. 写入Loki日志
-                MapMessage logData = new MapMessage()
-                        .with("itm", item.getItemId())
-                        .with("itemName", ItemInformationProvider.getInstance().getName(item.getItemId()))
-                        .with("itemData", objectMapper.writeValueAsString(itemDTO))
-                        .with("status", initialStatus);
-
-                logData.with("msg", String.format("物品 [%s] %s × %d 进入找回系统: %s",
-                        logData.get("itm"),
-                        logData.get("itemName"),
-                        itemDTO.getQuantity(),
-                        disposalType)
-                );
-
-                for (Map.Entry<String, String> entry : contextData.entrySet()) {
-                    logData.with(entry.getKey(), entry.getValue());
-                }
-
-                AuditLogger.info(
-                        LogModule.ITEM_RECOVERY.name(),
-                        disposalType,
-                        logData
-                );
             } catch (Exception e) {
-                log.error("写入物品找回双重日志失败，物品UID: " + item.getUid(), e);
+                log.error("写入物品找回日志失败，物品UID: " + item.getUid(), e);
             }
         });
     }

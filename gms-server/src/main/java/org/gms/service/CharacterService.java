@@ -57,6 +57,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -95,6 +96,7 @@ import static org.gms.dao.entity.table.WishlistsDOTableDef.WISHLISTS_D_O;
 @AllArgsConstructor
 @Slf4j
 public class CharacterService {
+    private static final Map<Integer, String> characterNameCache = new ConcurrentHashMap<>();
     private final ExtendValueMapper extendValueMapper;
     private final CharactersMapper charactersMapper;
     private final SkillsMapper skillsMapper;
@@ -133,6 +135,61 @@ public class CharacterService {
      */
     public CharactersDO findById(int id) {
         return charactersMapper.selectOneById(id);
+    }
+
+    /**
+     * 根据角色ID批量获取角色名称，并进行缓存。
+     * @param characterIds 角色ID集合
+     * @return Map<Integer, String> 角色ID到名称的映射
+     */
+    public Map<Integer, String> getChrNamesByIds(Set<Integer> characterIds) {
+        if (characterIds == null || characterIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Integer, String> names = new HashMap<>();
+        Set<Integer> missingIds = new HashSet<>();
+
+        // 1. 从缓存中获取
+        for (Integer id : characterIds) {
+            String name = characterNameCache.get(id);
+            if (name != null) {
+                names.put(id, name);
+            } else {
+                missingIds.add(id);
+            }
+        }
+
+        if (missingIds.isEmpty()) {
+            return names;
+        }
+
+        // 2. 尝试从在线玩家中获取
+        for (World world : Server.getInstance().getWorlds()) {
+            for (Character chr : world.getPlayerStorage().getAllCharacters()) {
+                if (missingIds.contains(chr.getId())) {
+                    String name = chr.getName();
+                    names.put(chr.getId(), name);
+                    characterNameCache.put(chr.getId(), name); // 更新缓存
+                    missingIds.remove(chr.getId()); // 从待查询集合中移除
+                }
+            }
+        }
+
+        if (missingIds.isEmpty()) {
+            return names;
+        }
+
+        // 3. 对于未在缓存和在线玩家中找到的ID，从数据库批量查询
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .select(CHARACTERS_D_O.ID, CHARACTERS_D_O.NAME)
+                .where(CHARACTERS_D_O.ID.in(missingIds));
+        List<CharactersDO> dbCharacters = charactersMapper.selectListByQuery(queryWrapper);
+        for (CharactersDO chrDO : dbCharacters) {
+            names.put(chrDO.getId(), chrDO.getName());
+            characterNameCache.put(chrDO.getId(), chrDO.getName()); // 更新缓存
+        }
+
+        return names;
     }
 
     /**
@@ -377,7 +434,7 @@ public class CharacterService {
                         .channel(onlineChr.getClient().getChannel())
                         .fame(onlineChr.getFame())
                         .loginTime(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(onlineChr.getLoginTime())))
-                        .lastLogoutTime(null)
+                        .lastLogoutTime(null) // 在线玩家登出时间为null
                         .banned(isBanned)
                         .banStatus(banStatus)
                         .banReason(banReason)
@@ -394,13 +451,13 @@ public class CharacterService {
             int banStatus = 0;
             String banReason = null;
             String tempBanTime = null;
-            
+
             // 优先使用 CharactersDO 中映射的字段
             if (charactersDO.getBanned() != null && charactersDO.getBanned() > 0) {
                 banned = true;
                 banStatus = 1; // 永久封禁
             }
-            
+
             if (charactersDO.getTempban() != null && charactersDO.getTempban().after(new Timestamp(System.currentTimeMillis()))) {
                 banned = true;
                 banStatus = 2; // 临时封禁
@@ -421,7 +478,7 @@ public class CharacterService {
                         banStatus = 1;
                     }
                 }
-                
+
                 Object tempbanObj = charactersDO.getExtra().get("tempban");
                 if (tempbanObj instanceof Timestamp) {
                     Timestamp tempban = (Timestamp) tempbanObj;

@@ -14,6 +14,7 @@ import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.manager.ServerManager;
 import org.gms.model.pojo.NewYearCardRecord;
+import org.gms.model.pojo.TraceabilityRules;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.StatEffect;
 import org.gms.server.ThreadManager;
@@ -22,6 +23,7 @@ import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
 import org.gms.server.maps.MapleMap;
 import org.gms.service.ItemFactoryService;
+import org.gms.service.TraceabilityConfigService;
 import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 import org.gms.util.PacketCreator;
@@ -31,14 +33,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.*;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.function.Consumer;
 
 public class InventoryManipulator {
     private static final Logger log = LoggerFactory.getLogger(InventoryManipulator.class);
     private static final ItemFactoryService itemFactoryService = ServerManager.getApplicationContext().getBean(ItemFactoryService.class);
     private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+    private static final TraceabilityConfigService configService = ServerManager.getApplicationContext().getBean(TraceabilityConfigService.class);
 
     public static boolean addById(Client c, int itemId, short quantity) {
         return addById(c, itemId, quantity, null, -1, -1);
@@ -1019,159 +1022,95 @@ public class InventoryManipulator {
     }
 
     /**
-     * 判断物品是否值得进入找回系统或溯源系统
-     * 策略：白名单(高价值ID段) + 价格阈值 + 黑名单(垃圾ID段)
+     * (V2.2) 判断物品是否值得进入找回系统或溯源系统.
+     * <p>
+     * 此方法现在完全由溯源系统的动态配置驱动。
+     * </p>
+     *
+     * @param item 要判断的物品
+     * @return 如果物品被视为“有价值”，则返回true
      */
     public static boolean isValuableForRecovery(Item item) {
         if (item == null) return false;
 
+        TraceabilityRules config = configService.getTraceabilityConfig();
+        TraceabilityRules.ValueConditions conditions = config.getValueConditions();
+        if (conditions == null) {
+            return false; // 如果没有配置规则，则默认所有物品都无价值
+        }
+
         int itemId = item.getItemId();
-        InventoryType type = ItemConstants.getInventoryType(itemId);
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
 
-        // 0. 现金物品：必须找回
-        // 检查 Cash 标志或 ID 范围 (5xxxxxx)
-        if (type == InventoryType.CASH || ii.isCash(itemId)) {
+        // 0. 现金物品：总是被视为有价值
+        if (ii.isCash(itemId)) {
             return true;
         }
 
-        // 1. 装备：默认全部找回 -> 修改为更详细的价值判断
-        // 除非是极低级的白板（可选：增加价格判断，例如售价<10金币的不找回）
-        if (item instanceof Equip) { // 使用 instanceof 判断，比 type == EQUIP 更准确
-            Equip equip = (Equip) item;
-
-            // 新增逻辑：条件1：高级装备 (穿戴等级 >= 120)
-            // 说明：这是新增的价值判断标准，高级装备无论属性如何都应被记录。
-            if (ii.getEquipLevelReq(itemId) >= 120) {
-                return true;
-            }
-
-            // 新增逻辑：条件2：已升级或已成长 (已砸卷次数 > 1 或 成长等级 > 1)
-            // 说明：这覆盖了被玩家强化过的装备。
-            if (equip.getLevel() > 1 || equip.getItemLevel() > 1) {
-                return true;
-            }
-
-            // 新增逻辑：条件3：属性总和超过默认值
-            // 说明：这覆盖了天生属性较好（俗称“满属性”）或通过卷轴强化后属性提升的装备。
-            Item defaultItem = ii.getEquipById(itemId);
-            if (defaultItem instanceof Equip) {
-                Equip defaultEquip = (Equip) defaultItem;
-                long currentStatsSum = calculateEquipStatsSum(equip);
-                long defaultStatsSum = calculateEquipStatsSum(defaultEquip);
-                if (currentStatsSum > defaultStatsSum) {
+        // 1. 装备判断
+        if (item instanceof Equip equip) {
+            TraceabilityRules.Equip equipConditions = conditions.getEquip();
+            if (equipConditions != null) {
+                // 检查：如果装备穿戴等级大于等于设定值（通常120以上视为高价值）
+                if (equipConditions.getMinLevel() > 0 && ii.getEquipLevelReq(itemId) >= equipConditions.getMinLevel()) {
                     return true;
                 }
-            }
-            // 如果以上装备的特定价值条件都不满足，则不再默认返回true，而是让它走到函数末尾返回false。
-        } else if (type == InventoryType.EQUIP) {
-            // 对于非Equip实例但类型为EQUIP的罕见情况（理论上不应发生），保留一个基本判断
-            // 或者直接认为这种情况下的装备无价值，因为无法获取详细属性
-            // 此处选择不处理，让其自然走到末尾返回false
-        }
-
-
-        // 2. 消耗品 (USE)
-        if (type == InventoryType.USE) {
-            // [保留] 卷轴 (204xxxx)
-            if (itemId / 10000 == 204) return true;
-            
-            // [保留] 技能书/母书 (228xxxx, 229xxxx)
-            if (itemId / 10000 == 228 || itemId / 10000 == 229) return true;
-            
-            // [保留] 飞镖/子弹 (207xxxx, 233xxxx) - 只有高价值的才保留
-            if (ItemConstants.isThrowingStar(itemId) || ItemConstants.isBullet(itemId)) {
-                // 排除普通子弹(2330000)和普通海星(2070000)等，这里简单判断售价
-                // 或者直接全部保留，因为飞镖通常比较贵重
-                // 修改：改为检测攻击力，攻击力 >= 20 的视为有价值
-                // 使用 getWatkForProjectile 获取飞镖/子弹的攻击力
-                int watk = ii.getWatkForProjectile(itemId);
-                
-                // 如果是子弹，攻击力 >= 15 视为有价值
-                if (ItemConstants.isBullet(itemId)) {
-                    return watk >= 15;
+                // 检查：如果装备已经砸卷超过指定的次数（即当前可用槽数被消耗了指定次数以上）
+                if (equipConditions.getMinUpgradeSlotsUsed() > 0 && equip.getLevel() >= equipConditions.getMinUpgradeSlotsUsed()) {
+                    return true;
                 }
-                
-                // 飞镖保持 >= 20
-                return watk >= 20;
-            }
-
-            // [保留] 坐骑食物/特殊道具 (21xxxx, 22xxxx, 23xxxx, 24xxxx)
-            // 210: 召唤包, 221: 宠物食物, 243: 礼包/箱子
-            if (itemId >= 2100000 && itemId < 2500000) return true;
-
-            // [过滤] 普通药水/回城符 (200xxxx - 203xxxx)
-            if (itemId >= 2000000 && itemId < 2040000) {
-                // 特例：高价值药水（如玛瑙苹果 2022179, 红色怪兽秘药 2022003）
-                // 策略：如果商店售价高于 5000 金币，或者无法卖给商店（售价<=0，通常是稀有品），则视为有价值
-                // 修改：改为判断药水属性总和 > 50
-                org.gms.server.StatEffect effect = ii.getItemEffect(itemId);
-                if (effect != null) {
-                    int totalStats = 0;
-                    List<org.gms.util.Pair<BuffStat, Integer>> statups = effect.getStatups();
-                    if (statups != null) {
-                        for (org.gms.util.Pair<BuffStat, Integer> stat : statups) {
-                            if (stat.getLeft() == BuffStat.WATK || stat.getLeft() == BuffStat.MATK ||
-                                stat.getLeft() == BuffStat.WDEF || stat.getLeft() == BuffStat.MDEF ||
-                                stat.getLeft() == BuffStat.ACC || stat.getLeft() == BuffStat.AVOID ||
-                                stat.getLeft() == BuffStat.SPEED || stat.getLeft() == BuffStat.JUMP) {
-                                totalStats += stat.getRight();
-                            }
+                // 检查：如果装备的成长等级（如特殊可升级装备）超过指定的等级
+                if (equipConditions.getMinGrowthLevel() > 0 && equip.getItemLevel() >= equipConditions.getMinGrowthLevel()) {
+                    return true;
+                }
+                // 检查：如果装备使用的金锤子次数大于等于设定的次数
+                if (equipConditions.getMinViciousHammerUsed() > 0 && equip.getVicious() >= equipConditions.getMinViciousHammerUsed()) {
+                    return true;
+                }
+                // 检查：如果装备当前属性总和(不含HP/MP)超过白板属性大于等于设定的值
+                int minStatsAboveBase = equipConditions.getMinStatsAboveBase();
+                if (minStatsAboveBase > 0) {
+                    Equip baseEquip = (Equip) ii.getEquipById(itemId);
+                    if (baseEquip != null) {
+                        long currentStatsSum = calculateEquipStatsSum(equip);
+                        long baseStatsSum = calculateEquipStatsSum(baseEquip);
+                        if (currentStatsSum - baseStatsSum >= minStatsAboveBase) {
+                            return true;
                         }
                     }
-                    
-                    if (totalStats > 50) return true;
                 }
-                
-                // 保留原有的价格兜底逻辑，防止漏掉非属性类的高价物品
-                double price = ii.getPrice(itemId, 1);
-                if (price > 50000 || price <= 0) return true;
-                
-                return false; // 其他普通药水视为垃圾
             }
-            // 过滤弩矢，箭矢
-            if (ItemConstants.isArrow(itemId)) {
-                return false;
-            }
-            return true; // 默认保留其他未覆盖的消耗品
         }
 
-        // 3. 其它/设置 (ETC / SETUP)
-        if (type == InventoryType.ETC || type == InventoryType.SETUP) {
-            // [设置] 椅子 (301xxxx) - 必须找回
-            if (itemId / 10000 == 301) return true;
-            
-            // [设置] 其它设置道具 - 默认找回
-            if (type == InventoryType.SETUP) return true;
-
-            // --- 以下为 ETC 判断 ---
-
-            // [不保留] 任务道具 (403xxxx)
-            if (itemId / 10000 == 403) return false;
-            // 或者使用 ii.isQuestItem(itemId)
-
-            // [保留] 召唤物/特殊 (408xxxx, 422xxxx 等)
-            if (itemId / 10000 == 408 || itemId / 10000 == 422) return true;
-
-            // [过滤] 普通掉落物/矿石 (400xxxx, 401xxxx, 402xxxx)
-            if (itemId >= 4000000 && itemId < 4030000) {
-                // 特例：高价值掉落物（如火焰的眼 4001017, 魔法石 4006000, 召回石 4006001）
-                // 策略：检查是否为特定贵重物品 ID，或售价较高
-                
-                // 魔法石、召回石
-                if (itemId == 4006000 || itemId == 4006001) return true;
-                // 火焰的眼
-                if (itemId == 4001017) return true;
-                // 梦幻石头 (4021009) 等稀有矿石
-                if (itemId == 4021009) return true;
-
-                // 价格兜底：如果卖店价超过 2000 金币，视为有价值
-                if (ii.getPrice(itemId, 1) > 2000) return true;
-
-                return false; // 其他视为垃圾
+        // 2. 特定物品ID列表判断（如特殊的纪念道具、神级物品）
+        TraceabilityRules.Item itemConditions = conditions.getItem();
+        if (itemConditions != null) {
+            List<Integer> specificItemIds = itemConditions.getSpecificItemIds();
+            if (specificItemIds != null && specificItemIds.contains(itemId)) {
+                return true;
             }
 
-            return true; // 默认保留其他 ETC
+            // 3. 物品类型判断
+            List<TraceabilityRules.ItemType> itemTypes = itemConditions.getItemTypes();
+            if (itemTypes != null && !itemTypes.isEmpty()) {
+                int itemPrefix = itemId / 10000;
+                for (TraceabilityRules.ItemType it : itemTypes) {
+                    if (it.getT() == itemPrefix) {
+                        return true;
+                    }
+                }
+            }
+
+            // 兼容以前的硬编码检查
+            if (itemConditions.isScrolls() && itemId / 10000 == 204) {
+                return true;
+            }
+            if (itemConditions.isSkillBooks() && itemId / 10000 == 228) {
+                return true;
+            }
+            if (itemConditions.isMasteryBooks() && itemId / 10000 == 229) {
+                return true;
+            }
         }
 
         return false;

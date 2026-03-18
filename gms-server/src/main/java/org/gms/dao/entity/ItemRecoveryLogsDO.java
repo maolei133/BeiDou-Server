@@ -1,5 +1,7 @@
 package org.gms.dao.entity;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.mybatisflex.annotation.Id;
 import com.mybatisflex.annotation.KeyType;
 import com.mybatisflex.annotation.Table;
@@ -19,7 +21,10 @@ public class ItemRecoveryLogsDO implements Serializable {
     @Id(keyType = KeyType.Auto)
     private Long id;
     private Integer characterId;
+
+    @JsonSerialize(using = ToStringSerializer.class) // [FIXED] Serialize Long to String for frontend
     private Long uid;
+
     private Integer itemId;
     private String itemData;
     private String disposalType;

@@ -1,5 +1,8 @@
 package org.gms.dao.entity;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.mybatisflex.annotation.Column;
 import com.mybatisflex.annotation.Id;
 import com.mybatisflex.annotation.KeyType;
 import com.mybatisflex.annotation.Table;
@@ -18,7 +21,10 @@ import java.io.Serializable;
 public class ItemTraceLogsDO implements Serializable {
     @Id(keyType = KeyType.Auto)
     private Long id;
+
+    @JsonSerialize(using = ToStringSerializer.class) // [FIXED] Serialize Long to String for frontend
     private Long uid;
+
     private Integer accountId;
     private Integer characterId;
     private String actionType;
@@ -30,4 +36,13 @@ public class ItemTraceLogsDO implements Serializable {
     private String itemSnapshot;
     private Long timestamp;
     private String memo;
+    private Boolean isValuable;
+
+    // 非数据库字段，用于在Service层填充
+    @Column(ignore = true)
+    private String itemName;
+    @Column(ignore = true)
+    private String characterName;
+    @Column(ignore = true)
+    private String mapName;
 }

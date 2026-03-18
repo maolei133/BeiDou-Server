@@ -12,6 +12,7 @@ import inventory from '@/views/game/inventory/locale/zh-CN';
 import duey from '@/views/game/duey/locale/zh-CN';
 import tooltip from '@/components/ToolTip/locale/zh-CN';
 import log from '@/views/log/locale/zh-CN';
+import traceability from '@/views/traceability/locale/zh-CN';
 import baseConfig from './zh-CN/base';
 
 export default {
@@ -39,6 +40,10 @@ export default {
   'menu.log.dashboard': '系统状态',
   'menu.log.query': '日志查询',
   'menu.log.config': '配置管理',
+  'menu.traceability': '溯源系统',
+  'menu.traceability.dashboard': '状态看板',
+  'menu.traceability.config': '溯源配置',
+  'menu.traceability.query': '日志查询',
   'menu.arco': 'UI 开发文档',
   'menu.beiDou': '关于北斗',
   // 提示信息
@@ -57,6 +62,7 @@ export default {
   'settings.logout': '退出登录',
   'settings.version': '版本',
   'playerSelector.title': '选择玩家',
+
   ...baseConfig, // 基本配置（示范如何外部导入）
   ...workplace,
   ...login,
@@ -72,4 +78,5 @@ export default {
   ...duey,
   ...tooltip,
   ...log,
+  ...traceability,
 };
