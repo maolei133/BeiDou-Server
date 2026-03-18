@@ -201,8 +201,13 @@ public class TraceabilityService {
         SPAWN, DESPAWN_EXPIRED, PICKUP,
 
         // 管理员操作
-        ADMIN_CREATE, ADMIN_DELETE, GM_CREATE, GM_MODIFY
-    }
+        ADMIN_CREATE, ADMIN_DELETE, GM_CREATE, GM_MODIFY;
+
+        public String getI18nKey() {
+            return "traceability.actionType." + this.name();
+        }
+
+        }
 
     /**
      * 记录物品流转日志

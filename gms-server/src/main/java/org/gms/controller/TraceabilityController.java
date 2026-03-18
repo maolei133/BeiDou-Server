@@ -13,6 +13,13 @@ import org.gms.service.TraceabilityService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+// [FIXED] 导入 ActionTypeDTO 和 I18nUtil
+import org.gms.model.dto.ActionTypeDTO;
+import org.gms.util.I18nUtil;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
 
 /**
  * 物品溯源系统API控制器 (V2.6 - 增加日志查询接口).
@@ -79,5 +86,21 @@ public class TraceabilityController {
         // 将Map转换为JsonNode以便统一返回格式
         JsonNode statsNode = objectMapper.convertValue(statsMap, JsonNode.class);
         return ResultBody.success(statsNode);
+    }
+
+    /**
+     * @zh-CN 获取所有物品流转行为类型及其本地化名称
+     * @en-US Get all item traceability action types and their localized names
+     * @return 行为类型列表
+     */
+    @GetMapping("/action-types")
+    public ResultBody<List<ActionTypeDTO>> getActionTypes() {
+        List<ActionTypeDTO> actionTypes = Arrays.stream(TraceabilityService.ActionType.values())
+                .map(actionType -> new ActionTypeDTO(
+                        actionType.name(),
+                        I18nUtil.getLogMessage(actionType.getI18nKey())
+                ))
+                .collect(Collectors.toList());
+        return ResultBody.success(actionTypes);
     }
 }
