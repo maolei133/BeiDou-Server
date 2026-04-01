@@ -264,7 +264,6 @@
                     <target>${java.version}</target>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <compilerArgs>
-                        <arg>--enable-preview</arg>
                         <arg>-parameters</arg>
                     </compilerArgs>
                 </configuration>

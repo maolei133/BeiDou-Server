@@ -263,7 +263,7 @@ public class TraceabilityService {
                     key += ".format";
                     return I18nUtil.getLogMessage(key, args);
                 }
-            } catch (Exception _) {}
+            } catch (Exception ignored) {}
             return args != null ? Arrays.stream(args).filter(Objects::nonNull).map(String::valueOf).collect(Collectors.joining()) : "";
         }
         public String getI18nKey() { return "traceability.actionSource." + this.name(); }
@@ -368,7 +368,10 @@ public class TraceabilityService {
                     if (dbActionSource.equals(ActionSourceType.STORAGE_PUT_IN.name())) isActionEnabled = logActionSwitches.isSTORAGE_IN();
                     else if (dbActionSource.equals(ActionSourceType.STORAGE_TAKE_OUT.name())) isActionEnabled = logActionSwitches.isSTORAGE_OUT();
                     break;
-                case ADMIN, GM: if (dbActionSource.equals(ActionSourceType.ADMIN_CREATE.name())) isActionEnabled = logActionSwitches.isGM_CREATE(); break;
+                case ADMIN:
+                case GM:
+                    if (dbActionSource.equals(ActionSourceType.ADMIN_CREATE.name())) isActionEnabled = logActionSwitches.isGM_CREATE();
+                    break;
                 default: break;
             }
             if (!isActionEnabled) return;
