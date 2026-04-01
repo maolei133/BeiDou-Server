@@ -6,7 +6,6 @@ import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.row.Db;
 import com.mybatisflex.core.row.Row;
-import lombok.AllArgsConstructor;
 import org.gms.client.inventory.Equip;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
@@ -19,7 +18,6 @@ import org.gms.dao.mapper.CharactersMapper;
 import org.gms.dao.mapper.DueypackagesMapper;
 import org.gms.model.dto.*;
 import org.gms.server.ItemInformationProvider;
-import org.gms.util.ItemConverter;
 import org.gms.util.Pair;
 import org.gms.util.SnowflakeIdGenerator;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -355,7 +353,7 @@ public class DueyService {
             DueyProcessor.createPackage(
                 req.getMesos() != null ? req.getMesos().intValue() : 0,
                 req.getMessage(),
-                req.getSenderName() != null ? req.getSenderName() : "管理员",
+                req.getSenderName() != null && !req.getSenderName().isEmpty() ? req.getSenderName() : "管理员",
                 receiverId,
                 Boolean.TRUE.equals(req.getQuick()),
                 null, // 没有物品
@@ -377,7 +375,7 @@ public class DueyService {
                     DueyProcessor.createPackage(
                         mesos.intValue(),
                         message,
-                        req.getSenderName() != null ? req.getSenderName() : "管理员",
+                        req.getSenderName() != null && !req.getSenderName().isEmpty()? req.getSenderName() : "管理员",
                         receiverId,
                         Boolean.TRUE.equals(req.getQuick()),
                         item,

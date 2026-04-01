@@ -1,5 +1,6 @@
 package org.gms.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
@@ -11,8 +12,12 @@ import lombok.Data;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class DueyItemReqDTO {
     /** 物品ID */
+    @JsonProperty("id")
+    @JsonAlias("itemId")
     private Integer itemId;
     /** 数量 */
+    @JsonProperty("qty")
+    @JsonAlias("quantity")
     private Integer quantity;
     /** 拥有者 */
     private String owner;
