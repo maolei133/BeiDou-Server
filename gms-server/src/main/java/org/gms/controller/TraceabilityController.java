@@ -13,8 +13,9 @@ import org.gms.service.TraceabilityService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-// [FIXED] 导入 ActionTypeDTO 和 I18nUtil
+// [FIXED] 导入 ActionTypeDTO, ActionSourceTypeDTO 和 I18nUtil
 import org.gms.model.dto.ActionTypeDTO;
+import org.gms.model.dto.ActionSourceTypeDTO;
 import org.gms.util.I18nUtil;
 import java.util.Arrays;
 import java.util.List;
@@ -102,5 +103,21 @@ public class TraceabilityController {
                 ))
                 .collect(Collectors.toList());
         return ResultBody.success(actionTypes);
+    }
+
+    /**
+     * @zh-CN 获取所有物品流转行为来源及其本地化名称
+     * @en-US Get all item traceability action sources and their localized names
+     * @return 行为来源列表
+     */
+    @GetMapping("/action-source-types")
+    public ResultBody<List<ActionSourceTypeDTO>> getActionSourceTypes() {
+        List<ActionSourceTypeDTO> actionSourceTypes = Arrays.stream(TraceabilityService.ActionSourceType.values())
+                .map(actionSourceType -> new ActionSourceTypeDTO(
+                        actionSourceType.name(),
+                        I18nUtil.getLogMessage(actionSourceType.getI18nKey())
+                ))
+                .collect(Collectors.toList());
+        return ResultBody.success(actionSourceTypes);
     }
 }

@@ -35,7 +35,7 @@ public class MapItem extends AbstractMapObject {
     protected Client ownerClient;
     protected Item item;
     protected MapObject dropper;
-    protected int character_ownerid, party_ownerid, meso, questid = -1;
+    protected int character_owneraccid,character_ownerid, party_ownerid, meso, questid = -1;
     protected byte type;
     protected boolean pickedUp = false, playerDrop, partyDrop;
     protected long dropTime;
@@ -45,6 +45,7 @@ public class MapItem extends AbstractMapObject {
         setPosition(position);
         this.item = item;
         this.dropper = dropper;
+        this.character_owneraccid = owner.getAccountId();
         this.character_ownerid = owner.getId();
         this.party_ownerid = owner.getPartyId();
         this.partyDrop = this.party_ownerid != -1;
@@ -58,6 +59,7 @@ public class MapItem extends AbstractMapObject {
         setPosition(position);
         this.item = item;
         this.dropper = dropper;
+        this.character_owneraccid = owner.getAccountId();
         this.character_ownerid = owner.getId();
         this.party_ownerid = owner.getPartyId();
         this.partyDrop = this.party_ownerid != -1;
@@ -72,6 +74,7 @@ public class MapItem extends AbstractMapObject {
         setPosition(position);
         this.item = null;
         this.dropper = dropper;
+        this.character_owneraccid = owner.getAccountId();
         this.character_ownerid = owner.getId();
         this.party_ownerid = owner.getPartyId();
         this.partyDrop = this.party_ownerid != -1;
@@ -98,6 +101,14 @@ public class MapItem extends AbstractMapObject {
 
     public final MapObject getDropper() {
         return dropper;
+    }
+
+    public int getOwnerAccid() {
+        return character_owneraccid;
+    }
+
+    public void setOwnerAccid(int character_owneraccid) {
+        this.character_owneraccid = character_owneraccid;
     }
 
     public final int getOwnerId() {

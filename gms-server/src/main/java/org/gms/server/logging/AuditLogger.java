@@ -76,7 +76,7 @@ public class AuditLogger {
 
         // 4. 注入上下文信息 (按预设顺序)
         Map<String, String> contextData = AuditContext.get();
-        
+
         // 客户端字段
         putIfPresent(logMap, contextData, "ip");
         putIfPresent(logMap, contextData, "hwid");
@@ -93,6 +93,9 @@ public class AuditLogger {
         putIfPresent(logMap, contextData, "map");
         putIfPresent(logMap, contextData, "mapName"); // 新增
 
+        if (logMap.get("map") != null && logMap.get("mapName") == null) {
+            logMap.put("mapName", "未知地图");
+        }
         // 5. 注入其他业务字段 (msg 等)
         Map<String, String> rawData = data.getData();
         for (Map.Entry<String, String> entry : rawData.entrySet()) {
@@ -114,7 +117,82 @@ public class AuditLogger {
         // 6. 序列化为 JSON 字符串并写入日志
         log.info(JSON.toJSONString(logMap));
     }
-    
+    public static void info(int aid,int cid,int mapid,String mapName,String module, String action, MapMessage data) {
+        // 自动注册模块 (防止有未在枚举中定义的动态模块)
+        moduleConfig.putIfAbsent(module, true);
+
+        // 1. 检查模块开关
+        if (!isModuleEnabled(module)) {
+            return;
+        }
+
+        if (data == null) {
+            data = new MapMessage();
+        }
+
+        // 2. 准备最终的日志 Map (使用 LinkedHashMap 保证顺序)
+        Map<String, Object> logMap = new LinkedHashMap<>();
+
+        // 3. 基础字段 (按预设顺序)
+        logMap.put("ts", System.currentTimeMillis());
+        // logMap.put("l", "INFO"); // 移除日志级别
+        logMap.put("mod", module);
+        logMap.put("act", action);
+
+        // 处理 category -> cat
+        if (data.containsKey("category")) {
+            logMap.put("cat", data.get("category"));
+        } else if (data.containsKey("cat")) {
+            logMap.put("cat", data.get("cat"));
+        }
+
+        // 4. 注入上下文信息 (按预设顺序)
+        Map<String, String> contextData = AuditContext.get();
+
+        // 客户端字段
+        putIfPresent(logMap, contextData, "ip");
+        putIfPresent(logMap, contextData, "hwid");
+        putIfPresent(logMap, contextData, "macs");
+
+        // 角色信息字段
+        putIfPresent(logMap, contextData, "aid");
+        putIfPresent(logMap, contextData, "acc");
+        putIfPresent(logMap, contextData, "cid");
+        putIfPresent(logMap, contextData, "chr");
+        putIfPresent(logMap, contextData, "lvl");
+        putIfPresent(logMap, contextData, "job");
+        putIfPresent(logMap, contextData, "jobName"); // 新增
+        putIfPresent(logMap, contextData, "map");
+        putIfPresent(logMap, contextData, "mapName"); // 新增
+
+        logMap.put("aid", aid);
+        logMap.put("cid", cid);
+        logMap.put("map", mapid);
+
+        if (logMap.get("map") != null && logMap.get("mapName") == null || logMap.get("mapName").toString().isEmpty()) {
+            logMap.put("mapName", mapName != null ? mapName : "未知地图");
+        }
+        // 5. 注入其他业务字段 (msg 等)
+        Map<String, String> rawData = data.getData();
+        for (Map.Entry<String, String> entry : rawData.entrySet()) {
+            String key = entry.getKey();
+            // 跳过已处理的字段
+            if (key.equals("mod") || key.equals("act") || key.equals("category") || key.equals("cat")) {
+                continue;
+            }
+            // 如果上下文里已经有了，且业务数据里也有，通常业务数据优先？或者上下文优先？
+            // 这里我们假设业务数据可能包含更具体的覆盖值，但通常不应该冲突。
+            // 为了保持顺序，我们把剩余的字段放在最后
+            if (!logMap.containsKey(key)) {
+                logMap.put(key, entry.getValue());
+            }
+        }
+
+        // 确保 msg 存在 (如果 data 里有 msg，上面已经 put 了；如果没有，这里也不强制，但通常会有)
+
+        // 6. 序列化为 JSON 字符串并写入日志
+        log.info(JSON.toJSONString(logMap));
+    }
     private static void putIfPresent(Map<String, Object> target, Map<String, String> source, String key) {
         if (source.containsKey(key)) {
             target.put(key, source.get(key));

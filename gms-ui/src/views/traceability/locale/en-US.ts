@@ -47,15 +47,28 @@ export default {
   'traceability.config.equip.minViciousHammerUsed': 'Min Hammer Used',
   'traceability.config.equip.minStatsAboveBase': 'Min Stats Above Base',
 
-  'traceability.config.item.scrolls': 'Record All Scrolls',
-  'traceability.config.item.skillBooks': 'Record All Skill Books',
-  'traceability.config.item.masteryBooks': 'Record All Mastery Books',
+  'traceability.config.item.throwingWeapons.title': 'Throwing Weapons',
+  'traceability.config.item.throwingWeapons.enabled':
+    'Enable Throwing Weapons Check',
+  'traceability.config.item.throwingWeapons.minAttackPower':
+    'Min Attack (Stars)',
+  'traceability.config.item.throwingWeapons.minAttackPowerBullet':
+    'Min Attack (Bullets)',
+
+  'traceability.config.item.potions.title': 'Buff Potions',
+  'traceability.config.item.potions.enabled': 'Enable Potions Check',
+  'traceability.config.item.potions.minTotalStatBonus': 'Min Total Stat Bonus',
+
+  'traceability.config.item.itemTypesTitle': 'Record Item Types by ID Prefix',
+  'traceability.config.item.itemTypes.t': 'ID Prefix',
+  'traceability.config.item.itemTypes.d': 'Description',
+  'traceability.config.item.itemTypes.enabled': 'Enabled',
+
   'traceability.config.item.specificItemIdsTitle':
     'Force Record Specific Item IDs',
-  'traceability.config.item.specificItemIds': 'Item ID',
-  'traceability.config.item.itemTypesTitle': 'Record Item Types by ID Prefix',
-  'traceability.config.item.itemTypes.t': 'ID Prefix (t)',
-  'traceability.config.item.itemTypes.d': 'Description (d)',
+  'traceability.config.item.specificItemIds.id': 'Item ID',
+  'traceability.config.item.specificItemIds.d': 'Description',
+  'traceability.config.item.specificItemIds.enabled': 'Enabled',
 
   'traceability.config.retention.valuable': 'Valuable Items',
   'traceability.config.retention.nonValuable': 'Non-Valuable Items',
@@ -65,9 +78,10 @@ export default {
   'traceability.config.retention.maxCount': 'Max Record Count',
 
   'traceability.config.performance.ignoredMapIdsTitle':
-    'Ignored Map IDs for Tracing',
-  'traceability.config.performance.ignoredMapIds': 'Map ID',
-  'traceability.config.performance.ignoredMapIdsColumn': 'Map ID',
+    'Ignored Maps for Tracing',
+  'traceability.config.performance.ignoredMapIds.id': 'Map ID',
+  'traceability.config.performance.ignoredMapIds.d': 'Description',
+  'traceability.config.performance.ignoredMapIds.enabled': 'Enabled',
 
   'traceability.message.loadDefault.success':
     'Default configuration has been loaded. Please click "Save Config" to apply.',

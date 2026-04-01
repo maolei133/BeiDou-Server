@@ -18,7 +18,11 @@
           field="dateRange"
           :label="$t('traceability.query.form.dateRange')"
         >
-          <a-range-picker v-model="formModel.dateRange" show-time />
+          <a-range-picker
+            v-model="formModel.dateRange"
+            style="width: 360px"
+            show-time
+          />
         </a-form-item>
 
         <!-- 物品ID -->
@@ -29,6 +33,7 @@
           <a-input
             v-model="formModel.itemName"
             :placeholder="$t('common.placeholder.select')"
+            style="width: 240px"
             allow-clear
             @clear="formModel.itemId = undefined"
           >
@@ -48,6 +53,7 @@
           <a-input
             v-model="formModel.characterName"
             :placeholder="$t('common.placeholder.select')"
+            style="width: 240px"
             allow-clear
             @clear="formModel.characterId = undefined"
           >
@@ -64,6 +70,7 @@
           <a-input
             v-model="formModel.uid"
             :placeholder="$t('common.placeholder.input')"
+            style="width: 240px"
             allow-clear
           />
         </a-form-item>
@@ -76,6 +83,7 @@
           <a-select
             v-model="formModel.actionType"
             :placeholder="$t('common.placeholder.select')"
+            style="width: 240px"
             allow-clear
           >
             <a-option
@@ -87,16 +95,19 @@
           </a-select>
         </a-form-item>
 
-        <!-- 行为来源 -->
+        <!-- 行为来源 (动态获取) -->
         <a-form-item
           field="actionSource"
           :label="$t('traceability.query.form.actionSource')"
         >
-          <a-input
+          <a-select
             v-model="formModel.actionSource"
-            :placeholder="$t('common.placeholder.input')"
+            :placeholder="$t('common.placeholder.select')"
+            :options="actionSourcePrefixes"
+            style="width: 240px"
             allow-clear
-          />
+          >
+          </a-select>
         </a-form-item>
 
         <!-- 操作按钮 -->
@@ -191,15 +202,15 @@
             <div class="action-cell">
               <div class="action-row">
                 <span class="action-label"
-                  >{{ $t('traceability.query.columns.actionSource') }}:</span
-                >
-                <span class="action-value">{{ record.actionSource }}</span>
-              </div>
-              <div class="action-row">
-                <span class="action-label"
                   >{{ $t('traceability.query.columns.actionType') }}:</span
                 >
                 <span class="action-value">{{ record.actionType }}</span>
+              </div>
+              <div class="action-row">
+                <span class="action-label"
+                  >{{ $t('traceability.query.columns.actionSource') }}:</span
+                >
+                <span class="action-value">{{ record.actionSource }}</span>
               </div>
             </div>
           </template>
@@ -230,9 +241,15 @@
     defineAsyncComponent,
   } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import axios from 'axios'; // 导入axios
-  import { queryTraceLogs, TraceLog } from '@/api/traceability';
-  import type { ActionTypeDTO } from '@/api/traceability'; // 导入ActionTypeDTO
+  import { Message } from '@arco-design/web-vue';
+  import {
+    queryTraceLogs,
+    TraceLog,
+    getActionTypes,
+    getActionSourceTypes,
+    ActionTypeDTO,
+    ActionSourceTypeDTO,
+  } from '@/api/traceability';
   import { InformationResult } from '@/api/information';
   import { OnlinePlayer } from '@/api/player';
   import { PaginationProps } from '@arco-design/web-vue';
@@ -261,18 +278,19 @@
 
   // 表单模型
   const formModel = reactive({
-    uid: undefined as string | undefined, // [FIXED] Changed to string
+    uid: undefined as string | undefined,
     itemId: undefined as number | undefined,
     itemName: '',
     characterId: undefined as number | undefined,
     characterName: '',
-    actionType: undefined as string | undefined, // [CHANGED] for a-select
+    actionType: undefined as string | undefined,
     actionSource: undefined as string | undefined,
     dateRange: [] as (Date | string)[],
   });
 
-  // 行为类型数据 (从后端获取)
+  // 行为类型和来源数据 (从后端获取)
   const actionTypes = ref<ActionTypeDTO[]>([]);
+  const actionSourcePrefixes = ref<ActionSourceTypeDTO[]>([]);
 
   // 表格数据
   const tableData = ref<TraceLog[]>([]);
@@ -326,7 +344,7 @@
           itemDetails = JSON.parse(record.itemSnapshot);
         }
       } catch (e) {
-        console.error('Failed to parse itemSnapshot:', e);
+        console.error('解析物品快照失败:', e);
       }
       return {
         ...itemDetails,
@@ -406,7 +424,6 @@
       const { data } = await queryTraceLogs({
         pageNumber: pagination.current,
         pageSize: pagination.pageSize,
-        // 确保 uid 是 string 或 undefined
         uid: formModel.uid === '' ? undefined : formModel.uid,
         itemId: formModel.itemId,
         characterId: formModel.characterId,
@@ -444,7 +461,7 @@
     formModel.itemName = '';
     formModel.characterId = undefined;
     formModel.characterName = '';
-    formModel.actionType = undefined; // Reset to undefined for select
+    formModel.actionType = undefined;
     formModel.actionSource = undefined;
     formModel.dateRange = [];
     handleSearch();
@@ -461,23 +478,33 @@
     fetchData();
   };
 
-  onMounted(async () => {
+  /**
+   * @zh-CN 初始化页面数据
+   */
+  const initialize = async () => {
     fetchData();
+
+    try {
+      const typesResponse = await getActionTypes();
+      actionTypes.value = typesResponse.data;
+    } catch (error) {
+      Message.error('获取行为类型失败');
+    }
+
+    try {
+      const prefixesResponse = await getActionSourceTypes();
+      actionSourcePrefixes.value = prefixesResponse.data;
+    } catch (error) {
+      Message.error('获取行为来源失败');
+    }
+  };
+
+  onMounted(() => {
+    initialize();
     window.addEventListener('resize', updateTableHeight);
     nextTick(() => {
       updateTableHeight();
     });
-
-    // [FIXED] 从后端获取行为类型列表
-    try {
-      const { data } = await axios.get<ActionTypeDTO[]>(
-        '/v1/traceability/action-types'
-      );
-      actionTypes.value = data;
-    } catch (error) {
-      console.error('Failed to fetch action types:', error);
-      // 可以在这里设置一个默认值或者显示错误信息
-    }
   });
 
   onUnmounted(() => {

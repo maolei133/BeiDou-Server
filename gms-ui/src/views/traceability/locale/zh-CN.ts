@@ -48,14 +48,25 @@ export default {
   'traceability.config.equip.minViciousHammerUsed': '最低金锤子次数',
   'traceability.config.equip.minStatsAboveBase': '属性总和超白板值',
 
-  'traceability.config.item.scrolls': '记录所有卷轴',
-  'traceability.config.item.skillBooks': '记录所有技能书',
-  'traceability.config.item.masteryBooks': '记录所有能力手册',
-  'traceability.config.item.specificItemIdsTitle': '强制记录的特定物品ID列表',
-  'traceability.config.item.specificItemIds': '物品ID',
+  'traceability.config.item.throwingWeapons.title': '投掷武器',
+  'traceability.config.item.throwingWeapons.enabled': '启用投掷武器判断',
+  'traceability.config.item.throwingWeapons.minAttackPower': '飞镖最低攻击力',
+  'traceability.config.item.throwingWeapons.minAttackPowerBullet':
+    '子弹最低攻击力',
+
+  'traceability.config.item.potions.title': '增益药水',
+  'traceability.config.item.potions.enabled': '启用增益药水判断',
+  'traceability.config.item.potions.minTotalStatBonus': '最低总属性加成',
+
   'traceability.config.item.itemTypesTitle': '按ID前缀记录的物品类型',
-  'traceability.config.item.itemTypes.t': 'ID前缀 (t)',
-  'traceability.config.item.itemTypes.d': '描述 (d)',
+  'traceability.config.item.itemTypes.t': 'ID前缀',
+  'traceability.config.item.itemTypes.d': '描述',
+  'traceability.config.item.itemTypes.enabled': '启用',
+
+  'traceability.config.item.specificItemIdsTitle': '强制记录的特定物品ID',
+  'traceability.config.item.specificItemIds.id': '物品ID',
+  'traceability.config.item.specificItemIds.d': '描述',
+  'traceability.config.item.specificItemIds.enabled': '启用',
 
   'traceability.config.retention.valuable': '有价值物品',
   'traceability.config.retention.nonValuable': '无价值物品',
@@ -64,10 +75,10 @@ export default {
   'traceability.config.retention.days': '保留天数',
   'traceability.config.retention.maxCount': '最大条数',
 
-  'traceability.config.performance.ignoredMapIdsTitle':
-    '忽略溯源记录的地图ID列表',
-  'traceability.config.performance.ignoredMapIds': '地图ID',
-  'traceability.config.performance.ignoredMapIdsColumn': '地图ID',
+  'traceability.config.performance.ignoredMapIdsTitle': '忽略溯源记录的地图',
+  'traceability.config.performance.ignoredMapIds.id': '地图ID',
+  'traceability.config.performance.ignoredMapIds.d': '描述',
+  'traceability.config.performance.ignoredMapIds.enabled': '启用',
 
   'traceability.message.loadDefault.success':
     '已加载默认配置，请点击“保存配置”以生效。',

@@ -22,7 +22,6 @@
 package org.gms.server;
 
 import com.mybatisflex.core.query.QueryWrapper;
-import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.Inventory;
@@ -38,9 +37,7 @@ import org.gms.dao.mapper.ShopitemsMapper;
 import org.gms.dao.mapper.ShopsMapper;
 import org.gms.manager.ServerManager;
 import org.gms.server.life.LifeFactory;
-import org.gms.server.logging.AuditLogger;
-import org.gms.server.logging.LogAction;
-import org.gms.server.logging.LogModule;
+import org.gms.service.ItemRecoveryService;
 import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +56,7 @@ import java.util.Set;
 public class Shop {
     private static final Logger log = LoggerFactory.getLogger(Shop.class);
     private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+    private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
     private static final Set<Integer> rechargeableItems = new LinkedHashSet<>();
 
     private final int id;
@@ -123,13 +121,12 @@ public class Shop {
                 int amount = (int) Math.min((float) item.getPrice() * quantity, Integer.MAX_VALUE);
                 if (c.getPlayer().getMeso() >= amount) {
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
-                        String source = String.format("从NPC(%s)商店购买", finalNpcName);
                         if (!ItemConstants.isRechargeable(itemId)) { //宠物无法从商店购买
                             short finalQuantity = quantity;
                             int finalAmount = amount;
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
                                 // 溯源日志：商店购买
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalAmount + "金币");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null,String.format("花费: %d 金币", finalAmount), npcId, finalNpcName);
                             });
                             c.getPlayer().gainMeso(-amount, false);
                         } else {
@@ -137,7 +134,7 @@ public class Shop {
                             short finalQuantity = quantity;
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
                                 // 溯源日志：商店购买 (充值类)
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + item.getPrice() + "金币");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity,null, String.format("花费: %d 金币", item.getPrice()), npcId, finalNpcName);
                             });
                             c.getPlayer().gainMeso(-item.getPrice(), false);
                         }
@@ -156,12 +153,11 @@ public class Shop {
 
                 if (c.getPlayer().getInventory(InventoryType.ETC).countById(ItemId.PERFECT_PITCH) >= amount) {
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
-                        String source = String.format("从NPC(%s)商店兑换(Pitch)", finalNpcName);
                         if (!ItemConstants.isRechargeable(itemId)) {
                             short finalQuantity = quantity;
                             int finalAmount = amount;
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalAmount + " Pitch");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null, String.format("花费: %d %s", finalAmount,ii.getName(ItemId.PERFECT_PITCH)), npcId, finalNpcName);
                             });
                             InventoryManipulator.removeById(c, InventoryType.ETC, ItemId.PERFECT_PITCH, amount, false, false);
                         } else {
@@ -170,7 +166,7 @@ public class Shop {
                             short finalQuantity = quantity;
                             int finalAmount = amount;
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalAmount + " Pitch");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null, String.format("花费: %d %s", finalAmount, ii.getName(ItemId.PERFECT_PITCH)), npcId, finalNpcName);
                             });
                             InventoryManipulator.removeById(c, InventoryType.ETC, ItemId.PERFECT_PITCH, amount, false, false);
                         }
@@ -189,17 +185,16 @@ public class Shop {
                     int cardreduce = value - cost;
                     int diff = cardreduce + c.getPlayer().getMeso();
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
-                        String source = String.format("从NPC(%s)商店购买(Token)", finalNpcName);
                         short finalQuantity = quantity;
                         int finalCost = cost;
                         if (ItemConstants.isPet(itemId)) {
                             int petid = Pet.createPet(itemId);
                             InventoryManipulator.addById(c, itemId, quantity, "", petid, -1, (addedItem) -> {
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalCost + " Token");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null, String.format("花费: %d %s", finalCost, ii.getName(token)), npcId, finalNpcName);
                             });
                         } else {
                             InventoryManipulator.addById(c, itemId, quantity, "", -1, -1, (addedItem) -> {
-                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SHOP_BUY, source, finalQuantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), "花费: " + finalCost + " Token");
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null, String.format("花费: %d %s", finalCost, ii.getName(token)), npcId, finalNpcName);
                             });
                         }
                         c.getPlayer().gainMeso(diff, false);
@@ -268,21 +263,6 @@ public class Shop {
         try {
             if (canSell(item, quantity)) {
                 quantity = getSellingQuantity(item, quantity);
-
-                // 物品找回系统拦截点
-                if (InventoryManipulator.isValuableForRecovery(item)) {
-                    TraceabilityService traceabilityService = SpringContextUtil.getBean(TraceabilityService.class);
-                    
-                    // 创建副本并设置实际卖出的数量，确保找回时数量正确
-                    Item recoveryItem = item.copy();
-                    recoveryItem.setQuantity(quantity);
-                    
-                    traceabilityService.logRecovery(recoveryItem, c.getPlayer(), "SELL");
-                }
-                
-                // 溯源日志：商店出售
-                traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.SHOP_SELL, "出售给NPC商店", -quantity, String.format("商店: [%d] %s", id ,LifeFactory.getNPCName(id)), null);
-
                 InventoryManipulator.removeFromSlot(c, type, (byte) slot, quantity, false);
 
                 ItemInformationProvider ii = ItemInformationProvider.getInstance();
@@ -291,6 +271,17 @@ public class Shop {
                     c.getPlayer().gainMeso(recvMesos, false);
                 }
                 c.sendPacket(PacketCreator.shopTransaction((byte) 0x8));
+
+                // 物品找回系统拦截点
+                if (InventoryManipulator.isValuableForRecovery(item)) {
+                    // 创建副本并设置实际卖出的数量，确保找回时数量正确
+                    Item recoveryItem = item.copy();
+                    recoveryItem.setQuantity(quantity);
+                    itemRecoveryService.logRecovery(item, c.getPlayer(), quantity, ItemRecoveryService.DisposalType.SELL);
+                    // 溯源日志：商店出售
+                    traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_SELL, -quantity, null,String.format("获得 %d 金币", recvMesos), npcId, npcName);
+                }
+
                 //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_SELL, new MapMessage().with("itm", item.getItemId()).with("cnt", quantity).with("gain", recvMesos));
             } else {
                 c.sendPacket(PacketCreator.shopTransaction((byte) 0x5));

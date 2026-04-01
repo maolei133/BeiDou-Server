@@ -77,8 +77,17 @@ public class HiredMerchantService {
             if (existingId != null) {
                 log.error("发现重复 UID 物品入库尝试 (雇佣商店)! UID: {}, 物品ID: {}, 商店ID: {}", 
                         item.getUid(), item.getItemId(), item.getMerchantId());
-                traceabilityService.log(null, null, TraceabilityService.ActionType.ADMIN_DELETE, 
-                        "DUPLICATE_UID_BLOCKED", 0, "由于重复的UID阻止了雇佣商店添加: " + item.getUid(), "商店ID: " + item.getMerchantId());
+                
+                // 获取 HiredMerchantsDO 对象以获取 ownerId 和 mapId
+                HiredMerchantsDO merchant = hiredMerchantsMapper.selectOneById(item.getMerchantId());
+                int ownerId = (merchant != null) ? merchant.getOwnerId() : 0;
+                int mapId = (merchant != null) ? merchant.getMapId() : 0;
+
+                // 创建一个临时的 Item 对象用于日志记录
+                Item tempItem = new Item(item.getItemId(), (short) 0, (short) 0);
+                tempItem.setUid(item.getUid());
+
+                traceabilityService.log(tempItem, 0, ownerId, mapId, TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_DELETE, 0, "由于重复的UID阻止了雇佣商店添加: " + item.getUid(), "商店ID: " + item.getMerchantId());
                 throw new RuntimeException("检测到重复 UID: " + item.getUid());
             }
         }

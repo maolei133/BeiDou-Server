@@ -83,10 +83,8 @@ public class TraceabilityRules {
     @JsonNaming(UpperCaseNamingStrategy.class)
     public static class TemporaryDisables {
         /** 怪物掉落/拾取记录配置 */
-        // @JsonProperty("LOOT") // 移除手动注解，由JsonNaming统一处理
         private DisableDetail LOOT;
         /** 商店购买记录配置 */
-        // @JsonProperty("SHOP_BUY") // 移除手动注解，由JsonNaming统一处理
         private DisableDetail SHOP_BUY;
     }
 
@@ -103,22 +101,16 @@ public class TraceabilityRules {
     @JsonNaming(UpperCaseNamingStrategy.class)
     public static class LogActionSwitches {
         /** 是否记录 玩家间交易 */
-        // @JsonProperty("TRADE") // 移除手动注解，由JsonNaming统一处理
         private boolean TRADE;
         /** 是否记录 玩家丢弃 */
-        // @JsonProperty("DROP") // 移除手动注解，由JsonNaming统一处理
         private boolean DROP;
         /** 是否记录 玩家出售给NPC */
-        // @JsonProperty("SELL") // 移除手动注解，由JsonNaming统一处理
         private boolean SELL;
         /** 是否记录 存入仓库 */
-        // @JsonProperty("STORAGE_IN") // 移除手动注解，由JsonNaming统一处理
         private boolean STORAGE_IN;
         /** 是否记录 从仓库取出 */
-        // @JsonProperty("STORAGE_OUT") // 移除手动注解，由JsonNaming统一处理
         private boolean STORAGE_OUT;
         /** 是否记录 GM通过命令创造物品 */
-        // @JsonProperty("GM_CREATE") // 移除手动注解，由JsonNaming统一处理
         private boolean GM_CREATE;
     }
 
@@ -149,31 +141,74 @@ public class TraceabilityRules {
     @Data
     @JsonNaming(UpperCaseNamingStrategy.class)
     public static class Item {
-        /** 是否将所有卷轴(204xxxx)视为有价值物品 */
-        private boolean scrolls;
-        /** 是否将所有技能书(228xxxx)视为有价值物品 */
-        private boolean skillBooks;
-        /** 是否将所有能手册(229xxxx)视为有价值物品 */
-        private boolean masteryBooks;
-        /** 检测ID前3位的配置 */
+        /** 投掷武器(飞镖/子弹)的价值判断 */
+        private ThrowingWeapons throwingWeapons;
+        /** 增益药水的价值判断 */
+        private Potions potions;
+        /** 检测ID前缀的配置 */
         private List<ItemType> itemTypes;
         /** 强制视为有价值的特定物品ID列表 (如混沌卷轴) */
-        private List<Integer> specificItemIds;
+        private List<SpecificItemId> specificItemIds;
+    }
+
+    @Data
+    @JsonNaming(UpperCaseNamingStrategy.class)
+    public static class ThrowingWeapons {
+        /** 是否启用投掷武器的价值判断 */
+        private boolean enabled;
+        /** 投掷武器(飞镖)的最低攻击力 */
+        private int minAttackPower;
+        /** 投掷武器(子弹)的最低攻击力 */
+        @JsonProperty("MINATTACKPOWER_BULLET")
+        private int minAttackPowerBullet;
+    }
+
+    @Data
+    @JsonNaming(UpperCaseNamingStrategy.class)
+    public static class Potions {
+        /** 是否启用药水的价值判断 */
+        private boolean enabled;
+        /** 增益类药水提供的属性总和(力/敏/智/运/攻/魔)的最低值 */
+        private int minTotalStatBonus;
     }
 
     @Data
     @JsonNaming(UpperCaseNamingStrategy.class)
     public static class ItemType {
-        /** 物品ID前3位 */
+        /** 物品ID前缀 */
         private int t;
         /** 描述 */
         private String d;
+        /** 是否启用此条目 */
+        private boolean enabled;
+    }
+
+    @Data
+    @JsonNaming(UpperCaseNamingStrategy.class)
+    public static class SpecificItemId {
+        /** 物品ID */
+        private int id;
+        /** 描述 */
+        private String d;
+        /** 是否启用此条目 */
+        private boolean enabled;
     }
 
     @Data
     @JsonNaming(UpperCaseNamingStrategy.class)
     public static class Performance {
         /** 忽略记录所有事件的地图ID列表 (如自由市场) */
-        private List<Integer> ignoredMapIds;
+        private List<IgnoredMapId> ignoredMapIds;
+    }
+
+    @Data
+    @JsonNaming(UpperCaseNamingStrategy.class)
+    public static class IgnoredMapId {
+        /** 地图ID */
+        private int id;
+        /** 描述 */
+        private String d;
+        /** 是否启用此条目 */
+        private boolean enabled;
     }
 }

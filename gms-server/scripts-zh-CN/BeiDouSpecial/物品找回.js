@@ -112,7 +112,7 @@ function levelselectCategory(selection) {
         var itemIco = `#i${itemId}:#`;
         var itemName = ItemInformationProvider.getName(itemId);
         var time = sdf.format(new Date(logEntry.getDisposalTime()));
-        var reason = logEntry.getDisposalType() == "SELL" ? "出售" : "丢弃";
+        var reason = logEntry.getDisposalType();// == "SELL" ? "出售" : "丢弃";
         
         sb += `#L${currentCategoryItems.length - 1}# ${itemIco} #b${itemName}#k × #r${itemData.qty || 1}#k\r\n`;
         sb += `   丢失时间：${time}  [${reason}]#l\r\n`;
@@ -200,8 +200,11 @@ function levelconfirmRecovery(selection) {
     var logId = selectedRecoveryLog.getId();
     
     try {
-        ItemRecoveryService.recoverItem(cm.getClient(), logId);
-        
+        var success = ItemRecoveryService.recoverItem(cm.getClient(), logId);
+        if (!success) {
+            level();
+            return;
+        }
         var itemId = selectedRecoveryLog.getItemId();
         var itemName = ItemInformationProvider.getName(itemId);
         var costType = GameConfig.getServerInt("item_recovery_cost_type", 0);

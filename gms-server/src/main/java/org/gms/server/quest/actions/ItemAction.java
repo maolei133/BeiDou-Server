@@ -159,7 +159,7 @@ public class ItemAction extends AbstractQuestAction {
             // 这里我们简单记录一下
             Item item = chr.getInventory(type).findById(itemid);
             if (item != null) {
-                traceabilityService.log(item, chr, TraceabilityService.ActionType.QUEST_CONSUME, String.format("完成任务(%s [%d])消耗", quest.getName(), questID), count);
+                traceabilityService.log(item, chr, TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_QUEST_CONSUME, count, String.format("完成任务 [%d] %s 消耗", questID, quest.getName()),String.format("数量: %d -> %d", item.getQuantity(), item.getQuantity() - quantity));
             }
 
             InventoryManipulator.removeById(chr.getClient(), type, itemid, quantity, true, false);
@@ -170,8 +170,8 @@ public class ItemAction extends AbstractQuestAction {
             int itemid = iEntry.getId(), count = iEntry.getCount(), period = iEntry.getPeriod();    // thanks Vcoc for noticing quest milestone item not getting removed from inventory after a while
 
             InventoryManipulator.addById(chr.getClient(), itemid, (short) count, "", -1, period > 0 ? (System.currentTimeMillis() + MINUTES.toMillis(period)) : -1, (addedItem) -> {
-                // 记录溯源日志：任务奖励
-                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.QUEST_REWARD, String.format("完成任务(%s [%d])获得", quest.getName(), questID), count);
+            // 记录溯源日志：任务奖励
+            traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_QUEST_REWARD, count, String.format("完成任务 [%d] %s 奖励", questID, quest.getName()),String.format("数量: %d -> %d",addedItem.getQuantity(), addedItem.getQuantity() + count));
             });
             chr.sendPacket(PacketCreator.getShowItemGain(itemid, (short) count, true));
         }
@@ -335,7 +335,9 @@ public class ItemAction extends AbstractQuestAction {
                         return false;
                     }
 
-                    InventoryManipulator.addById(chr.getClient(), item.getId(), (short) missingQty);
+                    InventoryManipulator.addById(chr.getClient(), item.getId(), (short) missingQty, null,  -1,addItem ->
+                            traceabilityService.log(addItem, chr, TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_QUEST_REWARD, missingQty, String.format("完成任务 [%d] %s 奖励", questID, quest.getName()),null)
+                            );
                     log.debug("角色 {} 从任务 ID {} 获得了 {}x 物品 {}", chr, questID, missingQty, itemid);
                 }
                 return true;

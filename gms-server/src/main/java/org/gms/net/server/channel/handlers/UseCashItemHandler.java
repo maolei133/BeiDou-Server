@@ -141,7 +141,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             }
             String error1 = I18nUtil.getMessage("UseCashItemHandler.handlePacket.error1");
             boolean vip = p.readByte() == 1 && itemId / 1000 >= 5041;
-            remove(c, position, itemId);
+            remove(c, position, toUse);
             boolean success = false;
             if (!vip) {
                 int mapId = p.readInt();
@@ -241,7 +241,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                     return;
                 }
             }
-            remove(c, position, itemId);
+            remove(c, position, toUse);
         } else if (itemType == 506) {//操作道具的现金物品、取名、封印、孵化
             Item eq = null;
             if (itemId == 5060000) { // Item tag.
@@ -291,14 +291,14 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                 }
                 if (getIncubatedItem(c, itemId)) {
                     InventoryManipulator.removeFromSlot(c, InventoryType.getByType(inventory2), slot2, (short) 1, false);
-                    remove(c, position, itemId);
+                    remove(c, position, toUse);
                 }
                 return;
             }
             p.readInt(); // time stamp
             if (eq != null) {
                 player.forceUpdateItem(eq);
-                remove(c, position, itemId);
+                remove(c, position, toUse);
             }
         } else if (itemType == 507) {   //喇叭
             boolean whisper;
@@ -379,13 +379,13 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                     Server.getInstance().broadcastMessage(c.getWorld(), PacketCreator.getMultiMegaphone(msg2, c.getChannel(), whisper));
                 }
             }
-            remove(c, position, itemId);
+            remove(c, position, toUse);
         } else if (itemType == 508) {   //风筝    // thanks tmskdl12 for graduation banner; thanks ratency for first pointing lack of Kite handling
             Kite kite = new Kite(player, p.readString(), itemId);
 
             if (!GameConstants.isFreeMarketRoom(player.getMapId())) {
                 player.getMap().spawnKite(kite);
-                remove(c, position, itemId);
+                remove(c, position, toUse);
             } else {
                 c.sendPacket(PacketCreator.sendCannotSpawnKite());
             }
@@ -394,14 +394,14 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             String msg = p.readString();
             try {
                 noteService.sendNormal(msg, player.getName(), sendTo);
-                remove(c, position, itemId);
+                remove(c, position, toUse);
                 c.sendPacket(new SendNoteSuccessPacket());
             } catch (Exception e) {
                 log.error("Error sending note", e);
             }
         } else if (itemType == 510) {//音乐盒
             player.getMap().broadcastMessage(PacketCreator.musicChange("Jukebox/Congratulation"));
-            remove(c, position, itemId);
+            remove(c, position, toUse);
         } else if (itemType == 512) {//场景消息
             if (ii.getStateChangeItem(itemId) != 0) {
                 for (Character mChar : player.getMap().getCharacters()) {
@@ -409,7 +409,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                 }
             }
             player.getMap().startMapEffect(ii.getMsg(itemId).replaceFirst("%s", player.getName()).replaceFirst("%s", p.readString()), itemId);
-            remove(c, position, itemId);
+            remove(c, position, toUse);
         } else if (itemType == 517) {//宠物取名
             Pet pet = player.getPet(0);
             if (pet == null) {
@@ -427,10 +427,10 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
 
             player.getMap().broadcastMessage(player, PacketCreator.changePetName(player, newName, 1), true);
             c.enableActions();
-            remove(c, position, itemId);
+            remove(c, position, toUse);
         } else if (itemType == 520) {//钱袋子
             player.gainMeso(ii.getMeso(itemId), true, false, true);
-            remove(c, position, itemId);
+            remove(c, position, toUse);
             c.enableActions();
         } else if (itemType == 523) {//猫头鹰商店搜索器
             int itemid = p.readInt();
@@ -441,7 +441,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             player.setOwlSearch(itemid);
             List<Pair<PlayerShopItem, AbstractMapObject>> hmsAvailable = c.getWorldServer().getAvailableItemBundles(itemid);
             if (!hmsAvailable.isEmpty()) {
-                remove(c, position, itemId);
+                remove(c, position, toUse);
             }
 
             c.sendPacket(PacketCreator.owlOfMinerva(c, itemid, hmsAvailable));
@@ -456,7 +456,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                     if (pair.getRight()) {
                         isUse = true;
                         pet.gainTamenessFullness(player, pair.getLeft(), 100, 1, true);
-                        remove(c, position, itemId);
+                        remove(c, position, toUse);
                         break;
                     }
                 } else {
@@ -491,7 +491,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             notEnabled(player);
         } else if (itemType == 530) {//变身石
             ii.getItemEffect(itemId).applyTo(player);
-            remove(c, position, itemId);
+            remove(c, position, toUse);
         } else if (itemType == 533) {//特快使用券
             DueyProcessor.dueySendTalk(c, true);
         } else if (itemType == 537) {//黑板
@@ -514,7 +514,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             final int world = c.getWorld();
             Server.getInstance().broadcastMessage(world, PacketCreator.getAvatarMega(player, medal, c.getChannel(), itemId, strLines, (p.readByte() != 0)));
             TimerManager.getInstance().schedule(() -> Server.getInstance().broadcastMessage(world, PacketCreator.byeAvatarMega()), SECONDS.toMillis(10));
-            remove(c, position, itemId);
+            remove(c, position, toUse);
         } else if (itemType == 540) {//改名卡和换区卡
             p.readByte();
             p.readInt();
@@ -523,7 +523,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             } else if (itemId == ItemId.WORLD_TRANSFER) {//换区卡
                 c.sendPacket(PacketCreator.showWorldTransferCancel(player.cancelPendingWorldTransfer()));
             }
-            remove(c, position, itemId);
+            remove(c, position, toUse);
             c.enableActions();
         } else if (itemType == 543) {//角色卡
             if (itemId == ItemId.MAPLE_LIFE_B && !c.gainCharacterSlot()) {
@@ -558,7 +558,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                 c.sendPacket(PacketCreator.sendMapleLifeError(0));   // success!
 
                 player.showHint(I18nUtil.getMessage("UseCashItemHandler.handlePacket.message8"));
-                remove(c, position, itemId);
+                remove(c, position, toUse);
             } else {
                 if (createStatus == -1) {    // check name
                     c.sendPacket(PacketCreator.sendMapleLifeNameError());
@@ -571,7 +571,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                 Shop shop = ShopFactory.getInstance().getShop(1338);
                 if (shop != null) {
                     shop.sendShop(c);
-                    remove(c, position, itemId);
+                    remove(c, position, toUse);
                 }
             } else {
                 c.enableActions();
@@ -619,7 +619,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             }
             equip.setExpiration(equip.getExpiration() + addTime); //给装备加上指定时间
             player.forceUpdateItem(equip);      //强制刷新装备状态属性
-            remove(c, position, itemId); // 移除指定位置的物品
+            remove(c, position, toUse); // 移除指定位置的物品
 
             player.dropMessage(5,I18nUtil.getMessage("UseCashItemHandler.handlePacket.message15",ii.getName(equip.getItemId()),addDay));
         } else if (itemType == 552) {
@@ -633,7 +633,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
 
             KarmaManipulator.setKarmaFlag(item);
             player.forceUpdateItem(item);
-            remove(c, position, itemId);
+            remove(c, position, toUse);
             c.enableActions();
         } else if (itemType == 552) { //DS EGG THING    //宿命剪刀
             c.enableActions();
@@ -648,7 +648,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             }
             equip.setVicious(equip.getVicious() + 1); // 增加装备的金锤子已使用次数
             equip.setUpgradeSlots(equip.getUpgradeSlots() + 1); // 增加装备的升级插槽数量
-            remove(c, position, itemId); // 移除指定位置的物品
+            remove(c, position, toUse, equip); // 移除指定位置的物品
             c.enableActions(); // 发送启用操作的封包
             c.sendPacket(PacketCreator.sendHammerData(equip.getVicious())); // 发送锤子数据封包
             player.forceUpdateItem(equip); // 强制更新装备信息
@@ -691,7 +691,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             //opcodes 0x42, 0x44: "this item cannot be used"; 0x39, 0x45: crashes
 
             InventoryManipulator.removeFromSlot(c, InventoryType.USE, uSlot, (short) 1, false);
-            remove(c, position, itemId);
+            remove(c, position, toUse);
 
             final Client client = c;
             TimerManager.getInstance().schedule(() -> {
@@ -721,27 +721,28 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
         c.enableActions();
     }
 
-    private static void remove(Client c, short position, int itemid) {
-        Inventory cashInv = c.getPlayer().getInventory(InventoryType.CASH); // 获取玩家的现金库存
-        cashInv.lockInventory(); // 锁定现金库存，防止并发修改
-        try {
-            Item it = cashInv.getItem(position); // 获取指定位置的物品
-            if (it == null || it.getItemId() != itemid) { // 如果指定位置的物品为空或ID不匹配
-                it = cashInv.findById(itemid); // 通过物品ID查找物品
-                if (it != null) { // 如果找到物品
-                    position = it.getPosition(); // 更新位置为找到物品的位置
-                }
-            }
-            
-            // 记录溯源日志
-            if (it != null) {
-                traceabilityService.log(it, c.getPlayer(), TraceabilityService.ActionType.USE, "现金道具使用", -1);
-            }
+    /**
+     * 移除指定位置的物品
+     * @param c 客户端
+     * @param position 位置
+     * @param item 移除的物品
+     * @param target 目标物品
+     */
+    private static void remove(Client c, short position, Item item, Item target) {
+        InventoryManipulator.removeFromSlot(c, InventoryType.CASH, position, (short) 1, true, false); // 从指定位置移除一个物品
+        traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CONSUME, -1,
+                target != null ? String.format("目标物品: [%d] %s",target.getItemId(), ItemInformationProvider.getInstance().getName(target.getItemId())) : "",
+                "目标UID: " + (target != null ? target.getUid() : null));
+    }
 
-            InventoryManipulator.removeFromSlot(c, InventoryType.CASH, position, (short) 1, true, false); // 从指定位置移除一个物品
-        } finally {
-            cashInv.unlockInventory(); // 解锁现金库存
-        }
+    /**
+     * 移除指定位置的物品
+     * @param c 客户端
+     * @param position 位置
+     * @param item 移除的物品
+     */
+    private static void remove(Client c, short position, Item item) {
+        remove(c, position, item, null);
     }
 
     private static boolean getIncubatedItem(Client c, int id) {

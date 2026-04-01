@@ -47,19 +47,19 @@ public class TraceabilityConfigService {
                 "DATABASE": true, // 是否启用写入到数据库表ITEM_TRACE_LOGS
                 "LOKI": true      // 是否启用并行写入Loki日志系统
               },
-              "RECORDINGTARGETS": {
+              "RECORDINGTARGETS": { // 记录目标
                 "VALUABLE": { "DATABASE": true, "LOKI": true },     // 有价值物品(通过下方的VALUECONDITIONS判断)的记录目标
                 "NONVALUABLE": { "DATABASE": false, "LOKI": false } // 无价值物品(普通物品)的记录目标
               },
-              "RETENTION": {
+              "RETENTION": { // 保留期限
                 "VALUABLE": { "DAYS": 90, "MAXCOUNT": 1000000 },    // 有价值物品在数据库中保留的最大天数和最大条数
                 "NONVALUABLE": { "DAYS": 7, "MAXCOUNT": 500000 }    // 无价值物品在数据库中保留的最大天数和最大条数
               },
-              "TEMPORARYDISABLES": {
+              "TEMPORARYDISABLES": { // 临时禁用
                 "LOOT": { "ENABLED": true, "DISABLEUNTIL": null },     // 是否临时禁用 怪物掉落/拾取 记录，以及禁用截止时间
                 "SHOP_BUY": { "ENABLED": true, "DISABLEUNTIL": null }  // 是否临时禁用 商店购买 记录，以及禁用截止时间
               },
-              "LOGACTIONSWITCHES": {
+              "LOGACTIONSWITCHES": { // 日志动作开关
                 "TRADE": true,       // 是否记录 玩家间交易 (TRADE)
                 "DROP": true,        // 是否记录 玩家丢弃 (DROP)
                 "SELL": true,        // 是否记录 玩家出售给NPC (SELL)
@@ -67,7 +67,7 @@ public class TraceabilityConfigService {
                 "STORAGE_OUT": true, // 是否记录 从仓库取出 (STORAGE_OUT)
                 "GM_CREATE": true    // 是否记录 GM通过命令创造物品 (GM_CREATE)
               },
-              "VALUECONDITIONS": {
+              "VALUECONDITIONS": { // 值判断条件
                 "EQUIP": {
                   "MINLEVEL": 120,               // 装备最低穿戴等级限制（满足即视为有价值）
                   "MINUPGRADESLOTSUSED": 1,      // 装备最低已砸卷次数（满足即视为有价值）
@@ -76,15 +76,32 @@ public class TraceabilityConfigService {
                   "MINSTATSABOVEBASE": 1         // 装备属性总和(不含HP/MP)超过白板属性的最低值（满足即视为有价值）
                 },
                 "ITEM": {
-                  "SCROLLS": true,         // 是否将所有卷轴(204xxxx)视为有价值物品
-                  "SKILLBOOKS": true,      // 是否将所有技能书(228xxxx)视为有价值物品
-                  "MASTERYBOOKS": true,    // 是否将所有能手册(229xxxx)视为有价值物品
-                  "ITEMTYPES": [],
-                  "SPECIFICITEMIDS": [] // 强制视为有价值的特定物品ID列表 (如混沌卷轴)
+                  "THROWINGWEAPONS": {           // 投掷武器
+                    "ENABLED": true,             // 是否启用
+                    "MINATTACKPOWER": 20,        // 飞镖最小攻击力
+                    "MINATTACKPOWER_BULLET": 15  // 子弹最小攻击力
+                  },
+                  "POTIONS": {  // 强化药水
+                    "ENABLED": true,             // 是否启用
+                    "MINTOTALSTATBONUS": 50      // 最小总属性（不含HP/MP/四维属性）增益
+                  },
+                  "ITEMTYPES": [
+                    { "T": 204, "D": "所有强化卷轴", "ENABLED": true },  // 所有强化卷轴
+                    { "T": 228, "D": "所有技能书", "ENABLED": true },  // 所有技能书
+                    { "T": 229, "D": "所有能手册", "ENABLED": true },  // 所能手册
+                    { "T": 210, "D": "所有召唤包", "ENABLED": true },  // 所有召唤包
+                    { "T": 301, "D": "所有椅子", "ENABLED": true }    // 所有椅子
+                  ],
+                  "SPECIFICITEMIDS": [          // 特定物品ID
+                    { "ID": 2049100, "D": "混沌卷轴 (60%)", "ENABLED": true },
+                    { "ID": 2340000, "D": "祝福卷轴", "ENABLED": true }
+                  ]
                 }
               },
-              "PERFORMANCE": {
-                "IGNOREDMAPIDS": [] // 忽略记录所有事件的地图ID列表 (如自由市场)
+              "PERFORMANCE": { // 性能优化
+                "IGNOREDMAPIDS": [          // 忽略的地图ID
+                  { "ID": 910000000, "D": "自由市场", "ENABLED": false }
+                ]
               }
             }
             """;

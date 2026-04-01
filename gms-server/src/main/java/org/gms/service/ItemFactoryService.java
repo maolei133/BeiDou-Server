@@ -501,8 +501,7 @@ public class ItemFactoryService {
                         if (existingId != null) {
                             log.error("发现重复 UID 物品入库尝试 (雇佣商人)! UID: {}, ItemID: {}, OwnerID: {}, Type: {}",
                                     item.getUid(), item.getItemId(), id, typeValue);
-                            traceabilityService.log(item, null, TraceabilityService.ActionType.ADMIN_DELETE,
-                                    "DUPLICATE_UID_BLOCKED", 0, "因重复 UID 阻止雇佣商人保存", "Type: " + typeValue);
+                            traceabilityService.log(item, null, TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_DELETE, 0, "因重复 UID 阻止雇佣商人保存", "Type: " + typeValue);
                             continue;
                         }
                     }

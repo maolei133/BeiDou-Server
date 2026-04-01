@@ -21,6 +21,7 @@
 */
 package org.gms.server.maps;
 
+import com.alibaba.druid.sql.visitor.functions.Char;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.inventory.Inventory;
@@ -31,6 +32,7 @@ import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.manager.ServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.server.Trade;
+import org.gms.server.logging.AuditContext;
 import org.gms.service.TraceabilityService;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
@@ -213,7 +215,7 @@ public class PlayerShop extends AbstractMapObject {
         }
     }
 
-    public boolean addItem(PlayerShopItem item) {
+    public boolean addItem(PlayerShopItem item,Item sellItem) {
         synchronized (items) {
             if (items.size() >= 16) {
                 return false;
@@ -225,9 +227,9 @@ public class PlayerShop extends AbstractMapObject {
             }
 
             items.add(item);
-            
+            short sellQty = (short) (item.getItem().getQuantity() * item.getBundles());
             // 记录溯源日志
-            traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.PLAYER_SHOP_ADD, "个人商店上架", (int) (item.getItem().getQuantity() * item.getBundles()), null, "价格: " + item.getPrice());
+            traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.PLAYER_SHOP, TraceabilityService.ActionSourceType.MERCHANT_ADD, -sellQty, String.format("数量: %d -> %d",sellItem.getQuantity(),sellItem.getQuantity() - sellQty), "价格: " + item.getPrice(),getItemId(),getDescription());
             
             return true;
         }
@@ -250,15 +252,15 @@ public class PlayerShop extends AbstractMapObject {
                     iitem.setQuantity((short) (shopItem.getItem().getQuantity() * shopItem.getBundles()));
 
                     if (!Inventory.checkSpot(chr, iitem)) {
-                        chr.sendPacket(PacketCreator.serverNotice(1, "Have a slot available on your inventory to claim back the item."));
-                        chr.sendPacket(PacketCreator.enableActions());
+                        chr.dropMessage(1, "背包空间不足，请清理出一个空格以取回物品。");
+                        chr.enableActions();
                         return;
                     }
 
                     InventoryManipulator.addFromDrop(chr.getClient(), iitem, true);
-                    
+
                     // 记录溯源日志
-                    traceabilityService.log(iitem, chr, TraceabilityService.ActionType.PLAYER_SHOP_RETURN, "个人商店取回");
+                    traceabilityService.log(iitem, chr, TraceabilityService.ActionType.PLAYER_SHOP, TraceabilityService.ActionSourceType.MERCHANT_RETURN, iitem.getQuantity(), null, null);
                 }
 
                 removeFromSlot(slot);
@@ -276,16 +278,17 @@ public class PlayerShop extends AbstractMapObject {
      */
     public boolean buy(Client c, int item, short quantity) {
         synchronized (items) {
-            if (isVisitor(c.getPlayer())) {
+            Character owner_buy = c.getPlayer();
+            if (isVisitor(owner_buy)) {
                 PlayerShopItem pItem = items.get(item);
                 Item newItem = pItem.getItem().copy();
 
                 newItem.setQuantity((short) ((pItem.getItem().getQuantity() * quantity)));
                 if (quantity < 1 || !pItem.isExist() || pItem.getBundles() < quantity) {
-                    c.sendPacket(PacketCreator.enableActions());
+                    c.enableActions();
                     return false;
                 } else if (newItem.getInventoryType().equals(InventoryType.EQUIP) && newItem.getQuantity() > 1) {
-                    c.sendPacket(PacketCreator.enableActions());
+                    c.enableActions();
                     return false;
                 }
 
@@ -295,19 +298,19 @@ public class PlayerShop extends AbstractMapObject {
                 try {
                     int price = (int) Math.min((float) pItem.getPrice() * quantity, Integer.MAX_VALUE);
 
-                    if (c.getPlayer().getMeso() >= price) {
-                        if (!owner.canHoldMeso(price)) {    // thanks Rohenn for noticing owner hold check misplaced
-                            c.getPlayer().dropMessage(1, "Transaction failed since the shop owner can't hold any more mesos.");
-                            c.sendPacket(PacketCreator.enableActions());
+                    if (owner_buy.getMeso() >= price) {
+                        if (!owner.canHoldMeso(price)) {    // 感谢 Rohenn 指出店主金币容量检查位置错误
+                            owner_buy.dropMessage(1, "交易失败，因为商店店主金币已达上限。");
+                            c.enableActions();
                             return false;
                         }
 
                         if (canBuy(c, newItem)) {
-                            c.getPlayer().gainMeso(-price, false);
+                            owner_buy.gainMeso(-price, false);
                             price -= Trade.getFee(price);  // thanks BHB for pointing out trade fees not applying here
                             owner.gainMeso(price, true);
 
-                            SoldItem soldItem = new SoldItem(c.getPlayer().getName(), pItem.getItem().getItemId(), quantity, price);
+                            SoldItem soldItem = new SoldItem(owner_buy.getName(), pItem.getItem().getItemId(), quantity, price);
                             owner.sendPacket(PacketCreator.getPlayerShopOwnerUpdate(soldItem, item));
 
                             synchronized (sold) {
@@ -321,21 +324,24 @@ public class PlayerShop extends AbstractMapObject {
                                     owner.setPlayerShop(null);
                                     this.setOpen(false);
                                     this.closeShop();
-                                    owner.dropMessage(1, "Your items are sold out, and therefore your shop is closed.");
+                                    owner.dropMessage(1, "您的物品已售罄，因此商店已关闭。");
                                 }
                             }
-                            
-                            // 记录溯源日志
-                            traceabilityService.log(newItem, c.getPlayer(), TraceabilityService.ActionType.PLAYER_SHOP_BUY, "个人商店购买", newItem.getQuantity(), "店主: " + owner.getName(), "价格: " + price);
-                            
+                            // 记录购买溯源日志
+                            AuditContext.set(owner_buy.getClient());
+                            traceabilityService.log(newItem, owner_buy, TraceabilityService.ActionType.PLAYER_SHOP, TraceabilityService.ActionSourceType.MERCHANT_BUY, newItem.getQuantity(), null,"价格: " + price, owner.getId(), owner.getName());
+                            AuditContext.clear();
+                            AuditContext.set(owner.getClient());
+                            // 记录卖出溯源日志
+                            traceabilityService.log(newItem, owner, TraceabilityService.ActionType.PLAYER_SHOP, TraceabilityService.ActionSourceType.MERCHANT_SELL, -newItem.getQuantity(), null, String.format("花费 %d 金币", price), owner_buy.getId(), owner_buy.getName());
                         } else {
-                            c.getPlayer().dropMessage(1, "Your inventory is full. Please clear a slot before buying this item.");
-                            c.sendPacket(PacketCreator.enableActions());
+                            owner_buy.dropMessage(1, "您的背包已满。请在购买此物品前清理出一个空格位。");
+                            c.enableActions();
                             return false;
                         }
                     } else {
-                        c.getPlayer().dropMessage(1, "You don't have enough mesos to purchase this item.");
-                        c.sendPacket(PacketCreator.enableActions());
+                        owner_buy.dropMessage(1, "您的金币不足，无法购买此物品。");
+                        c.enableActions();
                         return false;
                     }
 
@@ -476,7 +482,7 @@ public class PlayerShop extends AbstractMapObject {
                 if (item.isExist() && item.getBundles() > 0) {
                     Item iitem = item.getItem().copy();
                     iitem.setQuantity((short) (item.getItem().getQuantity() * item.getBundles()));
-                    traceabilityService.log(iitem, owner, TraceabilityService.ActionType.PLAYER_SHOP_RETURN, "个人商店关闭退回");
+                    traceabilityService.log(iitem, owner, TraceabilityService.ActionType.PLAYER_SHOP, TraceabilityService.ActionSourceType.MERCHANT_RETURN, iitem.getQuantity(), null,null, getItemId(), getDescription());
                 }
             }
         }
@@ -563,14 +569,14 @@ public class PlayerShop extends AbstractMapObject {
 
     public synchronized boolean visitShop(Character chr) {
         if (this.isBanned(chr.getName())) {
-            chr.dropMessage(1, "You have been banned from this store.");
+            chr.dropMessage(1, "您已被禁止进入此商店。");
             return false;
         }
 
         visitorLock.lock();
         try {
             if (!open.get()) {
-                chr.dropMessage(1, "This store is not yet open.");
+                chr.dropMessage(1, "此商店尚未开放。");
                 return false;
             }
 

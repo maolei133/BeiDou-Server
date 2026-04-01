@@ -7,6 +7,7 @@ package org.gms.server.logging;
 import com.alibaba.fastjson2.JSON;
 import org.gms.client.Client;
 import org.gms.client.Character;
+import org.gms.dao.entity.CharactersDO;
 import org.gms.server.maps.MapleMap;
 
 import java.util.HashMap;
@@ -98,5 +99,42 @@ public class AuditContext {
      */
     public static void clear() {
         context.remove();
+    }
+
+    /**
+     * 根据详细参数构建审计日志数据。
+     * 此方法允许调用者传入独立的审计字段值，并将它们打包成一个 Map 返回。
+     * 对于任何为 null 的参数，该字段将不会被添加到返回的 Map 中。
+     *
+     * @param aid 账号ID
+     * @param acc 账号名称
+     * @param ip IP地址
+     * @param macs MAC地址列表 (JSON格式)
+     * @param hwid 硬件ID
+     * @param cid 角色ID
+     * @param chr 角色名称
+     * @param map 地图ID
+     * @param mapName 地图名称
+     * @param lvl 角色等级
+     * @param job 职业ID
+     * @param jobName 职业名称
+     * @return 包含所提供审计数据的 Map
+     */
+    public static Map<String, String> buildAuditData(String aid, String acc, String ip, String macs, String hwid, String cid, String chr, String map, String mapName, String lvl, String job, String jobName) {
+        Map<String, String> data = context.get();
+        data.clear();
+        if (aid != null) data.put("aid", aid);
+        if (acc != null) data.put("acc", acc);
+        if (ip != null) data.put("ip", ip);
+        if (macs != null) data.put("macs", macs);
+        if (hwid != null) data.put("hwid", hwid);
+        if (cid != null) data.put("cid", cid);
+        if (chr != null) data.put("chr", chr);
+        if (map != null) data.put("map", map);
+        if (mapName != null) data.put("mapName", mapName);
+        if (lvl != null) data.put("lvl", lvl);
+        if (job != null) data.put("job", job);
+        if (jobName != null) data.put("jobName", jobName);
+        return data;
     }
 }

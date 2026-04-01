@@ -46,6 +46,7 @@ import org.gms.dao.mapper.NotesMapper;
 import org.gms.manager.ServerManager;
 import org.gms.net.server.Server;
 import org.gms.net.server.world.World;
+import org.gms.server.life.LifeFactory;
 import org.gms.service.HiredMerchantService;
 import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
@@ -327,7 +328,7 @@ public class FredrickProcessor {
                 for (Pair<Item, InventoryType> it : items) {
                     Item item = it.getLeft();
                     InventoryManipulator.addFromDrop(chr.getClient(), item, false);
-                    traceabilityService.log(item, chr, TraceabilityService.ActionType.HIRED_MERCHANT_RETURN, "弗雷德里克取回");
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_RETURN, item.getQuantity(), 9900001, LifeFactory.getNPCName(9900001));
                 }
 
                 for (HiredMerchantsDO merchant : merchants) {

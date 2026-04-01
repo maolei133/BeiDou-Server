@@ -21,7 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.net.server.channel.handlers;
 
-import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Client;
@@ -40,9 +39,6 @@ import org.gms.constants.skills.Aran;
 import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
-import org.gms.server.logging.AuditLogger;
-import org.gms.server.logging.LogAction;
-import org.gms.server.logging.LogModule;
 import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -131,11 +127,8 @@ public final class TakeDamageHandler extends AbstractPacketHandler {
                                             
                                             // 溯源日志：被怪物偷取
                                             Item item = inv.findById(loseItem.getId());
-                                            if (item != null) {
-                                                traceabilityService.log(item, chr, TraceabilityService.ActionType.DROP, String.format("被怪物偷取: %s(%d)", attacker.getName(), attacker.getId()), -qty);
-                                            }
-                                            
                                             InventoryManipulator.removeById(c, type, loseItem.getId(), qty, false, false);
+                                            traceabilityService.log(item, chr, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_DROP, -qty, String.format("被怪物 [%d] %s 偷取", attacker.getId(), attacker.getName()),String.format("数量: %d -> %d", item.getQuantity(), item.getQuantity() - qty));
                                         } finally {
                                             inv.unlockInventory();
                                         }
@@ -146,7 +139,8 @@ public final class TakeDamageHandler extends AbstractPacketHandler {
 
                                         for (byte b = 0; b < qty; b++) {
                                             pos.x = playerpos + ((d % 2 == 0) ? (25 * (d + 1) / 2) : -(25 * (d / 2)));
-                                            map.spawnItemDrop(chr, chr, new Item(loseItem.getId(), (short) 0, (short) 1), map.calcDropPos(pos, chr.getPosition()), true, true);
+                                            Item toDrop = new Item(loseItem.getId(), (short) 0, (short) 1);
+                                            map.spawnItemDrop(chr, chr, toDrop, map.calcDropPos(pos, chr.getPosition()), true, true);
                                             d++;
                                         }
                                     }
@@ -160,7 +154,7 @@ public final class TakeDamageHandler extends AbstractPacketHandler {
                 }
             } catch (ClassCastException e) {
                 //this happens due to mob on last map damaging player just before changing maps
-                log.warn("Attack is not a mob-type, rather is a {} entity", map.getMapObject(oid).getClass().getSimpleName(), e);
+                log.warn("攻击对象不是怪物类型，而是一个 {} 实体", map.getMapObject(oid).getClass().getSimpleName(), e);
                 return;
             }
 

@@ -164,6 +164,7 @@ public class Server {
     private static final NoteService noteService = ServerManager.getApplicationContext().getBean(NoteService.class);
     private static final HpMpAlertService hpMpAlertService = ServerManager.getApplicationContext().getBean(HpMpAlertService.class);
     private static final ServiceProperty serviceProperty = ServerManager.getApplicationContext().getBean(ServiceProperty.class);
+    private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
 
     private Server() {
         ReadWriteLock worldLock = new ReentrantReadWriteLock(true);
@@ -695,8 +696,11 @@ public class Server {
         final int worldCount = Math.min(GameConstants.WORLD_NAMES.length, GameConfig.getConfig().getJSONObject("world").size());
 
         // 重置登录状态和雇佣商店状态
-        accountService.resetAllLoggedIn();
-        characterService.resetMerchant();
+        accountService.resetAllLoggedIn();  // 重置登录状态
+        characterService.resetMerchant();  // 重置雇佣商店状态
+
+        itemRecoveryService.cleanupExpiredLogs(); // 清理过期找回记录
+        itemRecoveryService.updatePendingDrop();  // 更新待找回物品标记
 
         // 清空失效的现金物品
         nxCodeService.clearExpirations();

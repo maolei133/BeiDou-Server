@@ -47,9 +47,10 @@ import org.gms.net.server.services.task.channel.OverallService;
 import org.gms.net.server.services.type.ChannelServices;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.World;
+import org.gms.server.logging.AuditContext;
+import org.gms.service.ItemRecoveryService;
 import org.gms.service.TraceabilityService;
 import org.gms.util.NumberTool;
-import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.EventInstanceManager;
@@ -111,6 +112,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 public class MapleMap {
     private static final Logger log = LoggerFactory.getLogger(MapleMap.class);
     private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+    private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
     private static final List<MapObjectType> rangedMapobjectTypes = Arrays.asList(MapObjectType.SHOP, MapObjectType.ITEM, MapObjectType.NPC, MapObjectType.MONSTER, MapObjectType.DOOR, MapObjectType.SUMMON, MapObjectType.REACTOR, MapObjectType.HIRED_MERCHANT);
     private static final Map<Integer, Pair<Integer, Integer>> dropBoundsCache = new HashMap<>(100);
 
@@ -733,6 +735,7 @@ public class MapleMap {
                         idrop = new Item(de.itemId, (short) 0, (short) (Randomizer.nextInt(de.Maximum - de.Minimum + 1) + de.Minimum));
                     }
                     spawnDrop(idrop, calcDropPos(pos, mob.getPosition()), mob, chr, droptype, de.questid);
+                    traceabilityService.log(idrop,chr,TraceabilityService.ActionType.SYSTEM,TraceabilityService.ActionSourceType.SYSTEM_MONSTER_DROP,idrop.getQuantity(),String.format("[%d] %s",mob.getId(),mob.getName()),null);
                 }
                 d++;
             }
@@ -1004,7 +1007,7 @@ public class MapleMap {
             
             // 溯源日志：过期清除
             if (mmi.getItem() != null) {
-                traceabilityService.log(mmi.getItem(), -1, -1, this.getId(), TraceabilityService.ActionType.DESPAWN_EXPIRED, "系统清除", mmi.getItem().getQuantity(), "地图: " + this.getId(), "物品过期");
+                traceabilityService.log(mmi.getItem(), mmi.getOwnerAccid(), mmi.getOwnerId(), getId(), TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_EXPIRED_DESPAWN, mmi.getItem().getQuantity(), null, null);
             }
         }
 
@@ -2262,21 +2265,20 @@ public class MapleMap {
 
         instantiateItemDrop(mdrop);
         activateItemReactors(mdrop, owner.getClient());
-        
+
         // 溯源日志：物品生成
-        String sourceInfo;
+        TraceabilityService.ActionSourceType sourceType = TraceabilityService.ActionSourceType.SYSTEM_MAP_SPAWN;;
+        String targetinfo = null;
         if (dropper instanceof Character) {
-            sourceInfo = String.format("玩家丢弃: %s", ((Character) dropper).getName());
-        } else if (dropper instanceof Monster) {
-            Monster monster = (Monster) dropper;
-            sourceInfo = String.format("怪物掉落: %s(%d)", monster.getName(), monster.getId());
-        } else if (dropper instanceof Reactor) {
-            sourceInfo = String.format("反应堆掉落: %d", ((Reactor) dropper).getId());
-        } else {
-            sourceInfo = "系统生成";
+            sourceType = null;
+        } else if (dropper instanceof Monster monster) {
+            sourceType = TraceabilityService.ActionSourceType.SYSTEM_MONSTER_DROP;
+            targetinfo = String.format("怪物: [%d] %s",monster.getId(), monster.getName());
+        } else if (dropper instanceof Reactor reactor) {
+            sourceType = TraceabilityService.ActionSourceType.SYSTEM_REACTOR_DROP;
+            targetinfo = String.format("反应堆: [%d] %s",reactor.getId(), reactor.getName());
         }
-        
-        traceabilityService.log(item, owner != null ? owner.getAccountId() : -1, owner != null ? owner.getId() : -1, this.getId(), TraceabilityService.ActionType.DROP, sourceInfo, item.getQuantity(), "地图: " + this.getMapName(), null);
+        if (sourceType != null) traceabilityService.log(item, owner, TraceabilityService.ActionType.SYSTEM, sourceType, item.getQuantity(), targetinfo, null);
     }
 
     public final void spawnItemDropList(List<Integer> list, final MapObject dropper, final Character owner, Point pos) {
@@ -3610,7 +3612,7 @@ public class MapleMap {
                         owner = getCharacterById(mapitem.getOwnerId());
                     }
                     if (owner != null) {
-                        traceabilityService.logRecovery(mapitem.getItem(), owner, "EXPIRED");
+                        itemRecoveryService.activateRecovery(mapitem.getItem().getUid());
                     }
                 }
 

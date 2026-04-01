@@ -188,14 +188,14 @@ public class MakerProcessor {
                         if (toDisassemble != -1) {
                             Item disassembledItem = c.getPlayer().getInventory(InventoryType.EQUIP).getItem((short) pos);
                             if (disassembledItem != null) {
-                                traceabilityService.log(disassembledItem, c.getPlayer(), TraceabilityService.ActionType.CRAFT_CONSUME, "通过制作技能拆解", -1);
+                                traceabilityService.log(disassembledItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CONSUME, -1, String.format("通过制作技能 [%d] %s 消耗", toCreate, ii.getName(toCreate)),String.format("数量: %d -> %d", disassembledItem.getQuantity(), disassembledItem.getQuantity() - 1));
                             }
                             InventoryManipulator.removeFromSlot(c, InventoryType.EQUIP, (short) pos, (short) 1, false);
                         } else {
                             for (Pair<Integer, Integer> pair : recipe.getReqItems()) {
                                 Item consumedItem = c.getPlayer().getInventory(ItemConstants.getInventoryType(pair.getLeft())).findById(pair.getLeft());
                                 if (consumedItem != null) {
-                                     traceabilityService.log(consumedItem, c.getPlayer(), TraceabilityService.ActionType.CRAFT_CONSUME, String.format("通过制作技能(%s)消耗", ii.getName(toCreate)), -pair.getRight());
+                                     traceabilityService.log(consumedItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CONSUME, -pair.getRight(), String.format("通过制作技能 [%d] %s 消耗", toCreate, ii.getName(toCreate)),String.format("数量: %d -> %d", consumedItem.getQuantity(), consumedItem.getQuantity() - pair.getRight()));
                                 }
                                 c.getAbstractPlayerInteraction().gainItem(pair.getLeft(), (short) -pair.getRight(), false);
                             }
@@ -211,8 +211,9 @@ public class MakerProcessor {
                                 c.getPlayer().setCS(true);
                                 int gainId = pair.getLeft();
                                 short gainCnt = pair.getRight().shortValue();
+                                int finalToCreate = toCreate;
                                 InventoryManipulator.addById(c, gainId, gainCnt, "", -1, -1, (addedItem) -> {
-                                    traceabilityService.log(addedItem, c.getPlayer(), TraceabilityService.ActionType.CRAFT_CREATE, String.format("通过制作技能(%s)制作", ii.getName(gainId)), gainCnt);
+                                    traceabilityService.log(addedItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CRAFT, gainCnt, String.format("通过制作技能 [%d] %s 制作", finalToCreate, ii.getName(finalToCreate)), null);
                                 });
                                 c.getPlayer().setCS(false);
                             }
@@ -222,7 +223,7 @@ public class MakerProcessor {
                             if (stimulantid != -1) {
                                 Item stimulantItem = c.getPlayer().getInventory(ItemConstants.getInventoryType(stimulantid)).findById(stimulantid);
                                 if (stimulantItem != null) {
-                                     traceabilityService.log(stimulantItem, c.getPlayer(), TraceabilityService.ActionType.CRAFT_CONSUME, String.format("通过制作技能(%s)消耗促进剂", ii.getName(toCreate)), -1);
+                                     traceabilityService.log(stimulantItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CONSUME, -1, String.format("通过制作技能 [%d] %s 消耗", toCreate, ii.getName(toCreate)),String.format("数量: %d -> %d", stimulantItem.getQuantity(), stimulantItem.getQuantity() - 1));
                                 }
                                 c.getAbstractPlayerInteraction().gainItem(stimulantid, (short) -1, false);
                             }
@@ -230,7 +231,7 @@ public class MakerProcessor {
                                 for (Map.Entry<Integer, Short> r : reagentids.entrySet()) {
                                     Item reagentItem = c.getPlayer().getInventory(ItemConstants.getInventoryType(r.getKey())).findById(r.getKey());
                                     if (reagentItem != null) {
-                                         traceabilityService.log(reagentItem, c.getPlayer(), TraceabilityService.ActionType.CRAFT_CONSUME, String.format("通过制作技能(%s)消耗宝石", ii.getName(toCreate)), -r.getValue());
+                                         traceabilityService.log(reagentItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CONSUME, -r.getValue(), String.format("通过制作技能 [%d] %s 消耗", toCreate, ii.getName(toCreate)),String.format("数量: %d -> %d", reagentItem.getQuantity(), reagentItem.getQuantity() - r.getValue()));
                                     }
                                     c.getAbstractPlayerInteraction().gainItem(r.getKey(), (short) (-1 * r.getValue()), false);
                                 }
@@ -470,7 +471,7 @@ public class MakerProcessor {
             eqp = ii.randomizeUpgradeStats(eqp);
         }
 
-        traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.CRAFT_CREATE, String.format("通过制作技能(%s)制作", ii.getName(item.getItemId())), 1);
+        traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CRAFT, 1, String.format("通过制作技能 [%d] %s 制作", item.getItemId(), ii.getName(item.getItemId())), null);
         InventoryManipulator.addFromDrop(c, item, false, -1);
         return true;
     }

@@ -24,6 +24,7 @@ package org.gms.server.maps;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.client.Job;
 import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
@@ -43,6 +44,7 @@ import org.gms.net.server.Server;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.TimerManager;
 import org.gms.server.Trade;
+import org.gms.server.logging.AuditContext;
 import org.gms.service.CharacterService;
 import org.gms.service.HiredMerchantService;
 import org.gms.service.TraceabilityService;
@@ -377,7 +379,8 @@ public class HiredMerchant extends AbstractMapObject {
                         return;
                     }
                     InventoryManipulator.addFromDrop(chr.getClient(), iitem, true);
-                    traceabilityService.log(iitem, chr, TraceabilityService.ActionType.HIRED_MERCHANT_RETURN, "雇佣商店取回");
+                    // 溯源日志：记录下架返还
+                    traceabilityService.log(iitem, chr, TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_RETURN, iitem.getQuantity(), null, null, ownerId, ownerName);
                 }
                 removeFromSlot(slot);
                 if (shopItem.getDbId() != null) {
@@ -457,19 +460,22 @@ public class HiredMerchant extends AbstractMapObject {
                     }
                     
                     // 溯源日志：为购买者记录
-                    String sourceForBuyer = String.format("从 %s 的雇佣商店购买", ownerName);
-                    traceabilityService.log(newItem, chr, TraceabilityService.ActionType.HIRED_MERCHANT_BUY, sourceForBuyer, newItem.getQuantity(), "店主ID: " + ownerId, "价格: " + priceLong);
+                    traceabilityService.log(newItem, chr, TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_BUY, newItem.getQuantity(), null, null, ownerId, ownerName);
 
                     // 溯源日志：为店主记录
-                    String sourceForOwner = String.format("被玩家 %s 从雇佣商店购买", chr.getName());
                     Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
                     if (owner != null) {
-                        traceabilityService.log(newItem, owner, TraceabilityService.ActionType.HIRED_MERCHANT_BUY, sourceForOwner, -newItem.getQuantity(), "购买者ID: " + chr.getId(), "价格: " + priceLong);
+                        AuditContext.set(owner.getClient());
+                        traceabilityService.log(newItem, owner.getAccountId(), ownerId, map.getId(), TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_SELL, -newItem.getQuantity(), null, null, chr.getId(), chr.getName());
+                        AuditContext.clear();
                     } else {
                         // 如果店主离线，使用ID记录
-                        traceabilityService.log(newItem, characterService.findById(ownerId).getAccountid(), ownerId, -1, TraceabilityService.ActionType.HIRED_MERCHANT_BUY, sourceForOwner, -newItem.getQuantity(), "购买者ID: " + chr.getId(), "价格: " + priceLong);
+                        CharactersDO chrDO = characterService.findById(ownerId);
+                        AuditContext.buildAuditData(chrDO.getAccountid().toString(),chrDO.getAccountName(),null,null,null,String.valueOf(ownerId),ownerName,String.valueOf(map.getId()),map.getMapName(),chrDO.getLevel().toString(),chrDO.getJob().toString(), Job.getById(chrDO.getJob()).getName());
+                        traceabilityService.log(newItem, chrDO.getAccountid(), ownerId, map.getId(), TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_SELL, -newItem.getQuantity(), null, null, chr.getId(), chr.getName());
+                        AuditContext.clear();
                     }
-
+                    AuditContext.set(chr.getClient());
                     if (merchantId > 0) {
                         hiredMerchantService.processPurchase(merchantId, pItem.getDbId(), pItem.getItem().getItemId(), quantity, pItem.getPrice(), price, chr.getId());
                         this.mesos += price;
@@ -610,7 +616,8 @@ public class HiredMerchant extends AbstractMapObject {
                         Item itemToGive = mpsi.getItem().copy();
                         itemToGive.setQuantity((short) (mpsi.getItem().getQuantity() * mpsi.getBundles()));
                         InventoryManipulator.addFromDrop(c, itemToGive, false);
-                        traceabilityService.log(itemToGive, c.getPlayer(), TraceabilityService.ActionType.HIRED_MERCHANT_RETURN, "雇佣商店关闭取回");
+                        // 溯源日志：记录商店关闭时物品的返还
+                        traceabilityService.log(itemToGive, c.getPlayer(), TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_RETURN, itemToGive.getQuantity(), null, null, ownerId, ownerName);
                         if (merchantId > 0 && mpsi.getDbId() != null) {
                             HiredMerchantTransactionsDO transaction = HiredMerchantTransactionsDO.builder()
                                     .merchantId(merchantId).itemId(mpsi.getItem().getItemId()).buyerId(ownerId)
@@ -714,7 +721,7 @@ public class HiredMerchant extends AbstractMapObject {
         return false;
     }
 
-    public boolean addItem(PlayerShopItem item) {
+    public boolean addItem(PlayerShopItem item,Item sellItem) {
         synchronized (items) {
             if (items.size() >= getOnSaleSlotMax()) return false;
             if (item.getItem().getUid() <= 0) item.getItem().setUid(SnowflakeIdGenerator.getInstance().nextId());
@@ -739,8 +746,9 @@ public class HiredMerchant extends AbstractMapObject {
             items.add(item);
             Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
             if (owner != null) {
+                short sellQty = (short) (item.getItem().getQuantity() * item.getBundles());
                 // 溯源日志：记录上架操作
-                traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.HIRED_MERCHANT_ADD, "上架至雇佣商店", (int) (item.getItem().getQuantity() * item.getBundles()), null, "价格: " + item.getPrice());
+                traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_ADD, -sellQty, String.format("数量: %d -> %d",sellItem.getQuantity(),sellItem.getQuantity() - sellQty), null, owner.getId(), owner.getName());
             }
             return true;
         }

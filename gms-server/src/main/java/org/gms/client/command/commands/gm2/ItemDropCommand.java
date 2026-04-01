@@ -31,7 +31,9 @@ import org.gms.client.inventory.Item;
 import org.gms.client.inventory.Pet;
 import org.gms.config.GameConfig;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.server.ItemInformationProvider;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 
 import static java.util.concurrent.TimeUnit.DAYS;
@@ -40,6 +42,8 @@ public class ItemDropCommand extends Command {
     {
         setDescription(I18nUtil.getMessage("ItemDropCommand.message1"));
     }
+
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     @Override
     public void execute(Client c, String[] params) {
@@ -90,7 +94,7 @@ public class ItemDropCommand extends Command {
                 }
 
                 c.getPlayer().getMap().spawnItemDrop(c.getPlayer(), c.getPlayer(), toDrop, c.getPlayer().getPosition(), true, true);
-
+                traceabilityService.log(toDrop, player, TraceabilityService.ActionType.GM, TraceabilityService.ActionSourceType.ADMIN_CREATE,  quantity,null,"drop");
                 return;
             } else {
                 player.yellowMessage(I18nUtil.getMessage("ItemDropCommand.message3"));
@@ -117,5 +121,6 @@ public class ItemDropCommand extends Command {
         }
 
         c.getPlayer().getMap().spawnItemDrop(c.getPlayer(), c.getPlayer(), toDrop, c.getPlayer().getPosition(), true, true);
+        traceabilityService.log(toDrop, player, TraceabilityService.ActionType.GM, TraceabilityService.ActionSourceType.ADMIN_CREATE,  quantity, null, "drop");
     }
 }

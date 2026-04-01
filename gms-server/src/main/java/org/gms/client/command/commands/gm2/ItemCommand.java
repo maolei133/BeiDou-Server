@@ -39,6 +39,8 @@ import org.gms.util.I18nUtil;
 import static java.util.concurrent.TimeUnit.DAYS;
 
 public class ItemCommand extends Command {
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+
     {
         setDescription(I18nUtil.getMessage("ItemCommand.message1"));
     }
@@ -69,8 +71,6 @@ public class ItemCommand extends Command {
             player.yellowMessage(I18nUtil.getMessage("ItemCommand.message4"));
             return;
         }
-        
-        TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
         if (ItemConstants.isPet(itemId)) {
             if (params.length >= 2) {   // thanks to istreety & TacoBell
@@ -80,7 +80,7 @@ public class ItemCommand extends Command {
                 int petid = Pet.createPet(itemId);
 
                 InventoryManipulator.addById(c, itemId, finalQuantity, player.getName(), petid, expiration, (Item item) -> {
-                    traceabilityService.log(item, player, TraceabilityService.ActionType.ADMIN_CREATE, String.format("由GM %s 通过命令(item)创建", player.getName()), finalQuantity);
+                    traceabilityService.log(item, player, TraceabilityService.ActionType.GM, TraceabilityService.ActionSourceType.ADMIN_CREATE, finalQuantity, player.getName(), "item");
                 });
                 return;
             } else {
@@ -97,7 +97,7 @@ public class ItemCommand extends Command {
 
         short finalQuantity = quantity;
         if (!InventoryManipulator.addById(c, itemId, quantity, player.getName(), -1, flag, -1, (Item item) -> {
-            traceabilityService.log(item, player, TraceabilityService.ActionType.ADMIN_CREATE, String.format("由GM %s 通过命令(item)创建", player.getName()), finalQuantity);
+            traceabilityService.log(item, player, TraceabilityService.ActionType.GM, TraceabilityService.ActionSourceType.ADMIN_CREATE, finalQuantity, player.getName(), "item");
         })) {
             player.yellowMessage(I18nUtil.getMessage("ItemCommand.message3", params[0]));
         }

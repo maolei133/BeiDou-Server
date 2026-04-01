@@ -153,7 +153,7 @@ public class StorageProcessor {
                                 KarmaManipulator.toggleKarmaFlagToUntradeable(item);
                                 InventoryManipulator.addFromDrop(c, item, false);
 
-                                traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_OUT, "从仓库取出", item.getQuantity());
+                                traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE, TraceabilityService.ActionSourceType.STORAGE_TAKE_OUT, item.getQuantity());
 
                                 String itemName = ii.getName(item.getItemId());
                                 // 发送提示消息
@@ -293,7 +293,7 @@ public class StorageProcessor {
                         if (storage.store(c, item)) { // 在临界区内，"!(storage.isFull())" 仍然有效...
                             chr.setUsedStorage();
 
-                            traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE_IN, "存入仓库", -quantity);
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE, TraceabilityService.ActionSourceType.STORAGE_PUT_IN, -quantity);
 
                             String itemName = ii.getName(item.getItemId());
                             // 发送提示消息

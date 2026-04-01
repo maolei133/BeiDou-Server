@@ -42,7 +42,11 @@ import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.scripting.event.EventInstanceManager;
 import org.gms.scripting.event.EventManager;
+import org.gms.scripting.map.MapScriptMethods;
+import org.gms.scripting.npc.NPCConversationManager;
 import org.gms.scripting.npc.NPCScriptManager;
+import org.gms.scripting.portal.PortalPlayerInteraction;
+import org.gms.scripting.reactor.ReactorActionManager;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.Marriage;
 import org.gms.server.expeditions.Expedition;
@@ -55,6 +59,7 @@ import org.gms.server.maps.MapleMap;
 import org.gms.server.partyquest.PartyQuest;
 import org.gms.server.partyquest.Pyramid;
 import org.gms.server.quest.Quest;
+import org.gms.service.ItemRecoveryService;
 import org.gms.service.TraceabilityService;
 import org.gms.util.*;
 import org.slf4j.Logger;
@@ -70,6 +75,7 @@ public class AbstractPlayerInteraction {
 
     private static final Logger log = LoggerFactory.getLogger(AbstractPlayerInteraction.class);
     private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+    private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
 
     public Client c;
 
@@ -652,7 +658,7 @@ public class AbstractPlayerInteraction {
             }
 
             if (!InventoryManipulator.checkSpace(c, id, quantity, "")) {
-                c.getPlayer().dropMessage(1, "Your inventory is full. Please remove an item from your " + ItemConstants.getInventoryType(id).name() + " inventory.");
+                c.getPlayer().dropMessage(1, "您的背包已满。请从您的 " + ItemConstants.getInventoryType(id).name() + " 背包中移除一些物品。");
                 return null;
             }
             if (ItemConstants.getInventoryType(id) == InventoryType.EQUIP) {
@@ -666,13 +672,13 @@ public class AbstractPlayerInteraction {
             }
             
             // 记录溯源日志：脚本给予物品
-            traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.REWARD, "脚本给予", quantity, null, null);
+            traceabilityService.log(item, c.getPlayer(), getScriptActionType(), TraceabilityService.ActionSourceType.SCRIPT_GAIN_ITEM, quantity, getTargetInfo(), null);
             
         } else {
             // 记录溯源日志：脚本移除物品
             Item toRemove = c.getPlayer().getInventory(ItemConstants.getInventoryType(id)).findById(id);
             if (toRemove != null) {
-                traceabilityService.log(toRemove, c.getPlayer(), TraceabilityService.ActionType.CONSUME, "脚本移除", quantity, null, null);
+                traceabilityService.log(toRemove, c.getPlayer(), getScriptActionType(), TraceabilityService.ActionSourceType.SCRIPT_REMOVE_ITEM, quantity, getTargetInfo(), String.format("数量: %d -> %d", toRemove.getQuantity(), toRemove.getQuantity() - quantity));
             }
             
             InventoryManipulator.removeById(c, ItemConstants.getInventoryType(id), id, -quantity, true, false);
@@ -763,13 +769,13 @@ public class AbstractPlayerInteraction {
             }
             
             // 记录溯源日志：脚本给予物品
-            traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.REWARD, "脚本给予", quantity, null, null);
+            traceabilityService.log(item, c.getPlayer(), getScriptActionType(), TraceabilityService.ActionSourceType.SCRIPT_GAIN_ITEM, quantity, getTargetInfo(), null);
             
         } else {
             // 记录溯源日志：脚本移除物品
             Item toRemove = c.getPlayer().getInventory(ItemConstants.getInventoryType(id)).findById(id);
             if (toRemove != null) {
-                traceabilityService.log(toRemove, c.getPlayer(), TraceabilityService.ActionType.CONSUME, "脚本移除", quantity, null, null);
+                traceabilityService.log(toRemove, c.getPlayer(), getScriptActionType(), TraceabilityService.ActionSourceType.SCRIPT_REMOVE_ITEM, quantity, getTargetInfo(), String.format("数量: %d -> %d", toRemove.getQuantity(), toRemove.getQuantity() - quantity));
             }
             
             InventoryManipulator.removeById(c, ItemConstants.getInventoryType(id), id, -quantity, true, false);
@@ -1009,6 +1015,8 @@ public class AbstractPlayerInteraction {
         Inventory inv = getInventory(invType);
         for (Item item : new ArrayList<>(inv.list())) {
             InventoryManipulator.removeFromSlot(c, inv.getType(), item.getPosition(), item.getQuantity(), false);
+            itemRecoveryService.logRecovery(item, c.getPlayer(), item.getQuantity(), ItemRecoveryService.DisposalType.DELETE);
+            traceabilityService.log(item, c.getPlayer(), getScriptActionType(), TraceabilityService.ActionSourceType.SCRIPT_REMOVE_ITEM, -item.getQuantity(), getTargetInfo(), String.format("数量: %d -> %d", item.getQuantity(), 0));
         }
     }
 
@@ -1017,6 +1025,8 @@ public class AbstractPlayerInteraction {
         Item item = inv.getItem(slot);
         if (item != null) {
             InventoryManipulator.removeFromSlot(c, inv.getType(), item.getPosition(), item.getQuantity(), false);
+            itemRecoveryService.logRecovery(item, c.getPlayer(), item.getQuantity(), ItemRecoveryService.DisposalType.DELETE);
+            traceabilityService.log(item, c.getPlayer(), getScriptActionType(), TraceabilityService.ActionSourceType.SCRIPT_REMOVE_ITEM, -item.getQuantity(), getTargetInfo(), String.format("数量: %d -> %d", item.getQuantity(), 0));
         }
     }
 
@@ -1447,9 +1457,8 @@ public class AbstractPlayerInteraction {
             message(I18nUtil.getMessage("AbstractPlayerInteraction.gainEquip.message2", InventoryType.EQUIP.getName()));
         }
         InventoryManipulator.addFromDrop(getClient(), equip, false);
-        
         // 记录溯源日志：脚本给予装备
-        traceabilityService.log(equip, getPlayer(), TraceabilityService.ActionType.REWARD, "脚本给予(装备)", 1, null, null);
+        traceabilityService.log(equip, getPlayer(), getScriptActionType(), TraceabilityService.ActionSourceType.SCRIPT_GAIN_ITEM, 1, getTargetInfo(), null);
     }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1463,7 +1472,43 @@ public class AbstractPlayerInteraction {
     }
 
 
+    /**
+     * 根据当前对象的类名，获取对应的脚本操作类型
+     *
+     * @return 脚本操作类型
+     */
+    public TraceabilityService.ActionType getScriptActionType() {
+        String className = this.getClass().getSimpleName();
+        return switch (className) {
+            case "NPCConversationManager" -> TraceabilityService.ActionType.SCRIPT;
+            case "ItemScriptMethods" -> TraceabilityService.ActionType.SCRIPT_ITEM;
+            case "QuestActionManager" -> TraceabilityService.ActionType.SCRIPT_QUEST;
+            case "PortalPlayerInteraction" -> TraceabilityService.ActionType.SCRIPT_PORTAL;
+            case "EventInstanceManager" -> TraceabilityService.ActionType.SCRIPT_EVENT;
+            case "ReactorActionManager" -> TraceabilityService.ActionType.SCRIPT_REACTOR;
+            default -> TraceabilityService.ActionType.SCRIPT;
+        };
+    }
 
+    /**
+     * 获取脚本来源信息
+     *
+     * @return 来源信息
+     */
+    public String getTargetInfo() {
+        if (this instanceof NPCConversationManager cm) {
+            return String.format("[%d] %s%s", cm.getNpc(), LifeFactory.getNPCName(cm.getNpc()),cm.getScriptName() == null ? "" : " - " + cm.getScriptName());
+        } else if (this instanceof ReactorActionManager rm) {
+            return String.format("[%d] %s", rm.getReactor().getId(), rm.getReactor().getName());
+        } else if (this instanceof PortalPlayerInteraction pm) {
+            return String.format("[%d] %s%s", pm.getPortal().getId(), pm.getPortal().getName(),pm.getPortal().getScriptName() == null ? "" : " - " + pm.getPortal().getScriptName());
+        } else if (this instanceof MapScriptMethods) {
+            return String.format("[%d] %s", getPlayer().getMapId(), getPlayer().getMap().getMapName());
+        } else if (this.getClass().getSimpleName().equals("ItemScriptMethods")) {
+            return "[物品脚本]";
+        }
+        return null;
+    }
 
 
 }

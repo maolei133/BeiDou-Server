@@ -65,7 +65,7 @@ public class StorageService {
             QueryWrapper checkUidQuery = QueryWrapper.create().select(StorageItemsDO::getId).where(StorageItemsDO::getUid).eq(item.getUid());
             if (storageItemsMapper.selectOneByQuery(checkUidQuery) != null) {
                 log.error("发现重复 UID 物品入库尝试 (仓库)! UID: {}, ItemID: {}, StorageID: {}", item.getUid(), item.getItemId(), storageId);
-                traceabilityService.log(item, null, TraceabilityService.ActionType.ADMIN_DELETE, "重复UID已阻止", 0, "因UID重复，已阻止存入仓库", "仓库ID: " + storageId);
+                traceabilityService.log(item, 0, 0, 0, TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_DELETE, 0, "因UID重复，已阻止存入仓库", "仓库ID: " + storageId);
                 throw new RuntimeException("检测到重复的UID: " + item.getUid());
             }
         }
@@ -93,7 +93,7 @@ public class StorageService {
 
         // 统一在 TraceabilityService.log 中记录，防止重复
         // AuditLogger.info(LogModule.ITEM, LogAction.STORAGE_IN, new MapMessage().with("storageId", storageId).with("itm", item.getItemId()).with("cnt", item.getQuantity()).with("uid", item.getUid()));
-        traceabilityService.log(item, 0, 0, 0, TraceabilityService.ActionType.STORAGE_IN, "仓库存入", 0, "StorageID: " + storageId, null);
+//        traceabilityService.log(item, 0, 0, 0, TraceabilityService.ActionType.STORAGE, TraceabilityService.ActionSourceType.STORAGE_PUT_IN, -item.getQuantity(), "StorageID: " + storageId);
     }
 
     /**
@@ -115,7 +115,7 @@ public class StorageService {
 
         // 统一在 TraceabilityService.log 中记录，防止重复
         // AuditLogger.info(LogModule.ITEM, LogAction.STORAGE_OUT, new MapMessage().with("storageId", storageId).with("itm", item.getItemId()).with("cnt", item.getQuantity()).with("uid", item.getUid()));
-        traceabilityService.log(item, 0, 0, 0, TraceabilityService.ActionType.STORAGE_OUT, "仓库取出", 0, "StorageID: " + storageId, null);
+        //traceabilityService.log(item, 0, 0, 0, TraceabilityService.ActionType.STORAGE, TraceabilityService.ActionSourceType.STORAGE_TAKE_OUT, item.getQuantity(), "StorageID: " + storageId);
     }
 
     /**

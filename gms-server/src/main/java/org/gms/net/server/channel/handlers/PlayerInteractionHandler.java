@@ -39,6 +39,7 @@ import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.service.HiredMerchantService;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -916,18 +917,14 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                 PlayerShop shop = chr.getPlayerShop();
                 HiredMerchant merchant = chr.getHiredMerchant();
                 if (shop != null && shop.isOwner(chr)) {
-                    if (shop.isOpen() || !shop.addItem(shopItem)) { // thanks Vcoc for pointing an exploit with unlimited shop slots    //感谢Vcoc指出了一个具有无限商店插槽的漏洞
+                    if (shop.isOpen() || !shop.addItem(shopItem,ivItem)) { // thanks Vcoc for pointing an exploit with unlimited shop slots    //感谢Vcoc指出了一个具有无限商店插槽的漏洞
                         c.sendPacket(PacketCreator.serverNotice(1, I18nUtil.getMessage("PlayerInteractionHandler.message11")));
                         c.getPlayer().enableActions();
                         return;
                     }
 
-                    if (ItemConstants.isRechargeable(ivItem.getItemId())) {
-                        InventoryManipulator.removeFromSlot(c, ivType, slot, ivItem.getQuantity(), true);
-                    } else {
-                        InventoryManipulator.removeFromSlot(c, ivType, slot, (short) (bundles * perBundle), true);
-                    }
-
+                    short quantity = ItemConstants.isRechargeable(ivItem.getItemId()) ? ivItem.getQuantity() : (short) (bundles * perBundle);
+                    InventoryManipulator.removeFromSlot(c, ivType, slot, quantity, true);
                     c.sendPacket(PacketCreator.getPlayerShopItemUpdate(shop));
                 } else if (merchant != null && merchant.isOwner(chr)) {
                     if (ivType.equals(InventoryType.CASH) && merchant.isPublished()) {
@@ -937,7 +934,7 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                     }
 
                     // 尝试添加到商店（包括数据库操作）
-                    if (merchant.isOpen() || !merchant.addItem(shopItem)) { 
+                    if (merchant.isOpen() || !merchant.addItem(shopItem,ivItem)) {
                         c.sendPacket(PacketCreator.serverNotice(1, I18nUtil.getMessage("PlayerInteractionHandler.message11")));
                         c.getPlayer().enableActions();
                         return;

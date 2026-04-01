@@ -63,6 +63,14 @@ export interface ActionTypeDTO {
 }
 
 /**
+ * @zh-CN 行为来源前缀DTO
+ */
+export interface ActionSourceTypeDTO {
+  value: string;
+  label: string;
+}
+
+/**
  * (V1) 根据条件查询物品流转日志
  * @param params 查询参数
  */
@@ -102,4 +110,20 @@ export function updateTraceabilityConfig(config: any) {
  */
 export function getTraceabilityStats() {
   return axios.get('/v1/traceability/stats');
+}
+
+/**
+ * (V2) 获取所有行为类型
+ */
+export function getActionTypes() {
+  return axios.get<ActionTypeDTO[]>('/v1/traceability/action-types');
+}
+
+/**
+ * (V2) 获取所有行为来源前缀
+ */
+export function getActionSourceTypes() {
+  return axios.get<ActionSourceTypeDTO[]>(
+    '/v1/traceability/action-source-types'
+  );
 }

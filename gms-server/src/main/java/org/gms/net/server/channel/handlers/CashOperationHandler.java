@@ -58,9 +58,7 @@ import org.gms.util.Pair;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.concurrent.TimeUnit.DAYS;
 
@@ -80,7 +78,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
         CashShop cs = chr.getCashShop();
 
         if (!cs.isOpened()) {
-            c.sendPacket(PacketCreator.enableActions());
+            c.enableActions();
             return;
         }
 
@@ -101,6 +99,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         return;
                     }
 
+                    String itemName = ItemInformationProvider.getInstance().getName(cItem.getItemId());
                     if (action == 0x03) { // 道具
                         if (ItemConstants.isCashStore(cItem.getItemId()) && chr.getLevel() < 16) {
                             c.enableCSActions();
@@ -114,9 +113,6 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                         cs.gainCash(useNX, cItem, chr.getWorld());  // 感谢 Rohenn 注意到道具获取后的现金操作
                         cs.addToInventory(item);
                         c.sendPacket(PacketCreator.showBoughtCashItem(item, c.getAccID()));
-                        
-                        // 日志记录
-                        traceabilityService.log(item, chr, TraceabilityService.ActionType.CS_IN, "从商城购买", 1);
                     } else { // 礼包
                         cs.gainCash(useNX, cItem, chr.getWorld());
 
@@ -128,9 +124,11 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                                 }
                             }
                             cs.addToInventory(item);
-                            
                             // 日志记录
-                            traceabilityService.log(item, chr, TraceabilityService.ActionType.CS_IN, "商城礼包购买", 1);
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.CASH_SHOP, TraceabilityService.ActionSourceType.CS_BUY, 1,
+                                    String.format("购买自礼包 [%d] %s (SN: %d)",cItem.getItemId(),itemName,cItem.getSn()),
+                                    String.format("[%d] %s (SN: %d)",item.getItemId(),ItemInformationProvider.getInstance().getName(item.getItemId()),item.getSN())
+                            );
                         }
                         c.sendPacket(PacketCreator.showBoughtCashPackage(cashPackage, c.getAccID()));
                         log.info("玩家 {} 购买的礼包 {} (SN {}) 内含如下道具：[\r\n{}\r\n]",
@@ -144,7 +142,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                                     ).toList()
                                 )
                         );
-                        AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("itm", cItem.getItemId()).with("sn", snCS).with("cost", cItem.getPrice()).with("msg", "礼包"));
+//                        AuditLogger.info(LogModule.CASH_SHOP, LogAction.CS_BUY, new MapMessage().with("itm", cItem.getItemId()).with("sn", snCS).with("cost", cItem.getPrice()).with("msg", "礼包"));
                     }
                     c.sendPacket(PacketCreator.showCash(chr));
                     cs.save(); // 购买后保存商城数据
@@ -378,7 +376,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                             cs.save();
                             
                             // 日志记录
-                            traceabilityService.log(item, chr, TraceabilityService.ActionType.CS_OUT, "从商城取出", 1);
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.CASH_SHOP, TraceabilityService.ActionSourceType.CS_TAKE_OUT, 1);
                         } else {
                              c.sendPacket(PacketCreator.showCashShopMessage((byte) 0xA9)); // Inventory Full (should be caught by checkSpace but just in case)
                         }
@@ -422,7 +420,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                     );
                     
                     // 日志记录
-                    traceabilityService.log(item, chr, TraceabilityService.ActionType.CS_IN, "存入商城保管箱", -1);
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.CASH_SHOP, TraceabilityService.ActionSourceType.CS_PUT_IN, -1);
                 } else if (action == 0x1D) { // 情侣戒指 (action 28)
                     int birthday = p.readInt();
                     if (checkBirthday(c, birthday)) {
@@ -603,7 +601,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
                 c.releaseClient();
             }
         } else {
-            c.sendPacket(PacketCreator.enableActions());
+            c.enableActions();
         }
     }
 
@@ -625,6 +623,7 @@ public final class CashOperationHandler extends AbstractPacketHandler {
         // 将重复调用的方法设为变量
         String playerName = chr.getName();
         String itemName = ItemInformationProvider.getInstance().getName(cItem.getItemId());
+        Item item = cItem.toItem();
         int itemId = cItem.getItemId();
         int sn = cItem.getSn();
         int price = cItem.getPrice();
@@ -647,7 +646,6 @@ public final class CashOperationHandler extends AbstractPacketHandler {
         }
 
         if (GameConfig.getServerBoolean("use_pet_equip_permanent") && ItemConstants.isPetEquip(itemId)) {//商城是否允许将可升级次数>0的宠物装备时效设为永久。
-            Item item = cItem.toItem();
             if (item.getInventoryType().equals(InventoryType.EQUIP) && ((Equip) item).getUpgradeSlots() > 0) {
                 cItem.setPeriod(-1L);
             }
@@ -659,6 +657,10 @@ public final class CashOperationHandler extends AbstractPacketHandler {
         String cashName = chr.getCashShop().getCashName(useNX);
 
         log.info("玩家 {} 购买了现金道具 {}({}) (SN {}) 有效期 {} 数量 {} 花费 {}{}",playerName, itemName, itemId, sn, periodDesc, cItem.getCount(), price, cashName);
+        // 日志记录
+        traceabilityService.log(item, chr, TraceabilityService.ActionType.CASH_SHOP, TraceabilityService.ActionSourceType.CS_BUY, 1,
+                !CashItemFactory.isPackage(cItem.getItemId()) ? null : String.format("礼包 [%d] %s (SN: %d)",item.getItemId(),itemName,item.getSN()),
+                String.format("花费 %d %s",price,cashName));
         return true;
     }
 }

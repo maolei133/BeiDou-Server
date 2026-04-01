@@ -34,6 +34,7 @@ import org.gms.net.server.coordinator.world.InviteCoordinator;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResult;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResultType;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteType;
+import org.gms.server.logging.AuditContext;
 import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 import org.gms.util.SnowflakeIdGenerator;
@@ -126,28 +127,30 @@ public class Trade {
     private void completeTrade() {
         byte result;
         boolean show = GameConfig.getServerBoolean("use_debug");
-        
+
         // 对方玩家信息
         Character partnerChr = partner.getChr();
-        
-        // 记录对方失去的物品
+
+        // 记录我方【失去】的物品
         for (Item item : items) {
-            // 溯源日志：记录对方失去物品
-            String sourceForPartner = String.format("与玩家 %s(%d) 交易失去", chr.getName(), chr.getId());
-            traceabilityService.log(item, partnerChr, TraceabilityService.ActionType.TRADE, sourceForPartner, -item.getQuantity());
+            // 溯源日志：记录我方失去物品，交易给对方
+            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, TraceabilityService.ActionSourceType.PLAYER_TRADE, -item.getQuantity(), partnerChr.getId(), partnerChr.getName());
         }
 
         items.clear();
         meso = 0;
 
+        // 记录我方【获得】的物品
+        AuditContext.set(partnerChr.getClient());
         for (Item item : exchangeItems) {
             KarmaManipulator.toggleKarmaFlagToUntradeable(item);
             InventoryManipulator.addFromDrop(chr.getClient(), item, show);
-            
-            // 溯源日志：记录我方获得物品
-            String sourceForLocal = String.format("与玩家 %s(%d) 交易获得", partnerChr.getName(), partnerChr.getId());
-            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, sourceForLocal, item.getQuantity());
+
+            // 溯源日志：记录我方获得物品，从对方处获得
+            traceabilityService.log(item, partnerChr, TraceabilityService.ActionType.TRADE, TraceabilityService.ActionSourceType.PLAYER_TRADE, item.getQuantity(),  chr.getId(), chr.getName());
         }
+        AuditContext.clear();
+        AuditContext.set(chr.getClient());
 
         if (exchangeMeso > 0) {//此处对金币交易进行扣税处理
             int fee = getFee(exchangeMeso);

@@ -65,21 +65,21 @@ public final class UseItemHandler extends AbstractPacketHandler {
         if (toUse != null && toUse.getQuantity() > 0 && toUse.getItemId() == itemId) {
             if (itemId == ItemId.ALL_CURE_POTION) {
                 chr.dispelDebuffs();
-                remove(c, slot, itemId);
+                remove(c, slot, toUse);
                 return;
             } else if (itemId == ItemId.EYEDROP) {
                 chr.dispelDebuff(Disease.DARKNESS);
-                remove(c, slot, itemId);
+                remove(c, slot, toUse);
                 return;
             } else if (itemId == ItemId.TONIC) {
                 chr.dispelDebuff(Disease.WEAKEN);
                 chr.dispelDebuff(Disease.SLOW);
-                remove(c, slot, itemId);
+                remove(c, slot, toUse);
                 return;
             } else if (itemId == ItemId.HOLY_WATER) {
                 chr.dispelDebuff(Disease.SEAL);
                 chr.dispelDebuff(Disease.CURSE);
-                remove(c, slot, itemId);
+                remove(c, slot, toUse);
                 return;
             } else if (ItemConstants.isTownScroll(itemId)) {
                 int banMap = chr.getMapId();
@@ -91,19 +91,19 @@ public final class UseItemHandler extends AbstractPacketHandler {
                         chr.setBanishPlayerData(banMap, banSp, banTime);
                     }
 
-                    remove(c, slot, itemId);
+                    remove(c, slot, toUse);
                 }
                 return;
             } else if (ItemConstants.isAntibanishScroll(itemId)) {
                 if (ii.getItemEffect(toUse.getItemId()).applyTo(chr)) {
-                    remove(c, slot, itemId);
+                    remove(c, slot, toUse);
                 } else {
                     chr.dropMessage(5, I18nUtil.getMessage("UseItemHandler.message1"));
                 }
                 return;
             }
 
-            remove(c, slot, itemId);
+            remove(c, slot, toUse);
 
             if (toUse.getItemId() != ItemId.HAPPY_BIRTHDAY) {
                 ii.getItemEffect(toUse.getItemId()).applyTo(chr);
@@ -116,14 +116,10 @@ public final class UseItemHandler extends AbstractPacketHandler {
         }
     }
 
-    private void remove(Client c, short slot, int itemId) {
-        // 记录溯源日志
-        Item item = c.getPlayer().getInventory(InventoryType.USE).getItem(slot);
-        if (item != null) {
-            traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.USE, "物品使用", -1);
-        }
-
+    private void remove(Client c, short slot, Item item) {
         InventoryManipulator.removeFromSlot(c, InventoryType.USE, slot, (short) 1, false);
-        c.sendPacket(PacketCreator.enableActions());
+        c.enableActions();
+        // 记录溯源日志
+        traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_USE, -1, null, String.format("数量: %d -> %d", item.getQuantity() + 1, item.getQuantity()));
     }
 }

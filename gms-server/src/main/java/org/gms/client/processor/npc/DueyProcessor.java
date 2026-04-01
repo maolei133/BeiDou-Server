@@ -313,10 +313,6 @@ public class DueyProcessor {
             Item itemToSend = item.copy();
             itemToSend.setQuantity(amount);
 
-            // 溯源日志：记录发送操作
-            String source = String.format("通过快递发送给 %s", recipient);
-            traceabilityService.log(itemToSend, c.getPlayer(), TraceabilityService.ActionType.DUEY_SEND, source, -amount, "PackageID: " + packageId, null);
-
             InventoryManipulator.removeFromSlot(c, invType, itemPos, ItemConstants.isRechargeable(item.getItemId()) ? item.getQuantity() : amount, true, false);
             
             KarmaManipulator.toggleKarmaFlagToUntradeable(itemToSend);
@@ -331,6 +327,10 @@ public class DueyProcessor {
                         .set(DueypackagesDO::getItemId, itemToSend.getItemId())
                         .where(DueypackagesDO::getPackageid).eq(packageId)
                         .update();
+                
+                // 溯源日志：记录发送操作
+                var recipientIds = getAccountCharacterIdFromCNAME(recipient);
+                traceabilityService.log(itemToSend, c.getPlayer(), TraceabilityService.ActionType.DUEY, TraceabilityService.ActionSourceType.DUEY_SEND, -amount, null, null, recipientIds.getRight(), recipient);
                 
                 return itemToSend;
             } catch (JsonProcessingException e) {
@@ -461,13 +461,19 @@ public class DueyProcessor {
     public static void dueyRemovePackage(Client c, int packageid, boolean playerRemove) {
         if (c.tryacquireClient()) {
             try {
-                UpdateChain.of(DueypackagesDO.class)
-                        .set(DueypackagesDO::getChecked, 4)
-                        .set(DueypackagesDO::getStatusTime, new Timestamp(System.currentTimeMillis()))
-                        .where(DueypackagesDO::getPackageid).eq(packageid).update();
+                DueypackagesMapper mapper = SpringContextUtil.getBean(DueypackagesMapper.class);
+                DueypackagesDO pkg = mapper.selectOneById(packageid);
                 
-                traceabilityService.log(null, c.getPlayer(), TraceabilityService.ActionType.DUEY_DELETE, "快递删除", 0, "PackageID: " + packageid, null);
-                c.sendPacket(PacketCreator.removeItemFromDuey(playerRemove, packageid));
+                if (pkg != null && Objects.equals(pkg.getReceiverid(), (long)c.getPlayer().getId())) {
+                    UpdateChain.of(DueypackagesDO.class)
+                            .set(DueypackagesDO::getChecked, 4)
+                            .set(DueypackagesDO::getStatusTime, new Timestamp(System.currentTimeMillis()))
+                            .where(DueypackagesDO::getPackageid).eq(packageid).update();
+                    
+                    // 溯源日志：记录删除操作
+                    traceabilityService.log(null, c.getPlayer(), TraceabilityService.ActionType.DUEY, TraceabilityService.ActionSourceType.DUEY_DELETE, 0, null, null, (long)pkg.getSenderid(), pkg.getSendername());
+                    c.sendPacket(PacketCreator.removeItemFromDuey(playerRemove, packageid));
+                }
             } finally {
                 c.releaseClient();
             }
@@ -517,8 +523,7 @@ public class DueyProcessor {
             InventoryManipulator.addFromDrop(c, dpItem, false);
             
             // 溯源日志：记录接收操作
-            String source = String.format("从快递接收 (%s)", dp.getSender());
-            traceabilityService.log(dpItem, c.getPlayer(), TraceabilityService.ActionType.DUEY_RECEIVE, source, dpItem.getQuantity(), "PackageID: " + packageId, null);
+            traceabilityService.log(dpItem, c.getPlayer(), TraceabilityService.ActionType.DUEY, TraceabilityService.ActionSourceType.DUEY_RECEIVE, dpItem.getQuantity(), null, null, dpData.getSenderid(), dp.getSender());
         }
 
         c.getPlayer().gainMeso(dp.getMesos(), false);
@@ -615,6 +620,12 @@ public class DueyProcessor {
                         CharactersDO receiver = charMapper.selectOneById(pkg.getReceiverid());
                         String receiverName = (receiver != null) ? receiver.getName() : "未知";
                         String returnMessage = String.format("您于 %s 寄给 %s 的包裹超时未领取，已自动退回。", sdf.format(pkg.getTimestamp()), receiverName);
+                        
+                        // 溯源日志：记录退回操作
+                        if (item != null) {
+                            traceabilityService.log(item, sender.getAccountid(), sender.getId(), -1, TraceabilityService.ActionType.DUEY, TraceabilityService.ActionSourceType.DUEY_RETURN, item.getQuantity(), null, null, pkg.getReceiverid(), receiverName);
+                        }
+
                         createPackage(pkg.getMesos().intValue(), returnMessage, "包裹超时退回", sender.getId(), false, item, pkg.getPackageid().intValue(), -1, 0, 2);
                     }
                 }
