@@ -176,7 +176,7 @@ function levelShowBulkDeleteList() {
             let isLocked = (item.getFlag() & ItemConstants.LOCK) !== 0;
 
             if (isLocked) {
-                text += `   ${LOCKED_SYMBOL} #i${item.getItemId()}# #t${item.getItemId()}# × ${item.getQuantity()}\r\n`;
+                text += `\r\n   \t${LOCKED_SYMBOL} #i${item.getItemId()}# #t${item.getItemId()}# × ${item.getQuantity()}\r\n`;
             } else {
                 let symbol = selectionState[pos] ? CHECK_SYMBOL : UNCHECK_SYMBOL;
                 text += `#L${pos}#${symbol} #i${item.getItemId()}# #t${item.getItemId()}# × ${item.getQuantity()}#l\r\n`;
