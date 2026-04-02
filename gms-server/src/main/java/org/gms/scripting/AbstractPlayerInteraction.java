@@ -755,7 +755,7 @@ public class AbstractPlayerInteraction {
             }
 
             if (!InventoryManipulator.checkSpace(c, id, quantity, "")) {
-                c.getPlayer().dropMessage(1, "Your inventory is full. Please remove an item from your " + ItemConstants.getInventoryType(id).name() + " inventory.");
+                c.getPlayer().dropMessage(1, "您的背包已满。请从您的 " + ItemConstants.getInventoryType(id).name() + " 背包中移除一些物品。");
                 return null;
             }
             if (ItemConstants.getInventoryType(id) == InventoryType.EQUIP) {
@@ -775,7 +775,7 @@ public class AbstractPlayerInteraction {
             // 记录溯源日志：脚本移除物品
             Item toRemove = c.getPlayer().getInventory(ItemConstants.getInventoryType(id)).findById(id);
             if (toRemove != null) {
-                traceabilityService.log(toRemove, c.getPlayer(), getScriptActionType(), TraceabilityService.ActionSourceType.SCRIPT_REMOVE_ITEM, quantity, getTargetInfo(), String.format("数量: %d -> %d", toRemove.getQuantity(), toRemove.getQuantity() - quantity));
+                traceabilityService.log(toRemove, c.getPlayer(), getScriptActionType(), TraceabilityService.ActionSourceType.SCRIPT_REMOVE_ITEM, quantity, getTargetInfo(), String.format("数量: %d -> %d", toRemove.getQuantity(), toRemove.getQuantity() + quantity));
             }
             
             InventoryManipulator.removeById(c, ItemConstants.getInventoryType(id), id, -quantity, true, false);
