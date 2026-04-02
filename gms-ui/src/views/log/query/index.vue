@@ -2,14 +2,13 @@
   <div class="container">
     <Breadcrumb :items="['menu.log', 'menu.log.query']" />
 
-    <!-- 1. 系统状态区域 -->
+    <!-- 1. 查询表单区域 -->
     <a-card class="general-card" :title="$t('log.query.title')">
       <a-row>
         <a-col :flex="1">
           <a-form :model="form" label-col-flex="70px" label-align="left">
             <a-row :gutter="12">
-              <!-- 第一行 -->
-              <!-- 时间范围 (较宽) -->
+              <!-- 时间范围 -->
               <a-col :span="5">
                 <a-form-item
                   field="timeRange"
@@ -32,17 +31,33 @@
                 <a-form-item field="range" :label="$t('log.query.form.range')">
                   <a-select
                     v-model="form.range"
-                    placeholder="请选择"
+                    :placeholder="$t('log.query.form.placeholder.select')"
                     @change="handleRangeChange"
                   >
-                    <a-option value="1h">1小时</a-option>
-                    <a-option value="6h">6小时</a-option>
-                    <a-option value="12h">12小时</a-option>
-                    <a-option value="24h">1天</a-option>
-                    <a-option value="72h">3天</a-option>
-                    <a-option value="168h">7天</a-option>
-                    <a-option value="360h">15天</a-option>
-                    <a-option value="720h">30天</a-option>
+                    <a-option value="1h">{{
+                      $t('log.query.form.range.1h')
+                    }}</a-option>
+                    <a-option value="6h">{{
+                      $t('log.query.form.range.6h')
+                    }}</a-option>
+                    <a-option value="12h">{{
+                      $t('log.query.form.range.12h')
+                    }}</a-option>
+                    <a-option value="24h">{{
+                      $t('log.query.form.range.24h')
+                    }}</a-option>
+                    <a-option value="72h">{{
+                      $t('log.query.form.range.72h')
+                    }}</a-option>
+                    <a-option value="168h">{{
+                      $t('log.query.form.range.168h')
+                    }}</a-option>
+                    <a-option value="360h">{{
+                      $t('log.query.form.range.360h')
+                    }}</a-option>
+                    <a-option value="720h">{{
+                      $t('log.query.form.range.720h')
+                    }}</a-option>
                   </a-select>
                 </a-form-item>
               </a-col>
@@ -51,7 +66,7 @@
                 <a-form-item field="mod" :label="$t('log.query.form.mod')">
                   <a-select
                     v-model="form.mod"
-                    placeholder="全部"
+                    :placeholder="$t('log.query.form.placeholder.all')"
                     allow-clear
                     allow-search
                   >
@@ -71,7 +86,7 @@
                   <a-auto-complete
                     v-model="form.act"
                     :data="actOptions"
-                    placeholder="全部"
+                    :placeholder="$t('log.query.form.placeholder.all')"
                     allow-clear
                     @search="handleActSearch"
                   />
@@ -82,7 +97,9 @@
                 <a-form-item field="acc" :label="$t('log.query.form.acc')">
                   <a-select
                     v-model="form.acc"
-                    placeholder="搜索账号"
+                    :placeholder="
+                      $t('log.query.form.placeholder.searchAccount')
+                    "
                     allow-clear
                     allow-search
                     :loading="accountSearchLoading"
@@ -104,7 +121,9 @@
                 <a-form-item field="chr" :label="$t('log.query.form.chr')">
                   <a-select
                     v-model="form.chr"
-                    placeholder="搜索角色"
+                    :placeholder="
+                      $t('log.query.form.placeholder.searchCharacter')
+                    "
                     allow-clear
                     allow-search
                     :loading="characterSearchLoading"
@@ -122,13 +141,12 @@
                 </a-form-item>
               </a-col>
 
-              <!-- 第二行 -->
               <!-- IP -->
               <a-col :span="5">
                 <a-form-item field="ip" :label="$t('log.query.form.ip')">
                   <a-select
                     v-model="form.ip"
-                    placeholder="搜索IP"
+                    :placeholder="$t('log.query.form.placeholder.searchIp')"
                     allow-clear
                     allow-search
                     :loading="ipSearchLoading"
@@ -150,7 +168,7 @@
                 <a-form-item field="mac" :label="$t('log.query.form.mac')">
                   <a-select
                     v-model="form.mac"
-                    placeholder="搜索MAC"
+                    :placeholder="$t('log.query.form.placeholder.searchMac')"
                     allow-clear
                     allow-search
                     :loading="macSearchLoading"
@@ -172,7 +190,7 @@
                 <a-form-item field="hwid" :label="$t('log.query.form.hwid')">
                   <a-select
                     v-model="form.hwid"
-                    placeholder="搜索HWID"
+                    :placeholder="$t('log.query.form.placeholder.searchHwid')"
                     allow-clear
                     allow-search
                     :loading="hwidSearchLoading"
@@ -219,14 +237,50 @@
       </a-row>
       <a-divider style="margin-top: 0; margin-bottom: 10px" />
 
+      <!-- 自定义分页导航 -->
+      <div class="pagination-controls">
+        <a-space>
+          <a-button
+            type="primary"
+            :disabled="!canGoNewer"
+            @click="goToNewerPage"
+          >
+            <template #icon><icon-left /></template>
+            {{ $t('log.query.pagination.newer') }}
+          </a-button>
+          <a-button
+            type="primary"
+            :disabled="!canGoOlder"
+            @click="goToOlderPage"
+          >
+            {{ $t('log.query.pagination.older') }}
+            <template #icon><icon-right /></template>
+          </a-button>
+          <span>{{
+            $t('log.query.pagination.page', { page: currentPageIndex + 1 })
+          }}</span>
+        </a-space>
+        <a-space>
+          <span>{{ $t('log.query.pagination.limit') }}</span>
+          <a-select
+            v-model="form.limit"
+            style="width: 100px"
+            @change="handleLimitChange"
+          >
+            <a-option :value="50">50</a-option>
+            <a-option :value="100">100</a-option>
+            <a-option :value="200">200</a-option>
+            <a-option :value="500">500</a-option>
+          </a-select>
+        </a-space>
+      </div>
+
       <div ref="tableContainerRef" class="table-container">
         <a-table
           :data="data"
           :loading="loading"
-          :pagination="pagination"
+          :pagination="false"
           :scroll="{ y: tableHeight }"
-          @page-change="onPageChange"
-          @page-size-change="onPageSizeChange"
         >
           <template #columns>
             <a-table-column
@@ -239,29 +293,37 @@
               </template>
             </a-table-column>
             <a-table-column
-              :title="$t('log.query.table.mod')"
+              :title="$t('log.query.table.moduleAndAction')"
               data-index="mod"
-              :width="100"
+              :width="220"
             >
               <template #cell="{ record }">
-                {{
-                  $te(`log.module.${record.mod}`)
-                    ? $t(`log.module.${record.mod}`)
-                    : record.mod
-                }}
-              </template>
-            </a-table-column>
-            <a-table-column
-              :title="$t('log.query.table.act')"
-              data-index="act"
-              :width="150"
-            >
-              <template #cell="{ record }">
-                {{
-                  $te(`log.action.${record.act}`)
-                    ? $t(`log.action.${record.act}`)
-                    : record.act
-                }}
+                <div v-if="record.mod && record.mod !== '-'">
+                  <div class="info-row">
+                    <span class="label">{{
+                      $t('log.query.label.module')
+                    }}</span>
+                    <span class="separator"></span>
+                    <span class="value">{{
+                      $te(`log.module.${record.mod}`)
+                        ? $t(`log.module.${record.mod}`)
+                        : record.mod
+                    }}</span>
+                  </div>
+                </div>
+                <div v-if="record.act && record.act !== '-'">
+                  <div class="info-row">
+                    <span class="label">{{
+                      $t('log.query.label.action')
+                    }}</span>
+                    <span class="separator"></span>
+                    <span class="value">{{
+                      $te(`log.action.${record.act}`)
+                        ? $t(`log.action.${record.act}`)
+                        : record.act
+                    }}</span>
+                  </div>
+                </div>
               </template>
             </a-table-column>
             <a-table-column
@@ -317,7 +379,9 @@
               :width="150"
             >
               <template #cell="{ record }">
-                <div>{{ record.mapName }}</div>
+                <div style="font-size: 13px">
+                  <div>{{ record.mapName }}</div>
+                </div>
                 <div style="color: var(--color-text-3); font-size: 12px">
                   {{ record.map }}
                 </div>
@@ -389,7 +453,12 @@
                 <div>{{ record.msg }}</div>
                 <!-- 显示额外信息 -->
                 <div v-if="record.mobName" class="log-raw">
-                  怪物: {{ record.mobName }} ({{ record.mob }})
+                  {{
+                    $t('log.query.table.extra.monster', {
+                      name: record.mobName,
+                      id: record.mob,
+                    })
+                  }}
                 </div>
               </template>
             </a-table-column>
@@ -401,17 +470,24 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue';
+  import {
+    computed,
+    nextTick,
+    onMounted,
+    onUnmounted,
+    reactive,
+    ref,
+  } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
-    queryLogs,
     getModuleConfig,
+    queryLogs,
     searchAccount,
     searchCharacter,
-    searchIp,
-    searchMac,
     searchHwid,
+    searchIp,
     searchLogs,
+    searchMac,
   } from '@/api/log';
   import { Message } from '@arco-design/web-vue';
   import dayjs from 'dayjs';
@@ -429,36 +505,34 @@
     mac: '',
     hwid: '',
     msg: '',
-    limit: 100,
+    limit: 100, // 默认每页100条
   });
   const data = ref<any[]>([]);
   const moduleOptions = ref<string[]>([]);
   const actOptions = ref<string[]>([]);
 
+  // --- 搜索下拉框选项 ---
   const accountOptions = ref<any[]>([]);
   const accountSearchLoading = ref(false);
-
   const characterOptions = ref<any[]>([]);
   const characterSearchLoading = ref(false);
-
   const ipOptions = ref<string[]>([]);
   const ipSearchLoading = ref(false);
-
   const macOptions = ref<string[]>([]);
   const macSearchLoading = ref(false);
-
   const hwidOptions = ref<string[]>([]);
   const hwidSearchLoading = ref(false);
 
-  const pagination = reactive({
-    current: 1,
-    pageSize: 50,
-    total: 0,
-    showTotal: true,
-    showJumper: true,
-    showPageSize: true,
-    pageSizeOptions: [50, 100, 200, 500],
-  });
+  // --- 时间游标分页状态 ---
+  const currentPageIndex = ref(0); // 当前页码索引，从0开始
+  const timeCursors = ref<number[]>([]); // 存储每页的结束时间戳 (纳秒)
+  const currentLogQL = ref(''); // 保存当前查询的LogQL，用于翻页
+  const paginationStart = ref<number | undefined>(); // 保存整个分页生命周期的绝对开始时间
+
+  const canGoNewer = computed(() => currentPageIndex.value > 0);
+  const canGoOlder = computed(
+    () => timeCursors.value[currentPageIndex.value + 1] !== undefined
+  );
 
   // 表格高度自适应
   const tableContainerRef = ref<HTMLElement | null>(null);
@@ -468,8 +542,7 @@
     if (tableContainerRef.value) {
       const { top } = tableContainerRef.value.getBoundingClientRect();
       const windowHeight = window.innerHeight;
-      // 预留底部 padding 和 分页器高度 (约 60px)
-      tableHeight.value = windowHeight - top - 60;
+      tableHeight.value = windowHeight - top - 110; // 预留更多空间给分页器
     }
   };
 
@@ -483,6 +556,7 @@
     }
   };
 
+  // --- 各种搜索处理函数 (无变化) ---
   const handleActSearch = async (value: string) => {
     if (value) {
       try {
@@ -495,7 +569,6 @@
       actOptions.value = [];
     }
   };
-
   const handleAccountSearch = async (value: string) => {
     if (value) {
       accountSearchLoading.value = true;
@@ -511,7 +584,6 @@
       accountOptions.value = [];
     }
   };
-
   const handleCharacterSearch = async (value: string) => {
     if (value) {
       characterSearchLoading.value = true;
@@ -527,7 +599,6 @@
       characterOptions.value = [];
     }
   };
-
   const handleIpSearch = async (value: string) => {
     if (value) {
       ipSearchLoading.value = true;
@@ -543,7 +614,6 @@
       ipOptions.value = [];
     }
   };
-
   const handleMacSearch = async (value: string) => {
     if (value) {
       macSearchLoading.value = true;
@@ -559,7 +629,6 @@
       macOptions.value = [];
     }
   };
-
   const handleHwidSearch = async (value: string) => {
     if (value) {
       hwidSearchLoading.value = true;
@@ -590,27 +659,102 @@
     }
   };
 
-  const search = async () => {
+  // 核心查询函数
+  const executeQuery = async (
+    query: string,
+    limit: number,
+    start?: number,
+    end?: number,
+    range?: string
+  ) => {
     loading.value = true;
-    // LogQL 查询构建
-    // 1. 解析 JSON
-    let logql = '{job="gms-audit"} | json';
+    try {
+      const res = await queryLogs({ query, limit, start, end, range });
+      // @ts-ignore
+      const lokiData = res.data;
+      const result = lokiData?.data?.result || [];
 
-    // 2. 过滤条件 (使用新字段名)
+      const allLogs = result
+        .map((item: any) => {
+          const streamData = item.stream || {};
+          return item.values.map((val: any[]) => {
+            let timestampMs: number;
+            let rawLogObject: any = {};
+
+            try {
+              rawLogObject = JSON.parse(val[1]);
+            } catch (e) {
+              // ignore
+            }
+
+            if (
+              rawLogObject.ts &&
+              !Number.isNaN(parseInt(rawLogObject.ts, 10))
+            ) {
+              timestampMs = parseInt(rawLogObject.ts, 10);
+            } else {
+              const nanoTs = val[0];
+              if (nanoTs && nanoTs.length >= 13) {
+                timestampMs = parseInt(nanoTs.substring(0, 13), 10);
+              } else {
+                timestampMs = 0;
+              }
+            }
+
+            return {
+              ...streamData,
+              ...rawLogObject,
+              ts: timestampMs,
+              msg: rawLogObject.msg || streamData.msg || val[1],
+              raw: val[1],
+            };
+          });
+        })
+        .flat()
+        .sort((a: any, b: any) => b.ts - a.ts);
+
+      data.value = allLogs;
+
+      if (allLogs.length === limit && allLogs.length > 0) {
+        const lastLogTs = allLogs[allLogs.length - 1].ts;
+        timeCursors.value[currentPageIndex.value + 1] = lastLogTs * 1000000;
+      } else {
+        timeCursors.value.splice(currentPageIndex.value + 1);
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+      Message.error(t('log.query.message.fail'));
+      data.value = [];
+      timeCursors.value.splice(currentPageIndex.value + 1);
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // 构建LogQL查询语句
+  const buildLogQL = () => {
+    let logql = '{job="gms-audit"}';
+
+    // 关键词模糊搜索，使用 case-insensitive regex 作用于原始日志行
+    if (form.msg) {
+      // Escape special regex characters to treat user input as a literal string
+      const escapedMsg = form.msg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      logql += ` |~ "(?i)${escapedMsg}"`;
+    }
+
+    // 先解析JSON，再进行字段过滤
+    logql += ' | json';
+
     if (form.mod) logql += ` | mod="${form.mod}"`;
     if (form.act) logql += ` | act="${form.act}"`;
-
-    // 账号ID和名称混合筛选
     if (form.acc) {
-      // 尝试判断是否为纯数字，如果是则同时匹配 aid 或 acc
       if (/^\d+$/.test(form.acc)) {
         logql += ` | (acc="${form.acc}" or aid="${form.acc}")`;
       } else {
         logql += ` | acc="${form.acc}"`;
       }
     }
-
-    // 角色ID和名称混合筛选
     if (form.chr) {
       if (/^\d+$/.test(form.chr)) {
         logql += ` | (chr="${form.chr}" or cid="${form.chr}")`;
@@ -618,119 +762,99 @@
         logql += ` | chr="${form.chr}"`;
       }
     }
-
     if (form.ip) logql += ` | ip="${form.ip}"`;
     if (form.hwid) logql += ` | hwid="${form.hwid}"`;
-
-    // MAC地址支持模糊匹配或包含匹配，因为macs可能是列表
     if (form.mac) {
-      // 支持多个MAC筛选，逗号分隔
       const macs = form.mac
         .split(/[,，]/)
         .map((m) => m.trim())
         .filter((m) => m);
       if (macs.length > 0) {
-        // 构造正则匹配: macs字段包含其中任意一个
         const regex = macs.join('|');
         logql += ` | macs =~ ".*(${regex}).*"`;
       }
     }
+    return logql;
+  };
 
-    // 模糊搜索 msg
-    if (form.msg) logql += ` | line_format "{{.msg}}" |= "${form.msg}"`;
+  // 点击“搜索”按钮，发起新查询
+  const search = () => {
+    currentLogQL.value = buildLogQL();
 
-    // 时间范围处理
-    let start: number | undefined;
-    let end: number | undefined;
-    let range: string | undefined;
+    let startForFirstQuery: number | undefined;
+    let endForFirstQuery: number | undefined;
+    let rangeForFirstQuery: string | undefined;
+    let endForCursor: number;
 
     if (form.timeRange && form.timeRange.length === 2) {
-      start = dayjs(form.timeRange[0]).valueOf() * 1000000; // 毫秒转纳秒
-      end = dayjs(form.timeRange[1]).valueOf() * 1000000;
-    } else if (form.range) {
-      // 如果选择了最近时间
-      range = form.range;
+      const start = dayjs(form.timeRange[0]);
+      const end = dayjs(form.timeRange[1]);
+      startForFirstQuery = start.valueOf() * 1000000;
+      endForFirstQuery = end.valueOf() * 1000000;
+      paginationStart.value = startForFirstQuery;
+      endForCursor = endForFirstQuery;
     } else {
-      // 如果都没有选择，默认查询最近 24 小时
-      range = '24h';
-      form.range = '24h'; // 回显
+      rangeForFirstQuery = form.range || '24h';
+      if (!form.range) form.range = '24h';
+
+      const now = dayjs();
+      const rangeValue = parseInt(rangeForFirstQuery, 10);
+      const rangeUnit = rangeForFirstQuery.slice(-1);
+      const start = now.subtract(rangeValue, rangeUnit as any);
+
+      paginationStart.value = start.valueOf() * 1000000;
+      endForCursor = now.valueOf() * 1000000;
     }
 
-    try {
-      const res = await queryLogs({
-        query: logql,
-        limit: pagination.pageSize, // 使用分页大小
-        start,
-        end,
-        range, // 传递 range 参数
-      });
+    timeCursors.value = [endForCursor];
+    currentPageIndex.value = 0;
+    data.value = [];
 
-      // @ts-ignore
-      const lokiData = res.data;
-      const result = lokiData?.data?.result || [];
+    executeQuery(
+      currentLogQL.value,
+      form.limit,
+      startForFirstQuery,
+      endForFirstQuery,
+      rangeForFirstQuery
+    );
+  };
 
-      // Loki 不直接支持分页总数，这里只能模拟或展示当前获取的数量
-      // 实际生产中通常结合 start/end 时间进行滚动分页
-      // 这里简单处理：将获取到的数据展示出来
-      const allLogs = result
-        .map((item: any) => {
-          return item.values.map((val: any[]) => {
-            try {
-              // Loki 返回的日志行本身就是 JSON 字符串
-              const json = JSON.parse(val[1]);
+  // 切换每页条数
+  const handleLimitChange = () => {
+    search();
+  };
 
-              return {
-                ts: json.ts || parseInt(val[0], 10) / 1000000, // 优先使用日志里的业务时间
-                mod: json.mod || '-',
-                act: json.act || '-',
-                acc: json.acc || '-',
-                aid: json.aid,
-                chr: json.chr || '-',
-                cid: json.cid,
-                job: json.job,
-                jobName: json.jobName || '-',
-                map: json.map,
-                mapName: json.mapName || '-',
-                ip: json.ip || '-',
-                macs: json.macs,
-                hwid: json.hwid || '-',
-                mobName: json.mobName, // 可选
-                mob: json.mob, // 可选
-                msg: json.msg || '-',
-                raw: val[1],
-              };
-            } catch (e) {
-              return { ts: 0, msg: val[1] };
-            }
-          });
-        })
-        .flat()
-        .sort((a: any, b: any) => b.ts - a.ts);
+  // 前往更旧的页面 (下一页)
+  const goToOlderPage = () => {
+    if (!canGoOlder.value) return;
+    currentPageIndex.value += 1;
+    const end = timeCursors.value[currentPageIndex.value];
+    executeQuery(
+      currentLogQL.value,
+      form.limit,
+      paginationStart.value,
+      end,
+      undefined
+    );
+  };
 
-      data.value = allLogs;
-      // 注意：Loki 的 limit 是硬限制，不是总数。
-      // 如果返回数量等于 limit，说明可能还有更多数据。
-      // 这里暂时将 total 设置为当前数据量，或者一个估算值。
-      // 真正的分页需要后端支持或前端基于时间游标实现。
-      // 鉴于 Loki 特性，这里仅做前端分页展示当前批次数据是不够的，
-      // 但为了满足需求，我们先展示当前获取的数据。
-      // 如果需要翻页，应该基于最后一条日志的时间戳发起新请求。
-      // 这里简化处理：仅展示当前查询结果，不进行前端假分页（因为数据量可能很大），
-      // 而是让用户通过调整 limit 或时间范围来控制。
-      // 但需求要求添加分页组件，我们这里做前端分页。
-      pagination.total = allLogs.length;
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(err);
-      Message.error(t('log.query.message.fail'));
-    } finally {
-      loading.value = false;
-    }
+  // 前往较新的页面 (上一页)
+  const goToNewerPage = () => {
+    if (!canGoNewer.value) return;
+    currentPageIndex.value -= 1;
+    const end = timeCursors.value[currentPageIndex.value];
+    executeQuery(
+      currentLogQL.value,
+      form.limit,
+      paginationStart.value,
+      end,
+      undefined
+    );
   };
 
   const reset = () => {
     form.timeRange = [];
-    form.range = '24h'; // 重置为默认 24h
+    form.range = '24h';
     form.mod = '';
     form.act = '';
     form.acc = '';
@@ -740,47 +864,22 @@
     form.hwid = '';
     form.msg = '';
     form.limit = 100;
-    pagination.current = 1;
-    pagination.pageSize = 50;
-    search();
-  };
-
-  const onPageChange = (current: number) => {
-    pagination.current = current;
-    // 前端分页逻辑：data.value 已经是所有数据了，table 会自动处理吗？
-    // Arco Design Vue 的 Table 组件如果 data 是全量数据，pagination 属性会自动处理分页。
-    // 但是我们上面 search 方法里是把所有数据都赋值给了 data.value。
-    // 如果数据量很大（比如 1000 条），前端分页是合理的。
-    // 如果需要后端分页（基于时间游标），逻辑会复杂很多。
-    // 这里假设是前端分页。
-  };
-
-  const onPageSizeChange = (pageSize: number) => {
-    pagination.pageSize = pageSize;
-    pagination.current = 1;
-    // 重新查询以获取更多数据（如果 limit 小于 pageSize）
-    if (form.limit < pageSize) {
-      form.limit = pageSize;
-    }
     search();
   };
 
   const formatTime = (ts: number) => {
-    if (!ts) return '-';
+    if (!ts || ts === 0) return '-';
     return dayjs(ts).format('YYYY-MM-DD HH:mm:ss.SSS');
   };
 
   const parseMacs = (macsStr: string) => {
     if (!macsStr) return [];
-    // 假设 macs 是逗号分隔的字符串或者 JSON 数组字符串
     try {
-      // 尝试解析 JSON 数组
       const parsed = JSON.parse(macsStr);
       if (Array.isArray(parsed)) return parsed;
     } catch (e) {
       // ignore
     }
-    // 尝试逗号分隔
     return macsStr
       .split(',')
       .map((s) => s.trim())
@@ -788,7 +887,7 @@
   };
 
   onMounted(() => {
-    fetchModules(); // 加载模块列表
+    fetchModules();
     search();
     window.addEventListener('resize', updateTableHeight);
     nextTick(() => {
@@ -820,6 +919,14 @@
       flex-direction: column;
       padding-bottom: 0;
     }
+  }
+
+  .pagination-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    margin-bottom: 8px;
   }
 
   .table-container {
@@ -863,7 +970,7 @@
     .value {
       color: var(--color-text-1);
       flex: 1;
-      margin-left: 0px;
+      margin-left: 0;
     }
 
     .text-ellipsis {

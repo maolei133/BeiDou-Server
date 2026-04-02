@@ -159,7 +159,7 @@ public class TraceabilityConfigService {
             log.warn("配置项 '{}' 在数据库中不存在，将执行新增操作。", CONFIG_CODE);
             GameConfigDO newConfig = GameConfigDO.builder()
                     .configType("server")
-                    .configSubType("global") // 默认使用global子类型
+                    .configSubType("Debug") // 默认使用Debug子类型
                     .configCode(CONFIG_CODE)
                     .configValue(configValue)
                     .configClazz(String.class.getName())

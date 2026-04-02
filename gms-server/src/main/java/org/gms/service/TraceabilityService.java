@@ -436,6 +436,7 @@ public class TraceabilityService {
                 if (recordToLoki) {
                     MapMessage logData = new MapMessage()
                             .with("msg", lokiMsg != null ? lokiMsg : dbActionSource)
+                            .with("uid", item.getUid())
                             .with("itmId", item.getItemId())
                             .with("itmName", String.valueOf(ItemInformationProvider.getInstance().getName(item.getItemId())))
                             .with("cnt", quantityChange)
