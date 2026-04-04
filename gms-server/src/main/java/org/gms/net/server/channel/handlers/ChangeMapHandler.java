@@ -111,7 +111,7 @@ public final class ChangeMapHandler extends AbstractPacketHandler {
 
                         chr.updateHp(50);
                         chr.changeMap(map, map.findClosestPlayerSpawnpoint(chr.getPosition()));
-                        AuditLogger.info(LogModule.CHARACTER, LogAction.REVIVE, new MapMessage().with("map", map.getId()).with("item", ItemId.WHEEL_OF_FORTUNE));
+                        AuditLogger.info(LogModule.CHARACTER, LogAction.CHR_REVIVE, new MapMessage().with("map", map.getId()).with("item", ItemId.WHEEL_OF_FORTUNE));
                     } else {
                         boolean executeStandardPath = true;
                         if (chr.getEventInstance() != null) {
@@ -119,7 +119,7 @@ public final class ChangeMapHandler extends AbstractPacketHandler {
                         }
                         if (executeStandardPath) {
                             chr.respawn(map.getReturnMapId());
-                            AuditLogger.info(LogModule.CHARACTER, LogAction.REVIVE, new MapMessage().with("map", map.getReturnMapId()));
+                            AuditLogger.info(LogModule.CHARACTER, LogAction.CHR_REVIVE, new MapMessage().with("map", map.getReturnMapId()));
                         }
                     }
                 } else {

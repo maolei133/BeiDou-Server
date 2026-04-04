@@ -10,7 +10,10 @@ import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configurator;
 import org.gms.model.dto.ResultBody;
 import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.service.AccountService;
+import org.gms.service.TraceabilityService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.yaml.snakeyaml.DumperOptions;
@@ -29,6 +32,7 @@ import java.nio.file.Files;
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Tag(name = "日志系统管理", description = "提供日志系统的进程管理、动态配置和文件配置接口")
 @RestController
@@ -252,16 +256,50 @@ public class LogSystemController {
 
     // --- 2. 动态配置管理 ---
 
-    @Operation(summary = "获取模块日志开关", description = "返回当前所有已注册模块的日志开启状态")
+    @Operation(summary = "获取所有查询选项", description = "一次性获取模块、动作、行为类型和来源的列表，用于前端查询下拉框")
+    @GetMapping("/config/all-options")
+    public ResultBody<Map<String, List<Map<String, Object>>>> getAllOptions() {
+        Map<String, List<Map<String, Object>>> result = new HashMap<>();
+        result.put("modules", getEnumOptions(LogModule.class, e -> ((LogModule) e).getI18nVal()));
+        result.put("actions", getEnumOptions(LogAction.class, e -> ((LogAction) e).getI18nVal()));
+        result.put("traceabilityActionTypes", getEnumOptions(TraceabilityService.ActionType.class, e -> ((TraceabilityService.ActionType) e).getI18nVal()));
+        result.put("traceabilityActionSourceTypes", getEnumOptions(TraceabilityService.ActionSourceType.class, e -> ((TraceabilityService.ActionSourceType) e).getI18nVal()));
+        return ResultBody.success(result);
+    }
+
+    private <T extends Enum<T>> List<Map<String, Object>> getEnumOptions(Class<T> enumClass, java.util.function.Function<T, String> i18nMapper) {
+        return Stream.of(enumClass.getEnumConstants())
+                .map(e -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("value", e.name());
+                    map.put("label", i18nMapper.apply(e));
+                    return map;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Operation(summary = "获取模块列表", description = "返回所有日志模块及其国际化名称")
     @GetMapping("/config/modules")
-    public ResultBody<Map<String, Boolean>> getModuleConfig() {
+    public ResultBody<List<Map<String, Object>>> getModules() {
+        return ResultBody.success(getEnumOptions(LogModule.class, e -> ((LogModule) e).getI18nVal()));
+    }
+
+    @Operation(summary = "获取动作列表", description = "返回所有日志动作及其国际化名称")
+    @GetMapping("/config/actions")
+    public ResultBody<List<Map<String, Object>>> getActions() {
+        return ResultBody.success(getEnumOptions(LogAction.class, e -> ((LogAction) e).getI18nVal()));
+    }
+
+    @Operation(summary = "获取模块日志开关", description = "返回当前所有已注册模块的日志开启状态")
+    @GetMapping("/config/module-switches")
+    public ResultBody<Map<String, Boolean>> getModuleSwitches() {
         return ResultBody.success(AuditLogger.getModuleConfig());
     }
 
     @Operation(summary = "设置模块日志开关", description = "实时开启或关闭指定模块的日志记录")
-    @PostMapping("/config/modules")
+    @PostMapping("/config/module-switches")
     public ResultBody<String> setModuleConfig(
-            @Parameter(description = "模块名称 (如 shop, login)", required = true) @RequestParam String module,
+            @Parameter(description = "模块名称 (如 SHOP, LOGIN)", required = true) @RequestParam String module,
             @Parameter(description = "是否开启", required = true) @RequestParam boolean enabled) {
         AuditLogger.setModuleEnabled(module, enabled);
         return ResultBody.success("模块 [" + module + "] 已" + (enabled ? "开启" : "关闭"));

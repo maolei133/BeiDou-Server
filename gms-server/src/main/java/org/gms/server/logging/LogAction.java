@@ -1,5 +1,7 @@
 package org.gms.server.logging;
 
+import org.gms.util.I18nUtil;
+
 /**
  * 日志动作枚举
  * 用于规范化日志记录的具体行为。
@@ -10,22 +12,20 @@ public enum LogAction {
     /** 服务器关闭 */ SERVER_SHUTDOWN,
     /** 系统错误 */ ERROR,
 
-    // --- LOGIN ---
-    /** 登录成功 */ LOGIN_SUCCESS,
-    /** 登录失败 */ LOGIN_FAIL,
-    /** 登出 */ LOGOUT,
-    /** 创建角色 */ CREATE_CHAR,
-    /** 选择角色 */ SELECT_CHAR,
-    /** 删除角色 */ DELETE_CHAR,
-
+    // --- ACCOUNT ---
+    /** 登录成功 */ ACC_LOGIN_SUCCESS,
+    /** 登录失败 */ ACC_LOGIN_FAIL,
     // --- CHARACTER ---
-    /** 升级 */ LEVEL_UP,
-    /** 转职 */ JOB_ADVANCE,
-    /** 属性变更 */ STAT_CHANGE,
-    /** 死亡 */ DIE,
-    /** 复活 */ REVIVE,
-    /** 技能点分配 */ SP_DISTRIBUTE,
-    /** 属性点分配 */ AP_DISTRIBUTE,
+    /** 创建角色 */ CHR_CREATE,
+    /** 选择角色 */ CHR_SELECT,
+    /** 删除角色 */ CHR_DELETE,
+    /** 升级 */ CHR_LEVEL_UP,
+    /** 转职 */ CHR_JOB_ADVANCE,
+    /** 属性变更 */ CHR_STAT_CHANGE,
+    /** 死亡 */ CHR_DIE,
+    /** 复活 */ CHR_REVIVE,
+    /** 技能点分配 */ CHR_SP_DISTRIBUTE,
+    /** 属性点分配 */ CHR_AP_DISTRIBUTE,
 
     // --- ITEM ---
     /** 获得物品 */ ITEM_GAIN,
@@ -53,7 +53,7 @@ public enum LogAction {
     /** 商城存入 */ CS_IN,
 
     // --- FIELD ---
-    /** 切换地图 */ CHANGE_MAP,
+    /** 切换地图 */ MAP_CHANGE,
 
     // --- AUTOBAN ---
     /** 检测到作弊 */ CHEAT_DETECTED,
@@ -72,5 +72,13 @@ public enum LogAction {
     /** 取出仓库 */ STORAGE_OUT,
     /** 仓库迁移 */ STORAGE_MIGRATE,
     /** 仓库合并 */ STORAGE_MERGE,
-    /** 仓库合并失败 */ STORAGE_MERGE_FAIL
+    /** 仓库合并失败 */ STORAGE_MERGE_FAIL;
+
+    public String getI18nKey() {
+        return "log.action." + this.name();
+    }
+
+    public String getI18nVal() {
+        return I18nUtil.getLogMessage(getI18nKey());
+    }
 }

@@ -9,7 +9,7 @@
           <a-form :model="form" label-col-flex="70px" label-align="left">
             <a-row :gutter="12">
               <!-- 时间范围 -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item
                   field="timeRange"
                   :label="$t('log.query.form.time')"
@@ -27,12 +27,14 @@
                 </a-form-item>
               </a-col>
               <!-- 最近时间 -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item field="range" :label="$t('log.query.form.range')">
                   <a-select
                     v-model="form.range"
                     :placeholder="$t('log.query.form.placeholder.select')"
                     @change="handleRangeChange"
+                    :key="item"
+                    :value="item"
                   >
                     <a-option value="1h">{{
                       $t('log.query.form.range.1h')
@@ -62,38 +64,61 @@
                 </a-form-item>
               </a-col>
               <!-- 模块 -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item field="mod" :label="$t('log.query.form.mod')">
                   <a-select
                     v-model="form.mod"
                     :placeholder="$t('log.query.form.placeholder.all')"
+                    :options="moduleOptions"
                     allow-clear
                     allow-search
-                  >
-                    <a-option
-                      v-for="mod in moduleOptions"
-                      :key="mod"
-                      :value="mod"
-                    >
-                      {{ $t(`log.module.${mod}`) }}
-                    </a-option>
-                  </a-select>
+                  />
                 </a-form-item>
               </a-col>
               <!-- 动作 -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item field="act" :label="$t('log.query.form.act')">
-                  <a-auto-complete
+                  <a-select
                     v-model="form.act"
-                    :data="actOptions"
                     :placeholder="$t('log.query.form.placeholder.all')"
+                    :options="actionOptions"
                     allow-clear
-                    @search="handleActSearch"
+                    allow-search
+                  />
+                </a-form-item>
+              </a-col>
+              <!-- 行为类型 -->
+              <a-col :span="6">
+                <a-form-item
+                  field="actionType"
+                  :label="$t('log.query.form.actionType')"
+                >
+                  <a-select
+                    v-model="form.actionType"
+                    :placeholder="$t('log.query.form.placeholder.all')"
+                    :options="traceabilityActionTypeOptions"
+                    allow-clear
+                    allow-search
+                  />
+                </a-form-item>
+              </a-col>
+              <!-- 行为来源 -->
+              <a-col :span="6">
+                <a-form-item
+                  field="actionSource"
+                  :label="$t('log.query.form.actionSource')"
+                >
+                  <a-select
+                    v-model="form.actionSource"
+                    :placeholder="$t('log.query.form.placeholder.all')"
+                    :options="traceabilityActionSourceTypeOptions"
+                    allow-clear
+                    allow-search
                   />
                 </a-form-item>
               </a-col>
               <!-- 账号 -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item field="acc" :label="$t('log.query.form.acc')">
                   <a-select
                     v-model="form.acc"
@@ -117,7 +142,7 @@
                 </a-form-item>
               </a-col>
               <!-- 角色 -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item field="chr" :label="$t('log.query.form.chr')">
                   <a-select
                     v-model="form.chr"
@@ -142,7 +167,7 @@
               </a-col>
 
               <!-- IP -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item field="ip" :label="$t('log.query.form.ip')">
                   <a-select
                     v-model="form.ip"
@@ -164,7 +189,7 @@
                 </a-form-item>
               </a-col>
               <!-- MAC -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item field="mac" :label="$t('log.query.form.mac')">
                   <a-select
                     v-model="form.mac"
@@ -186,7 +211,7 @@
                 </a-form-item>
               </a-col>
               <!-- HWID -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item field="hwid" :label="$t('log.query.form.hwid')">
                   <a-select
                     v-model="form.hwid"
@@ -208,7 +233,7 @@
                 </a-form-item>
               </a-col>
               <!-- 关键词 -->
-              <a-col :span="5">
+              <a-col :span="6">
                 <a-form-item field="msg" :label="$t('log.query.form.msg')">
                   <a-input
                     v-model="form.msg"
@@ -295,7 +320,7 @@
             <a-table-column
               :title="$t('log.query.table.moduleAndAction')"
               data-index="mod"
-              :width="220"
+              :width="180"
             >
               <template #cell="{ record }">
                 <div v-if="record.mod && record.mod !== '-'">
@@ -305,9 +330,7 @@
                     }}</span>
                     <span class="separator"></span>
                     <span class="value">{{
-                      $te(`log.module.${record.mod}`)
-                        ? $t(`log.module.${record.mod}`)
-                        : record.mod
+                      getDisplayText(record.mod, 'mod')
                     }}</span>
                   </div>
                 </div>
@@ -318,9 +341,18 @@
                     }}</span>
                     <span class="separator"></span>
                     <span class="value">{{
-                      $te(`log.action.${record.act}`)
-                        ? $t(`log.action.${record.act}`)
-                        : record.act
+                      getDisplayText(record.act, 'act', record.mod)
+                    }}</span>
+                  </div>
+                </div>
+                <div v-if="record.actsou && record.actsou !== '-'">
+                  <div class="info-row">
+                    <span class="label">{{
+                      $t('log.query.label.actSource')
+                    }}</span>
+                    <span class="separator"></span>
+                    <span class="value">{{
+                      getDisplayText(record.actsou, 'actsou')
                     }}</span>
                   </div>
                 </div>
@@ -480,14 +512,14 @@
   } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
-    getModuleConfig,
+    getAllOptions,
     queryLogs,
     searchAccount,
     searchCharacter,
     searchHwid,
     searchIp,
-    searchLogs,
     searchMac,
+    LabelValue,
   } from '@/api/log';
   import { Message } from '@arco-design/web-vue';
   import dayjs from 'dayjs';
@@ -496,20 +528,26 @@
   const loading = ref(false);
   const form = reactive({
     timeRange: [],
-    range: '24h', // 默认最近 24 小时
+    range: '24h',
     mod: '',
     act: '',
+    actionType: '',
+    actionSource: '',
     acc: '',
     chr: '',
     ip: '',
     mac: '',
     hwid: '',
     msg: '',
-    limit: 100, // 默认每页100条
+    limit: 100,
   });
   const data = ref<any[]>([]);
-  const moduleOptions = ref<string[]>([]);
-  const actOptions = ref<string[]>([]);
+
+  // --- 下拉框选项 ---
+  const moduleOptions = ref<LabelValue[]>([]);
+  const actionOptions = ref<LabelValue[]>([]);
+  const traceabilityActionTypeOptions = ref<LabelValue[]>([]);
+  const traceabilityActionSourceTypeOptions = ref<LabelValue[]>([]);
 
   // --- 搜索下拉框选项 ---
   const accountOptions = ref<any[]>([]);
@@ -523,11 +561,17 @@
   const hwidOptions = ref<string[]>([]);
   const hwidSearchLoading = ref(false);
 
+  // --- 缓存 ---
+  const moduleMap = ref<Map<string, string>>(new Map());
+  const actionMap = ref<Map<string, string>>(new Map());
+  const traceabilityActionTypeMap = ref<Map<string, string>>(new Map());
+  const traceabilityActionSourceTypeMap = ref<Map<string, string>>(new Map());
+
   // --- 时间游标分页状态 ---
-  const currentPageIndex = ref(0); // 当前页码索引，从0开始
-  const timeCursors = ref<number[]>([]); // 存储每页的结束时间戳 (纳秒)
-  const currentLogQL = ref(''); // 保存当前查询的LogQL，用于翻页
-  const paginationStart = ref<number | undefined>(); // 保存整个分页生命周期的绝对开始时间
+  const currentPageIndex = ref(0);
+  const timeCursors = ref<number[]>([]);
+  const currentLogQL = ref('');
+  const paginationStart = ref<number | undefined>();
 
   const canGoNewer = computed(() => currentPageIndex.value > 0);
   const canGoOlder = computed(
@@ -542,33 +586,58 @@
     if (tableContainerRef.value) {
       const { top } = tableContainerRef.value.getBoundingClientRect();
       const windowHeight = window.innerHeight;
-      tableHeight.value = windowHeight - top - 110; // 预留更多空间给分页器
+      tableHeight.value = windowHeight - top - 110;
     }
   };
 
-  // 获取模块列表供下拉选择
-  const fetchModules = async () => {
+  // 获取所有下拉列表数据并建立缓存
+  const fetchOptions = async () => {
     try {
-      const { data: modules } = await getModuleConfig();
-      moduleOptions.value = Object.keys(modules);
+      const { data: allOptions } = await getAllOptions();
+      moduleOptions.value = allOptions.modules;
+      actionOptions.value = allOptions.actions;
+      traceabilityActionTypeOptions.value = allOptions.traceabilityActionTypes;
+      traceabilityActionSourceTypeOptions.value =
+        allOptions.traceabilityActionSourceTypes;
+
+      moduleMap.value = new Map(
+        allOptions.modules.map((i) => [i.value, i.label])
+      );
+      actionMap.value = new Map(
+        allOptions.actions.map((i) => [i.value, i.label])
+      );
+      traceabilityActionTypeMap.value = new Map(
+        allOptions.traceabilityActionTypes.map((i) => [i.value, i.label])
+      );
+      traceabilityActionSourceTypeMap.value = new Map(
+        allOptions.traceabilityActionSourceTypes.map((i) => [i.value, i.label])
+      );
     } catch (err) {
       // ignore
     }
   };
 
-  // --- 各种搜索处理函数 (无变化) ---
-  const handleActSearch = async (value: string) => {
-    if (value) {
-      try {
-        const { data: res } = await searchLogs('act', value);
-        actOptions.value = res;
-      } catch (err) {
-        // ignore
+  // 获取显示文本
+  const getDisplayText = (
+    value: string,
+    type: 'mod' | 'act' | 'actsou',
+    modValue?: string
+  ) => {
+    if (!value) return value;
+    if (type === 'mod') return moduleMap.value.get(value) || value;
+    if (type === 'act') {
+      if (modValue === 'ITEM_TRACEAB') {
+        return traceabilityActionTypeMap.value.get(value) || value;
       }
-    } else {
-      actOptions.value = [];
+      return actionMap.value.get(value) || value;
     }
+    if (type === 'actsou') {
+      return traceabilityActionSourceTypeMap.value.get(value) || value;
+    }
+    return value;
   };
+
+  // --- 搜索处理函数 ---
   const handleAccountSearch = async (value: string) => {
     if (value) {
       accountSearchLoading.value = true;
@@ -645,18 +714,12 @@
     }
   };
 
-  // 互斥逻辑：选择最近时间时，清空时间范围
+  // 互斥逻辑
   const handleRangeChange = (val: string) => {
-    if (val) {
-      form.timeRange = [];
-    }
+    if (val) form.timeRange = [];
   };
-
-  // 互斥逻辑：选择时间范围时，清空最近时间
   const handleTimeRangeChange = (val: any[]) => {
-    if (val && val.length > 0) {
-      form.range = '';
-    }
+    if (val && val.length > 0) form.range = '';
   };
 
   // 核心查询函数
@@ -735,22 +798,33 @@
   // 构建LogQL查询语句
   const buildLogQL = () => {
     let logql = '{job="gms-audit"}';
-
-    // 关键词模糊搜索，使用 case-insensitive regex 作用于原始日志行
+    const acttionType = traceabilityActionTypeMap.value.get(form.actionType);
+    const actionSourceType = traceabilityActionSourceTypeMap.value.get(
+      form.actionSource
+    );
     if (form.msg) {
-      // Escape special regex characters to treat user input as a literal string
       const escapedMsg = form.msg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       logql += ` |~ "(?i)${escapedMsg}"`;
     }
 
-    // 先解析JSON，再进行字段过滤
-    logql += ' | json';
-
     if (form.mod) logql += ` | mod="${form.mod}"`;
     if (form.act) logql += ` | act="${form.act}"`;
+    if (form.actionType)
+      logql += ` | act="${form.actionType}" ${
+        acttionType !== undefined ? `or act="${acttionType}"` : ''
+      }`;
+
+    logql += ' | json';
+
+    if (form.actionSource)
+      logql += ` | actsou="${form.actionSource}" ${
+        actionSourceType !== undefined ? `or actsou="${actionSourceType}"` : ''
+      }`;
+
     if (form.acc) {
       if (/^\d+$/.test(form.acc)) {
-        logql += ` | (acc="${form.acc}" or aid="${form.acc}")`;
+        logql += ` | (acc="${form.acc}"
+      } or aid="${form.acc}")`;
       } else {
         logql += ` | acc="${form.acc}"`;
       }
@@ -777,7 +851,7 @@
     return logql;
   };
 
-  // 点击“搜索”按钮，发起新查询
+  // 点击“搜索”按钮
   const search = () => {
     currentLogQL.value = buildLogQL();
 
@@ -824,7 +898,7 @@
     search();
   };
 
-  // 前往更旧的页面 (下一页)
+  // 翻页
   const goToOlderPage = () => {
     if (!canGoOlder.value) return;
     currentPageIndex.value += 1;
@@ -838,7 +912,6 @@
     );
   };
 
-  // 前往较新的页面 (上一页)
   const goToNewerPage = () => {
     if (!canGoNewer.value) return;
     currentPageIndex.value -= 1;
@@ -857,6 +930,8 @@
     form.range = '24h';
     form.mod = '';
     form.act = '';
+    form.actionType = '';
+    form.actionSource = '';
     form.acc = '';
     form.chr = '';
     form.ip = '';
@@ -887,7 +962,7 @@
   };
 
   onMounted(() => {
-    fetchModules();
+    fetchOptions();
     search();
     window.addEventListener('resize', updateTableHeight);
     nextTick(() => {

@@ -126,7 +126,7 @@ public final class CreateCharHandler extends AbstractPacketHandler {
         } else if(status != 0) {
             c.sendPacket(PacketCreator.deleteCharResponse(0, 9));       //发送未知错误的弹窗提示
         } else {
-            AuditLogger.info(LogModule.LOGIN, LogAction.CREATE_CHAR, new MapMessage().with("chr", name).with("job", job));
+            AuditLogger.info(LogModule.ACCOUNT, LogAction.CHR_CREATE, new MapMessage().with("chr", name).with("job", job));
         }
     }
 }

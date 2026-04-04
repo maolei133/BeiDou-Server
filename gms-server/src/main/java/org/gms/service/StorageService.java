@@ -215,7 +215,7 @@ public class StorageService {
         }
         itemFactoryService.saveItems(2, true, new LinkedList<>(), storageId);
         log.info("仓库 ID: {} 数据迁移完成，迁移物品数: {}", storageId, items == null ? 0 : items.size());
-        AuditLogger.info(LogModule.ITEM, LogAction.STORAGE_MIGRATE, new MapMessage().with("storageId", storageId).with("cnt", items == null ? 0 : items.size()));
+        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_MIGRATE, new MapMessage().with("storageId", storageId).with("cnt", items == null ? 0 : items.size()));
     }
 
     /**
@@ -247,7 +247,7 @@ public class StorageService {
             }
         }
         itemFactoryService.saveItems(2, true, new LinkedList<>(), storageId);
-        AuditLogger.info(LogModule.ITEM, LogAction.STORAGE_MERGE, new MapMessage().with("storageId", storageId).with("cnt", items == null ? 0 : items.size()).with("type", "MERGE"));
+        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_MERGE, new MapMessage().with("storageId", storageId).with("cnt", items == null ? 0 : items.size()).with("type", "MERGE"));
     }
 
     /**

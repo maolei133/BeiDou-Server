@@ -134,7 +134,7 @@ public class Trade {
         // 记录我方【失去】的物品
         for (Item item : items) {
             // 溯源日志：记录我方失去物品，交易给对方
-            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, TraceabilityService.ActionSourceType.PLAYER_TRADE, -item.getQuantity(), partnerChr.getId(), partnerChr.getName());
+            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, TraceabilityService.ActionSourceType.TRADE_SENDER, -item.getQuantity(), partnerChr.getId(), partnerChr.getName());
         }
 
         items.clear();
@@ -147,7 +147,7 @@ public class Trade {
             InventoryManipulator.addFromDrop(chr.getClient(), item, show);
 
             // 溯源日志：记录我方获得物品，从对方处获得
-            traceabilityService.log(item, partnerChr, TraceabilityService.ActionType.TRADE, TraceabilityService.ActionSourceType.PLAYER_TRADE, item.getQuantity(),  chr.getId(), chr.getName());
+            traceabilityService.log(item, partnerChr, TraceabilityService.ActionType.TRADE, TraceabilityService.ActionSourceType.TRADE_RECEIVER, item.getQuantity(),  chr.getId(), chr.getName());
         }
         AuditContext.clear();
         AuditContext.set(chr.getClient());

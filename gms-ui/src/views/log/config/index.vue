@@ -11,20 +11,29 @@
             <a-spin :loading="loadingModules">
               <a-space wrap>
                 <div
-                  v-for="(enabled, mod) in modules"
-                  :key="mod"
+                  v-for="mod in moduleList"
+                  :key="mod.value"
                   class="module-item"
                 >
-                  <span class="module-name">{{ $t(`log.module.${mod}`) }}</span>
+                  <span class="module-name">{{ mod.label }}</span>
                   <a-switch
-                    :model-value="enabled"
-                    @change="(val) => handleToggleModule(mod, val as boolean)"
+                    :model-value="moduleSwitches[mod.value]"
+                    @change="
+                      (val) => handleToggleModule(mod.value, val as boolean)
+                    "
                   >
-                    <template #checked>ON</template>
-                    <template #unchecked>OFF</template>
+                    <template #checked>{{
+                      $t('log.config.switch.on')
+                    }}</template>
+                    <template #unchecked>{{
+                      $t('log.config.switch.off')
+                    }}</template>
                   </a-switch>
                 </div>
-                <div v-if="Object.keys(modules).length === 0" class="empty-tip">
+                <div
+                  v-if="Object.keys(moduleList).length === 0"
+                  class="empty-tip"
+                >
                   {{ $t('log.config.module.empty') }}
                 </div>
               </a-space>
@@ -59,11 +68,12 @@
                           (val) => handleChangeLevel(record.name, val as string)
                         "
                       >
-                        <a-option value="DEBUG">DEBUG</a-option>
-                        <a-option value="INFO">INFO</a-option>
-                        <a-option value="WARN">WARN</a-option>
-                        <a-option value="ERROR">ERROR</a-option>
-                        <a-option value="OFF">OFF</a-option>
+                        <a-option
+                          v-for="level in logLevels"
+                          :key="level"
+                          :value="level"
+                          >{{ level }}</a-option
+                        >
                       </a-select>
                     </template>
                   </a-table-column>
@@ -153,7 +163,9 @@
                         >
                           <a-input
                             v-model="lokiForm.limits_config.retention_period"
-                            placeholder="e.g. 168h"
+                            :placeholder="
+                              $t('log.config.placeholder.retention')
+                            "
                           />
                           <template #help>{{
                             $t('log.config.loki.retention.help')
@@ -177,7 +189,9 @@
                         >
                           <a-input
                             v-model="lokiForm.compactor.compaction_interval"
-                            placeholder="e.g. 10m"
+                            :placeholder="
+                              $t('log.config.placeholder.compaction')
+                            "
                           />
                         </a-form-item>
                       </a-col>
@@ -342,7 +356,8 @@
                       >
                         <template #title>
                           <span style="font-weight: bold"
-                            >Job: {{ job.job_name }}</span
+                            >{{ $t('log.config.job.title') }}:
+                            {{ job.job_name }}</span
                           >
                         </template>
                         <template #extra>
@@ -387,7 +402,7 @@
                             "
                             :auto-size="{ minRows: 3, maxRows: 10 }"
                             style="font-family: monospace; font-size: 12px"
-                            placeholder="Pipeline stages JSON"
+                            :placeholder="$t('log.config.placeholder.pipeline')"
                             @input="(val) => updatePipelineStages(index, val)"
                           />
                           <template #help>{{
@@ -429,13 +444,15 @@
   import { ref, onMounted, computed, reactive } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
-    getModuleConfig,
-    setModuleConfig,
+    getModules,
+    getModuleSwitches,
+    setModuleSwitch,
     getLoggerLevels,
     setLoggerLevel,
     restartProcess,
     getConfigYaml,
     saveConfigYaml,
+    LabelValue,
   } from '@/api/log';
   import { Message, Modal } from '@arco-design/web-vue';
 
@@ -443,9 +460,11 @@
 
   // --- Business Config ---
   const loadingModules = ref(false);
-  const modules = ref<Record<string, boolean>>({});
+  const moduleList = ref<LabelValue[]>([]);
+  const moduleSwitches = ref<Record<string, boolean>>({});
   const loadingLevels = ref(false);
   const levels = ref<Record<string, string>>({});
+  const logLevels = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'OFF'];
 
   const levelsData = computed(() => {
     return Object.keys(levels.value).map((key) => ({
@@ -457,8 +476,12 @@
   const fetchModules = async () => {
     loadingModules.value = true;
     try {
-      const { data } = await getModuleConfig();
-      modules.value = data;
+      const [{ data: modules }, { data: switches }] = await Promise.all([
+        getModules(),
+        getModuleSwitches(),
+      ]);
+      moduleList.value = modules;
+      moduleSwitches.value = switches;
     } catch (err) {
       // ignore
     } finally {
@@ -468,14 +491,19 @@
 
   const handleToggleModule = async (mod: string, enabled: boolean) => {
     try {
-      await setModuleConfig(mod, enabled);
+      await setModuleSwitch(mod, enabled);
+      const module = moduleList.value.find((m) => m.value === mod);
       Message.success(
         t('log.config.message.module.success', {
-          mod: t(`log.module.${mod}`),
-          status: enabled ? 'ON' : 'OFF',
+          mod: module ? module.label : mod,
+          status: enabled
+            ? t('log.config.switch.on')
+            : t('log.config.switch.off'),
         })
       );
-      fetchModules();
+      // Refresh only switches
+      const { data } = await getModuleSwitches();
+      moduleSwitches.value = data;
     } catch (err) {
       Message.error(t('log.config.message.fail'));
     }
@@ -681,13 +709,13 @@
 
   const addScrapeJob = () => {
     promtailForm.scrape_configs.push({
-      job_name: 'new-job',
+      job_name: t('log.config.job.new_job_name'),
       static_configs: [
         {
           targets: ['localhost'],
           labels: {
-            job: 'new-job',
-            __path__: '/path/to/logs/*.log',
+            job: t('log.config.job.new_job_name'),
+            __path__: t('log.config.job.new_job_path'),
           },
         },
       ],

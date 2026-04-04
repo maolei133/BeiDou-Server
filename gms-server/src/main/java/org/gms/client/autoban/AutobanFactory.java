@@ -132,8 +132,7 @@ public enum AutobanFactory {
                 .with("x", chr.getPosition().x)
                 .with("y", chr.getPosition().y)
                 .with("sub", this.getName())
-                .with("rsn", reason)
-                .with("msg", "异常提示");
+                .with("msg", reason);
             
             AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, msg);
         }

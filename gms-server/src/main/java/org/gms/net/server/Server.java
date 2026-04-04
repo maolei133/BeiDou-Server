@@ -61,6 +61,9 @@ import org.gms.server.ThreadManager;
 import org.gms.server.TimerManager;
 import org.gms.server.expeditions.ExpeditionBossLog;
 import org.gms.server.life.PlayerNPC;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.server.quest.Quest;
 import org.gms.service.*;
 import org.gms.util.*;
@@ -1633,8 +1636,9 @@ public class Server {
 
     public synchronized void shutdownInternal(boolean restart, boolean exit) {
         this.shutdown = true;
-        log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info1"), restart ?
-                I18nUtil.getLogMessage("Server.shutdownInternal.info2") : I18nUtil.getLogMessage("Server.shutdownInternal.info3"));
+        String msg =  I18nUtil.getLogMessage("Server.shutdownInternal.info1", I18nUtil.getLogMessage(restart ? "Server.shutdownInternal.info2" : "Server.shutdownInternal.info3"));
+        log.info(msg);
+        AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_SHUTDOWN, msg);
         if (getWorlds() == null) {
             return;//already shutdown
         }
@@ -1665,10 +1669,12 @@ public class Server {
         log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info4"));
         if (restart) {
             log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info5"));
+            AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_SHUTDOWN, I18nUtil.getLogMessage("Server.shutdownInternal.info5"));
             instance = null;
             getInstance().init();
         } else if (exit) {
-            log.info("Server shutdown complete. Exiting application.");
+            log.info("服务器关闭完成。正在退出应用程序。");
+            AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_SHUTDOWN, "服务器关闭完成。正在退出应用程序。");
             SpringApplication.exit(ServerManager.getApplicationContext());
             System.exit(0);
         }

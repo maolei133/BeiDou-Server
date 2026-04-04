@@ -156,6 +156,7 @@
       width="600px"
       :top="50"
       @ok="handleSaveChart"
+      @cancel="resetForm"
     >
       <a-form :model="addForm" layout="vertical" size="small">
         <a-row :gutter="16">
@@ -220,7 +221,7 @@
           <a-row :gutter="16">
             <a-col :span="8">
               <a-form-item :label="$t('log.dashboard.custom.form.logSource')">
-                <a-select v-model="queryBuilder.logSource" @change="buildQuery">
+                <a-select v-model="queryBuilder.logSource">
                   <a-option value="gms-audit">{{
                     $t('log.dashboard.builder.source.audit')
                   }}</a-option>
@@ -241,7 +242,7 @@
             </a-col>
             <a-col :span="8">
               <a-form-item :label="$t('log.dashboard.custom.form.range')">
-                <a-select v-model="addForm.range" @change="buildQuery">
+                <a-select v-model="addForm.range">
                   <a-option value="1h">1h</a-option>
                   <a-option value="6h">6h</a-option>
                   <a-option value="12h">12h</a-option>
@@ -256,7 +257,7 @@
                 :label="$t('log.dashboard.custom.form.interval')"
                 field="interval"
               >
-                <a-select v-model="queryBuilder.interval" @change="buildQuery">
+                <a-select v-model="queryBuilder.interval">
                   <a-option value="1m">1m</a-option>
                   <a-option value="5m">5m</a-option>
                   <a-option value="10m">10m</a-option>
@@ -272,74 +273,71 @@
             </a-col>
           </a-row>
 
-          <a-row :gutter="16">
-            <a-col :span="8">
-              <a-form-item :label="$t('log.dashboard.custom.form.filterKey')">
+          <!-- 动态过滤条件 -->
+          <div
+            v-for="(filter, index) in queryBuilder.filters"
+            :key="index"
+            class="filter-row"
+          >
+            <a-row :gutter="8">
+              <a-col :span="8">
                 <a-select
-                  v-model="queryBuilder.filterKey"
-                  placeholder="选择字段"
-                  @change="handleFilterKeyChange"
-                >
-                  <a-option value="">{{
-                    $t('log.dashboard.builder.filterKey.none')
-                  }}</a-option>
-                  <a-option value="mod">{{
-                    $t('log.dashboard.builder.filterKey.mod')
-                  }}</a-option>
-                  <a-option value="act">{{
-                    $t('log.dashboard.builder.filterKey.act')
-                  }}</a-option>
-                  <a-option value="acc">{{
-                    $t('log.dashboard.builder.filterKey.acc')
-                  }}</a-option>
-                  <a-option value="chr">{{
-                    $t('log.dashboard.builder.filterKey.chr')
-                  }}</a-option>
-                  <a-option value="map">{{
-                    $t('log.dashboard.builder.filterKey.map')
-                  }}</a-option>
-                  <a-option value="itm">{{
-                    $t('log.dashboard.builder.filterKey.itm')
-                  }}</a-option>
-                </a-select>
-              </a-form-item>
-            </a-col>
-            <a-col :span="16">
-              <a-form-item :label="$t('log.dashboard.custom.form.filterValue')">
-                <a-select
-                  v-if="
-                    queryBuilder.filterKey === 'mod' ||
-                    queryBuilder.filterKey === 'act'
+                  v-model="filter.key"
+                  :placeholder="
+                    $t('log.dashboard.builder.filter.placeholder.key')
                   "
-                  v-model="queryBuilder.filterValue"
-                  allow-search
-                  allow-clear
-                  placeholder="选择或搜索"
-                  @search="handleSearch"
-                  @focus="handleSearch('')"
-                  @change="buildQuery"
                 >
                   <a-option
-                    v-for="item in autoCompleteData"
+                    v-for="item in combinedDimensions"
                     :key="item.value"
                     :value="item.value"
+                    >{{ item.label }}</a-option
                   >
-                    {{ item.label }}
-                  </a-option>
                 </a-select>
-                <a-auto-complete
-                  v-else
-                  v-model="queryBuilder.filterValue"
-                  :data="autoCompleteData.map((i) => i.value)"
-                  placeholder="输入值 (支持自动搜索)"
+              </a-col>
+              <a-col :span="4">
+                <a-select v-model="filter.op">
+                  <a-option value="=">=</a-option>
+                  <a-option value="!=">!=</a-option>
+                  <a-option value="=~">=~</a-option>
+                  <a-option value="!~">!~</a-option>
+                </a-select>
+              </a-col>
+              <a-col :span="10">
+                <a-select
+                  v-if="isSelectFilter(filter.key)"
+                  v-model="filter.value"
+                  :placeholder="
+                    $t('log.dashboard.builder.filter.placeholder.value')
+                  "
+                  allow-search
                   allow-clear
-                  @search="handleSearch"
-                  @focus="handleSearch(queryBuilder.filterValue)"
-                  @change="buildQuery"
+                  :options="getOptionsForFilterKey(filter.key)"
                 />
-              </a-form-item>
-            </a-col>
-          </a-row>
+                <a-input
+                  v-else
+                  v-model="filter.value"
+                  :placeholder="
+                    $t('log.dashboard.builder.filter.placeholder.inputValue')
+                  "
+                  allow-clear
+                />
+              </a-col>
+              <a-col :span="2">
+                <a-button
+                  type="text"
+                  status="danger"
+                  @click="removeFilter(index)"
+                  ><icon-minus-circle
+                /></a-button>
+              </a-col>
+            </a-row>
+          </div>
+          <a-button type="dashed" long @click="addFilter">
+            <template #icon><icon-plus /></template>
+            {{ $t('log.dashboard.builder.filter.add') }}
+          </a-button>
+          <a-divider />
 
           <a-row :gutter="16">
             <a-col :span="8">
@@ -347,7 +345,7 @@
                 :label="$t('log.dashboard.custom.form.metric')"
                 field="metric"
               >
-                <a-select v-model="queryBuilder.metric" @change="buildQuery">
+                <a-select v-model="queryBuilder.metric">
                   <a-option value="count">{{
                     $t('log.dashboard.builder.metric.count')
                   }}</a-option>
@@ -374,28 +372,17 @@
                 <a-select
                   v-model="queryBuilder.field"
                   :disabled="queryBuilder.metric === 'count'"
-                  placeholder="选择数值字段"
+                  :placeholder="
+                    $t('log.dashboard.builder.field.placeholder.numeric')
+                  "
                   allow-create
-                  @change="buildQuery"
                 >
-                  <a-option value="cnt">{{
-                    $t('log.dashboard.builder.field.cnt')
-                  }}</a-option>
-                  <a-option value="cost">{{
-                    $t('log.dashboard.builder.field.cost')
-                  }}</a-option>
-                  <a-option value="meso">{{
-                    $t('log.dashboard.builder.field.meso')
-                  }}</a-option>
-                  <a-option value="exp">{{
-                    $t('log.dashboard.builder.field.exp')
-                  }}</a-option>
-                  <a-option value="hp">{{
-                    $t('log.dashboard.builder.field.hp')
-                  }}</a-option>
-                  <a-option value="mp">{{
-                    $t('log.dashboard.builder.field.mp')
-                  }}</a-option>
+                  <a-option
+                    v-for="item in combinedNumericFields"
+                    :key="item.value"
+                    :value="item.value"
+                    >{{ item.label }}</a-option
+                  >
                 </a-select>
               </a-form-item>
             </a-col>
@@ -404,28 +391,13 @@
                 :label="$t('log.dashboard.custom.form.dimension')"
                 field="dimension"
               >
-                <a-select v-model="queryBuilder.dimension" @change="buildQuery">
-                  <a-option value="none">{{
-                    $t('log.dashboard.builder.dimension.none')
-                  }}</a-option>
-                  <a-option value="mod">{{
-                    $t('log.dashboard.builder.dimension.mod')
-                  }}</a-option>
-                  <a-option value="act">{{
-                    $t('log.dashboard.builder.dimension.act')
-                  }}</a-option>
-                  <a-option value="jobName">{{
-                    $t('log.dashboard.builder.dimension.job')
-                  }}</a-option>
-                  <a-option value="mapName">{{
-                    $t('log.dashboard.builder.dimension.map')
-                  }}</a-option>
-                  <a-option value="acc">{{
-                    $t('log.dashboard.builder.dimension.acc')
-                  }}</a-option>
-                  <a-option value="chr">{{
-                    $t('log.dashboard.builder.dimension.chr')
-                  }}</a-option>
+                <a-select v-model="queryBuilder.dimension">
+                  <a-option
+                    v-for="item in combinedDimensions"
+                    :key="item.value"
+                    :value="item.value"
+                    >{{ item.label }}</a-option
+                  >
                 </a-select>
               </a-form-item>
             </a-col>
@@ -438,8 +410,7 @@
                   v-model="queryBuilder.topk"
                   :min="0"
                   :max="100"
-                  placeholder="0 表示不限制"
-                  @change="buildQuery"
+                  :placeholder="$t('log.dashboard.builder.topk.placeholder')"
                 />
               </a-form-item>
             </a-col>
@@ -460,13 +431,79 @@
             {{ $t('log.dashboard.custom.form.query.help') }}
           </template>
         </a-form-item>
+        <a-form-item>
+          <a-space>
+            <a-button :loading="testingQuery" @click="handleTestQuery">{{
+              $t('log.dashboard.custom.action.test')
+            }}</a-button>
+            <a-button @click="handleParseResult">{{
+              $t('log.dashboard.custom.action.parse')
+            }}</a-button>
+          </a-space>
+        </a-form-item>
       </a-form>
+    </a-modal>
+
+    <!-- 测试结果弹窗 -->
+    <a-modal
+      v-model:visible="showTestResultModal"
+      :title="$t('log.dashboard.custom.testResult.title')"
+      width="800px"
+      :top="100"
+      :footer="false"
+    >
+      <div class="test-result-content">
+        <pre>{{ testResult }}</pre>
+      </div>
+    </a-modal>
+
+    <!-- 解析字段弹窗 -->
+    <a-modal
+      v-model:visible="showParseModal"
+      :title="$t('log.dashboard.custom.parseModal.title')"
+      width="600px"
+      @ok="confirmParseSelection"
+    >
+      <a-table
+        :data="parsedFields"
+        :pagination="false"
+        row-key="name"
+        size="small"
+      >
+        <template #columns>
+          <a-table-column
+            :title="$t('log.dashboard.custom.parseModal.field')"
+            data-index="name"
+          />
+          <a-table-column
+            :title="$t('log.dashboard.custom.parseModal.display')"
+            data-index="translated"
+          />
+          <a-table-column
+            :title="$t('log.dashboard.custom.parseModal.type')"
+            data-index="type"
+          />
+          <a-table-column :title="$t('log.dashboard.custom.parseModal.add')">
+            <template #cell="{ record }">
+              <a-checkbox v-model="record.selected" />
+            </template>
+          </a-table-column>
+        </template>
+      </a-table>
     </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted, onUnmounted, reactive, nextTick } from 'vue';
+  import {
+    ref,
+    onMounted,
+    onUnmounted,
+    reactive,
+    nextTick,
+    computed,
+    watch,
+  } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
     getProcessStatus,
@@ -477,14 +514,16 @@
     ProcessStatus,
     readConfigFile,
     saveConfigFile,
-    searchLogs,
+    getAllOptions,
+    LabelValue,
+    queryLogs,
   } from '@/api/log';
   import { Message, Modal } from '@arco-design/web-vue';
   import dayjs from 'dayjs';
   import Sortable from 'sortablejs';
   import LogChart from './LogChart.vue';
 
-  const { t, te, messages, locale } = useI18n();
+  const { t } = useI18n();
 
   // --- Status Logic ---
   const loading = ref(false);
@@ -578,6 +617,27 @@
     });
   };
 
+  // --- LogQL Builder ---
+  const LOKI_LABELS = ['job', 'mod', 'act'];
+
+  interface LogQLFilter {
+    key: string;
+    op: string;
+    value: string;
+  }
+
+  const createDefaultQueryBuilder = () => ({
+    metric: 'count',
+    field: '',
+    dimension: 'none',
+    interval: '1m',
+    filters: [{ key: '', op: '=', value: '' }] as LogQLFilter[],
+    topk: 0,
+    logSource: 'gms-audit',
+  });
+
+  const queryBuilder = reactive(createDefaultQueryBuilder());
+
   // --- Dashboard Logic ---
   interface ChartConfig {
     id: string;
@@ -597,6 +657,7 @@
     width: number;
     height: number;
     range?: string;
+    builderState?: typeof queryBuilder;
   }
 
   const charts = ref<ChartConfig[]>([]);
@@ -615,198 +676,251 @@
     range: '24h',
   });
 
-  // Query Builder State
-  const queryBuilder = reactive({
-    metric: 'count',
-    field: '', // for sum/avg
-    dimension: 'none',
-    interval: '1m',
-    filterKey: '',
-    filterValue: '',
-    topk: 0,
-    logSource: 'gms-audit',
-  });
+  const buildBaseLogQL = () => {
+    const labels = [`job="${queryBuilder.logSource}"`];
+    const lineFilters: string[] = [];
 
-  // 修改 autoCompleteData 类型以支持 label/value
-  const autoCompleteData = ref<{ label: string; value: string }[]>([]);
-
-  // 自动填充搜索
-  const handleSearch = async (value: string) => {
-    if (!queryBuilder.filterKey) {
-      autoCompleteData.value = [];
-      return;
-    }
-    let type = '';
-    if (queryBuilder.filterKey === 'acc') type = 'account';
-    if (queryBuilder.filterKey === 'chr') type = 'character';
-    if (queryBuilder.filterKey === 'ip') type = 'ip';
-    if (queryBuilder.filterKey === 'hwid') type = 'hwid';
-    if (queryBuilder.filterKey === 'mac') type = 'mac';
-    if (queryBuilder.filterKey === 'mod') type = 'module';
-    if (queryBuilder.filterKey === 'act') type = 'action';
-
-    if (!type) return;
-
-    // 如果是模块或动作，使用预定义列表
-    if (type === 'module') {
-      const modules = [
-        'SYSTEM',
-        'LOGIN',
-        'CHARACTER',
-        'ITEM',
-        'SHOP',
-        'TRADE',
-        'PARTY',
-        'GUILD',
-        'FAMILY',
-        'QUEST',
-        'FIELD',
-        'SCRIPT',
-        'CASH_SHOP',
-        'EVENT',
-        'AUTOBAN',
-        'PLUGIN',
-      ];
-      const keyword = (value || '').toLowerCase();
-      autoCompleteData.value = modules
-        .map((m) => {
-          const key = `log.module.${m}`;
-          // 优先使用 messages 直接查找，解决扁平键名问题
-          const msgs = messages.value[locale.value];
-          let label = m;
-          if (msgs && msgs[key]) {
-            label = msgs[key];
-          } else if (te(key)) {
-            label = t(key);
-          }
-          return {
-            label,
-            value: m,
-          };
-        })
-        .filter(
-          (item) =>
-            item.value.toLowerCase().includes(keyword) ||
-            item.label.toLowerCase().includes(keyword)
-        );
-      return;
-    }
-
-    if (type === 'action') {
-      // 仅列出部分常用动作，完整列表太长
-      const actions = [
-        'LOGIN_SUCCESS',
-        'LOGIN_FAIL',
-        'LOGOUT',
-        'LEVEL_UP',
-        'DIE',
-        'REVIVE',
-        'ITEM_GAIN',
-        'ITEM_LOST',
-        'ITEM_USE',
-        'SHOP_BUY',
-        'SHOP_SELL',
-        'TRADE_COMPLETE',
-        'CHEAT_DETECTED',
-      ];
-      const keyword = (value || '').toLowerCase();
-      autoCompleteData.value = actions
-        .map((a) => {
-          const key = `log.action.${a}`;
-          // 优先使用 messages 直接查找，解决扁平键名问题
-          const msgs = messages.value[locale.value];
-          let label = a;
-          if (msgs && msgs[key]) {
-            label = msgs[key];
-          } else if (te(key)) {
-            label = t(key);
-          }
-          return {
-            label,
-            value: a,
-          };
-        })
-        .filter(
-          (item) =>
-            item.value.toLowerCase().includes(keyword) ||
-            item.label.toLowerCase().includes(keyword)
-        );
-      return;
-    }
-
-    try {
-      const { data } = await searchLogs(type, value || '');
-      // 后端返回的是字符串数组，转换为对象数组
-      autoCompleteData.value = (data as string[]).map((item) => ({
-        label: item,
-        value: item,
-      }));
-    } catch (err) {
-      // ignore
-    }
+    queryBuilder.filters.forEach((filter) => {
+      let actualKey = filter.key;
+      if (filter.key === 'actionType') actualKey = 'act';
+      if (filter.key === 'actionSource') actualKey = 'actsou';
+      if (filter.key && filter.value) {
+        if (LOKI_LABELS.includes(actualKey)) {
+          labels.push(`${actualKey}${filter.op}"${filter.value}"`);
+        } else {
+          lineFilters.push(`| ${actualKey}${filter.op}"${filter.value}"`);
+        }
+      }
+    });
+    const selector = `{${labels.join(',')}}`;
+    const streamFilter = lineFilters.join(' ');
+    return `${selector} | json ${streamFilter}`;
   };
 
   const buildQuery = () => {
-    let selector = `{job="${queryBuilder.logSource}"`;
-    if (queryBuilder.filterKey && queryBuilder.filterValue) {
-      selector += `, ${queryBuilder.filterKey}="${queryBuilder.filterValue}"`;
-    }
-    selector += '}';
-
+    const baseStream = buildBaseLogQL();
     let rangeVector = '';
     if (queryBuilder.metric === 'count') {
-      rangeVector = `${selector}[${queryBuilder.interval}]`;
+      rangeVector = `(${baseStream})[${queryBuilder.interval}]`;
     } else {
-      if (!queryBuilder.field) return;
-      rangeVector = `(${selector} | unwrap ${queryBuilder.field} | __error__="")[${queryBuilder.interval}]`;
+      if (!queryBuilder.field) {
+        addForm.query = t('log.dashboard.custom.message.query.error');
+        return;
+      }
+      rangeVector = `(${baseStream} | unwrap ${queryBuilder.field} | __error__="")[${queryBuilder.interval}]`;
     }
 
-    let func = '';
-    switch (queryBuilder.metric) {
-      case 'count':
-        func = `count_over_time(${rangeVector})`;
-        break;
-      case 'sum':
-        func = `sum_over_time(${rangeVector})`;
-        break;
-      case 'avg':
-        func = `avg_over_time(${rangeVector})`;
-        break;
-      case 'max':
-        func = `max_over_time(${rangeVector})`;
-        break;
-      case 'min':
-        func = `min_over_time(${rangeVector})`;
-        break;
-      default:
-        func = `count_over_time(${rangeVector})`;
-    }
+    const func = `${queryBuilder.metric}_over_time(${rangeVector})`;
 
     let q = '';
-    if (queryBuilder.dimension !== 'none') {
+    if (queryBuilder.dimension && queryBuilder.dimension !== 'none') {
       q = `sum by (${queryBuilder.dimension}) (${func})`;
-      // TopK Logic
       if (queryBuilder.topk > 0) {
         q = `topk(${queryBuilder.topk}, ${q})`;
       }
     } else {
       q = `sum(${func})`;
     }
-
     addForm.query = q;
   };
 
-  const handleFilterKeyChange = () => {
-    // 当切换过滤键时，清空过滤值
-    queryBuilder.filterValue = '';
-    autoCompleteData.value = [];
-    buildQuery();
+  watch(queryBuilder, buildQuery, { deep: true });
 
-    // 如果切换到 mod 或 act，自动加载列表
-    if (queryBuilder.filterKey === 'mod' || queryBuilder.filterKey === 'act') {
-      handleSearch('');
+  const addFilter = () => {
+    queryBuilder.filters.push({ key: '', op: '=', value: '' });
+  };
+  const removeFilter = (index: number) => {
+    queryBuilder.filters.splice(index, 1);
+  };
+
+  const allOptions = ref({
+    modules: [] as LabelValue[],
+    actions: [] as LabelValue[],
+    traceabilityActionTypes: [] as LabelValue[],
+    traceabilityActionSourceTypes: [] as LabelValue[],
+  });
+
+  const isSelectFilter = (key: string) => {
+    return ['mod', 'act', 'actionType', 'actionSource'].includes(key);
+  };
+
+  const getOptionsForFilterKey = (key: string) => {
+    if (key === 'mod') return allOptions.value.modules;
+    if (key === 'act') return allOptions.value.actions;
+    if (key === 'actionType') return allOptions.value.traceabilityActionTypes;
+    if (key === 'actionSource')
+      return allOptions.value.traceabilityActionSourceTypes;
+    return [];
+  };
+
+  // --- Test & Parse Logic ---
+  const showTestResultModal = ref(false);
+  const testResult = ref('');
+  const testingQuery = ref(false);
+  const lastTestResultData = ref<any[]>([]);
+  const dynamicDimensions = ref<LabelValue[]>([]);
+  const dynamicNumericFields = ref<LabelValue[]>([]);
+  const showParseModal = ref(false);
+  const parsedFields = ref<
+    { name: string; translated: string; type: string; selected: boolean }[]
+  >([]);
+  const i18nFieldMap = new Map<string, string>();
+
+  const buildI18nMap = () => {
+    i18nFieldMap.set('mod', t('log.dashboard.builder.dimension.mod'));
+    i18nFieldMap.set('act', t('log.dashboard.builder.dimension.act'));
+    i18nFieldMap.set('jobName', t('log.dashboard.builder.dimension.job'));
+    i18nFieldMap.set('mapName', t('log.dashboard.builder.dimension.map'));
+    i18nFieldMap.set('acc', t('log.dashboard.builder.dimension.acc'));
+    i18nFieldMap.set('chr', t('log.dashboard.builder.dimension.chr'));
+    i18nFieldMap.set('actionType', t('log.query.form.actionType'));
+    i18nFieldMap.set('actionSource', t('log.query.form.actionSource'));
+  };
+
+  const fetchAllOptions = async () => {
+    try {
+      const { data } = await getAllOptions();
+      allOptions.value = data;
+    } catch (err) {
+      // ignore
     }
   };
+
+  const handleTestQuery = async () => {
+    testingQuery.value = true;
+    const testQuery = buildBaseLogQL();
+    try {
+      const response = await queryLogs({
+        query: testQuery,
+        limit: 10,
+        range: addForm.range,
+      });
+      const result = response.data?.data?.result || [];
+
+      const allLogs = result
+        .map((item: any) => {
+          return item.values.map((val: any[]) => {
+            try {
+              return JSON.parse(val[1].trim());
+            } catch (e) {
+              return { raw: val[1] };
+            }
+          });
+        })
+        .flat();
+
+      lastTestResultData.value = allLogs;
+      testResult.value = JSON.stringify(allLogs, null, 2);
+      showTestResultModal.value = true;
+    } catch (err: any) {
+      Message.error(err.message || t('log.query.message.fail'));
+      testResult.value = `${t('log.query.message.fail')}: ${err.message}\n\n${t(
+        'log.dashboard.custom.form.query'
+      )}:\n${testQuery}`;
+      showTestResultModal.value = true;
+    } finally {
+      testingQuery.value = false;
+    }
+  };
+
+  const handleParseResult = () => {
+    if (lastTestResultData.value.length === 0) {
+      Message.info(t('log.dashboard.custom.message.test.noResult'));
+      return;
+    }
+    const firstLog = lastTestResultData.value[0];
+    if (!firstLog || typeof firstLog !== 'object') {
+      Message.error(t('log.dashboard.custom.message.test.invalidJson'));
+      return;
+    }
+
+    parsedFields.value = Object.keys(firstLog).map((key) => {
+      const value = firstLog[key];
+      return {
+        name: key,
+        translated: i18nFieldMap.get(key) || key,
+        type: typeof value,
+        selected: true,
+      };
+    });
+    showParseModal.value = true;
+  };
+
+  const confirmParseSelection = () => {
+    const newDimensions = new Set(dynamicDimensions.value.map((d) => d.value));
+    const newNumericFields = new Set(
+      dynamicNumericFields.value.map((f) => f.value)
+    );
+    let addedCount = 0;
+
+    parsedFields.value.forEach((field) => {
+      if (field.selected) {
+        if (field.type === 'string' && !newDimensions.has(field.name)) {
+          newDimensions.add(field.name);
+          addedCount += 1;
+        } else if (
+          field.type === 'number' &&
+          !newNumericFields.has(field.name)
+        ) {
+          newNumericFields.add(field.name);
+          addedCount += 1;
+        }
+      }
+    });
+
+    dynamicDimensions.value = Array.from(newDimensions).map((d) => ({
+      label: i18nFieldMap.get(d) || d,
+      value: d,
+    }));
+    dynamicNumericFields.value = Array.from(newNumericFields).map((f) => ({
+      label: i18nFieldMap.get(f) || f,
+      value: f,
+    }));
+
+    if (addedCount > 0) {
+      Message.success(
+        t('log.dashboard.custom.message.parse.success', { count: addedCount })
+      );
+    } else {
+      Message.info(t('log.dashboard.custom.message.parse.noNew'));
+    }
+    showParseModal.value = false;
+  };
+
+  const combinedDimensions = computed(() => {
+    const staticDimensions = [
+      { label: t('log.dashboard.builder.dimension.none'), value: 'none' },
+      { label: t('log.dashboard.builder.dimension.mod'), value: 'mod' },
+      { label: t('log.dashboard.builder.dimension.act'), value: 'act' },
+      { label: t('log.query.form.actionType'), value: 'actionType' },
+      { label: t('log.query.form.actionSource'), value: 'actionSource' },
+      { label: t('log.dashboard.builder.dimension.job'), value: 'jobName' },
+      { label: t('log.dashboard.builder.dimension.map'), value: 'mapName' },
+      { label: t('log.dashboard.builder.dimension.acc'), value: 'acc' },
+      { label: t('log.dashboard.builder.dimension.chr'), value: 'chr' },
+    ];
+    const all = [...staticDimensions, ...dynamicDimensions.value];
+    return all.filter(
+      (item, index, self) =>
+        index === self.findIndex((item2) => item2.value === item.value)
+    );
+  });
+
+  const combinedNumericFields = computed(() => {
+    const staticFields = [
+      { label: t('log.dashboard.builder.field.cnt'), value: 'cnt' },
+      { label: t('log.dashboard.builder.field.cost'), value: 'cost' },
+      { label: t('log.dashboard.builder.field.meso'), value: 'meso' },
+      { label: t('log.dashboard.builder.field.exp'), value: 'exp' },
+      { label: t('log.dashboard.builder.field.hp'), value: 'hp' },
+      { label: t('log.dashboard.builder.field.mp'), value: 'mp' },
+    ];
+    const all = [...staticFields, ...dynamicNumericFields.value];
+    return all.filter(
+      (item, index, self) =>
+        index === self.findIndex((item2) => item2.value === item.value)
+    );
+  });
 
   const handleResizeStart = () => {
     isResizing.value = true;
@@ -820,109 +934,68 @@
   const getDefaultCharts = (): ChartConfig[] => [
     {
       id: '1',
-      title: '登录活跃度 (Login Activity)',
+      title: t('log.dashboard.defaultChart.loginActivity'),
       type: 'line',
       query:
-        'sum by (act) (count_over_time({job="gms-audit", mod="LOGIN"}[1h]))',
+        'sum by (act) (count_over_time({job="gms-audit",mod="LOGIN"}[1h]))',
       width: 600,
       height: 300,
       range: '24h',
     },
     {
       id: '2',
-      title: '商城消费热度 (Cash Shop Sales)',
+      title: t('log.dashboard.defaultChart.cashShopSales'),
       type: 'pie',
       query:
-        'sum by (act) (count_over_time({job="gms-audit", mod="CASH_SHOP"}[1h]))',
+        'sum by (act) (count_over_time({job="gms-audit",mod="CASH_SHOP"}[1h]))',
       width: 600,
       height: 300,
       range: '24h',
     },
     {
       id: '3',
-      title: '商店交易活跃度 (Shop Activity)',
+      title: t('log.dashboard.defaultChart.shopActivity'),
       type: 'bar',
-      query:
-        'sum by (act) (count_over_time({job="gms-audit", mod="SHOP"}[1h]))',
+      query: 'sum by (act) (count_over_time({job="gms-audit",mod="SHOP"}[1h]))',
       width: 600,
       height: 300,
       range: '24h',
     },
     {
       id: '4',
-      title: '职业分布 (Job Distribution)',
+      title: t('log.dashboard.defaultChart.jobDistribution'),
       type: 'pie',
       query:
-        'sum by (jobName) (count_over_time({job="gms-audit", mod="LOGIN", act="LOGIN_SUCCESS"}[24h]))',
+        'sum by (jobName) (count_over_time({job="gms-audit",act="LOGIN_SUCCESS"} | json[24h]))',
       width: 600,
       height: 300,
       range: '24h',
     },
     {
       id: '5',
-      title: '热门地图 Top 10 (Map Popularity)',
+      title: t('log.dashboard.defaultChart.mapPopularity'),
       type: 'bar',
       query:
-        'topk(10, sum by (mapName) (count_over_time({job="gms-audit", mod="FIELD", act="CHANGE_MAP"}[1h])))',
+        'topk(10, sum by (mapName) (count_over_time({job="gms-audit",act="CHANGE_MAP"} | json[1h])))',
       width: 1200,
       height: 350,
       range: '24h',
     },
     {
       id: '6',
-      title: '作弊检测告警 (Cheat Detection)',
+      title: t('log.dashboard.defaultChart.cheatDetection'),
       type: 'bar',
       query:
-        'sum by (act) (count_over_time({job="gms-audit", mod="AUTOBAN"}[1h]))',
+        'sum by (act) (count_over_time({job="gms-audit",mod="AUTOBAN"}[1h]))',
       width: 600,
       height: 300,
       range: '24h',
     },
     {
       id: '7',
-      title: '系统错误监控 (System Errors)',
+      title: t('log.dashboard.defaultChart.systemErrors'),
       type: 'line',
-      query: 'count_over_time({job="gms-audit", level="ERROR"}[1m])',
-      width: 600,
-      height: 300,
-      range: '24h',
-    },
-    {
-      id: '8',
-      title: '组队活跃度 (Party Activity)',
-      type: 'line',
-      query:
-        'sum by (act) (count_over_time({job="gms-audit", mod="PARTY"}[1h]))',
-      width: 600,
-      height: 300,
-      range: '24h',
-    },
-    {
-      id: '9',
-      title: '公会活动 (Guild Activity)',
-      type: 'bar',
-      query:
-        'sum by (act) (count_over_time({job="gms-audit", mod="GUILD"}[1h]))',
-      width: 600,
-      height: 300,
-      range: '24h',
-    },
-    {
-      id: '10',
-      title: '任务完成情况 (Quest Completion)',
-      type: 'pie',
-      query:
-        'sum by (act) (count_over_time({job="gms-audit", mod="QUEST"}[24h]))',
-      width: 600,
-      height: 300,
-      range: '24h',
-    },
-    {
-      id: '11',
-      title: '物品交易量 (Trade Volume)',
-      type: 'line',
-      query:
-        'sum by (act) (count_over_time({job="gms-audit", mod="TRADE"}[1h]))',
+      query: 'sum(count_over_time({job="gms-error"}[1m]))',
       width: 600,
       height: 300,
       range: '24h',
@@ -932,16 +1005,10 @@
   const saveLayout = async () => {
     savingLayout.value = true;
     try {
-      // 显式深拷贝，确保序列化纯数据
       const dataToSave = JSON.parse(JSON.stringify(charts.value));
-      // eslint-disable-next-line no-console
-      console.log('Saving layout data:', dataToSave);
-
       await saveConfigFile('dashboard-layout.json', JSON.stringify(dataToSave));
       Message.success(t('log.dashboard.custom.message.save.success'));
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Save layout failed:', err);
       Message.error(t('log.dashboard.custom.message.save.fail'));
     } finally {
       savingLayout.value = false;
@@ -953,10 +1020,7 @@
       const { data } = await readConfigFile('dashboard-layout.json');
       if (data) {
         let parsed = typeof data === 'string' ? JSON.parse(data) : data;
-
-        // 兼容处理：如果文件内容被错误地包装了（例如包含 requestId 和 data 字段）
         if (parsed && !Array.isArray(parsed) && parsed.data) {
-          // 如果 data 字段是字符串（被二次序列化了），尝试解析它
           if (typeof parsed.data === 'string') {
             try {
               parsed = JSON.parse(parsed.data);
@@ -967,8 +1031,6 @@
             parsed = parsed.data;
           }
         }
-
-        // 再次检查是否为字符串（处理可能的双重序列化）
         if (typeof parsed === 'string') {
           try {
             parsed = JSON.parse(parsed);
@@ -976,27 +1038,22 @@
             // ignore
           }
         }
-
         if (Array.isArray(parsed)) {
           charts.value = parsed;
           charts.value.forEach((c) => {
             if (!c.height) c.height = 300;
-            // 兼容旧数据：如果 width <= 24，说明是栅格数，转换为像素
             if (c.width <= 24) {
-              c.width *= 50; // 假设每列 50px，或者给一个默认值 600
+              c.width *= 50;
               if (c.width < 200) c.width = 600;
             }
           });
         } else {
-          // 如果解析结果不是数组，回退到默认图表
           charts.value = getDefaultCharts();
         }
       } else {
         charts.value = getDefaultCharts();
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn('Failed to load layout file, using default charts:', err);
       charts.value = getDefaultCharts();
     }
   };
@@ -1004,7 +1061,7 @@
   const resetToDefault = () => {
     Modal.confirm({
       title: t('log.dashboard.action.resetDefault'),
-      content: '确定要重置为默认仪表盘吗？当前所有自定义图表将丢失。',
+      content: t('log.dashboard.confirm.resetDefault'),
       onOk: () => {
         charts.value = getDefaultCharts();
         saveLayout();
@@ -1013,20 +1070,15 @@
   };
 
   const resetForm = () => {
+    Object.assign(queryBuilder, createDefaultQueryBuilder());
     addForm.title = '';
     addForm.query = '';
     addForm.width = 600;
     addForm.height = 300;
     addForm.type = 'line';
     addForm.range = '24h';
-    queryBuilder.metric = 'count';
-    queryBuilder.field = '';
-    queryBuilder.dimension = 'none';
-    queryBuilder.filterKey = '';
-    queryBuilder.filterValue = '';
-    queryBuilder.interval = '1m';
-    queryBuilder.topk = 0;
-    queryBuilder.logSource = 'gms-audit';
+    dynamicDimensions.value = [];
+    dynamicNumericFields.value = [];
     buildQuery();
   };
 
@@ -1036,104 +1088,28 @@
     showAddModal.value = true;
   };
 
-  const parseQuery = (query: string) => {
-    // 简单的正则解析，用于反推参数
-    // 示例: topk(10, sum by (mapName) (count_over_time({job="gms-audit", mod="FIELD", act="CHANGE_MAP"}[1h])))
-    // 示例: sum by (act) (count_over_time({job="gms-audit", mod="SHOP"}[1h]))
-    // 示例: count_over_time({job="gms-audit"}[1m])
-
-    try {
-      // 1. TopK
-      const topkMatch = query.match(/topk\((\d+),/);
-      if (topkMatch) {
-        queryBuilder.topk = parseInt(topkMatch[1], 10);
-      } else {
-        queryBuilder.topk = 0;
-      }
-
-      // 2. Dimension (sum by (...))
-      const dimMatch = query.match(/by\s*\(([^)]+)\)/);
-      if (dimMatch) {
-        queryBuilder.dimension = dimMatch[1].trim();
-      } else {
-        queryBuilder.dimension = 'none';
-      }
-
-      // 3. Metric & Interval & Selector
-      // 匹配 count_over_time(...) 或 sum_over_time(...) 等
-      const funcMatch = query.match(/(\w+)_over_time\(([^)]+)\)/);
-      if (funcMatch) {
-        // eslint-disable-next-line prefer-destructuring
-        queryBuilder.metric = funcMatch[1]; // count, sum, avg...
-        const inner = funcMatch[2]; // {job="...", ...}[1h] 或 ({...} | unwrap ...)[1h]
-
-        // Interval
-        const intervalMatch = inner.match(/\[([^\]]+)\]$/);
-        if (intervalMatch) {
-          // eslint-disable-next-line prefer-destructuring
-          queryBuilder.interval = intervalMatch[1];
-        }
-
-        // Field (unwrap)
-        const unwrapMatch = inner.match(/unwrap\s+([^\s|]+)/);
-        if (unwrapMatch) {
-          // eslint-disable-next-line prefer-destructuring
-          queryBuilder.field = unwrapMatch[1];
-        } else {
-          queryBuilder.field = '';
-        }
-
-        // Selector {key="value", ...}
-        const selectorMatch = inner.match(/\{([^}]+)\}/);
-        if (selectorMatch) {
-          const parts = selectorMatch[1].split(',');
-          let logSource = 'gms-audit';
-          let filterKey = '';
-          let filterValue = '';
-
-          parts.forEach((part) => {
-            const [k, v] = part
-              .split('=')
-              .map((s) => s.trim().replace(/"/g, ''));
-            if (k === 'job') {
-              logSource = v;
-            } else if (k !== '__error__') {
-              // 假设只有一个额外的过滤条件
-              filterKey = k;
-              filterValue = v;
-            }
-          });
-
-          queryBuilder.logSource = logSource;
-          queryBuilder.filterKey = filterKey;
-          queryBuilder.filterValue = filterValue;
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-  };
-
   const openEditModal = (index: number) => {
     isEditMode.value = true;
     editingIndex.value = index;
     const chart = charts.value[index];
+
+    // 优先从保存的 builderState 恢复
+    if (chart.builderState) {
+      Object.assign(
+        queryBuilder,
+        JSON.parse(JSON.stringify(chart.builderState))
+      );
+    } else {
+      // 后备方案：如果旧数据没有 builderState，则重置
+      resetForm();
+    }
+
     addForm.title = chart.title;
     addForm.type = chart.type;
     addForm.query = chart.query;
     addForm.width = chart.width;
     addForm.height = chart.height || 300;
     addForm.range = chart.range || '24h';
-
-    // 反推参数
-    parseQuery(chart.query);
-
-    // 自动加载下拉选项，以便正确显示 Label
-    if (queryBuilder.filterKey === 'mod' || queryBuilder.filterKey === 'act') {
-      handleSearch('');
-    } else {
-      autoCompleteData.value = [];
-    }
 
     showAddModal.value = true;
   };
@@ -1143,47 +1119,28 @@
       Message.warning(t('log.dashboard.custom.validate.required'));
       return;
     }
+    buildQuery();
 
-    if (isEditMode.value && editingIndex.value !== -1) {
-      const chart = charts.value[editingIndex.value];
-      chart.title = addForm.title;
-      chart.type = addForm.type as
-        | 'line'
-        | 'bar'
-        | 'pie'
-        | 'scatter'
-        | 'area'
-        | 'radar'
-        | 'funnel'
-        | 'gauge'
-        | 'heatmap'
-        | 'candlestick';
-      chart.query = addForm.query;
-      chart.width = addForm.width;
-      chart.range = addForm.range;
+    const chartData: ChartConfig = {
+      id: isEditMode.value
+        ? charts.value[editingIndex.value].id
+        : Date.now().toString(),
+      title: addForm.title,
+      type: addForm.type as any,
+      query: addForm.query,
+      width: addForm.width,
+      height: addForm.height,
+      range: addForm.range,
+      builderState: JSON.parse(JSON.stringify(queryBuilder)), // 保存构建器状态
+    };
+
+    if (isEditMode.value) {
+      charts.value[editingIndex.value] = chartData;
     } else {
-      const newChart: ChartConfig = {
-        id: Date.now().toString(),
-        title: addForm.title,
-        type: addForm.type as
-          | 'line'
-          | 'bar'
-          | 'pie'
-          | 'scatter'
-          | 'area'
-          | 'radar'
-          | 'funnel'
-          | 'gauge'
-          | 'heatmap'
-          | 'candlestick',
-        query: addForm.query,
-        width: addForm.width,
-        height: 300,
-        range: addForm.range,
-      };
-      charts.value.push(newChart);
+      charts.value.push(chartData);
     }
     showAddModal.value = false;
+    resetForm();
   };
 
   const removeChart = (index: number) => {
@@ -1218,6 +1175,9 @@
   onMounted(() => {
     fetchStatus();
     loadLayout();
+    fetchAllOptions();
+    buildI18nMap();
+    buildQuery();
     timer = setInterval(() => {
       now.value = Date.now();
     }, 1000);
@@ -1324,6 +1284,10 @@
     border: 1px solid var(--color-border-2);
   }
 
+  .filter-row {
+    margin-bottom: 8px;
+  }
+
   /* 网格背景样式 */
   .chart-grid-container {
     position: relative;
@@ -1345,5 +1309,13 @@
     background-size: 16px 16px;
     background-position: 0 0;
     border-color: var(--color-neutral-3);
+  }
+
+  .test-result-content {
+    max-height: 60vh;
+    overflow: auto;
+    background-color: var(--color-fill-2);
+    padding: 10px;
+    border-radius: 4px;
   }
 </style>

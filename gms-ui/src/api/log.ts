@@ -20,6 +20,18 @@ export interface LogStats {
   raw: string;
 }
 
+export interface LabelValue {
+  label: string;
+  value: string;
+}
+
+export interface AllOptions {
+  modules: LabelValue[];
+  actions: LabelValue[];
+  traceabilityActionTypes: LabelValue[];
+  traceabilityActionSourceTypes: LabelValue[];
+}
+
 export function getProcessStatus() {
   return axios.get<ProcessStatus>('/log/process/status');
 }
@@ -40,13 +52,27 @@ export function resetProcess() {
   return axios.post<string>('/log/process/reset');
 }
 
-export function getModuleConfig() {
-  return axios.get<Record<string, boolean>>('/log/config/modules');
+export function getAllOptions() {
+  return axios.get<AllOptions>('/log/config/all-options');
 }
 
-export function setModuleConfig(module: string, enabled: boolean) {
+// --- 以下为旧的独立接口，保留以便其他地方可能的使用 ---
+export function getModules() {
+  return axios.get<LabelValue[]>('/log/config/modules');
+}
+
+export function getActions() {
+  return axios.get<LabelValue[]>('/log/config/actions');
+}
+// ---
+
+export function getModuleSwitches() {
+  return axios.get<Record<string, boolean>>('/log/config/module-switches');
+}
+
+export function setModuleSwitch(module: string, enabled: boolean) {
   return axios.post<string>(
-    `/log/config/modules?module=${module}&enabled=${enabled}`
+    `/log/config/module-switches?module=${module}&enabled=${enabled}`
   );
 }
 

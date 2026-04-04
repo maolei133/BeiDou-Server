@@ -185,10 +185,7 @@ public class StorageProcessor {
                     InventoryType invType = ItemConstants.getInventoryType(itemId);
                     Inventory inv = chr.getInventory(invType);
                     if (slot < 1 || slot > inv.getSlotLimit()) { // 玩家背包从1开始
-                        AutobanFactory.PACKET_EDIT.alert(c.getPlayer(),
-                                c.getPlayer().getName() + " 尝试通过仓库进行封包编辑。");
-                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_IN,
-                                new MapMessage().with("msg", "检测到封包编辑").with("slot", slot));
+                        AutobanFactory.PACKET_EDIT.alert(c.getPlayer(),c.getPlayer().getName() + " 尝试通过仓库进行封包编辑。");
                         c.disconnect(true, false);
                         return;
                     }
@@ -373,7 +370,7 @@ public class StorageProcessor {
                         new MapMessage()
                                 .with("msg", "仓库操作异常")
                                 .with("mode", mode)
-                                .with("char", chr.getName()), e);
+                                , e);
             } finally {
                 c.releaseClient();
             }

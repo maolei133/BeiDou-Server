@@ -180,8 +180,6 @@ public class TraceabilityService {
         PLAYER_DROP,
         PLAYER_PICKUP,
         INVENTORY_MERGE,
-        INVENTORY_MOVE,
-        INVENTORY_CHANGE,
 
         // STORAGE
         STORAGE_PUT_IN,
@@ -203,8 +201,8 @@ public class TraceabilityService {
         MERCHANT_RETURN, // arg1: 商店ID/所有者ID, arg2: 商店名/所有者名
 
         // TRADE
-        PLAYER_TRADE, // arg1: 对方角色ID, arg2: 对方角色名
-
+        TRADE_SENDER, // arg1: 对方角色ID, arg2: 对方角色名
+        TRADE_RECEIVER, // arg1: 对方角色ID, arg2: 对方角色名
         // DUEY
         DUEY_SEND, // arg1: 对方角色ID, arg2: 对方角色名
         DUEY_RECEIVE, // arg1: 对方角色ID, arg2: 对方角色名
@@ -214,7 +212,6 @@ public class TraceabilityService {
         // ITEM_USAGE
         ITEM_USE, // arg1: 物品ID, arg2: 物品名, arg3: 数量
         ITEM_CONSUME, // arg1: 物品ID, arg2: 物品名, arg3: 数量
-        ITEM_MERGE, // arg1: 物品ID, arg2: 物品名, arg3: 数量
         ITEM_CRAFT, // arg1: 物品ID, arg2: 物品名, arg3: 数量
 
         // EQUIPMENT
@@ -315,7 +312,8 @@ public class TraceabilityService {
             } else {
                 lokiMessage += String.format(" : [%d] %s × %d", item.getItemId(), ItemInformationProvider.getInstance().getName(item.getItemId()), quantityChange <= 0 ? quantityChange / -1 : quantityChange);
             }
-        } else if (formattedSource != null && !formattedSource.isEmpty()) lokiMessage += " : " + formattedSource;
+        }
+        if (formattedSource != null && !formattedSource.isEmpty()) lokiMessage += " : " + formattedSource;
 
         String dbTargetInfo = (domainType == ActionType.ITEM_USAGE) ? null : formattedSource;
         if (targetInfo != null) {
@@ -435,13 +433,14 @@ public class TraceabilityService {
 
                 if (recordToLoki) {
                     MapMessage logData = new MapMessage()
-                            .with("msg", lokiMsg != null ? lokiMsg : dbActionSource)
+                            .with("actsou", actionSourceType.name())
                             .with("uid", item.getUid())
                             .with("itmId", item.getItemId())
                             .with("itmName", String.valueOf(ItemInformationProvider.getInstance().getName(item.getItemId())))
                             .with("cnt", quantityChange)
                             .with("isVal", isValuable)
-                            .with("itmData", itemSnapshotJson);
+                            .with("itmData", itemSnapshotJson)
+                            .with("msg", lokiMsg != null ? lokiMsg : dbActionSource);
 
                     for (Map.Entry<String, String> entry : contextData.entrySet()) {
                         logData.with(entry.getKey(), entry.getValue());
@@ -449,7 +448,7 @@ public class TraceabilityService {
                     if (targetInfo != null && !targetInfo.isEmpty()) logData.with("target", targetInfo);
                     if (memo != null && !memo.isEmpty()) logData.with("memo", memo);
 
-                    AuditLogger.info(accountId,characterId,mapId, MapFactory.loadPlaceName(mapId),LogModule.ITEM.name(), actionSourceType.getI18nVal(), logData);
+                    AuditLogger.info(accountId,characterId,mapId, MapFactory.loadPlaceName(mapId),LogModule.ITEM_TRACEAB.name(), actionType.name(), logData);
                 }
             } catch (Exception e) {
                 log.error("写入物品溯源双重日志失败，物品UID: " + item.getUid(), e);

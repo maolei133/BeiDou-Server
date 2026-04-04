@@ -77,7 +77,7 @@ public final class DeleteCharHandler extends AbstractPacketHandler {
 
             if (c.deleteCharacter(cid, c.getAccID())) {
                 log.info("账号 {} 删除了角色 ID {}", c.getAccountName(), cid);
-                AuditLogger.info(LogModule.LOGIN, LogAction.DELETE_CHAR, new MapMessage().with("cid", cid).with("chr", charactersDO.getName()));
+                AuditLogger.info(LogModule.ACCOUNT, LogAction.CHR_DELETE, new MapMessage().with("cid", cid).with("chr", charactersDO.getName()));
                 c.sendPacket(PacketCreator.deleteCharResponse(cid, 0));
             } else {
                 c.sendPacket(PacketCreator.deleteCharResponse(cid, 0x09));
