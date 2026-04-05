@@ -23,7 +23,6 @@ package org.gms.client.inventory;
 
 import com.alibaba.fastjson2.JSONObject;
 import lombok.Getter;
-import lombok.Setter;
 import org.gms.client.Client;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.ExpTable;
@@ -41,8 +40,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+
 @Getter
-@Setter
 public class Equip extends Item {
     private static final Logger log = LoggerFactory.getLogger(Equip.class);
 
@@ -168,6 +167,8 @@ public class Equip extends Item {
         ret.setExpiration(getExpiration());
         ret.setGiftFrom(getGiftFrom());
         ret.setUid(getUid()); // 复制 uid
+        ret.setInventoryItemId(getInventoryItemId());
+        ret.setDirty(isDirty());
         return ret;
     }
 
@@ -177,12 +178,160 @@ public class Equip extends Item {
     }
 
     public void setInt(short _int) {
-        this._int = _int;
+        if (this._int != _int) {
+            this._int = _int;
+            setDirty(true);
+        }
     }
 
     public short getInt() {
         return _int;
     }
+
+    public void setUpgradeSlots(byte upgradeSlots) {
+        if (this.upgradeSlots != upgradeSlots) {
+            this.upgradeSlots = upgradeSlots;
+            setDirty(true);
+        }
+    }
+
+    public void setLevel(short level) {
+        if (this.level != level) {
+            this.level = level;
+            setDirty(true);
+        }
+    }
+
+    public void setItemLevel(short itemLevel) {
+        if (this.itemLevel != itemLevel) {
+            this.itemLevel = itemLevel;
+            setDirty(true);
+        }
+    }
+
+    public void setStr(short str) {
+        if (this.str != str) {
+            this.str = str;
+            setDirty(true);
+        }
+    }
+
+    public void setDex(short dex) {
+        if (this.dex != dex) {
+            this.dex = dex;
+            setDirty(true);
+        }
+    }
+
+    public void setLuk(short luk) {
+        if (this.luk != luk) {
+            this.luk = luk;
+            setDirty(true);
+        }
+    }
+
+    public void setHp(short hp) {
+        if (this.hp != hp) {
+            this.hp = hp;
+            setDirty(true);
+        }
+    }
+
+    public void setMp(short mp) {
+        if (this.mp != mp) {
+            this.mp = mp;
+            setDirty(true);
+        }
+    }
+
+    public void setWatk(short watk) {
+        if (this.watk != watk) {
+            this.watk = watk;
+            setDirty(true);
+        }
+    }
+
+    public void setMatk(short matk) {
+        if (this.matk != matk) {
+            this.matk = matk;
+            setDirty(true);
+        }
+    }
+
+    public void setWdef(short wdef) {
+        if (this.wdef != wdef) {
+            this.wdef = wdef;
+            setDirty(true);
+        }
+    }
+
+    public void setMdef(short mdef) {
+        if (this.mdef != mdef) {
+            this.mdef = mdef;
+            setDirty(true);
+        }
+    }
+
+    public void setAcc(short acc) {
+        if (this.acc != acc) {
+            this.acc = acc;
+            setDirty(true);
+        }
+    }
+
+    public void setAvoid(short avoid) {
+        if (this.avoid != avoid) {
+            this.avoid = avoid;
+            setDirty(true);
+        }
+    }
+
+    public void setHands(short hands) {
+        if (this.hands != hands) {
+            this.hands = hands;
+            setDirty(true);
+        }
+    }
+
+    public void setSpeed(short speed) {
+        if (this.speed != speed) {
+            this.speed = speed;
+            setDirty(true);
+        }
+    }
+
+    public void setJump(short jump) {
+        if (this.jump != jump) {
+            this.jump = jump;
+            setDirty(true);
+        }
+    }
+
+    public void setVicious(short vicious) {
+        if (this.vicious != vicious) {
+            this.vicious = vicious;
+            setDirty(true);
+        }
+    }
+
+    public void setItemExp(float itemExp) {
+        if (this.itemExp != itemExp) {
+            this.itemExp = itemExp;
+            setDirty(true);
+        }
+    }
+
+    public void setRingId(int ringid) {
+        if (this.ringid != ringid) {
+            this.ringid = ringid;
+            setDirty(true);
+        }
+    }
+
+    public void wear(boolean wear) {
+        this.wear = wear;
+    }
+    
     private static int getStatModifier(boolean isAttribute) {
         if (GameConfig.getServerBoolean("use_equipment_level_up_power")) {
             return isAttribute ? 2 : 4;
@@ -333,11 +482,11 @@ public class Equip extends Item {
 
             switch (type) {
                 case incVicious: // 减少金锤子
-                    vicious -= value;
+                    setVicious((short) (vicious - value));
                     gotVicious = true;
                     break;
                 case incSlot: // 增加升级槽
-                    upgradeSlots += value;
+                    setUpgradeSlots((byte) (upgradeSlots + value));
                     gotSlot = true;
                     break;
                 default: // 处理普通属性
@@ -397,20 +546,20 @@ public class Equip extends Item {
      */
     private void setCurrentStat(StatUpgrade type, int value) {
         switch (type) {
-            case incDEX: dex = (short) value; break;
-            case incSTR: str = (short) value; break;
-            case incINT: _int = (short) value; break;
-            case incLUK: luk = (short) value; break;
-            case incMHP: hp = (short) value; break;
-            case incMMP: mp = (short) value; break;
-            case incPAD: watk = (short) value; break;
-            case incMAD: matk = (short) value; break;
-            case incPDD: wdef = (short) value; break;
-            case incMDD: mdef = (short) value; break;
-            case incEVA: avoid = (short) value; break;
-            case incACC: acc = (short) value; break;
-            case incSpeed: speed = (short) value; break;
-            case incJump: jump = (short) value; break;
+            case incDEX: setDex((short) value); break;
+            case incSTR: setStr((short) value); break;
+            case incINT: setInt((short) value); break;
+            case incLUK: setLuk((short) value); break;
+            case incMHP: setHp((short) value); break;
+            case incMMP: setMp((short) value); break;
+            case incPAD: setWatk((short) value); break;
+            case incMAD: setMatk((short) value); break;
+            case incPDD: setWdef((short) value); break;
+            case incMDD: setMdef((short) value); break;
+            case incEVA: setAvoid((short) value); break;
+            case incACC: setAcc((short) value); break;
+            case incSpeed: setSpeed((short) value); break;
+            case incJump: setJump((short) value); break;
             default: break;
         }
     }
@@ -455,7 +604,7 @@ public class Equip extends Item {
             }
         }
 
-        itemLevel++; // 提升装备等级
+        setItemLevel((short) (itemLevel + 1)); // 提升装备等级
 
         String lvupStr = I18nUtil.getMessage("Equip.gainStats.lvupStr", ii.getName(this.getItemId()), itemLevel) + "; ";  // 生成等级提升的提示消息
 
@@ -526,7 +675,7 @@ public class Equip extends Item {
 
         float baseExpGain = gain * elementModifier * masteryModifier;// 计算实际获得的经验值
 
-        itemExp += baseExpGain;// 更新装备经验值
+        setItemExp(itemExp + baseExpGain);// 更新装备经验值
         int expNeeded = ExpTable.getEquipExpNeededForLevel(itemLevel);
 
         // 调试信息：显示经验值获取详情
@@ -538,11 +687,11 @@ public class Equip extends Item {
 
         if (itemExp >= expNeeded) {// 判断是否需要升级
             while (itemExp >= expNeeded) {
-                itemExp -= expNeeded;
+                setItemExp(itemExp - expNeeded);
                 gainLevel(c); // 升级装备
 
                 if (itemLevel >= equipMaxLevel || !GameConfig.getServerBoolean("use_equipment_level_up_continuous")) {// 如果达到最大等级或者不允许连续升级，重置经验值并退出循环
-                    itemExp = 0.0f;
+                    setItemExp(0.0f);
                     break;
                 }
 
@@ -576,11 +725,10 @@ public class Equip extends Item {
     }
 
     public void setItemExp(int exp) {
-        this.itemExp = exp;
-    }
-
-    public void setItemLevel(short level) {
-        this.itemLevel = level;
+        if (this.itemExp != exp) {
+            this.itemExp = exp;
+            setDirty(true);
+        }
     }
 
     @Override
@@ -592,31 +740,21 @@ public class Equip extends Item {
     }
 
     public void setUpgradeSlots(int i) {
-        this.upgradeSlots = (byte) i;
+        if (this.upgradeSlots != (byte) i) {
+            this.upgradeSlots = (byte) i;
+            setDirty(true);
+        }
     }
 
     public void setVicious(int i) {
-        this.vicious = (short) i;
+        if (this.vicious != (short) i) {
+            this.vicious = (short) i;
+            setDirty(true);
+        }
     }
 
     public int getRingId() {
         return ringid;
-    }
-
-    public void setRingId(int id) {
-        this.ringid = id;
-    }
-
-    public boolean isWearing() {
-        return wear;
-    }
-
-    public void wear(boolean yes) {
-        wear = yes;
-    }
-
-    public void setUpgradeSlots(byte i) {
-        this.upgradeSlots = i;
     }
 
     @Override

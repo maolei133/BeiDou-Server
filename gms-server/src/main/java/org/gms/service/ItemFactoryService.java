@@ -77,9 +77,6 @@ public class ItemFactoryService {
             if (uid != null && uid > 0) {
                 item.setUid(uid);
             } else {
-                // 延迟生成：如果数据库中缺少 UID，则生成一个新的
-                // 注意：这个新的 UID 不会立即持久化回数据库，
-                // 但会在物品保存时（例如注销或地图更改时）进行持久化
                 item.setUid(SnowflakeIdGenerator.getInstance().nextId());
             }
 
@@ -89,6 +86,7 @@ public class ItemFactoryService {
                 item.setInventoryItemId(dbId);
             }
             
+            item.setDirty(false); // 从数据库加载的物品初始状态为非脏
             items.add(new Pair<>(item, mit));
         }
         return items;
@@ -129,7 +127,6 @@ public class ItemFactoryService {
             }
             
             if (item != null) {
-                // 加载 UID
                 Long uid = row.getLong("uid");
                 if (uid != null && uid > 0) {
                     item.setUid(uid);
@@ -137,43 +134,29 @@ public class ItemFactoryService {
                     item.setUid(SnowflakeIdGenerator.getInstance().nextId());
                 }
 
-                // 设置数据库 ID
                 Long dbId = row.getLong("inventoryitemid");
                 if (dbId != null) {
                     item.setInventoryItemId(dbId);
                 }
-
+                
+                item.setDirty(false);
                 items.add(new Pair<>(item, mit));
             }
         }
         return items;
     }
 
-    /**
-     * 保存物品到数据库 (增量更新) - 全量保存入口
-     *
-     * @param typeValue 物品存储位置类型 (1: 背包, 2: 仓库, 3: 商城, 4: 雇佣商人, 5: 结婚礼物, 6: 快递)
-     * @param isAccount 是否关联到账号 (true: 关联账号, false: 关联角色)
-     * @param items     要保存的物品列表，包含物品对象和库存类型
-     * @param id        账号ID或角色ID (取决于 isAccount)
-     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveItems(int typeValue, boolean isAccount, List<Pair<Item, InventoryType>> items, int id) {
         saveItems(typeValue, isAccount, items, id, null);
     }
 
-    /**
-     * 保存物品到数据库 (增量更新) - 核心逻辑
-     *
-     * @param typeValue 物品存储位置类型 (1: 背包, 2: 仓库, 3: 商城, 4: 雇佣商人, 5: 结婚礼物, 6: 快递)
-     * @param isAccount 是否关联到账号 (true: 关联账号, false: 关联角色)
-     * @param items     要保存的物品列表，包含物品对象和库存类型
-     * @param id        账号ID或角色ID (取决于 isAccount)
-     * @param targetTypes 需要保存的背包类型集合，如果为null或空则保存所有类型
-     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveItems(int typeValue, boolean isAccount, List<Pair<Item, InventoryType>> items, int id, Set<InventoryType> targetTypes) {
-        // 1. 获取数据库中已存在的物品信息 (ID 和 UID)
+        String ownerIdentifier = isAccount ? "账号ID: " + id : "角色ID: " + id;
+        String targetTypesStr = targetTypes == null ? "所有" : targetTypes.stream().map(Enum::name).collect(Collectors.joining(", "));
+        //log.info("开始保存物品. 归属: {}, 存储类型: {}, 目标背包: {}", ownerIdentifier, typeValue, targetTypesStr);
+
         QueryWrapper selectQuery = QueryWrapper.create()
                 .select(INVENTORYITEMS_D_O.INVENTORYITEMID, INVENTORYITEMS_D_O.UID)
                 .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue));
@@ -183,7 +166,6 @@ public class ItemFactoryService {
             selectQuery.and(INVENTORYITEMS_D_O.CHARACTERID.eq(id));
         }
 
-        // [关键修复] 限制查询范围
         if (targetTypes != null && !targetTypes.isEmpty()) {
             List<Integer> typeCodes = targetTypes.stream().map(InventoryType::getType).map(Byte::intValue).collect(Collectors.toList());
             selectQuery.and(INVENTORYITEMS_D_O.INVENTORYTYPE.in(typeCodes));
@@ -199,6 +181,7 @@ public class ItemFactoryService {
                 dbUidToIdMap.put(doc.getUid(), doc.getInventoryitemid());
             }
         }
+        //log.info("数据库中存在 {} 个相关物品. DB ID 数量: {}, UID->ID 映射数量: {}", existingItems.size(), dbIds.size(), dbUidToIdMap.size());
 
         Set<Long> processedIds = new HashSet<>();
 
@@ -207,14 +190,12 @@ public class ItemFactoryService {
                 Item item = pair.getLeft();
                 InventoryType mit = pair.getRight();
                 
-                // 如果指定了 targetTypes，则只处理属于这些类型的物品
                 if (targetTypes != null && !targetTypes.isEmpty() && !targetTypes.contains(mit)) {
                     continue;
                 }
 
                 Long targetDbId = item.getInventoryItemId();
                 
-                // 如果内存中没有DB ID，尝试通过UID找回
                 if (targetDbId == null && item.getUid() > 0) {
                     targetDbId = dbUidToIdMap.get(item.getUid());
                     if (targetDbId != null) {
@@ -226,6 +207,11 @@ public class ItemFactoryService {
                     // 更新
                     processedIds.add(targetDbId);
 
+                    if (!item.isDirty()) {
+                        continue; // 如果物品不是脏的，则跳过更新
+                    }
+                    //log.info("更新脏物品: DB ID={}, UID={}, ItemID={}", targetDbId, item.getUid(), item.getItemId());
+
                     InventoryitemsDO itemDO = new InventoryitemsDO();
                     itemDO.setInventoryitemid(targetDbId);
                     itemDO.setInventorytype((int) mit.getType());
@@ -236,7 +222,6 @@ public class ItemFactoryService {
                     itemDO.setFlag((int) item.getFlag());
                     itemDO.setExpiration(item.getExpiration());
                     itemDO.setGiftFrom(item.getGiftFrom() == null ? "" : item.getGiftFrom());
-                    // UID 不更新，保持原样
 
                     inventoryitemsMapper.update(itemDO);
 
@@ -269,12 +254,12 @@ public class ItemFactoryService {
                         inventoryequipmentMapper.updateByQuery(equipDO,
                                 QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.eq(targetDbId)));
                     }
+                    item.setDirty(false); // 更新成功后，重置脏标记
                 } else {
                     // 插入或更新类型（跨类型移动）
-                    
-                    // 1. 检查全局 UID 是否存在 (处理跨栏移动，如商城->背包)
                     Long existingGlobalId = null;
-                    if (item.getUid() > 0) {
+                    // [核心修复] 只对装备（不可堆叠物品）进行全局UID检查，防止消耗品堆叠拆分后出现数据覆盖
+                    if (item instanceof Equip && item.getUid() > 0) {
                         existingGlobalId = inventoryitemsMapper.selectOneByQueryAs(
                                 QueryWrapper.create().select(INVENTORYITEMS_D_O.INVENTORYITEMID)
                                         .where(INVENTORYITEMS_D_O.UID.eq(item.getUid())),
@@ -283,11 +268,7 @@ public class ItemFactoryService {
                     }
 
                     if (existingGlobalId != null) {
-                        // 发现 UID 存在，说明是跨 type 移动！
-                        // 执行 UPDATE type 操作，将该物品“抢”过来
-                        
-                        // [关键修复] 跨类型移动时，必须同时更新归属权 (accountid/characterid)
-                        // 使用 Db.updateByQuery 来确保可以更新为 null 值
+                        //log.info("物品跨栏移动:ID={} UID={}, ItemID={}, 从其他Type移动到Type={}",item.getInventoryItemId(), item.getUid(), item.getItemId(), typeValue);
                         
                         QueryWrapper updateWrapper = QueryWrapper.create()
                                 .where(INVENTORYITEMS_D_O.INVENTORYITEMID.eq(existingGlobalId));
@@ -306,16 +287,11 @@ public class ItemFactoryService {
                             updates.set(INVENTORYITEMS_D_O.CHARACTERID.getName(), id);
                         }
                         
-                        // 执行更新
                         Db.updateByQuery(INVENTORYITEMS_D_O.getName(), updates, updateWrapper);
-                        
-                        // 更新内存中的 ID，防止后续误判
                         item.setInventoryItemId(existingGlobalId);
-                        
-                        // 记录日志
-//                        log.info("物品跨栏移动: UID={}, OldType=?, NewType={}", item.getUid(), typeValue);
+                        item.setDirty(false);
                     } else {
-                        // 真的不存在 -> 插入
+                        //log.info("插入新物品: UID={}, ItemID={}", item.getUid(), item.getItemId());
                         InventoryitemsDO itemDO = new InventoryitemsDO();
                         itemDO.setType(typeValue);
                         if (isAccount) {
@@ -336,7 +312,8 @@ public class ItemFactoryService {
 
                         inventoryitemsMapper.insert(itemDO);
                         Long genKey = itemDO.getInventoryitemid();
-                        item.setInventoryItemId(genKey); // 更新内存对象
+                        item.setInventoryItemId(genKey);
+                        //log.info("新物品插入成功: DB ID={}, UID={}, ItemID={}", genKey, item.getUid(), item.getItemId());
 
                         if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
                             Equip equip = (Equip) item;
@@ -367,12 +344,12 @@ public class ItemFactoryService {
 
                             inventoryequipmentMapper.insert(equipDO);
                         }
+                        item.setDirty(false);
                     }
                 }
             }
         }
 
-        // 删除
         List<Long> idsToDelete = new ArrayList<>();
         for (Long existingId : dbIds) {
             if (!processedIds.contains(existingId)) {
@@ -381,29 +358,24 @@ public class ItemFactoryService {
         }
 
         if (!idsToDelete.isEmpty()) {
-            // [关键修复] 删除时必须加上 type 条件，防止误删已经被转移到其他 type 的物品
-            // 例如：物品从商城(type=3)转到背包(type=1)。
-            // 背包保存时执行了 UPDATE type=1。
-            // 商城保存时，发现物品不在内存了，准备 DELETE。
-            // 如果不加 type=3 条件，就会把刚刚变成 type=1 的物品删掉！
+            //log.info("准备删除 {} 个物品. DB IDs: {}", idsToDelete.size(), idsToDelete);
             
             inventoryequipmentMapper.deleteByQuery(QueryWrapper.create()
                     .where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(idsToDelete)));
             
-            // 注意：inventorymerchant 表通常只关联 type=6 (雇佣商人) 或 type=5 (拍卖行)，
-            // 但为了安全起见，这里也应该级联删除。
             inventorymerchantMapper.deleteByQuery(QueryWrapper.create()
                     .where(INVENTORYMERCHANT_D_O.INVENTORYITEMID.in(idsToDelete)));
             
-            inventoryitemsMapper.deleteByQuery(QueryWrapper.create()
+            int deletedCount = inventoryitemsMapper.deleteByQuery(QueryWrapper.create()
                     .where(INVENTORYITEMS_D_O.INVENTORYITEMID.in(idsToDelete))
-                    .and(INVENTORYITEMS_D_O.TYPE.eq(typeValue))); // 必须加上 type 条件！
+                    .and(INVENTORYITEMS_D_O.TYPE.eq(typeValue)));
+            //log.info("从 inventoryitems 表中删除了 {} 条记录 (限定 Type={})", deletedCount, typeValue);
         }
+        //log.info("物品保存完成. 归属: {}, 存储类型: {}", ownerIdentifier, typeValue);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveItemsMerchant(int typeValue, List<Pair<Item, InventoryType>> items, List<Short> bundlesList, int id) {
-        // 1. 获取数据库中已存在的物品信息
         QueryWrapper selectMerchantItemsQuery = QueryWrapper.create()
                 .select(INVENTORYITEMS_D_O.INVENTORYITEMID, INVENTORYITEMS_D_O.UID)
                 .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue))
@@ -439,8 +411,11 @@ public class ItemFactoryService {
                 }
 
                 if (targetDbId != null && dbIds.contains(targetDbId)) {
-                    // 更新
                     processedIds.add(targetDbId);
+
+                    if (!item.isDirty()) {
+                        continue;
+                    }
 
                     InventoryitemsDO itemDO = new InventoryitemsDO();
                     itemDO.setInventoryitemid(targetDbId);
@@ -489,9 +464,8 @@ public class ItemFactoryService {
                         inventoryequipmentMapper.updateByQuery(equipDO,
                                 QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.eq(targetDbId)));
                     }
+                    item.setDirty(false);
                 } else {
-                    // 插入
-                    // 检查重复 UID
                     if (item.getUid() > 0) {
                         QueryWrapper checkUidQuery = QueryWrapper.create()
                                 .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
@@ -559,11 +533,11 @@ public class ItemFactoryService {
 
                         inventoryequipmentMapper.insert(equipDO);
                     }
+                    item.setDirty(false);
                 }
             }
         }
 
-        // 删除
         List<Long> idsToDelete = new ArrayList<>();
         for (Long existingId : dbIds) {
             if (!processedIds.contains(existingId)) {
@@ -602,7 +576,6 @@ public class ItemFactoryService {
             Integer cid = row.getInt("characterid");
             Equip equip = loadEquipFromRow(row);
             
-            // 加载 UID
             Long uid = row.getLong("uid");
             if (uid != null && uid > 0) {
                 equip.setUid(uid);
@@ -610,12 +583,12 @@ public class ItemFactoryService {
                 equip.setUid(SnowflakeIdGenerator.getInstance().nextId());
             }
 
-            // 设置数据库 ID
             Long dbId = row.getLong("inventoryitemid");
             if (dbId != null) {
                 equip.setInventoryItemId(dbId);
             }
             
+            equip.setDirty(false);
             items.add(new Pair<>(equip, cid));
         }
         return items;
@@ -630,10 +603,6 @@ public class ItemFactoryService {
         equip.setDex(getShort(row, "dex"));
         equip.setHands(getShort(row, "hands"));
         equip.setHp(getShort(row, "hp"));
-        // 警告：严禁修改此处为 "inte"！
-        // 原因：Row 对象直接映射数据库列名，数据库中该列名为 "int"。
-        // 虽然 InventoryequipmentDO 中字段名为 "inte"，但这里操作的是 Row 对象，必须使用数据库列名。
-        // 修改为 "inte" 会导致智力属性读取为 0，造成严重的数据丢失！
         equip.setInt(getShort(row, "int"));
         equip.setJump(getShort(row, "jump"));
         equip.setVicious(getShort(row, "vicious"));
@@ -648,9 +617,9 @@ public class ItemFactoryService {
         equip.setWdef(getShort(row, "wdef"));
         
         equip.setUpgradeSlots((byte) getInt(row, "upgradeslots"));
-        equip.setLevel((byte) getInt(row, "level"));
+        equip.setLevel((short) getInt(row, "level"));
         equip.setItemExp(getInt(row, "itemexp"));
-        equip.setItemLevel((byte) getInt(row, "itemlevel"));
+        equip.setItemLevel((short) getInt(row, "itemlevel"));
 
         equip.setExpiration(getLong(row, "expiration"));
         equip.setGiftFrom(getString(row, "giftFrom"));

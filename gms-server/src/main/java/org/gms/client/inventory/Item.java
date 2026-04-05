@@ -31,6 +31,7 @@ import org.gms.util.SnowflakeIdGenerator;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Item implements Comparable<Item> {
@@ -57,6 +58,9 @@ public class Item implements Comparable<Item> {
     private long uid;
     private Long inventoryItemId;
 
+    @JsonIgnore
+    private transient boolean dirty = false;
+
     public Item(int id, short position, short quantity) {
         this.id = id;
         this.position = position;
@@ -64,6 +68,7 @@ public class Item implements Comparable<Item> {
         this.itemLog = new LinkedList<>();
         this.flag = 0;
         this.uid = SnowflakeIdGenerator.getInstance().nextId();
+        this.dirty = true; // 新创建的物品默认为脏
     }
 
     public Item(int id, short position, short quantity, int petid) {
@@ -80,6 +85,15 @@ public class Item implements Comparable<Item> {
         this.flag = 0;
         this.itemLog = new LinkedList<>();
         this.uid = SnowflakeIdGenerator.getInstance().nextId();
+        this.dirty = true; // 新创建的物品默认为脏
+    }
+
+    public boolean isDirty() {
+        return dirty;
+    }
+
+    public void setDirty(boolean dirty) {
+        this.dirty = dirty;
     }
 
     public Item copy() {
@@ -90,18 +104,25 @@ public class Item implements Comparable<Item> {
         ret.itemLog = new LinkedList<>(itemLog);
         ret.uid = this.uid;
         ret.inventoryItemId = this.inventoryItemId;
+        ret.dirty = this.dirty; // 复制时也要复制脏标记
         return ret;
     }
 
     public void setPosition(short position) {
-        this.position = position;
+        if (this.position != position) {
+            this.position = position;
+            setDirty(true);
+        }
         if (this.pet != null) {
             this.pet.setPosition(position);
         }
     }
 
     public void setQuantity(short quantity) {
-        this.quantity = quantity;
+        if (this.quantity != quantity) {
+            this.quantity = quantity;
+            setDirty(true);
+        }
     }
 
     public int getItemId() {
@@ -109,11 +130,17 @@ public class Item implements Comparable<Item> {
     }
     
     public void setItemId(int id) {
-        this.id = id;
+        if (this.id != id) {
+            this.id = id;
+            setDirty(true);
+        }
     }
 
     public void setCashId(int cashId) {
-        this.cashId = cashId;
+        if (this.cashId != cashId) {
+            this.cashId = cashId;
+            setDirty(true);
+        }
     }
 
     public int getCashId() {
@@ -145,7 +172,10 @@ public class Item implements Comparable<Item> {
     }
 
     public void setOwner(String owner) {
-        this.owner = owner;
+        if (!Objects.equals(this.owner, owner)) {
+            this.owner = owner;
+            setDirty(true);
+        }
     }
 
     @JsonIgnore
@@ -176,7 +206,10 @@ public class Item implements Comparable<Item> {
         if (ii.isAccountRestricted(id)) {
             b |= ItemConstants.ACCOUNT_SHARING;
         }
-        this.flag = b;
+        if (this.flag != b) {
+            this.flag = b;
+            setDirty(true);
+        }
     }
 
     public long getExpiration() {
@@ -184,7 +217,11 @@ public class Item implements Comparable<Item> {
     }
 
     public void setExpiration(long expire) {
-        this.expiration = !ItemConstants.isPermanentItem(id) ? expire : ItemConstants.isPet(id) ? Long.MAX_VALUE : -1;
+        long newExpiration = !ItemConstants.isPermanentItem(id) ? expire : ItemConstants.isPet(id) ? Long.MAX_VALUE : -1;
+        if (this.expiration != newExpiration) {
+            this.expiration = newExpiration;
+            setDirty(true);
+        }
     }
 
     public int getSN() {
@@ -192,7 +229,10 @@ public class Item implements Comparable<Item> {
     }
 
     public void setSN(int sn) {
-        this.sn = sn;
+        if (this.sn != sn) {
+            this.sn = sn;
+            setDirty(true);
+        }
     }
 
     public String getGiftFrom() {
@@ -200,7 +240,10 @@ public class Item implements Comparable<Item> {
     }
 
     public void setGiftFrom(String giftFrom) {
-        this.giftFrom = giftFrom;
+        if (!Objects.equals(this.giftFrom, giftFrom)) {
+            this.giftFrom = giftFrom;
+            setDirty(true);
+        }
     }
 
     public Pet getPet() {
@@ -216,7 +259,10 @@ public class Item implements Comparable<Item> {
     }
 
     public void setUid(long uid) {
-        this.uid = uid;
+        if (this.uid != uid) {
+            this.uid = uid;
+            setDirty(true);
+        }
     }
 
     public Long getInventoryItemId() {
@@ -224,7 +270,10 @@ public class Item implements Comparable<Item> {
     }
 
     public void setInventoryItemId(Long inventoryItemId) {
-        this.inventoryItemId = inventoryItemId;
+        if (!Objects.equals(this.inventoryItemId, inventoryItemId)) {
+            this.inventoryItemId = inventoryItemId;
+            setDirty(true);
+        }
     }
 
     /**

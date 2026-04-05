@@ -181,6 +181,7 @@ public class StorageProcessor {
                     short slot = p.readShort();
                     int itemId = p.readInt();
                     short quantity = p.readShort();
+                    short oldqty;
                     
                     InventoryType invType = ItemConstants.getInventoryType(itemId);
                     Inventory inv = chr.getInventory(invType);
@@ -276,7 +277,7 @@ public class StorageProcessor {
                                 sendStorageError(c, StorageError.UNKNOWN);
                                 return;
                             }
-
+                            oldqty = (short) (item.getQuantity() + quantity);
                             item = item.copy(); // 感谢 Robin Schulz & BHB88 注意到存入物品时的背包故障
                         } finally {
                             inv.unlockInventory();
@@ -290,7 +291,7 @@ public class StorageProcessor {
                         if (storage.store(c, item)) { // 在临界区内，"!(storage.isFull())" 仍然有效...
                             chr.setUsedStorage();
 
-                            traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE, TraceabilityService.ActionSourceType.STORAGE_PUT_IN, -quantity);
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE, TraceabilityService.ActionSourceType.STORAGE_PUT_IN, -quantity,null,String.format("数量: %d -> %d",oldqty, oldqty - quantity));
 
                             String itemName = ii.getName(item.getItemId());
                             // 发送提示消息

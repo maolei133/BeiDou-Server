@@ -1075,6 +1075,20 @@ public class CharacterService {
         }
         chr.setLoggedIn(true);
 
+        // [核心修复] 加载所有类型的角色物品
+        for (ItemFactory factory : ItemFactory.values()) {
+            // 只加载属于角色的物品 (非账号共享)，并排除特殊类型如雇佣商人和快递
+            if (!factory.isAccount() && factory != ItemFactory.MERCHANT && factory != ItemFactory.DUEY) {
+                List<Pair<Item, InventoryType>> items = factory.loadItems(cid, false);
+                for (Pair<Item, InventoryType> itemPair : items) {
+                    Inventory iv = chr.getInventory(itemPair.getRight());
+                    if (iv != null) {
+                        iv.addItemFromDB(itemPair.getLeft());
+                    }
+                }
+            }
+        }
+
         List<QuestStatus> questStatusList = questService.getQuestStatusByCharacter(cid);
         questStatusList.forEach(questStatus -> chr.getQuests().put(questStatus.getQuestID(), questStatus));
 

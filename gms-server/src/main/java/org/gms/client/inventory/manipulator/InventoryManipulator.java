@@ -326,7 +326,7 @@ public class InventoryManipulator {
                             nItem.setUid(item.getUid());
                         }
                     }
-                    
+
                     short newSlot = inv.addItem(nItem);
                     if (newSlot == -1) {
                         c.sendPacket(PacketCreator.getInventoryFull());
@@ -545,7 +545,7 @@ public class InventoryManipulator {
                 }
             }
         }
-        
+
         // 实时保存
         final InventoryType finalType = type;
         ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
@@ -628,7 +628,7 @@ public class InventoryManipulator {
             int itemID = source.getItemId();
             c.getPlayer().dropMessage(5, I18nUtil.getMessage("InventoryManipulator.handlePacket.message1") + itemID);
         }
-        
+
         // 实时保存
         final InventoryType finalType = type;
         ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new Pair<>(i, finalType)).toList(), c.getPlayer().getId(), Collections.singleton(finalType));
@@ -820,7 +820,7 @@ public class InventoryManipulator {
         }
         c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(2, source, src))));
         chr.equipChanged();
-        
+
         // 实时保存
         ItemFactory.INVENTORY.saveItems(eqpInv.list().stream().map(i -> new Pair<>(i, InventoryType.EQUIP)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIP));
         ItemFactory.INVENTORY.saveItems(eqpdInv.list().stream().map(i -> new Pair<>(i, InventoryType.EQUIPPED)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIPPED));
@@ -877,7 +877,7 @@ public class InventoryManipulator {
                 chr.unEquipPet(pet, true);
             }
         }
-        
+
         Point dropPos = new Point(chr.getPosition());
         short oldqty = source.getQuantity();
         short newqty = (short) (oldqty - quantity);
@@ -956,7 +956,7 @@ public class InventoryManipulator {
         } else if (itemId == ItemId.ARPQ_SPIRIT_JEWEL) {
             chr.updateAriantScore(quantityNow);
         }
-        
+
         // 实时保存
         final InventoryType finalType = type;
         ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
