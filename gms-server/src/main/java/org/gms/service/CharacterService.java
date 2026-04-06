@@ -1993,10 +1993,20 @@ public class CharacterService {
                 Client c = onlineChr.getClient();
                 
                 if (banIp) {
-                    accountService.banIp(c.getRemoteAddress(), accountId);
+                    if (request.getIps() != null && !request.getIps().isEmpty()) {
+                        for (String ip : request.getIps()) {
+                            accountService.banIp(ip, accountId);
+                        }
+                    } else {
+                        accountService.banIp(c.getRemoteAddress(), accountId);
+                    }
                 }
                 if (banMac) {
-                    accountService.banMacs(c.getMacs(), accountId);
+                    if (request.getMacs() != null && !request.getMacs().isEmpty()) {
+                        accountService.banMacs(new HashSet<>(request.getMacs()), accountId);
+                    } else {
+                        accountService.banMacs(c.getMacs(), accountId);
+                    }
                 }
                 if (banHwid) {
                     if (c.getHwid() != null) {
@@ -2012,24 +2022,34 @@ public class CharacterService {
                 if (banIp || banMac || banHwid) {
                     AccountsDO account = accountService.findById(accountId);
                     if (account != null) {
-                        if (banIp && account.getIp() != null && !account.getIp().isEmpty()) {
-                            String[] ips = account.getIp().split(",");
-                            for (String ip : ips) {
-                                if (!ip.trim().isEmpty()) {
-                                    accountService.banIp(ip.trim(), accountId);
+                        if (banIp) {
+                            if (request.getIps() != null && !request.getIps().isEmpty()) {
+                                for (String ip : request.getIps()) {
+                                    accountService.banIp(ip, accountId);
+                                }
+                            } else if (account.getIp() != null && !account.getIp().isEmpty()) {
+                                String[] ips = account.getIp().split(",");
+                                for (String ip : ips) {
+                                    if (!ip.trim().isEmpty()) {
+                                        accountService.banIp(ip.trim(), accountId);
+                                    }
                                 }
                             }
                         }
-                        if (banMac && account.getMacs() != null && !account.getMacs().isEmpty()) {
-                            String[] macs = account.getMacs().split(",");
-                            Set<String> macSet = new HashSet<>();
-                            for (String mac : macs) {
-                                if (!mac.trim().isEmpty()) {
-                                    macSet.add(mac.trim());
+                        if (banMac) {
+                            if (request.getMacs() != null && !request.getMacs().isEmpty()) {
+                                accountService.banMacs(new HashSet<>(request.getMacs()), accountId);
+                            } else if (account.getMacs() != null && !account.getMacs().isEmpty()) {
+                                String[] macs = account.getMacs().split(",");
+                                Set<String> macSet = new HashSet<>();
+                                for (String mac : macs) {
+                                    if (!mac.trim().isEmpty()) {
+                                        macSet.add(mac.trim());
+                                    }
                                 }
-                            }
-                            if (!macSet.isEmpty()) {
-                                accountService.banMacs(macSet, accountId);
+                                if (!macSet.isEmpty()) {
+                                    accountService.banMacs(macSet, accountId);
+                                }
                             }
                         }
                         if (banHwid && account.getHwid() != null && !account.getHwid().isEmpty()) {

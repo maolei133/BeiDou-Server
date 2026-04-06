@@ -16,4 +16,8 @@ public class BanPlayerReqDTO {
     private boolean banHwid;
     private boolean notify;
     private String notifyContent;
+    
+    // Front-end optional selection for IPs and MACs
+    private List<String> ips;
+    private List<String> macs;
 }
