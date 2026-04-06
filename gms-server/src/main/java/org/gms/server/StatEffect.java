@@ -398,7 +398,7 @@ public class StatEffect {
                             addBuffStatPairToListIfNotZero(statups, BuffStat.COUPON_DRP3, 1);
                             break;
                     }
-                } else if (ItemId.isMonsterCard(sourceid)) {
+                } else if (ItemId.isMonsterCard(sourceid) || DataTool.getInt("itemupbyitem", source, 0) > 0 || DataTool.getInt("mesoupbyitem", source, 0) > 0) {
                     int prob = 0, itemupCode = Integer.MAX_VALUE;
                     List<Pair<Integer, Integer>> areas = null;
                     boolean inParty = false;
@@ -425,14 +425,15 @@ public class StatEffect {
                         }
                     }
 
-                    if (DataTool.getInt("mesoupbyitem", source, 0) != 0) {
-                        addBuffStatPairToListIfNotZero(statups, BuffStat.MESO_UP_BY_ITEM, 4);
+                    int mesoupbyitem = DataTool.getInt("mesoupbyitem", source, 0);
+                    if (mesoupbyitem != 0) {
+                        addBuffStatPairToListIfNotZero(statups, BuffStat.MESO_UP_BY_ITEM, mesoupbyitem);
                         prob = DataTool.getInt("prob", source, 1);
                     }
 
                     int itemupType = DataTool.getInt("itemupbyitem", source, 0);
                     if (itemupType != 0) {
-                        addBuffStatPairToListIfNotZero(statups, BuffStat.ITEM_UP_BY_ITEM, 4);
+                        addBuffStatPairToListIfNotZero(statups, BuffStat.ITEM_UP_BY_ITEM, itemupType);
                         prob = DataTool.getInt("prob", source, 1);
 
                         switch (itemupType) {
@@ -1972,6 +1973,8 @@ public class StatEffect {
     public int getMoneyCon() {
         return moneyCon;
     }
+
+
 
     public int getCooldown() {
         return cooldown;

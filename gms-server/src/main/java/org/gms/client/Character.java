@@ -5024,6 +5024,17 @@ public class Character extends AbstractCharacterObject {
         return rate / 100;
     }
 
+    public float getTotalMesoRate() {
+        return getCouponMesoRate() * getCardRate(0);
+    }
+
+    public float getTotalDropRate() {
+        return getDropRate() * getFamilyDrop() * getCardRate(1);
+    }
+
+    public float getTotalBossDropRate() {
+        return getBossDropRate() * getCardRate(1);
+    }
     public Family getFamily() {
         if (familyEntry != null) {
             return familyEntry.getFamily();
