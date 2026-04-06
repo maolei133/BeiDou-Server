@@ -23,20 +23,16 @@ package org.gms.net.server.channel.handlers;
 
 import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Client;
+import org.gms.client.autoban.AutobanFactory;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
+import org.gms.server.movement.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.maps.AnimatedMapObject;
-import org.gms.server.movement.AbsoluteLifeMovement;
-import org.gms.server.movement.ChangeEquip;
-import org.gms.server.movement.JumpDownMovement;
-import org.gms.server.movement.LifeMovementFragment;
-import org.gms.server.movement.RelativeLifeMovement;
-import org.gms.server.movement.TeleportMovement;
 import org.gms.exception.EmptyMovementException;
 
 import java.awt.*;
@@ -178,6 +174,11 @@ public abstract class AbstractMovementPacketHandler extends AbstractPacketHandle
             }
         }
 
+        // 检查是否存在“封图挂”行为
+        if (checkMoveLifeHack(c, res, numCommands)) {
+            return null; // 检测到外挂，中断处理
+        }
+
         if (res.isEmpty()) {
             throw new EmptyMovementException(p); // 如果没有解析出任何移动则抛出异常
         }
@@ -297,6 +298,61 @@ public abstract class AbstractMovementPacketHandler extends AbstractPacketHandle
                     throw new EmptyMovementException(p); // 抛出异常
             }
         }
+    }
+
+    /**
+     * 从移动片段列表中累积统计数据.
+     * @param movements 移动片段列表
+     * @return 一个包含总耗时 (left) 和 0状态计数 (right) 的 Pair 对象
+     */
+    private Pair<Integer, Integer> calculateMoveStats(List<LifeMovementFragment> movements) {
+        int totalDuration = 0;
+        int zeroStateCount = 0;
+        for (LifeMovementFragment move : movements) {
+            if (move instanceof LifeMovement) {
+                totalDuration += ((LifeMovement) move).getDuration();
+                if (((LifeMovement) move).getNewstate() == 0) {
+                    zeroStateCount++;
+                }
+            }
+        }
+        return new Pair<>(totalDuration, zeroStateCount);
+    }
+
+    /**
+     * 检查是否存在“封图挂”行为 (高频/异常状态移动).
+     * @param c 客户端
+     * @param movements 解析后的移动片段列表
+     * @param numCommands 原始指令数量
+     * @return 如果检测到外挂则返回 true
+     */
+    private boolean checkMoveLifeHack(Client c, List<LifeMovementFragment> movements, int numCommands) {
+        if (c == null || c.getPlayer() == null || movements.isEmpty()) {
+            return false;
+        }
+
+        Pair<Integer, Integer> stats = calculateMoveStats(movements);
+        int totalDuration = stats.left;
+        int zeroStateCount = stats.right;
+
+        boolean isHighRisk = false;
+        if (numCommands > 10 && totalDuration < 200) {
+            isHighRisk = true;
+        }
+        if (numCommands > 10 && zeroStateCount == numCommands) {
+            isHighRisk = true;
+        }
+
+        if (isHighRisk) {
+            MapMessage extraData = new MapMessage()
+                    .with("指令数", numCommands)
+                    .with("持续时间", totalDuration)
+                    .with("零状态计数", zeroStateCount);
+            String reason = "高频/异常状态的怪物移动封包 (封图挂)";
+            c.getPlayer().getAutoBanManager().addPoint(AutobanFactory.MOVE_LIFE_HACK, reason, extraData);
+            return true;
+        }
+        return false;
     }
     
     private void checkAndDisconnect(Client c, byte command) {
