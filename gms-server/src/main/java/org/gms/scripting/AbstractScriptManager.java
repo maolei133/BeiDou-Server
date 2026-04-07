@@ -21,10 +21,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.scripting;
 
-import org.gms.client.Client;
 import com.oracle.truffle.js.scriptengine.GraalJSScriptEngine;
+import org.apache.logging.log4j.message.MapMessage;
+import org.gms.client.Client;
 import org.gms.manager.ServerManager;
 import org.gms.property.ServiceProperty;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.util.I18nUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,7 +79,19 @@ public abstract class AbstractScriptManager {
         try (BufferedReader br = Files.newBufferedReader(actualPath, StandardCharsets.UTF_8)) {
             engine.eval(br);
         } catch (final ScriptException | IOException t) {
-            log.warn(I18nUtil.getLogMessage("AbstractScriptManager.getInvocableScriptEngine.warn1"), path, t);
+            // 获取脚本管理器类型
+            String managerType = this.getClass().getSimpleName().replace("ScriptManager", "").toLowerCase();
+            // 获取脚本文件名
+            String scriptFileName = actualPath.getFileName().toString();
+            // 记录更详细的错误日志
+            log.error("脚本引擎[{}]加载脚本[{}]时发生错误，脚本路径：{}，错误详情：{}", managerType, scriptFileName, actualPath, t.getMessage());
+
+            // 使用AuditLogger记录到Loki
+            MapMessage data = new MapMessage()
+                    .with("engine", managerType)
+                    .with("script", scriptFileName)
+                    .with("path", actualPath.toString());
+            AuditLogger.error(LogModule.SCRIPT, LogAction.ERROR, data, t);
             return null;
         }
 

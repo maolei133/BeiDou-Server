@@ -21,6 +21,7 @@
  */
 package org.gms.scripting.event;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Skill;
 import org.gms.client.SkillFactory;
@@ -29,6 +30,9 @@ import org.gms.constants.inventory.ItemConstants;
 import org.gms.net.server.coordinator.world.EventRecallCoordinator;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.util.NumberTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -243,12 +247,46 @@ public class EventInstanceManager {
 
     }
 
-    public Object invokeScriptFunction(String name, Object... args) throws ScriptException, NoSuchMethodException {
-        if (!disposed) {
-            return em.getIv().invokeFunction(name, args);
-        } else {
-            return null;
+    private void handleScriptException(Exception e, String functionName) {
+        // 定义一个包含所有可选函数名的集合。这些函数如果不存在于脚本中，不应报错。
+        final Set<String> optionalFunctions = Set.of(
+                "changedMap",
+                "afterChangedMap",
+                "friendlyKilled",
+                "friendlyDamaged",
+                "friendlyItemDrop",
+                "playerDead",
+                "monsterRevive",
+                "playerRevive"
+        );
+
+        // 如果异常是“方法未找到”，并且该方法在我们的可选列表中，则直接返回，不记录日志。
+        if (e instanceof NoSuchMethodException && optionalFunctions.contains(functionName)) {
+            return;
         }
+
+        // 对于所有其他异常（如ScriptException），或对于必需但缺失的方法，则记录详细错误。
+        String eventName = em.getName();
+        String scriptPath = "scripts/event/" + eventName + ".js"; // 推断脚本路径
+        log.error("事件脚本[{}]的函数[{}]执行失败。脚本路径: {}, 异常: {}", eventName, functionName, scriptPath, e.getMessage());
+
+        // 使用AuditLogger记录到Loki
+        MapMessage data = new MapMessage()
+                .with("event", eventName)
+                .with("func", functionName)
+                .with("path", scriptPath);
+        AuditLogger.error(LogModule.SCRIPT, LogAction.ERROR, data, e);
+    }
+
+    public Object invokeScriptFunction(String name, Object... args) {
+        if (!disposed) {
+            try {
+                return em.getIv().invokeFunction(name, args);
+            } catch (ScriptException | NoSuchMethodException e) {
+                handleScriptException(e, name);
+            }
+        }
+        return null;
     }
 
     public synchronized void registerPlayer(final Character chr) {
@@ -278,11 +316,7 @@ public class EventInstanceManager {
         }
 
         if (runEntryScript) {
-            try {
-                invokeScriptFunction("playerEntry", EventInstanceManager.this, chr);// 调用玩家进入脚本函数
-            } catch (ScriptException | NoSuchMethodException ex) {
-                ex.printStackTrace();
-            }
+            invokeScriptFunction("playerEntry", EventInstanceManager.this, chr);// 调用玩家进入脚本函数
         }
     }
 
@@ -292,12 +326,7 @@ public class EventInstanceManager {
         }
 
         unregisterPlayer(chr);
-
-        try {
-            invokeScriptFunction("playerExit", EventInstanceManager.this, chr);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
+        invokeScriptFunction("playerExit", EventInstanceManager.this, chr);
     }
 
     public void dropMessage(int type, String message) {
@@ -321,12 +350,7 @@ public class EventInstanceManager {
 
         event_schedule = TimerManager.getInstance().schedule(() -> {
             dismissEventTimer();
-
-            try {
-                invokeScriptFunction("scheduledTimeout", EventInstanceManager.this);
-            } catch (ScriptException | NoSuchMethodException ex) {
-                log.error("事件脚本 {} 没有封装scheduledTimeout函数", em.getName(), ex);
-            }
+            invokeScriptFunction("scheduledTimeout", EventInstanceManager.this);
         }, time);
     }
 
@@ -338,12 +362,7 @@ public class EventInstanceManager {
 
                 event_schedule = TimerManager.getInstance().schedule(() -> {
                     dismissEventTimer();
-
-                    try {
-                        invokeScriptFunction("scheduledTimeout", EventInstanceManager.this);
-                    } catch (ScriptException | NoSuchMethodException ex) {
-                        log.error("事件脚本 {} 没有封装scheduledTimeout函数", em.getName(), ex);
-                    }
+                    invokeScriptFunction("scheduledTimeout", EventInstanceManager.this);
                 }, nextTime);
             }
         } else {
@@ -411,11 +430,7 @@ public class EventInstanceManager {
     }
 
     public void unregisterPlayer(final Character chr) {
-        try {
-            invokeScriptFunction("playerUnregistered", EventInstanceManager.this, chr);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            log.error("事件脚本 {} 没有封装playerUnregistered函数", em.getName(), ex);
-        }
+        invokeScriptFunction("playerUnregistered", EventInstanceManager.this, chr);
 
         writeLock.lock();
         try {
@@ -472,34 +487,19 @@ public class EventInstanceManager {
     }
 
     public void movePlayer(final Character chr) {
-        try {
-            invokeScriptFunction("moveMap", EventInstanceManager.this, chr);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
+        invokeScriptFunction("moveMap", EventInstanceManager.this, chr);
     }
 
     public void changedMap(final Character chr, final int mapId) {
-        try {
-            invokeScriptFunction("changedMap", EventInstanceManager.this, chr, mapId);
-        } catch (ScriptException | NoSuchMethodException ex) {
-        } // optional
+        invokeScriptFunction("changedMap", EventInstanceManager.this, chr, mapId);
     }
 
     public void afterChangedMap(final Character chr, final int mapId) {
-        try {
-            invokeScriptFunction("afterChangedMap", EventInstanceManager.this, chr, mapId);
-        } catch (ScriptException | NoSuchMethodException ex) {
-        } // optional
+        invokeScriptFunction("afterChangedMap", EventInstanceManager.this, chr, mapId);
     }
 
     public synchronized void changedLeader(final PartyCharacter ldr) {
-        try {
-            invokeScriptFunction("changedLeader", EventInstanceManager.this, ldr);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
-
+        invokeScriptFunction("changedLeader", EventInstanceManager.this, ldr);
         leaderId = ldr.getId();
     }
 
@@ -522,85 +522,53 @@ public class EventInstanceManager {
         }
 
         if (scriptResult > 0) {
-            try {
-                invokeScriptFunction("monsterKilled", mob, EventInstanceManager.this, hasKiller);
-            } catch (ScriptException | NoSuchMethodException ex) {
-                ex.printStackTrace();
-            }
+            invokeScriptFunction("monsterKilled", mob, EventInstanceManager.this, hasKiller);
 
             if (scriptResult > 1) {
-                try {
-                    invokeScriptFunction("allMonstersDead", EventInstanceManager.this, hasKiller);
-                } catch (ScriptException | NoSuchMethodException ex) {
-                    ex.printStackTrace();
-                }
+                invokeScriptFunction("allMonstersDead", EventInstanceManager.this, hasKiller);
             }
         }
     }
 
     public void friendlyKilled(final Monster mob, final boolean hasKiller) {
-        try {
-            invokeScriptFunction("friendlyKilled", mob, EventInstanceManager.this, hasKiller);
-        } catch (ScriptException | NoSuchMethodException ex) {
-        } //optional
+        invokeScriptFunction("friendlyKilled", mob, EventInstanceManager.this, hasKiller);
     }
 
     public void friendlyDamaged(final Monster mob) {
-        try {
-            invokeScriptFunction("friendlyDamaged", EventInstanceManager.this, mob);
-        } catch (ScriptException | NoSuchMethodException ex) {
-        } // optional
+        invokeScriptFunction("friendlyDamaged", EventInstanceManager.this, mob);
     }
 
     public void friendlyItemDrop(final Monster mob) {
-        try {
-            invokeScriptFunction("friendlyItemDrop", EventInstanceManager.this, mob);
-        } catch (ScriptException | NoSuchMethodException ex) {
-        } // optional
+        invokeScriptFunction("friendlyItemDrop", EventInstanceManager.this, mob);
     }
 
     public void playerKilled(final Character chr) {
         ThreadManager.getInstance().newTask(() -> {
-            try {
-                invokeScriptFunction("playerDead", EventInstanceManager.this, chr);
-            } catch (ScriptException | NoSuchMethodException ex) {
-            } // optional
+            invokeScriptFunction("playerDead", EventInstanceManager.this, chr);
         });
     }
 
     public void reviveMonster(final Monster mob) {
-        try {
-            invokeScriptFunction("monsterRevive", EventInstanceManager.this, mob);
-        } catch (ScriptException | NoSuchMethodException ex) {
-        } // optional
+        invokeScriptFunction("monsterRevive", EventInstanceManager.this, mob);
     }
 
     public boolean revivePlayer(final Character chr) {
-        try {
-            Object b = invokeScriptFunction("playerRevive", EventInstanceManager.this, chr);
-            if (b instanceof Boolean) {
-                return (Boolean) b;
-            }
-        } catch (ScriptException | NoSuchMethodException ex) {
-        } // optional
-
+        Object b = invokeScriptFunction("playerRevive", EventInstanceManager.this, chr);
+        if (b instanceof Boolean) {
+            return (Boolean) b;
+        }
         return true;
     }
 
     public void playerDisconnected(final Character chr) {
-        try {
-            invokeScriptFunction("playerDisconnected", EventInstanceManager.this, chr);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
-
+        invokeScriptFunction("playerDisconnected", EventInstanceManager.this, chr);
         EventRecallCoordinator.getInstance().storeEventInstance(chr.getId(), this);
     }
 
     public void monsterKilled(Character chr, final Monster mob) {
-        try {
-            final int inc = (int) invokeScriptFunction("monsterValue", EventInstanceManager.this, mob.getId());
-
+        Object result = invokeScriptFunction("monsterValue", EventInstanceManager.this, mob.getId());
+        if (result instanceof Integer) {
+            final int inc = (Integer) result;
             if (inc != 0) {
                 Integer kc = killCount.get(chr);
                 if (kc == null) {
@@ -613,8 +581,6 @@ public class EventInstanceManager {
                     expedition.monsterKilled(chr, mob);
                 }
             }
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
         }
     }
 
@@ -641,11 +607,7 @@ public class EventInstanceManager {
             return;
         }
 
-        try {
-            invokeScriptFunction("dispose", EventInstanceManager.this);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
+        invokeScriptFunction("dispose", EventInstanceManager.this);
         disposed = true;
 
         ess.dispose();
@@ -704,11 +666,7 @@ public class EventInstanceManager {
         try {
             if (ess != null) {
                 Runnable r = () -> {
-                    try {
-                        invokeScriptFunction(methodName, EventInstanceManager.this);
-                    } catch (ScriptException | NoSuchMethodException ex) {
-                        ex.printStackTrace();
-                    }
+                    invokeScriptFunction(methodName, EventInstanceManager.this);
                 };
 
                 ess.registerEntry(r, delay);
@@ -802,35 +760,19 @@ public class EventInstanceManager {
     }
 
     public void leftParty(final Character chr) {
-        try {
-            invokeScriptFunction("leftParty", EventInstanceManager.this, chr);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
+        invokeScriptFunction("leftParty", EventInstanceManager.this, chr);
     }
 
     public void disbandParty() {
-        try {
-            invokeScriptFunction("disbandParty", EventInstanceManager.this);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
+        invokeScriptFunction("disbandParty", EventInstanceManager.this);
     }
 
     public void clearPQ() {
-        try {
-            invokeScriptFunction("clearPQ", EventInstanceManager.this);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
+        invokeScriptFunction("clearPQ", EventInstanceManager.this);
     }
 
     public void removePlayer(final Character chr) {
-        try {
-            invokeScriptFunction("playerExit", EventInstanceManager.this, chr);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
+        invokeScriptFunction("playerExit", EventInstanceManager.this, chr);
     }
 
     public boolean isLeader(Character chr) {
@@ -881,7 +823,7 @@ public class EventInstanceManager {
                 return true;
             }
         } catch (Exception ex) {
-            ex.printStackTrace();
+            handleScriptException(ex, "disposeIfPlayerBelow");
         }
 
         return false;
@@ -1112,12 +1054,7 @@ public class EventInstanceManager {
 
     public final synchronized void startEvent() {
         eventStarted = true;
-
-        try {
-            invokeScriptFunction("afterSetup", EventInstanceManager.this);
-        } catch (ScriptException | NoSuchMethodException ex) {
-            ex.printStackTrace();
-        }
+        invokeScriptFunction("afterSetup", EventInstanceManager.this);
     }
 
     public final void setEventCleared() {
