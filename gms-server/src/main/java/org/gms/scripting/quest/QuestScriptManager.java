@@ -80,7 +80,7 @@ public class QuestScriptManager extends AbstractScriptManager {
                     if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) {
                         c.getPlayer().dropMessage(5,"任务脚本 " + quest.getName() + "(" + questid + ".js) 不存在。");
                     }
-                    qm.dispose();
+                    dispose(c); // 脚本不存在，直接dispose
                     return;
                 } else if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) {
                     c.getPlayer().dropMessage(0,"与任务脚本 " + quest.getName() + "(" + questid + ".js) 的 start() 建立了联系。");
@@ -94,7 +94,7 @@ public class QuestScriptManager extends AbstractScriptManager {
                 iv.invokeFunction("start", (byte) 1, (byte) 0, 0);
             }
         } catch (final Throwable t) {
-            log.error("执行任务脚本 {}.js 的 strat() 错误: ", questid, t);
+            log.error("执行任务脚本 {}.js 的 start() 错误: ", questid, t);
             if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) {
                 c.getPlayer().dropMessage(5,"任务脚本 " + questid + ".js 执行出错。");
             }
@@ -109,7 +109,7 @@ public class QuestScriptManager extends AbstractScriptManager {
                 c.setClickedNPC();
                 iv.invokeFunction("start", mode, type, selection);
             } catch (final Exception e) {
-                log.error("执行任务脚本 {} 的 strat({}, {} ,{}) 错误: ", getQM(c).getQuest(), mode, type, selection, e);
+                log.error("执行任务脚本 {} 的 start({}, {} ,{}) 错误: ", getQM(c).getQuest(), mode, type, selection, e);
                 if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) {
                     c.getPlayer().dropMessage(5,"任务脚本 " +  getQM(c).getQuest() + ".js 执行出错。");
                 }
@@ -143,7 +143,7 @@ public class QuestScriptManager extends AbstractScriptManager {
                     if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) {
                         c.getPlayer().dropMessage(5,"任务脚本 " + quest.getName() + "(" + questid + ".js) 不存在。");
                     }
-                    qm.dispose();
+                    dispose(c); // 脚本不存在，直接dispose
                     return;
                 } else if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) {
                     c.getPlayer().dropMessage(0,"与任务脚本 " + quest.getName() + "(" + questid + ".js) 的 end() 建立了联系。");
@@ -196,8 +196,7 @@ public class QuestScriptManager extends AbstractScriptManager {
                     if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) {
                         c.getPlayer().dropMessage(5,"任务脚本 " + questid + " 不存在。");
                     }
-                    //FilePrinter.printError(FilePrinter.QUEST_UNCODED, "RAISE Quest " + questid + " is uncoded.");
-                    qm.dispose();
+                    dispose(c); // 脚本不存在，直接dispose
                     return;
                 } else if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) {
                     c.getPlayer().dropMessage(0,"任务脚本 " + questid + ".js 启动操作了。");
@@ -232,6 +231,8 @@ public class QuestScriptManager extends AbstractScriptManager {
         if (qm != null) {
             dispose(qm, c);
         }
+        // 总是尝试解锁UI，以防万一
+        c.enableActions();
     }
 
     public QuestActionManager getQM(Client c) {
