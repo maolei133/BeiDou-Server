@@ -22,11 +22,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package org.gms.client.autoban;
 
-import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
-import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
-import org.gms.server.logging.LogModule;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -120,36 +117,25 @@ public enum AutobanFactory {
     }
 
     public void alert(Character chr, String reason) {
-        if (chr.getAutoBanManager().useAutoBan()) {
-            if (isIgnored(chr.getId())) {
-                return;
-            }
+        if (chr.getAutoBanManager().useAutoBan() && isIgnored(chr.getId())) {
+            return;
         }
-        if (chr.getAutoBanManager().useAutoBanLog()) {
-            // 使用 AuditLogger
-            MapMessage msg = new MapMessage()
-                //.with("lvl", chr.getLevel()) // 已自动注入
-                //.with("job", chr.getJob().getId()) // 已自动注入
-                .with("x", chr.getPosition().x)
-                .with("y", chr.getPosition().y)
-                .with("sub", this.getName())
-                .with("msg", reason);
-            
-            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, msg);
-        }
+        // 调用新的中央日志记录器
+        AutobanLogger.log(chr, this, LogAction.CHEAT_ALERT, reason);
     }
 
 
     /**
      * 自动封禁玩家
-     * 
+     *
      * @param chr 要被封禁的玩家角色对象
      * @param value 封禁的原因或相关信息
      */
     public void autoban(Character chr, String value) {
         if (chr.getAutoBanManager().useAutoBan()) {
+            // 调用新的中央日志记录器
+            AutobanLogger.log(chr, this, LogAction.CHEAT_BAN, value);
             chr.autoBan("因 [" + this.getName() + "] 被自动封禁: " + value);
-            //chr.sendPolice("You will be disconnected for (" + this.name() + ": " + value + ")");
         }
     }
 

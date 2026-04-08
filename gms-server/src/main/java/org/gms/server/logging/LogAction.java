@@ -60,6 +60,8 @@ public enum LogAction {
     /** 作弊警告 */ CHEAT_WARNING,
     /** 作弊封号 */ CHEAT_BAN,
     /** 作弊断开 */ CHEAT_DISCONNECT,
+    /** 作弊处罚 */ CHEAT_PENALTY,
+    /** 作弊提醒 */ CHEAT_ALERT,
 
     // --- PLUGIN ---
     /** 插件启动 */ PLUGIN_START,

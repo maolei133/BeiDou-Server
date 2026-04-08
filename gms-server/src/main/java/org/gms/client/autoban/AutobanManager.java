@@ -11,9 +11,7 @@ import org.gms.client.Character;
 import org.gms.client.cheatsystem.plugin.MobVacPlugin;
 import org.gms.config.GameConfig;
 import org.gms.constants.skills.*;
-import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
-import org.gms.server.logging.LogModule;
 import org.gms.net.server.Server;
 import org.gms.server.StatEffect;
 import org.gms.server.life.MobSkillFactory;
@@ -22,7 +20,6 @@ import org.gms.server.life.Monster;
 import org.gms.server.maps.MapleMap;
 import org.gms.util.PacketCreator;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,15 +38,15 @@ import java.util.concurrent.atomic.AtomicLongArray;
  * @author kevintjuh93
  */
 public class AutobanManager {
-    
+
     // 惩罚基础持续时间（毫秒）
     private static final int PUNISHMENT_DURATION_BASE = 10000;
-    
+
     // 排除检测的技能ID集合
     private static final Set<Integer> EXCLUDED_SKILLS = new HashSet<>();
     // 终极武器技能集合
     private static final Set<Integer> FINAL_ATTACK_SKILLS = new HashSet<>();
-    
+
     // 初始化排除检测的技能ID集合
     static {
         EXCLUDED_SKILLS.add(WindArcher.HURRICANE);
@@ -68,7 +65,7 @@ public class AutobanManager {
         FINAL_ATTACK_SKILLS.add(WindArcher.FINAL_ATTACK);
         FINAL_ATTACK_SKILLS.add(DawnWarrior.FINAL_ATTACK);
     }
-    
+
     private final Character chr; // 关联的玩家角色
     private final Map<AutobanFactory, Integer> punishPoints = new ConcurrentHashMap<>(); // 惩罚点数存储
     private final Map<AutobanFactory, Integer> banPoints = new ConcurrentHashMap<>(); // 封号点数存储
@@ -99,7 +96,7 @@ public class AutobanManager {
     public boolean useAutoBan() {
         return GameConfig.getServerBoolean("use_auto_ban");
     }
-    
+
     /**
      * 是否使用自动封禁日志
      * @return true-使用自动封禁日志, false-不使用自动封禁日志
@@ -168,21 +165,10 @@ public class AutobanManager {
         int currentPunishPoints = punishPoints.getOrDefault(fac, 0) + 1;
         punishPoints.put(fac, currentPunishPoints);
 
-        // 记录日志
+        // 在接近阈值时记录警告日志
         if (useAutoBanLog() && (fac != AutobanFactory.FAST_ATTACK && currentPunishPoints >= (fac.getMaximum() * 0.90))) {
-            MapMessage msg = new MapMessage()
-                .with("x", chr.getPosition().x)
-                .with("y", chr.getPosition().y)
-                .with("type", fac.getName())
-                .with("reason", reason)
-                .with("points", currentPunishPoints);
-            
-            if (extraData != null) {
-                // 使用 forEach 并显式转换类型，避免 raw type 导致的编译错误
-                extraData.getData().forEach((k, v) -> msg.with(String.valueOf(k), String.valueOf(v)));
-            }
-            
-            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, msg);
+            MapMessage logData = new MapMessage(extraData.getData()).with("points", currentPunishPoints);
+            AutobanLogger.log(chr, fac, LogAction.CHEAT_WARNING, reason, logData);
         }
 
         // 惩罚点数达到最大值时增加封号点数并清零惩罚点数
@@ -199,47 +185,28 @@ public class AutobanManager {
                 // 清零封号点数
                 banPoints.put(fac, 0);
                 if (useAutoBan()) {
-                    chr.autoBan(reason);
+                    fac.autoban(chr, reason); // autoban内部已包含日志记录
                     return 1; // 已封号
                 } else if (useAntiCheatDisconnect()) {
                     chr.getClient().disconnect(false,false);
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + fac.getName() + " 而被断开连接"));
-                    if (useAutoBanLog()) {
-                        MapMessage msg = new MapMessage()
-                            .with("type", fac.getName())
-                            .with("reason", reason);
-                        if (extraData != null) {
-                            extraData.getData().forEach((k, v) -> msg.with(String.valueOf(k), String.valueOf(v)));
-                        }
-                        AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DISCONNECT, msg);
-                    }
+                    AutobanLogger.log(chr, fac, LogAction.CHEAT_DISCONNECT, reason, extraData);
                     return 1;
                 } else if (useAutoBanLog()) {
                     // 记录日志但不执行封号
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + fac.getName() + " 但未启用自动封禁，因此无事发生。"));
-                    MapMessage msg = new MapMessage()
-                        .with("type", fac.getName())
-                        .with("reason", reason)
-                        .with("msg", "未启用封禁");
-                    if (extraData != null) {
-                        extraData.getData().forEach((k, v) -> msg.with(String.valueOf(k), String.valueOf(v)));
-                    }
-                    AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DETECTED, msg);
+                    MapMessage logData = new MapMessage(extraData.getData()).with("msg", "未启用封禁");
+                    AutobanLogger.log(chr, fac, LogAction.CHEAT_DETECTED, reason, logData);
                 }
             } else {
                 // 记录日志
                 if (useAutoBanLog()) {
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 触发 " + fac.getName() + " - " + reason));
-                    MapMessage msg = new MapMessage()
-                        .with("type", fac.getName())
-                        .with("reason", reason)
+                    MapMessage logData = new MapMessage(extraData.getData())
                         .with("points", fac.getMaximum())
                         .with("banPoints", currentBanPoints)
                         .with("msg", "增加封号点数");
-                    if (extraData != null) {
-                        extraData.getData().forEach((k, v) -> msg.with(String.valueOf(k), String.valueOf(v)));
-                    }
-                    AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DETECTED, msg);
+                    AutobanLogger.log(chr, fac, LogAction.CHEAT_DETECTED, reason, logData);
                 }
             }
             return 0; // 需要惩罚但未达到封号条件
@@ -251,16 +218,15 @@ public class AutobanManager {
      * 自动扣除HP和MP惩罚
      * 当玩家触发违规时自动扣除一定量的HP和MP
      * 扣除量不会超过玩家当前的HP和MP上限
-     * 
+     *
      * @param hpToLose 要扣除的HP值
      * @param mpToLose 要扣除的MP值
      */
     public void applyLoseHpMp(int hpToLose, int mpToLose) {
         if (!useAntiCheatLoseHpMp() || chr == null || chr.gmLevel() >= 4) {
             if (chr.gmLevel() >= 4) {
-                AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, new MapMessage()
-                    .with("reason", "GM等级>=4")
-                    .with("msg", "跳过HP/MP扣除惩罚"));
+                MapMessage logData = new MapMessage().with("reason", "GM等级>=4");
+                AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.CHEAT_ALERT, "跳过HP/MP扣除惩罚", logData);
             }
             return;
         }
@@ -275,10 +241,8 @@ public class AutobanManager {
 
         // 记录日志
         if (useAutoBanLog()) {
-            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, new MapMessage()
-                .with("hpLoss", actualHpLoss)
-                .with("mpLoss", actualMpLoss)
-                .with("msg", "扣除HP/MP惩罚"));
+            MapMessage logData = new MapMessage().with("hpLoss", actualHpLoss).with("mpLoss", actualMpLoss);
+            AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.CHEAT_PENALTY, "扣除HP/MP惩罚", logData);
         }
     }
 
@@ -286,7 +250,7 @@ public class AutobanManager {
      * 自动扣除HP和MP惩罚（带消息提示）
      * 当玩家触发违规时自动扣除一定量的HP和MP
      * 扣除量不会超过玩家当前的HP和MP上限
-     * 
+     *
      * @param hpToLose 要扣除的HP值
      * @param mpToLose 要扣除的MP值
      * @param msg 提示消息
@@ -295,7 +259,7 @@ public class AutobanManager {
         if (!useAntiCheatLoseHpMp() || chr == null) return;
         // 调用原有的applyLoseHpMp方法处理HP/MP扣除逻辑
         applyLoseHpMp(hpToLose, mpToLose);
-        
+
         // 如果消息不为空，则发送封包
         if (msg != null && !msg.isEmpty()) {
             chr.sendPacket(PacketCreator.earnTitleMessage(msg + " 超出部分对你自身造成 " + hpToLose + " 伤害"));
@@ -312,9 +276,8 @@ public class AutobanManager {
         MobSkillFactory.getMobSkill(MobSkillType.SEAL, 1).ifPresent(skill -> chr.giveDebuff(Disease.SEAL, skill, duration));
         MobSkillFactory.getMobSkill(MobSkillType.DARKNESS, 1).ifPresent(skill -> chr.giveDebuff(Disease.DARKNESS, skill, duration));
         if (useAutoBanLog()) {
-            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, new MapMessage()
-                .with("duration", duration)
-                .with("msg", "施加Debuff惩罚"));
+            MapMessage logData = new MapMessage().with("duration", duration);
+            AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.CHEAT_PENALTY, "施加Debuff惩罚", logData);
         }
     }
 
@@ -356,7 +319,7 @@ public class AutobanManager {
             }
             reasonBuilder.append(" 频率异常，间隔: ").append(timeBetweenAttacks)
                 .append("ms (最低允许: ").append(minAttackInterval).append("ms)");
-            
+
             // 使用点数系统处理
             int result = addPoint(AutobanFactory.FAST_ATTACK, reasonBuilder.toString());
 
@@ -366,7 +329,6 @@ public class AutobanManager {
                 if (banPoints > 1) {//降低误报的概率
                     int punishmentDuration = banPoints * PUNISHMENT_DURATION_BASE; // 惩罚间隔至少10秒
                     applyDebuffPunishment(punishmentDuration);
-//                AutobanFactory.FAST_ATTACK.alert(chr, "惩罚时间: " + punishmentDuration + "ms ,攻击间隔: " + timeBetweenAttacks + "ms");
                     chr.sendPacket(PacketCreator.earnTitleMessage("由于攻速过快，还需等待 " + (punishmentDuration / 1000f) + " 秒后才能恢复攻击。"));
                 }
             }
@@ -454,9 +416,7 @@ public class AutobanManager {
             if (currentCount >= times) {
                 if (useAutoBan()) {
                     chr.getClient().disconnect(false, false);
-                    AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DISCONNECT, new MapMessage()
-                        .with("type", type)
-                        .with("msg", "频繁操作断开连接"));
+                    AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.CHEAT_DISCONNECT, "频繁操作断开连接", new MapMessage().with("type", type));
                 }
             }
         } else {
@@ -515,12 +475,12 @@ public class AutobanManager {
 
     /**
      * 检测怪物吸怪外挂
-     * 
+     *
      * 功能说明：
      * 通过分析怪物坐标的一致性来判断玩家是否使用吸怪外挂。
      * 该函数会收集怪物位置样本，当90%以上的怪物都在70像素范围内时，
      * 判定为吸怪行为并执行相应的惩罚措施。
-     * 
+     *
      * 检测逻辑：
      * 1. 基础安全检查（反作弊启用、玩家和怪物对象有效）
      * 2. 地图状态检查（跳过已启用合法聚集功能的地图）
@@ -528,7 +488,7 @@ public class AutobanManager {
      * 4. 收集新的怪物位置样本
      * 5. 当样本数量足够时进行一致性分析
      * 6. 如果90%以上怪物位置一致，执行惩罚措施
-     * 
+     *
      * @param monster 要检测的怪物对象，包含位置坐标信息
      * @return boolean 如果检测到吸怪行为返回true，否则返回false
      * @see MonsterVacSample 怪物位置采样数据结构
@@ -544,7 +504,7 @@ public class AutobanManager {
 
         // 获取怪物移动类型
         int movetype = monster.getStats().getMovetype(); // 获取怪物移动类型
-        
+
         // 根据移动类型选择对应的采样集合
         ConcurrentLinkedQueue<MonsterVacSample> currentSamples;
         if (movetype == 0) { // 陆地类型
@@ -554,10 +514,10 @@ public class AutobanManager {
         } else { // 其它类型
             currentSamples = otherMonsterVacSamples;
         }
-        
+
         long now = Server.getInstance().getCurrentTime(); // 获取当前服务器时间
         long expire = AutobanFactory.MONSTER_VAC.getExpire(); // 获取怪物吸怪检测的过期时间配置
-        
+
         // 清理过期的采样数据
         while (!currentSamples.isEmpty() && currentSamples.peek().ts <= now - expire) {
             currentSamples.poll(); // 移除过期记录
@@ -566,29 +526,29 @@ public class AutobanManager {
         // 移除已存在的相同OID的样本，确保每个怪物只保留最新的位置信息
         int oid = monster.getObjectId();
         currentSamples.removeIf(sample -> sample.oid == oid);
-        
+
         MonsterVacSample s = new MonsterVacSample(); // 创建新的怪物位置采样
         s.oid = oid; // 记录怪物OID
         s.x = (int) monster.getPosition().getX(); // 怪物X坐标
         s.y = (int) monster.getPosition().getY(); // 怪物Y坐标
         s.ts = now; // 采样时间戳
-        
+
         // 将新采样添加到对应的队列末尾
         currentSamples.add(s);
-        
+
         int maxSize = AutobanFactory.MONSTER_VAC.getMaximum(); // 获取最大采样数量配置
-        
+
         // 保持采样队列在最大容量范围内
         while (currentSamples.size() > maxSize) {
             currentSamples.poll(); // 移除最旧的采样
         }
-        
+
         // 当采样数量达到最大值时开始检测
         if (currentSamples.size() >= maxSize) {
             // 根据移动类型设置不同的检测参数
             int pixelRange = 60; // 默认采样范围
             double consistencyThreshold = 0.95; // 默认相似率阈值
-            
+
             // 根据移动类型设置参数：1=陆地，2=飞行，其它=未知
             if (movetype == 1) { // 陆地类型
                 pixelRange = 125; // 采样范围125像素点
@@ -600,39 +560,39 @@ public class AutobanManager {
                 pixelRange = 80; // 采样范围80像素点
                 consistencyThreshold = 0.90; // 相似率90%
             }
-            
+
             int consistentCount = 0; // 统计在相近位置的怪物数量
             for (MonsterVacSample sample : currentSamples) { // 遍历当前类型的所有采样，检查位置一致性
                 if (Math.abs(sample.x - s.x) <= pixelRange && Math.abs(sample.y - s.y) <= pixelRange) { // 使用动态计算的像素范围
                     consistentCount++; // 一致位置计数增加
                 }
             }
-            
+
             double consistencyRatio = consistentCount * 1.0 / currentSamples.size(); // 计算一致位置比例
-            
+
             if (consistencyRatio >= consistencyThreshold) { // 使用动态计算的相似率阈值
                 // 二次校验：检查聚集的怪物占全图怪物的比例
                 List<Monster> mapMonsters = map.getAllMonsters();
                 int totalTypeMonsters = 0;
                 int nearbyTypeCount = 0;
-                
+
                 for (Monster m : mapMonsters) {
                     // 只统计相同移动类型的怪物
                     if (m.getStats().getMovetype() == movetype) {
                         totalTypeMonsters++;
                         // 检查该同类型怪物是否在样本点附近
-                        if (Math.abs(m.getPosition().x - s.x) <= pixelRange && 
+                        if (Math.abs(m.getPosition().x - s.x) <= pixelRange &&
                             Math.abs(m.getPosition().y - s.y) <= pixelRange) {
                             nearbyTypeCount++;
                         }
                     }
                 }
-                
+
                 // 防止除以零（虽然理论上当前怪物存在，总数至少为1）
                 if (totalTypeMonsters == 0) return false;
-                
+
                 double mapRatio = (double) nearbyTypeCount / totalTypeMonsters;
-                
+
                 // 如果该类型的怪物聚集比例低于 90%，则认为是误报（例如玩家拉怪）
                 if (mapRatio < 0.85) {
                      return false;
