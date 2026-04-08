@@ -256,7 +256,6 @@
 
     const series: any[] = [];
     const legendData: string[] = [];
-    const xAxisData: Set<string> = new Set();
 
     if (chartData.value.length > 0) {
       const processedData = chartData.value.map((item: any) => {
@@ -359,9 +358,6 @@
       } else {
         processedData.forEach((item: any) => {
           legendData.push(item.name);
-          item.values.forEach((val: any[]) => {
-            xAxisData.add(val[0].toString());
-          });
 
           let chartType = props.type || 'line';
           if (isScatter) chartType = 'scatter';

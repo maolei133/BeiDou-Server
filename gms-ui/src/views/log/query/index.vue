@@ -33,8 +33,6 @@
                     v-model="form.range"
                     :placeholder="$t('log.query.form.placeholder.select')"
                     @change="handleRangeChange"
-                    :key="item"
-                    :value="item"
                   >
                     <a-option value="1h">{{
                       $t('log.query.form.range.1h')

@@ -477,16 +477,14 @@
                   />
                 </template>
                 <template v-else-if="rawQueryStatus === 'valid'">
-                  <icon-check-circle style="color: var(--color-success-6)" />
+                  <icon-check-circle style="color: #0fbf60" />
                 </template>
                 <template
                   v-else-if="
                     rawQueryStatus === 'matrix' || rawQueryStatus === 'error'
                   "
                 >
-                  <icon-exclamation-circle
-                    style="color: var(--color-danger-6)"
-                  />
+                  <icon-exclamation-circle style="color: #f53f3f" />
                 </template>
                 <template v-else>
                   <icon-question-circle style="color: var(--color-text-3)" />
@@ -734,20 +732,22 @@
   const queryBuilder = reactive(createDefaultQueryBuilder());
 
   // --- Dashboard Logic ---
+  type ChartType =
+    | 'line'
+    | 'bar'
+    | 'pie'
+    | 'scatter'
+    | 'area'
+    | 'radar'
+    | 'funnel'
+    | 'gauge'
+    | 'heatmap'
+    | 'candlestick';
+
   interface ChartConfig {
     id: string;
     title: string;
-    type:
-      | 'line'
-      | 'bar'
-      | 'pie'
-      | 'scatter'
-      | 'area'
-      | 'radar'
-      | 'funnel'
-      | 'gauge'
-      | 'heatmap'
-      | 'candlestick';
+    type: ChartType;
     query: string;
     width: number;
     height: number;
@@ -762,14 +762,16 @@
   const editingIndex = ref(-1);
   const isResizing = ref(false);
 
-  const addForm = reactive({
+  const createDefaultAddForm = () => ({
     title: '',
-    type: 'line',
+    type: 'line' as ChartType,
     query: '',
-    width: 12,
+    width: 600,
     height: 300,
     range: '24h',
   });
+
+  const addForm = reactive(createDefaultAddForm());
 
   const buildQuery = () => {
     const keyMapping = {
@@ -894,7 +896,7 @@
     const { query } = addForm;
     // 尝试匹配最外层的流选择器 { ... }
     // 这是一个简化的匹配，假设一个查询中只有一个主要流选择器用于获取日志源
-    const streamSelectorMatch = query.match(/\{[^{}]*\}/);
+    const streamSelectorMatch = query.match(/\{[^{}]*}/);
     if (streamSelectorMatch && streamSelectorMatch[0]) {
       // 提取流选择器部分
       let baseQuery = streamSelectorMatch[0];
@@ -1051,7 +1053,7 @@
       } else {
         rawQueryStatus.value = 'error';
       }
-    } catch (err) {
+    } catch (err: any) {
       rawQueryStatus.value = 'error';
       Message.error(err.message || t('log.query.message.fail'));
     } finally {
@@ -1216,38 +1218,52 @@
   const loadLayout = async () => {
     try {
       const { data } = await readConfigFile('dashboard-layout.json');
-      if (data) {
-        let parsed = typeof data === 'string' ? JSON.parse(data) : data;
-        if (parsed && !Array.isArray(parsed) && parsed.data) {
-          if (typeof parsed.data === 'string') {
-            try {
-              parsed = JSON.parse(parsed.data);
-            } catch (e) {
-              parsed = parsed.data;
-            }
-          } else {
-            parsed = parsed.data;
-          }
-        }
-        if (typeof parsed === 'string') {
-          try {
-            parsed = JSON.parse(parsed);
-          } catch (e) {
-            // ignore
-          }
-        }
-        if (Array.isArray(parsed)) {
-          charts.value = parsed;
-          charts.value.forEach((c) => {
-            if (!c.height) c.height = 300;
-            if (c.width <= 24) {
-              c.width *= 50;
-              if (c.width < 200) c.width = 600;
-            }
-          });
-        } else {
+      if (!data) {
+        charts.value = getDefaultCharts();
+        return;
+      }
+
+      let parsedData: any;
+      if (typeof data === 'string') {
+        try {
+          parsedData = JSON.parse(data);
+        } catch (e) {
           charts.value = getDefaultCharts();
+          return;
         }
+      } else {
+        parsedData = data;
+      }
+
+      // 检查并解包可能存在的嵌套 'data' 属性
+      if (
+        parsedData &&
+        typeof parsedData === 'object' &&
+        !Array.isArray(parsedData) &&
+        'data' in parsedData
+      ) {
+        if (typeof parsedData.data === 'string') {
+          try {
+            parsedData = JSON.parse(parsedData.data);
+          } catch (e) {
+            // 如果内部数据无法解析，则使用默认值
+            charts.value = getDefaultCharts();
+            return;
+          }
+        } else {
+          parsedData = parsedData.data;
+        }
+      }
+
+      if (Array.isArray(parsedData)) {
+        charts.value = parsedData;
+        charts.value.forEach((c) => {
+          if (!c.height) c.height = 300;
+          if (c.width <= 24) {
+            c.width *= 50;
+            if (c.width < 200) c.width = 600;
+          }
+        });
       } else {
         charts.value = getDefaultCharts();
       }
@@ -1260,21 +1276,16 @@
     Modal.confirm({
       title: t('log.dashboard.action.resetDefault'),
       content: t('log.dashboard.confirm.resetDefault'),
-      onOk: () => {
+      onOk: async () => {
         charts.value = getDefaultCharts();
-        saveLayout();
+        await saveLayout();
       },
     });
   };
 
   const resetForm = () => {
     Object.assign(queryBuilder, createDefaultQueryBuilder());
-    addForm.title = '';
-    addForm.query = '';
-    addForm.width = 600;
-    addForm.height = 300;
-    addForm.type = 'line';
-    addForm.range = '24h';
+    Object.assign(addForm, createDefaultAddForm());
     dynamicDimensions.value = [];
     dynamicNumericFields.value = [];
     rawQueryStatus.value = 'idle'; // Reset raw query status
@@ -1323,7 +1334,7 @@
         ? charts.value[editingIndex.value].id
         : Date.now().toString(),
       title: addForm.title,
-      type: addForm.type as any,
+      type: addForm.type,
       query: addForm.query, // 直接使用文本框的查询
       width: addForm.width,
       height: addForm.height,
@@ -1371,8 +1382,8 @@
 
   onMounted(async () => {
     await fetchAllOptions(); // 确保在构建 i18n 映射和其他逻辑之前获取选项
-    fetchStatus();
-    loadLayout();
+    await fetchStatus();
+    await loadLayout();
     timer = setInterval(() => {
       now.value = Date.now();
     }, 1000);
