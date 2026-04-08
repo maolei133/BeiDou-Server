@@ -42,6 +42,11 @@ export default {
   'log.dashboard.custom.form.query': 'LogQL 查询语句',
   'log.dashboard.custom.form.query.placeholder': '自动生成，也可手动修改',
   'log.dashboard.custom.form.query.help': '基于 LogQL v2 语法生成',
+  'log.dashboard.custom.form.rawQueryForParse': '用于解析的原始日志查询',
+  'log.dashboard.custom.form.rawQueryForParse.placeholder':
+    '自动提取的原始日志流查询',
+  'log.dashboard.custom.form.rawQueryForParse.help':
+    '此查询用于“解析结果”功能，确保返回原始日志流。',
   'log.dashboard.custom.form.metric': '统计指标',
   'log.dashboard.custom.form.field': '数值字段',
   'log.dashboard.custom.form.dimension': '分组维度',
@@ -55,7 +60,8 @@ export default {
   'log.dashboard.custom.message.save.fail': '保存失败',
   'log.dashboard.custom.message.load.fail': '加载图表数据失败',
   'log.dashboard.custom.validate.required': '标题和查询语句不能为空',
-  'log.dashboard.custom.action.test': '测试语句',
+  'log.dashboard.custom.action.testFullQuery': '测试完整查询',
+  'log.dashboard.custom.action.testRawQuery': '测试原始查询',
   'log.dashboard.custom.action.parse': '解析结果',
   'log.dashboard.custom.testResult.title': '测试查询结果',
   'log.dashboard.custom.parseModal.title': '解析并添加字段',
@@ -70,6 +76,14 @@ export default {
     '测试结果不是有效的JSON对象，无法解析。',
   'log.dashboard.custom.message.parse.success': '成功添加了 {count} 个新字段。',
   'log.dashboard.custom.message.parse.noNew': '没有需要添加的新字段。',
+  'log.dashboard.custom.message.rawQuery.valid':
+    '原始查询有效，返回可解析的日志流。',
+  'log.dashboard.custom.message.rawQuery.matrix':
+    '原始查询返回聚合数据，无法解析日志流。',
+  'log.dashboard.custom.message.rawQuery.failed':
+    '原始查询失败或未返回可解析的日志流。',
+  'log.dashboard.custom.message.test.noParsableResult':
+    '没有可供解析的原始日志结果。请先运行“测试原始查询”并确保返回原始日志流。',
 
   'log.dashboard.builder.metric.count': '计数',
   'log.dashboard.builder.metric.sum': '求和',
@@ -236,4 +250,6 @@ export default {
   'log.config.job.title': '任务',
   'log.config.job.new_job_name': '新任务',
   'log.config.job.new_job_path': '/path/to/logs/*.log',
+
+  'log.dashboard.builder.action.generate': '生成',
 };

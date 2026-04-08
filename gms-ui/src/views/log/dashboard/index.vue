@@ -136,6 +136,7 @@
             :type="chart.type"
             :query="chart.query"
             :range="chart.range"
+            :all-options="allOptions"
             @remove="removeChart(index)"
             @config="openEditModal(index)"
             @resize-start="handleResizeStart"
@@ -286,6 +287,8 @@
                   :placeholder="
                     $t('log.dashboard.builder.filter.placeholder.key')
                   "
+                  allow-create
+                  filterable
                 >
                   <a-option
                     v-for="item in combinedDimensions"
@@ -376,6 +379,7 @@
                     $t('log.dashboard.builder.field.placeholder.numeric')
                   "
                   allow-create
+                  filterable
                 >
                   <a-option
                     v-for="item in combinedNumericFields"
@@ -391,7 +395,11 @@
                 :label="$t('log.dashboard.custom.form.dimension')"
                 field="dimension"
               >
-                <a-select v-model="queryBuilder.dimension">
+                <a-select
+                  v-model="queryBuilder.dimension"
+                  allow-create
+                  filterable
+                >
                   <a-option
                     v-for="item in combinedDimensions"
                     :key="item.value"
@@ -414,9 +422,20 @@
                 />
               </a-form-item>
             </a-col>
+            <a-col :span="16">
+              <a-form-item>
+                <a-button
+                  type="primary"
+                  style="margin-top: 28px"
+                  @click="buildQuery"
+                >
+                  <template #icon><icon-command /></template>
+                  {{ $t('log.dashboard.builder.action.generate') }}
+                </a-button>
+              </a-form-item>
+            </a-col>
           </a-row>
         </div>
-
         <a-form-item
           :label="$t('log.dashboard.custom.form.query')"
           field="query"
@@ -431,14 +450,68 @@
             {{ $t('log.dashboard.custom.form.query.help') }}
           </template>
         </a-form-item>
+
+        <!-- 新增：用于解析的原始日志查询 -->
+        <a-form-item
+          :label="$t('log.dashboard.custom.form.rawQueryForParse')"
+          field="rawQueryForParse"
+        >
+          <div
+            style="display: flex; align-items: center; gap: 8px; width: 100%"
+          >
+            <a-textarea
+              :model-value="rawLogQueryForParsing"
+              :placeholder="
+                $t('log.dashboard.custom.form.rawQueryForParse.placeholder')
+              "
+              :auto-size="{ minRows: 1, maxRows: 3 }"
+              readonly
+              style="flex-grow: 1; resize: vertical"
+            />
+            <div class="raw-query-status-indicator">
+              <a-tooltip :content="rawQueryStatusMessage">
+                <template v-if="rawQueryStatus === 'loading'">
+                  <icon-loading
+                    class="spin"
+                    style="color: var(--color-text-3)"
+                  />
+                </template>
+                <template v-else-if="rawQueryStatus === 'valid'">
+                  <icon-check-circle style="color: var(--color-success-6)" />
+                </template>
+                <template
+                  v-else-if="
+                    rawQueryStatus === 'matrix' || rawQueryStatus === 'error'
+                  "
+                >
+                  <icon-exclamation-circle
+                    style="color: var(--color-danger-6)"
+                  />
+                </template>
+                <template v-else>
+                  <icon-question-circle style="color: var(--color-text-3)" />
+                </template>
+              </a-tooltip>
+            </div>
+          </div>
+          <template #help>
+            {{ $t('log.dashboard.custom.form.rawQueryForParse.help') }}
+          </template>
+        </a-form-item>
+
         <a-form-item>
           <a-space>
-            <a-button :loading="testingQuery" @click="handleTestQuery">{{
-              $t('log.dashboard.custom.action.test')
+            <a-button :loading="testingQuery" @click="handleTestFullQuery">{{
+              $t('log.dashboard.custom.action.testFullQuery')
             }}</a-button>
-            <a-button @click="handleParseResult">{{
-              $t('log.dashboard.custom.action.parse')
+            <a-button :loading="testingRawQuery" @click="handleTestRawQuery">{{
+              $t('log.dashboard.custom.action.testRawQuery')
             }}</a-button>
+            <a-button
+              :disabled="!isRawQueryParsable"
+              @click="handleParseResult"
+              >{{ $t('log.dashboard.custom.action.parse') }}</a-button
+            >
           </a-space>
         </a-form-item>
       </a-form>
@@ -522,6 +595,28 @@
   import dayjs from 'dayjs';
   import Sortable from 'sortablejs';
   import LogChart from './LogChart.vue';
+
+  // --- Refactoring: Centralized static definitions ---
+  const STATIC_DIMENSIONS_MAP = {
+    none: 'log.dashboard.builder.dimension.none',
+    mod: 'log.dashboard.builder.dimension.mod',
+    act: 'log.dashboard.builder.dimension.act',
+    actionType: 'log.query.form.actionType', // '行为'
+    actsou: 'log.query.form.actionSource', // '来源'
+    jobName: 'log.dashboard.builder.dimension.job',
+    mapName: 'log.dashboard.builder.dimension.map',
+    acc: 'log.dashboard.builder.dimension.acc',
+    chr: 'log.dashboard.builder.dimension.chr',
+  };
+
+  const STATIC_NUMERIC_FIELDS_MAP = {
+    cnt: 'log.dashboard.builder.field.cnt',
+    cost: 'log.dashboard.builder.field.cost',
+    meso: 'log.dashboard.builder.field.meso',
+    exp: 'log.dashboard.builder.field.exp',
+    hp: 'log.dashboard.builder.field.hp',
+    mp: 'log.dashboard.builder.field.mp',
+  };
 
   const { t } = useI18n();
 
@@ -676,15 +771,18 @@
     range: '24h',
   });
 
-  const buildBaseLogQL = () => {
+  const buildQuery = () => {
+    const keyMapping = {
+      actionType: 'act',
+      actionSource: 'actsou',
+    };
+
     const labels = [`job="${queryBuilder.logSource}"`];
     const lineFilters: string[] = [];
 
     queryBuilder.filters.forEach((filter) => {
-      let actualKey = filter.key;
-      if (filter.key === 'actionType') actualKey = 'act';
-      if (filter.key === 'actionSource') actualKey = 'actsou';
       if (filter.key && filter.value) {
+        const actualKey = keyMapping[filter.key] || filter.key;
         if (LOKI_LABELS.includes(actualKey)) {
           labels.push(`${actualKey}${filter.op}"${filter.value}"`);
         } else {
@@ -692,29 +790,40 @@
         }
       }
     });
-    const selector = `{${labels.join(',')}}`;
-    const streamFilter = lineFilters.join(' ');
-    return `${selector} | json ${streamFilter}`;
-  };
 
-  const buildQuery = () => {
-    const baseStream = buildBaseLogQL();
-    let rangeVector = '';
-    if (queryBuilder.metric === 'count') {
-      rangeVector = `(${baseStream})[${queryBuilder.interval}]`;
-    } else {
-      if (!queryBuilder.field) {
-        addForm.query = t('log.dashboard.custom.message.query.error');
-        return;
+    const selector = `{${labels.join(',')}}`;
+    const lineFilterPipe = lineFilters.join(' ');
+    const actualDimension =
+      keyMapping[queryBuilder.dimension] || queryBuilder.dimension;
+
+    const needsJson =
+      lineFilterPipe ||
+      (actualDimension !== 'none' && !LOKI_LABELS.includes(actualDimension)) ||
+      queryBuilder.metric !== 'count';
+
+    let stream = selector;
+    if (needsJson) {
+      stream += ` | json`;
+      if (lineFilterPipe) {
+        stream += ` ${lineFilterPipe}`;
       }
-      rangeVector = `(${baseStream} | unwrap ${queryBuilder.field} | __error__="")[${queryBuilder.interval}]`;
     }
 
-    const func = `${queryBuilder.metric}_over_time(${rangeVector})`;
+    let func = '';
+    if (queryBuilder.metric === 'count') {
+      func = `count_over_time(${stream} [${queryBuilder.interval}])`;
+    } else {
+      if (!queryBuilder.field) {
+        Message.error(t('log.dashboard.custom.message.query.error'));
+        return;
+      }
+      const unwrapStream = `${stream} | unwrap ${queryBuilder.field} | __error__=""`;
+      func = `${queryBuilder.metric}_over_time(${unwrapStream} [${queryBuilder.interval}])`;
+    }
 
     let q = '';
     if (queryBuilder.dimension && queryBuilder.dimension !== 'none') {
-      q = `sum by (${queryBuilder.dimension}) (${func})`;
+      q = `sum by (${actualDimension}) (${func})`;
       if (queryBuilder.topk > 0) {
         q = `topk(${queryBuilder.topk}, ${q})`;
       }
@@ -723,8 +832,6 @@
     }
     addForm.query = q;
   };
-
-  watch(queryBuilder, buildQuery, { deep: true });
 
   const addFilter = () => {
     queryBuilder.filters.push({ key: '', op: '=', value: '' });
@@ -741,23 +848,72 @@
   });
 
   const isSelectFilter = (key: string) => {
-    return ['mod', 'act', 'actionType', 'actionSource'].includes(key);
+    return ['mod', 'act', 'actionType', 'actsou'].includes(key);
   };
 
   const getOptionsForFilterKey = (key: string) => {
     if (key === 'mod') return allOptions.value.modules;
     if (key === 'act') return allOptions.value.actions;
     if (key === 'actionType') return allOptions.value.traceabilityActionTypes;
-    if (key === 'actionSource')
-      return allOptions.value.traceabilityActionSourceTypes;
+    if (key === 'actsou') return allOptions.value.traceabilityActionSourceTypes;
     return [];
   };
 
   // --- Test & Parse Logic ---
   const showTestResultModal = ref(false);
   const testResult = ref('');
-  const testingQuery = ref(false);
-  const lastTestResultData = ref<any[]>([]);
+  const testingQuery = ref(false); // For full query
+  const testingRawQuery = ref(false); // For raw query for parsing
+
+  // Data for parsing
+  const lastParsableLogData = ref<any[]>([]);
+  const rawQueryStatus = ref<'idle' | 'loading' | 'valid' | 'matrix' | 'error'>(
+    'idle'
+  );
+
+  const rawQueryStatusMessage = computed(() => {
+    switch (rawQueryStatus.value) {
+      case 'idle':
+        return '';
+      case 'loading':
+        return t('common.loading');
+      case 'valid':
+        return t('log.dashboard.custom.message.rawQuery.valid');
+      case 'matrix':
+        return t('log.dashboard.custom.message.rawQuery.matrix');
+      case 'error':
+        return t('log.dashboard.custom.message.rawQuery.failed');
+      default:
+        return '';
+    }
+  });
+
+  const isRawQueryParsable = computed(() => rawQueryStatus.value === 'valid');
+
+  const rawLogQueryForParsing = computed(() => {
+    const { query } = addForm;
+    // 尝试匹配最外层的流选择器 { ... }
+    // 这是一个简化的匹配，假设一个查询中只有一个主要流选择器用于获取日志源
+    const streamSelectorMatch = query.match(/\{[^{}]*\}/);
+    if (streamSelectorMatch && streamSelectorMatch[0]) {
+      // 提取流选择器部分
+      let baseQuery = streamSelectorMatch[0];
+      // 确保后面有 | json 管道，这是解析日志的关键
+      // 如果原始查询中流选择器后面已经有 | json，则不再重复添加
+      const indexAfterSelector = query.indexOf(baseQuery) + baseQuery.length;
+      const remaining = query.substring(indexAfterSelector).trim();
+      if (!remaining.startsWith('| json')) {
+        baseQuery += ' | json';
+      } else {
+        // 如果已经有 | json，则只保留到 | json 为止
+        const jsonPipeEndIndex = remaining.indexOf('| json') + '| json'.length;
+        baseQuery += remaining.substring(0, jsonPipeEndIndex);
+      }
+      return baseQuery.trim();
+    }
+    return '';
+  });
+
   const dynamicDimensions = ref<LabelValue[]>([]);
   const dynamicNumericFields = ref<LabelValue[]>([]);
   const showParseModal = ref(false);
@@ -766,51 +922,74 @@
   >([]);
   const i18nFieldMap = new Map<string, string>();
 
+  const staticDimensions = computed(() =>
+    Object.entries(STATIC_DIMENSIONS_MAP).map(([value, key]) => ({
+      label: t(key),
+      value,
+    }))
+  );
+
+  const staticNumericFields = computed(() =>
+    Object.entries(STATIC_NUMERIC_FIELDS_MAP).map(([value, key]) => ({
+      label: t(key),
+      value,
+    }))
+  );
+
+  const combinedDimensions = computed(() => {
+    const all = [...staticDimensions.value, ...dynamicDimensions.value];
+    return all.filter(
+      (item, index, self) =>
+        index === self.findIndex((item2) => item2.value === item.value)
+    );
+  });
+
+  const combinedNumericFields = computed(() => {
+    const all = [...staticNumericFields.value, ...dynamicNumericFields.value];
+    return all.filter(
+      (item, index, self) =>
+        index === self.findIndex((item2) => item2.value === item.value)
+    );
+  });
+
   const buildI18nMap = () => {
-    i18nFieldMap.set('mod', t('log.dashboard.builder.dimension.mod'));
-    i18nFieldMap.set('act', t('log.dashboard.builder.dimension.act'));
-    i18nFieldMap.set('jobName', t('log.dashboard.builder.dimension.job'));
-    i18nFieldMap.set('mapName', t('log.dashboard.builder.dimension.map'));
-    i18nFieldMap.set('acc', t('log.dashboard.builder.dimension.acc'));
-    i18nFieldMap.set('chr', t('log.dashboard.builder.dimension.chr'));
-    i18nFieldMap.set('actionType', t('log.query.form.actionType'));
-    i18nFieldMap.set('actionSource', t('log.query.form.actionSource'));
+    i18nFieldMap.clear();
+    Object.entries(STATIC_DIMENSIONS_MAP).forEach(([value, key]) => {
+      if (value !== 'none') {
+        i18nFieldMap.set(value, t(key));
+      }
+    });
+    Object.entries(STATIC_NUMERIC_FIELDS_MAP).forEach(([value, key]) => {
+      i18nFieldMap.set(value, t(key));
+    });
   };
 
   const fetchAllOptions = async () => {
     try {
       const { data } = await getAllOptions();
       allOptions.value = data;
+      buildI18nMap();
     } catch (err) {
       // ignore
     }
   };
 
-  const handleTestQuery = async () => {
+  // Function to test the full query (for display in modal)
+  const handleTestFullQuery = async () => {
     testingQuery.value = true;
-    const testQuery = buildBaseLogQL();
+    const testQuery = addForm.query;
+    if (!testQuery) {
+      Message.warning(t('log.dashboard.custom.validate.queryRequired'));
+      testingQuery.value = false;
+      return;
+    }
     try {
       const response = await queryLogs({
         query: testQuery,
-        limit: 10,
+        limit: 10, // Limit for display purposes
         range: addForm.range,
       });
-      const result = response.data?.data?.result || [];
-
-      const allLogs = result
-        .map((item: any) => {
-          return item.values.map((val: any[]) => {
-            try {
-              return JSON.parse(val[1].trim());
-            } catch (e) {
-              return { raw: val[1] };
-            }
-          });
-        })
-        .flat();
-
-      lastTestResultData.value = allLogs;
-      testResult.value = JSON.stringify(allLogs, null, 2);
+      testResult.value = JSON.stringify(response.data, null, 2);
       showTestResultModal.value = true;
     } catch (err: any) {
       Message.error(err.message || t('log.query.message.fail'));
@@ -823,12 +1002,69 @@
     }
   };
 
-  const handleParseResult = () => {
-    if (lastTestResultData.value.length === 0) {
-      Message.info(t('log.dashboard.custom.message.test.noResult'));
+  // Function to test the raw query for parsing
+  const handleTestRawQuery = async () => {
+    testingRawQuery.value = true;
+    rawQueryStatus.value = 'loading';
+    lastParsableLogData.value = []; // Clear previous data
+
+    const queryToTest = rawLogQueryForParsing.value;
+    if (!queryToTest) {
+      Message.warning(t('log.dashboard.custom.message.rawQuery.failed'));
+      rawQueryStatus.value = 'error';
+      testingRawQuery.value = false;
       return;
     }
-    const firstLog = lastTestResultData.value[0];
+
+    try {
+      const response = await queryLogs({
+        query: queryToTest,
+        limit: 10, // Only need a few logs to extract fields
+        range: addForm.range,
+      });
+
+      const resultData = response.data?.data;
+      const result = resultData?.result || [];
+      const resultType = resultData?.resultType || '';
+
+      if (resultType === 'streams') {
+        const allLogs = result
+          .map((item: any) => {
+            return item.values.map((val: any[]) => {
+              try {
+                return JSON.parse(val[1].trim());
+              } catch (e) {
+                return { raw: val[1] }; // Fallback for non-JSON lines
+              }
+            });
+          })
+          .flat();
+
+        if (allLogs.length > 0) {
+          lastParsableLogData.value = allLogs;
+          rawQueryStatus.value = 'valid';
+        } else {
+          rawQueryStatus.value = 'error'; // No parsable logs found
+        }
+      } else if (resultType === 'matrix') {
+        rawQueryStatus.value = 'matrix';
+      } else {
+        rawQueryStatus.value = 'error';
+      }
+    } catch (err) {
+      rawQueryStatus.value = 'error';
+      Message.error(err.message || t('log.query.message.fail'));
+    } finally {
+      testingRawQuery.value = false;
+    }
+  };
+
+  const handleParseResult = () => {
+    if (!isRawQueryParsable.value || lastParsableLogData.value.length === 0) {
+      Message.info(t('log.dashboard.custom.message.test.noParsableResult'));
+      return;
+    }
+    const firstLog = lastParsableLogData.value[0];
     if (!firstLog || typeof firstLog !== 'object') {
       Message.error(t('log.dashboard.custom.message.test.invalidJson'));
       return;
@@ -847,35 +1083,31 @@
   };
 
   const confirmParseSelection = () => {
-    const newDimensions = new Set(dynamicDimensions.value.map((d) => d.value));
-    const newNumericFields = new Set(
-      dynamicNumericFields.value.map((f) => f.value)
-    );
     let addedCount = 0;
-
     parsedFields.value.forEach((field) => {
       if (field.selected) {
-        if (field.type === 'string' && !newDimensions.has(field.name)) {
-          newDimensions.add(field.name);
+        const existingDim = combinedDimensions.value.find(
+          (d) => d.value === field.name
+        );
+        const existingNum = combinedNumericFields.value.find(
+          (f) => f.value === field.name
+        );
+
+        if (field.type === 'string' && !existingDim) {
+          dynamicDimensions.value.push({
+            label: field.translated,
+            value: field.name,
+          });
           addedCount += 1;
-        } else if (
-          field.type === 'number' &&
-          !newNumericFields.has(field.name)
-        ) {
-          newNumericFields.add(field.name);
+        } else if (field.type === 'number' && !existingNum) {
+          dynamicNumericFields.value.push({
+            label: field.translated,
+            value: field.name,
+          });
           addedCount += 1;
         }
       }
     });
-
-    dynamicDimensions.value = Array.from(newDimensions).map((d) => ({
-      label: i18nFieldMap.get(d) || d,
-      value: d,
-    }));
-    dynamicNumericFields.value = Array.from(newNumericFields).map((f) => ({
-      label: i18nFieldMap.get(f) || f,
-      value: f,
-    }));
 
     if (addedCount > 0) {
       Message.success(
@@ -886,41 +1118,6 @@
     }
     showParseModal.value = false;
   };
-
-  const combinedDimensions = computed(() => {
-    const staticDimensions = [
-      { label: t('log.dashboard.builder.dimension.none'), value: 'none' },
-      { label: t('log.dashboard.builder.dimension.mod'), value: 'mod' },
-      { label: t('log.dashboard.builder.dimension.act'), value: 'act' },
-      { label: t('log.query.form.actionType'), value: 'actionType' },
-      { label: t('log.query.form.actionSource'), value: 'actionSource' },
-      { label: t('log.dashboard.builder.dimension.job'), value: 'jobName' },
-      { label: t('log.dashboard.builder.dimension.map'), value: 'mapName' },
-      { label: t('log.dashboard.builder.dimension.acc'), value: 'acc' },
-      { label: t('log.dashboard.builder.dimension.chr'), value: 'chr' },
-    ];
-    const all = [...staticDimensions, ...dynamicDimensions.value];
-    return all.filter(
-      (item, index, self) =>
-        index === self.findIndex((item2) => item2.value === item.value)
-    );
-  });
-
-  const combinedNumericFields = computed(() => {
-    const staticFields = [
-      { label: t('log.dashboard.builder.field.cnt'), value: 'cnt' },
-      { label: t('log.dashboard.builder.field.cost'), value: 'cost' },
-      { label: t('log.dashboard.builder.field.meso'), value: 'meso' },
-      { label: t('log.dashboard.builder.field.exp'), value: 'exp' },
-      { label: t('log.dashboard.builder.field.hp'), value: 'hp' },
-      { label: t('log.dashboard.builder.field.mp'), value: 'mp' },
-    ];
-    const all = [...staticFields, ...dynamicNumericFields.value];
-    return all.filter(
-      (item, index, self) =>
-        index === self.findIndex((item2) => item2.value === item.value)
-    );
-  });
 
   const handleResizeStart = () => {
     isResizing.value = true;
@@ -937,7 +1134,7 @@
       title: t('log.dashboard.defaultChart.loginActivity'),
       type: 'line',
       query:
-        'sum by (act) (count_over_time({job="gms-audit",mod="LOGIN"}[1h]))',
+        'sum by (act) (count_over_time({job="gms-audit",mod="ACCOUNT"} [30m]))',
       width: 600,
       height: 300,
       range: '24h',
@@ -947,7 +1144,7 @@
       title: t('log.dashboard.defaultChart.cashShopSales'),
       type: 'pie',
       query:
-        'sum by (act) (count_over_time({job="gms-audit",mod="CASH_SHOP"}[1h]))',
+        'topk(10, sum by (itmName) (count_over_time({job="gms-audit",mod="ITEM_TRACEAB",act="CASH_SHOP"} | json | actsou="CS_BUY" [30m])))',
       width: 600,
       height: 300,
       range: '24h',
@@ -956,7 +1153,8 @@
       id: '3',
       title: t('log.dashboard.defaultChart.shopActivity'),
       type: 'bar',
-      query: 'sum by (act) (count_over_time({job="gms-audit",mod="SHOP"}[1h]))',
+      query:
+        'topk(10, sum by (itmName) (sum_over_time({job="gms-audit",mod="ITEM_TRACEAB",act="MERCHANT_SHOP"} | json | unwrap cnt | __error__="" [30m])))',
       width: 600,
       height: 300,
       range: '24h',
@@ -966,7 +1164,7 @@
       title: t('log.dashboard.defaultChart.jobDistribution'),
       type: 'pie',
       query:
-        'sum by (jobName) (count_over_time({job="gms-audit",act="LOGIN_SUCCESS"} | json[24h]))',
+        'sum by (jobName) (count_over_time({job="gms-audit",mod="ACCOUNT",act="CHR_SELECT"} | json [30m]))',
       width: 600,
       height: 300,
       range: '24h',
@@ -976,7 +1174,7 @@
       title: t('log.dashboard.defaultChart.mapPopularity'),
       type: 'bar',
       query:
-        'topk(10, sum by (mapName) (count_over_time({job="gms-audit",act="CHANGE_MAP"} | json[1h])))',
+        'topk(10, sum by (mapName) (count_over_time({job="gms-audit",act="MAP_CHANGE"} | json [30m])))',
       width: 1200,
       height: 350,
       range: '24h',
@@ -986,7 +1184,7 @@
       title: t('log.dashboard.defaultChart.cheatDetection'),
       type: 'bar',
       query:
-        'sum by (act) (count_over_time({job="gms-audit",mod="AUTOBAN"}[1h]))',
+        'sum by (type) (count_over_time({job="gms-audit",mod="AUTOBAN"} | json [30m]))',
       width: 600,
       height: 300,
       range: '24h',
@@ -995,7 +1193,7 @@
       id: '7',
       title: t('log.dashboard.defaultChart.systemErrors'),
       type: 'line',
-      query: 'sum(count_over_time({job="gms-error"}[1m]))',
+      query: 'sum(count_over_time({job="gms-error"} [30m]))',
       width: 600,
       height: 300,
       range: '24h',
@@ -1079,7 +1277,8 @@
     addForm.range = '24h';
     dynamicDimensions.value = [];
     dynamicNumericFields.value = [];
-    buildQuery();
+    rawQueryStatus.value = 'idle'; // Reset raw query status
+    lastParsableLogData.value = []; // Clear parsable data
   };
 
   const openAddModal = () => {
@@ -1093,15 +1292,14 @@
     editingIndex.value = index;
     const chart = charts.value[index];
 
+    resetForm(); // 先重置
+
     // 优先从保存的 builderState 恢复
     if (chart.builderState) {
       Object.assign(
         queryBuilder,
         JSON.parse(JSON.stringify(chart.builderState))
       );
-    } else {
-      // 后备方案：如果旧数据没有 builderState，则重置
-      resetForm();
     }
 
     addForm.title = chart.title;
@@ -1119,7 +1317,6 @@
       Message.warning(t('log.dashboard.custom.validate.required'));
       return;
     }
-    buildQuery();
 
     const chartData: ChartConfig = {
       id: isEditMode.value
@@ -1127,7 +1324,7 @@
         : Date.now().toString(),
       title: addForm.title,
       type: addForm.type as any,
-      query: addForm.query,
+      query: addForm.query, // 直接使用文本框的查询
       width: addForm.width,
       height: addForm.height,
       range: addForm.range,
@@ -1172,12 +1369,10 @@
     }
   };
 
-  onMounted(() => {
+  onMounted(async () => {
+    await fetchAllOptions(); // 确保在构建 i18n 映射和其他逻辑之前获取选项
     fetchStatus();
     loadLayout();
-    fetchAllOptions();
-    buildI18nMap();
-    buildQuery();
     timer = setInterval(() => {
       now.value = Date.now();
     }, 1000);
@@ -1190,6 +1385,18 @@
   onUnmounted(() => {
     if (timer) clearInterval(timer);
   });
+
+  // Watch for changes in the main query to reset raw query status
+  watch(
+    () => {
+      const { query } = addForm; // 使用对象解构
+      return query;
+    },
+    () => {
+      rawQueryStatus.value = 'idle';
+      lastParsableLogData.value = [];
+    }
+  );
 </script>
 
 <style scoped lang="less">
@@ -1317,5 +1524,14 @@
     background-color: var(--color-fill-2);
     padding: 10px;
     border-radius: 4px;
+  }
+
+  .raw-query-status-indicator {
+    display: flex;
+    align-items: center;
+  }
+
+  .raw-query-status-indicator .arco-icon {
+    font-size: 18px;
   }
 </style>

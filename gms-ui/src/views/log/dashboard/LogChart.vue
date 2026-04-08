@@ -82,7 +82,7 @@
     VisualMapComponent,
   } from 'echarts/components';
   import VChart from 'vue-echarts';
-  import { queryLogs } from '@/api/log';
+  import { queryLogs, LabelValue } from '@/api/log';
   import { useI18n } from 'vue-i18n';
 
   use([
@@ -111,6 +111,12 @@
     height: number;
     width: number;
     range?: string;
+    allOptions: {
+      modules: LabelValue[];
+      actions: LabelValue[];
+      traceabilityActionTypes: LabelValue[];
+      traceabilityActionSourceTypes: LabelValue[];
+    };
   }>();
 
   const emit = defineEmits([
@@ -122,7 +128,7 @@
     'resizeStart',
     'resizeEnd',
   ]);
-  const { t, te, locale, messages } = useI18n();
+  const { t } = useI18n();
 
   const loading = ref(false);
   const error = ref('');
@@ -215,6 +221,31 @@
     }
   };
 
+  // 用于将原始值（如 LOGIN_SUCCESS）翻译成显示文本（如“登录成功”）
+  const i18nMap = computed(() => {
+    const map = new Map<string, string>();
+    if (!props.allOptions) return map;
+
+    // 遍历 allOptions 中的每个列表并添加到映射中
+    props.allOptions.modules.forEach((item) => map.set(item.value, item.label));
+    props.allOptions.actions.forEach((item) => map.set(item.value, item.label));
+    props.allOptions.traceabilityActionTypes.forEach((item) =>
+      map.set(item.value, item.label)
+    );
+    props.allOptions.traceabilityActionSourceTypes.forEach((item) =>
+      map.set(item.value, item.label)
+    );
+
+    return map;
+  });
+
+  // 提取 LogQL 查询中的分组字段（例如 'act', 'mod', 'jobName'）
+  const groupByField = computed(() => {
+    // 匹配 'by (fieldName)' 或 'topk(N, sum by (fieldName))' 中的 fieldName
+    const match = props.query.match(/\bby\s*\(([^)]+)\)/);
+    return match ? match[1] : null;
+  });
+
   const chartOption = computed(() => {
     const isPie = props.type === 'pie';
     const isScatter = props.type === 'scatter';
@@ -229,35 +260,18 @@
 
     if (chartData.value.length > 0) {
       const processedData = chartData.value.map((item: any) => {
-        const name =
-          Object.entries(item.metric)
-            .filter(([k]) => k !== 'job' && k !== '__name__') // 移除 job 和 __name__ 标签
-            .map(([, v]) => {
-              const val = v as string;
-              // 尝试翻译模块或动作
-              const modKey = `log.module.${val}`;
-              const actKey = `log.action.${val}`;
+        // 根据 groupByField 提取原始值，并使用 i18nMap 进行翻译
+        const rawValue =
+          groupByField.value && item.metric[groupByField.value]
+            ? item.metric[groupByField.value]
+            : 'Total'; // 如果没有分组字段或值，则默认为 'Total'
 
-              // 优先从 messages 中直接查找 (解决扁平化键名 te() 返回 false 的问题)
-              const msgs = messages.value[locale.value];
-              if (msgs) {
-                if (msgs[modKey]) return msgs[modKey];
-                if (msgs[actKey]) return msgs[actKey];
-              }
-
-              // 回退到标准 te/t 检查
-              if (te(modKey)) return t(modKey);
-              if (te(actKey)) return t(actKey);
-              return val;
-            })
-            .join(' - ') || 'Total';
+        const name = i18nMap.value.get(rawValue) || rawValue; // 尝试翻译，否则使用原始值
 
         let total = 0;
         const values = item.values.map((val: any[]) => {
           const v = parseFloat(val[1]);
           total += v;
-          // 自动适配秒级(10位)或毫秒级(13位)时间戳
-          // JS Date 需要毫秒，如果数据是秒级(10位)，必须 * 1000
           let ts = parseInt(val[0], 10);
           if (ts < 10000000000) {
             ts *= 1000;
@@ -422,7 +436,7 @@
           formatter: (value: number) => {
             const date = new Date(value);
             const diff =
-              chartData.value.length > 0
+              chartData.value.length > 0 && chartData.value[0].values.length > 1
                 ? chartData.value[0].values[
                     chartData.value[0].values.length - 1
                   ][0] - chartData.value[0].values[0][0]

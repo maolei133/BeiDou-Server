@@ -44,6 +44,11 @@ export default {
   'log.dashboard.custom.form.query.placeholder':
     'Auto-generated, can be modified manually',
   'log.dashboard.custom.form.query.help': 'Generated based on LogQL v2 syntax',
+  'log.dashboard.custom.form.rawQueryForParse': 'Raw Log Query for Parsing',
+  'log.dashboard.custom.form.rawQueryForParse.placeholder':
+    'Automatically extracted raw log stream query',
+  'log.dashboard.custom.form.rawQueryForParse.help':
+    'This query is used for the "Parse Result" function to ensure it returns raw log streams.',
   'log.dashboard.custom.form.metric': 'Metric',
   'log.dashboard.custom.form.field': 'Numeric Field',
   'log.dashboard.custom.form.dimension': 'Dimension',
@@ -57,7 +62,8 @@ export default {
   'log.dashboard.custom.message.save.fail': 'Failed to save layout',
   'log.dashboard.custom.message.load.fail': 'Failed to load chart data',
   'log.dashboard.custom.validate.required': 'Title and Query are required',
-  'log.dashboard.custom.action.test': 'Test Query',
+  'log.dashboard.custom.action.testFullQuery': 'Test Full Query',
+  'log.dashboard.custom.action.testRawQuery': 'Test Raw Query',
   'log.dashboard.custom.action.parse': 'Parse Result',
   'log.dashboard.custom.testResult.title': 'Test Query Result',
   'log.dashboard.custom.parseModal.title': 'Parse and Add Fields',
@@ -74,6 +80,14 @@ export default {
   'log.dashboard.custom.message.parse.success':
     'Successfully added {count} new fields.',
   'log.dashboard.custom.message.parse.noNew': 'No new fields to add.',
+  'log.dashboard.custom.message.rawQuery.valid':
+    'Raw query is valid and returns parsable log streams.',
+  'log.dashboard.custom.message.rawQuery.matrix':
+    'Raw query returns aggregated data, cannot parse log streams.',
+  'log.dashboard.custom.message.rawQuery.failed':
+    'Raw query failed or did not return parsable log streams.',
+  'log.dashboard.custom.message.test.noParsableResult':
+    'No parsable raw log results available. Please run "Test Raw Query" first and ensure it returns raw log streams.',
 
   'log.dashboard.builder.metric.count': 'Count',
   'log.dashboard.builder.metric.sum': 'Sum',
@@ -241,4 +255,6 @@ export default {
   'log.config.job.title': 'Job',
   'log.config.job.new_job_name': 'new-job',
   'log.config.job.new_job_path': '/path/to/logs/*.log',
+
+  'log.dashboard.builder.action.generate': 'Generate',
 };
