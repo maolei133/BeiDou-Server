@@ -24,6 +24,7 @@ package org.gms.net.server.channel.handlers;
 import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.client.autoban.AutobanManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.server.logging.AuditLogger;
@@ -44,7 +45,7 @@ public final class ItemPickupHandler extends AbstractPacketHandler {
 
     @Override
     public void handlePacket(final InPacket p, final Client c) {
-        p.readInt(); //Timestamp
+        int timestamp = p.readInt(); //Timestamp
         p.readByte();
         p.readPos(); //cpos
         int oid = p.readInt();
@@ -53,6 +54,9 @@ public final class ItemPickupHandler extends AbstractPacketHandler {
         if (ob == null) {
             return;
         }
+
+        AutobanManager abm = chr.getAutoBanManager();
+        abm.checkActionFrequency(AutobanManager.ActionType.ITEM_PICKUP, timestamp, 5);
 
         Point charPos = chr.getPosition();
         Point obPos = ob.getPosition();

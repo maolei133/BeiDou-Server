@@ -24,6 +24,7 @@ package org.gms.net.server.channel.handlers;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.autoban.AutobanFactory;
+import org.gms.client.autoban.AutobanManager;
 import org.gms.client.command.CommandsExecutor;
 import org.gms.config.GameConfig;
 import org.gms.net.AbstractPacketHandler;
@@ -91,10 +92,10 @@ public final class WhisperHandler extends AbstractPacketHandler {
     }
 
     private void handleWhisper(String message, Character user, Character target) {
-        if (user.getAutoBanManager().getLastSpam(7) + 200 > currentServerTime()) {
+        if (user.getAutoBanManager().getLastActionTime(AutobanManager.ActionType.CHAT) + 200 > currentServerTime()) {
             return;
         }
-        user.getAutoBanManager().spam(7);
+        user.getAutoBanManager().recordAction(AutobanManager.ActionType.CHAT);
 
         if (message.length() > Byte.MAX_VALUE) {
             AutobanFactory.PACKET_EDIT.alert(user, user.getName() + " 尝试通过悄悄话功能修改数据包。");

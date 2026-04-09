@@ -22,6 +22,7 @@
 package org.gms.net.server.channel.handlers;
 
 import org.gms.client.Client;
+import org.gms.client.autoban.AutobanManager;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.net.AbstractPacketHandler;
@@ -35,7 +36,7 @@ public final class ItemMoveHandler extends AbstractPacketHandler {
     @Override
     public final void handlePacket(InPacket p, Client c) {  //使用装备、物品、道具
         p.skip(4);
-        if (c.getPlayer().getAutoBanManager().getLastSpam(6) + 300 > currentServerTime()) {
+        if (c.getPlayer().getAutoBanManager().getLastActionTime(AutobanManager.ActionType.ITEM_DROP) + 300 > currentServerTime()) {
             c.sendPacket(PacketCreator.enableActions());
             return;
         }
@@ -55,6 +56,6 @@ public final class ItemMoveHandler extends AbstractPacketHandler {
             InventoryManipulator.move(c, type, src, action);
         }
 
-        c.getPlayer().getAutoBanManager().spam(6);
+        c.getPlayer().getAutoBanManager().recordAction(AutobanManager.ActionType.ITEM_DROP);
     }
 }

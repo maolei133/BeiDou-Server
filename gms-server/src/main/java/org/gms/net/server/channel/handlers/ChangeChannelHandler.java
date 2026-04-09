@@ -23,6 +23,7 @@ package org.gms.net.server.channel.handlers;
 
 import org.gms.client.Client;
 import org.gms.client.autoban.AutobanFactory;
+import org.gms.client.autoban.AutobanManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
@@ -37,7 +38,7 @@ public final class ChangeChannelHandler extends AbstractPacketHandler {
     public final void handlePacket(InPacket p, Client c) {
         if (Server.getInstance().isShutdown()) {
             c.getPlayer().dropMessage(1, "服务器即将维护，暂时无法切换频道。");
-            c.sendPacket(PacketCreator.enableActions());
+            c.enableActions();
             return;
         }
 
@@ -45,7 +46,7 @@ public final class ChangeChannelHandler extends AbstractPacketHandler {
 
         int channel = p.readByte() + 1;
         p.readInt();
-        c.getPlayer().getAutoBanManager().setTimestamp(6, Server.getInstance().getCurrentTimestamp(), 3);
+        c.getPlayer().getAutoBanManager().checkActionFrequency(AutobanManager.ActionType.CHANGE_CHANNEL, Server.getInstance().getCurrentTime(), 3);
         if (c.getChannel() == channel) {
             AutobanFactory.GENERAL.alert(c.getPlayer(), "尝试切换到相同频道。");
             c.disconnect(false, false);

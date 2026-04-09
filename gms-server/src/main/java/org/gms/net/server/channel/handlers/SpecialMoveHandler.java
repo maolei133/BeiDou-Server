@@ -25,6 +25,7 @@ import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.Skill;
 import org.gms.client.SkillFactory;
+import org.gms.client.autoban.AutobanManager;
 import org.gms.config.GameConfig;
 import org.gms.constants.skills.Brawler;
 import org.gms.constants.skills.Corsair;
@@ -50,7 +51,7 @@ public final class SpecialMoveHandler extends AbstractPacketHandler {
     public final void handlePacket(InPacket p, Client c) {
         Character chr = c.getPlayer();
         p.readInt();
-        chr.getAutoBanManager().setTimestamp(4, Server.getInstance().getCurrentTimestamp(), 28);
+        chr.getAutoBanManager().checkActionFrequency(AutobanManager.ActionType.SPECIAL_MOVE, Server.getInstance().getCurrentTime(), 28);
         int skillid = p.readInt();
         
         /*
@@ -73,7 +74,7 @@ public final class SpecialMoveHandler extends AbstractPacketHandler {
             skillLevel = 1;
             chr.setDojoEnergy(0);
             c.sendPacket(PacketCreator.getEnergy("energy", chr.getDojoEnergy()));
-            c.sendPacket(PacketCreator.serverNotice(5, "As you used the secret skill, your energy bar has been reset."));
+            c.sendPacket(PacketCreator.serverNotice(5, "当你使用了这个秘密技能后，你的能量条已被重置。"));
         }
         if (skillLevel == 0 || skillLevel != __skillLevel) {
             return;
@@ -113,7 +114,7 @@ public final class SpecialMoveHandler extends AbstractPacketHandler {
             }
             byte direction = p.readByte();   // thanks MedicOP for pointing some 3rd-party related issues with Magnet
             chr.getMap().broadcastMessage(chr, PacketCreator.showBuffEffect(chr.getId(), skillid, chr.getSkillLevel(skillid), 1, direction), false);
-            c.sendPacket(PacketCreator.enableActions());
+            c.enableActions();
             return;
         } else if (skillid == Brawler.MP_RECOVERY) {// MP Recovery
             Skill s = SkillFactory.getSkill(skillid);
@@ -147,17 +148,17 @@ public final class SpecialMoveHandler extends AbstractPacketHandler {
                             chr.cancelMagicDoor();
                             skill.getEffect(skillLevel).applyTo(chr, pos);
                         } else {
-                            chr.message("Please wait 5 seconds before casting Mystic Door again.");
+                            chr.message("请等待5秒后再施放时空门。");
                         }
                     } finally {
                         c.releaseClient();
                     }
                 }
 
-                c.sendPacket(PacketCreator.enableActions());
+                c.enableActions();
             }
         } else {
-            c.sendPacket(PacketCreator.enableActions());
+            c.enableActions();
         }
     }
 }

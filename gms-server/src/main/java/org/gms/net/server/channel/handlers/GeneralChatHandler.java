@@ -24,6 +24,7 @@ package org.gms.net.server.channel.handlers;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.autoban.AutobanFactory;
+import org.gms.client.autoban.AutobanManager;
 import org.gms.client.command.CommandsExecutor;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
@@ -39,7 +40,7 @@ public final class GeneralChatHandler extends AbstractPacketHandler {  //定义�
     public void handlePacket(InPacket p, Client c) {  //处理聊天数据包的核心方法
         String s = p.readString();  //从数据包读取聊天内容
         Character chr = c.getPlayer();  //获取发送聊天的玩家角色对象
-        if (chr.getAutoBanManager().getLastSpam(7) + 200 > currentServerTime()) {// 检查聊天冷却时间（200ms内重复发言会被拦截）
+        if (chr.getAutoBanManager().getLastActionTime(AutobanManager.ActionType.CHAT) + 200 > currentServerTime()) {// 检查聊天冷却时间（200ms内重复发言会被拦截）
             c.sendPacket(PacketCreator.enableActions());  //发送允许操作指令
             return;
         }
@@ -67,7 +68,7 @@ public final class GeneralChatHandler extends AbstractPacketHandler {  //定义�
                 ChatLogger.log(c, "GM 隐身消息", s);  //记录GM聊天日志
             }
 
-            chr.getAutoBanManager().spam(7);  //更新聊天时间戳（7表示聊天行为类型）
+            chr.getAutoBanManager().recordAction(AutobanManager.ActionType.CHAT);  //更新聊天时间戳
         }
     }
 }

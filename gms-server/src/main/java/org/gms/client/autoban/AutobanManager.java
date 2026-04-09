@@ -27,8 +27,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicIntegerArray;
-import java.util.concurrent.atomic.AtomicLongArray;
 
 /**
  * 自动封禁管理器
@@ -38,6 +36,47 @@ import java.util.concurrent.atomic.AtomicLongArray;
  * @author kevintjuh93
  */
 public class AutobanManager {
+
+    /**
+     * 玩家行为类型枚举
+     * 用于统一管理和检测玩家的各种操作，替代了旧的SpamType和TimestampType。
+     */
+    public enum ActionType {
+        /** 宠物食品 */
+        PET_FOOD("宠物食品"),
+        /** 背包合并 */
+        ITEM_MERGE("背包合并"),
+        /** 背包排序 */
+        ITEM_SORT("背包排序"),
+        /** 特殊移动 */
+        SPECIAL_MOVE("特殊移动"),
+        /** 使用捕捉道具 */
+        USE_CATCH_ITEM("使用捕捉道具"),
+        /** 物品丢弃 */
+        ITEM_DROP("物品丢弃"),
+        /** 聊天 */
+        CHAT("聊天"),
+        /** 持续回复HP */
+        HEAL_HP("持续回复HP"),
+        /** 持续回复MP */
+        HEAL_MP("持续回复MP"),
+        /** 切换频道 */
+        CHANGE_CHANNEL("切换频道"),
+        /** 物品拾取 */
+        ITEM_PICKUP("物品拾取"),
+        /** 攻击 */
+        ATTACK("攻击");
+
+        private final String name;
+
+        ActionType(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+    }
 
     // 惩罚基础持续时间（毫秒）
     private static final int PUNISHMENT_DURATION_BASE = 10000;
@@ -73,9 +112,8 @@ public class AutobanManager {
     private final AtomicInteger misses = new AtomicInteger(0); // 未命中计数
     private final AtomicInteger lastmisses = new AtomicInteger(0); // 上一次的未命中计数
     private final AtomicInteger samemisscount = new AtomicInteger(0); // 相同未命中计数次数
-    private final AtomicLongArray spam = new AtomicLongArray(20); // 频繁操作时间记录数组
-    private final AtomicIntegerArray timestamp = new AtomicIntegerArray(20); // 时间戳记录数组
-    private final AtomicIntegerArray timestampcounter = new AtomicIntegerArray(20); // 时间戳计数器
+    private final Map<ActionType, Long> actionTimestamps = new ConcurrentHashMap<>(); // 行为时间戳记录
+    private final Map<ActionType, Integer> actionCounters = new ConcurrentHashMap<>(); // 行为计数器
     private final ConcurrentLinkedQueue<MonsterVacSample> landMonsterVacSamples = new ConcurrentLinkedQueue<>();    // 陆地怪物采样集合
     private final ConcurrentLinkedQueue<MonsterVacSample> flyMonsterVacSamples = new ConcurrentLinkedQueue<>();     // 飞行怪物采样集合
     private final ConcurrentLinkedQueue<MonsterVacSample> otherMonsterVacSamples = new ConcurrentLinkedQueue<>();    // 其他类型怪物采样集合
@@ -292,11 +330,11 @@ public class AutobanManager {
             return false;
         }
         long currentTime = Server.getInstance().getCurrentTime();
-        long lastAttackTime = getLastSpam(8);
+        long lastAttackTime = getLastActionTime(ActionType.ATTACK);
 
         // 如果是第一次攻击，记录时间并返回
         if (lastAttackTime == 0) {
-            spam(8);
+            recordAction(ActionType.ATTACK);
             return false;
         }
 
@@ -304,7 +342,7 @@ public class AutobanManager {
         long timeBetweenAttacks = currentTime - lastAttackTime;
 
         // 更新攻击时间和技能
-        spam(8);
+        recordAction(ActionType.ATTACK);
 
         // 检查攻击间隔是否小于最小允许间隔，且为相同技能，暴风箭雨/金属风暴 不做检测
         // 使用Set存储排除检测的技能ID，提高查找效率
@@ -369,59 +407,55 @@ public class AutobanManager {
     }
 
     /**
-     * 记录频繁操作时间
-     * @param type 操作类型
+     * 记录玩家行为发生的时间。
+     * @param type 行为类型
      */
-    public void spam(int type) {
-        this.spam.set(type, Server.getInstance().getCurrentTime());
+    public void recordAction(ActionType type) {
+        this.actionTimestamps.put(type, Server.getInstance().getCurrentTime());
     }
 
     /**
-     * 记录频繁操作时间（指定时间戳）
-     * @param type 操作类型
+     * 记录玩家行为发生的时间（使用指定的时间戳）。
+     * @param type 行为类型
      * @param timestamp 时间戳
      */
-    public void spam(int type, long timestamp) {
-        this.spam.set(type, timestamp);
+    public void recordAction(ActionType type, long timestamp) {
+        this.actionTimestamps.put(type, timestamp);
     }
 
     /**
-     * 获取最后一次频繁操作时间
-     * @param type 操作类型
-     * @return 最后一次操作的时间戳
+     * 获取指定行为类型的最后一次发生时间。
+     * @param type 行为类型
+     * @return 最后一次操作的时间戳，如果从未发生过则返回 0
      */
-    public long getLastSpam(int type) {
-        return spam.get(type);
+    public long getLastActionTime(ActionType type) {
+        return actionTimestamps.getOrDefault(type, 0L);
     }
 
     /**
-     * 时间戳检查器
-     * <code>type</code> 类型说明:<br>
-     * 1: 宠物食品<br>
-     * 2: 背包合并<br>
-     * 3: 背包排序<br>
-     * 4: 特殊移动<br>
-     * 5: 使用捕捉道具<br>
-     * 6: 物品丢弃<br>
-     * 7: 聊天<br>
-     * 8: 持续回复HP<br>
-     * 9: 持续回复MP<br>
-     * @param type 操作类型
-     * @param time 当前时间戳
-     * @param times 允许的最大次数
+     * 检查并记录玩家行为频率。
+     * 用于检测如聊天、使用物品等过于频繁的操作。
+     *
+     * @param type   行为类型
+     * @param time   当前操作的时间戳 (通常是 System.currentTimeMillis())
+     * @param maxCount 在一个时间戳内允许的最大操作次数
      */
-    public void setTimestamp(int type, int time, int times) {
-        if (this.timestamp.get(type) == time) {
-            int currentCount = this.timestampcounter.incrementAndGet(type);
-            if (currentCount >= times) {
-                if (useAutoBan()) {
-                    chr.getClient().disconnect(false, false);
-                    AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.CHEAT_DISCONNECT, "频繁操作断开连接", new MapMessage().with("type", type));
-                }
+    public void checkActionFrequency(ActionType type, long time, int maxCount) {
+        long lastTime = actionTimestamps.getOrDefault(type, 0L);
+        int count = actionCounters.getOrDefault(type, 0);
+
+        if (lastTime == time) {
+            count++;
+            actionCounters.put(type, count);
+
+            if (count >= maxCount) {
+                // 当检测到过于频繁的操作时，使用点数系统进行记录和惩罚
+                String reason = "过于频繁的操作: " + type.getName() + " (次数: " + count + ")";
+                addPoint(AutobanFactory.SPAM, reason, new MapMessage().with("spam", type.getName()));
             }
         } else {
-            this.timestamp.set(type, time);
-            this.timestampcounter.set(type, 0);
+            actionTimestamps.put(type, time);
+            actionCounters.put(type, 1); // 开始新的计数
         }
     }
 

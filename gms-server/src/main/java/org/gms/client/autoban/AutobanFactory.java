@@ -57,6 +57,7 @@ public enum AutobanFactory {
     FAST_ATTACK(8, MILLISECONDS.toMillis(1000), "快速攻击"),
     MISS_HACK(7,SECONDS.toMillis(5), "MISS无敌"),
     MPCON(25, SECONDS.toMillis(30), "MP消耗"),
+    SPAM(10, SECONDS.toMillis(5), "频繁操作"),
     MOVE_LIFE_HACK(2, SECONDS.toMillis(10), "封图挂");
 
     private static final Set<Integer> ignoredChrIds = new HashSet<>();
