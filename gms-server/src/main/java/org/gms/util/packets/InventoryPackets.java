@@ -32,6 +32,7 @@ public class InventoryPackets {
         OutPacket p = OutPacket.create(SendOpcode.INVENTORY_OPERATION);
         p.writeBool(updateTick);
         p.writeByte(mods.size());
+        //p.writeByte(0); v104 :)
         int addMovement = -1;
         for (ModifyInventory mod : mods) {
             p.writeByte(mod.getMode());

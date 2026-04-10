@@ -23,6 +23,7 @@ package org.gms.client.inventory;
 
 import com.alibaba.fastjson2.JSONObject;
 import lombok.Getter;
+import lombok.Setter;
 import org.gms.client.Client;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.ExpTable;
@@ -42,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 
 @Getter
+@Setter
 public class Equip extends Item {
     private static final Logger log = LoggerFactory.getLogger(Equip.class);
 
@@ -161,6 +163,7 @@ public class Equip extends Item {
         ret.itemLevel = itemLevel;
         ret.itemExp = itemExp;
         ret.level = level;
+        ret.ringid = ringid;
         ret.itemLog = new LinkedList<>(itemLog);
         ret.setOwner(getOwner());
         ret.setQuantity(getQuantity());
@@ -170,6 +173,13 @@ public class Equip extends Item {
         ret.setInventoryItemId(getInventoryItemId());
         ret.setDirty(isDirty());
         return ret;
+    }
+
+    public void setFlag(short b) {
+        if (this.flag != b) {
+            this.flag = b;
+            setDirty(true);
+        }
     }
 
     @Override
