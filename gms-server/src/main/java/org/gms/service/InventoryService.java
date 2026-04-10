@@ -83,7 +83,7 @@ public class InventoryService {
         RequireUtil.requireNotNull(data.getCharacterId(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "characterId"));
         InventoryType inventoryType = InventoryType.getByType(data.getInventoryType());
         RequireUtil.requireNotNull(inventoryType, I18nUtil.getExceptionMessage("UNKNOWN_PARAMETER_VALUE", "inventoryType", data.getInventoryType()));
-        List<Row> results = inventoryitemsMapper.selectListByQueryAs(QueryWrapper.create()
+        QueryWrapper query = QueryWrapper.create()
                 .select(INVENTORYITEMS_D_O.ALL_COLUMNS, INVENTORYEQUIPMENT_D_O.ALL_COLUMNS)
                 .from(INVENTORYITEMS_D_O.as("i"))
                 .leftJoin(INVENTORYEQUIPMENT_D_O.as("e")).on(INVENTORYITEMS_D_O.INVENTORYITEMID.eq(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID))
@@ -91,7 +91,14 @@ public class InventoryService {
                 .where(INVENTORYITEMS_D_O.INVENTORYTYPE.eq(data.getInventoryType()))
                 // 只查询背包
                 .and(INVENTORYITEMS_D_O.TYPE.eq(ItemFactory.INVENTORY.getValue()))
-                .and(INVENTORYITEMS_D_O.CHARACTERID.eq(data.getCharacterId())), Row.class);
+                .and(INVENTORYITEMS_D_O.CHARACTERID.eq(data.getCharacterId()));
+        
+        // [新增] 如果是加载装备栏，则排除宠物装备
+        if (data.getInventoryType() == InventoryType.EQUIPPED.getType()) {
+            query.and(INVENTORYITEMS_D_O.PETID.le(0)); // 小于等于0，-1为非宠物，0为历史数据兼容
+        }
+
+        List<Row> results = inventoryitemsMapper.selectListByQueryAs(query, Row.class);
         List<InventorySearchRtnDTO> rtnDTOList = new ArrayList<>();
         Set<Character> characterSet = new HashSet<>();
         for (Row obj : results) {

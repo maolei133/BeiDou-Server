@@ -10,6 +10,7 @@ import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.ItemFactory;
+import org.gms.client.inventory.Pet;
 import org.gms.client.keybind.KeyBinding;
 import org.gms.client.processor.npc.FredrickProcessor;
 import org.gms.config.GameConfig;
@@ -1034,12 +1035,34 @@ public class CharacterService {
      * @return 角色对象
      */
     public Character loadCharFromDB(int cid, Client client, boolean channelServer) {
+        long startTime = System.currentTimeMillis(); // [日志] 开始计时
         CharactersDO charactersDO = findById(cid);
         RequireUtil.requireNotNull(charactersDO, I18nUtil.getExceptionMessage("UNKNOWN_CHARACTER"));
         Character chr = Character.fromCharactersDO(charactersDO, client);
+
+        // [优化] 如果不是为频道服务器加载（即在角色选择界面），则只加载外观数据后直接返回
         if (!channelServer) {
+//            log.info("[角色加载优化] 开始为角色选择界面轻量加载角色ID: {}", cid);
+
+            // [优化] 只加载已装备的物品用于显示外观
+            List<InventorySearchRtnDTO> equippedItems = inventoryService.getInventoryList(
+                InventorySearchReqDTO.builder()
+                    .characterId(cid)
+                    .inventoryType(InventoryType.EQUIPPED.getType())
+                    .build()
+            );
+            
+            Inventory equipInventory = chr.getInventory(InventoryType.EQUIPPED);
+            for (InventorySearchRtnDTO itemDTO : equippedItems) {
+                equipInventory.addItemFromDB(itemDTO.toItem());
+            }
+            
+//            long duration = System.currentTimeMillis() - startTime;
+//            log.info("[角色加载优化] 角色ID: {} 轻量加载完成。加载物品数量: {}, 耗时: {} ms", cid, equippedItems.size(), duration);
+
             return chr;
         }
+
         MapManager mapManager = client.getChannelServer().getMapFactory();
         MapleMap mapleMap = mapManager.getMap(chr.getMapId());
         if (mapleMap == null) {
