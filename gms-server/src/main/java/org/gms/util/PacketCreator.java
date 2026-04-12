@@ -135,8 +135,29 @@ public class PacketCreator {
 
     /**
      * 获取登录失败包
-     * @param reason 失败原因
-     * @return 数据包
+     * <p>
+     * reason 可能的值:<br>
+     * 3: ID 已删除或被封锁<br>
+     * 4: 密码错误<br>
+     * 5: 不是注册的 ID<br>
+     * 6: 系统错误<br>
+     * 7: 已经登录<br>
+     * 8: 系统错误<br>
+     * 9: 系统错误<br>
+     * 10: 无法处理这么多连接<br>
+     * 11: 只有 20 岁以上的用户可以使用此频道<br>
+     * 13: 无法在此 IP 以管理员身份登录<br>
+     * 14: 错误的网关或个人信息以及奇怪的韩语按钮<br>
+     * 15: 正在处理该韩语按钮的请求！<br>
+     * 16: 请通过电子邮件验证您的帐户...<br>
+     * 17: 错误的网关或个人信息<br>
+     * 21: 请通过电子邮件验证您的帐户...<br>
+     * 23: 许可协议<br>
+     * 25: Maple Europe 通知 =[ FUCK YOU NEXON<br>
+     * 27: 一些奇怪的完整客户端通知，可能用于试用版<br>
+     *
+     * @param reason 登录失败的原因
+     * @return 登录失败包
      */
     public static Packet getLoginFailed(int reason) {
         return LoginPackets.getLoginFailed(reason);
