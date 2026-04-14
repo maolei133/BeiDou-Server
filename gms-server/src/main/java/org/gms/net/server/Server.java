@@ -1353,8 +1353,7 @@ public class Server {
 
             playerEquips.add(ae.getLeft());
         }
-
-        List<CharactersDO> charactersDOList = characterService.getCharactersByAccountId(accId);
+        List<CharactersDO> charactersDOList = characterService.getCharactersViewByAccountId(-1,accId);
         for (CharactersDO charactersDO : charactersDOList) {
             characterCount++;
 
@@ -1370,10 +1369,8 @@ public class Server {
                 chars = new LinkedList<>();
             }
 
-            Integer cid = charactersDO.getId();
-            chars.add(Character.fromCharactersDO(charactersDO, null));
+            chars.add(Character.fromCharactersViewDO(charactersDO));
         }
-
         wchars.add(curWorld, chars);
 
         return new Pair<>(characterCount, wchars);
@@ -1395,6 +1392,57 @@ public class Server {
         } finally {
             lgnRLock.unlock();
         }
+    }
+
+    /**
+     * 登录时为客户端加载轻量级角色数据。
+     * <p>
+     * 此方法旨在优化登录流程，避免一次性加载所有角色的完整数据。
+     * 它首先检查角色数据是否已在内存中。如果是首次登录或数据未加载，
+     * 它会调用 {@link #loadAccountCharactersView} 方法从数据库加载角色的
+     * 轻量级视图（仅包含角色列表显示和GM等级判断所需的基本信息）。
+     * <p>
+     * 加载后，它会遍历所有角色以确定该账号的最高GM等级，并设置到客户端对象中。
+     *
+     * @param c 客户端对象，需要加载角色数据并设置GM等级。
+     */
+    public void loadAccountCharactersLight(Client c) {
+        Integer accId = c.getAccID();
+        // 如果是首次登录，则从数据库加载轻量级角色视图
+        if (isFirstAccountLogin(accId)) {
+            loadAccountCharactersView(accId, 0, 0);
+        }
+
+        Set<Integer> accWorlds = new HashSet<>();
+        lgnRLock.lock();
+        try {
+            // 获取该账号下所有角色所在的世界ID
+            for (Integer chrid : getAccountCharacterEntries(accId)) {
+                accWorlds.add(worldChars.get(chrid));
+            }
+        } finally {
+            lgnRLock.unlock();
+        }
+
+        int gmLevel = 0;
+        // 遍历角色所在的所有世界
+        for (Integer worldId : accWorlds) {
+            World world = this.getWorld(worldId);
+            if (world != null) {
+                // 从世界缓存中获取该账号的角色视图列表
+                List<Character> characterViews = world.getAccountCharactersView(accId);
+                if (characterViews != null) {
+                    // 遍历角色视图，找到最高的GM等级
+                    for (Character chrView : characterViews) {
+                        if (gmLevel < chrView.gmLevel()) {
+                            gmLevel = chrView.gmLevel();
+                        }
+                    }
+                }
+            }
+        }
+        // 设置客户端的GM等级
+        c.setGMLevel(gmLevel);
     }
 
     public void loadAccountCharacters(Client c) {

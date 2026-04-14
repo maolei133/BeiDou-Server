@@ -128,7 +128,8 @@ public class LoginPackets {
      * @return 认证成功包
      */
     public static Packet getAuthSuccess(Client c) {
-        Server.getInstance().loadAccountCharacters(c);    // 锁定登录会话，直到从缓存或数据库恢复数据。
+        // 优化: 登录成功时只加载GM等级和角色视图，避免加载所有角色数据导致延迟
+        Server.getInstance().loadAccountCharactersLight(c);// 锁定登录会话，直到从缓存或数据库恢复数据。
         Server.getInstance().loadAccountStorages(c);
 
         final OutPacket p = OutPacket.create(SendOpcode.LOGIN_STATUS);

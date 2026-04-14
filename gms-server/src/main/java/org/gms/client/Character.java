@@ -6623,6 +6623,73 @@ public class Character extends AbstractCharacterObject {
         updateRemainingSp(remainingSp, GameConstants.getSkillBook(job.getId()));
     }
 
+    /**
+     * 加载账号所有角色预览数据
+     * @param accountId
+     * @return
+     */
+    public static List<Character> fromCharactersViewList(int worldId,int accountId) {
+        List<Character> CharsList = new ArrayList<>();
+        List<CharactersDO> charactersDOList = characterService.getCharactersViewByAccountId(worldId,accountId);
+        for (CharactersDO charactersDO : charactersDOList) {
+            CharsList.add(fromCharactersViewDO(charactersDO));
+        }
+        return CharsList;
+    }
+    /**
+     * 加载角色预览数据
+     * @param charactersDO
+     * @return
+     */
+    public static Character fromCharactersViewDO(CharactersDO charactersDO) {
+        Character chr = new Character();
+        chr.setId(charactersDO.getId());
+        chr.setName(charactersDO.getName());
+        chr.setLevel(charactersDO.getLevel());
+        chr.setFame(charactersDO.getFame());
+        chr.setQuestFame(charactersDO.getFquest());
+        chr.setStr(charactersDO.getAttrStr());
+        chr.setDex(charactersDO.getAttrDex());
+        chr.setInt(charactersDO.getAttrInt());
+        chr.setLuk(charactersDO.getAttrLuk());
+        chr.setExp(charactersDO.getExp());
+        chr.setGachaExp(charactersDO.getGachaexp());
+        chr.setHp(charactersDO.getHp());
+        chr.setMaxHp(charactersDO.getMaxhp());
+        chr.setMp(charactersDO.getMp());
+        chr.setMaxMp(charactersDO.getMaxmp());
+        chr.setGMLevel(charactersDO.getGm());
+        chr.setSkinColor(SkinColor.getById(charactersDO.getSkincolor()));
+        chr.setGender(charactersDO.getGender());
+        chr.setJob(Job.getById(charactersDO.getJob()));
+        chr.setHair(charactersDO.getHair());
+        chr.setFace(charactersDO.getFace());
+        chr.setAccountId(charactersDO.getAccountid());
+        chr.setMapId(charactersDO.getMap());
+        chr.setWorld(charactersDO.getWorld());
+        chr.setRank(charactersDO.getRank());
+        chr.setRankMove(charactersDO.getRankMove());
+        chr.setJobRank(charactersDO.getJobRank());
+        chr.setJobRankMove(charactersDO.getJobRankMove());
+        chr.setGuildId(charactersDO.getGuildid());
+        chr.setGuildRank(charactersDO.getGuildrank());
+        chr.setAllianceRank(charactersDO.getAllianceRank());
+        chr.setFamilyId(charactersDO.getFamilyId());
+
+        // 加载角色外观数据
+        List<InventorySearchRtnDTO> equippedItems = inventoryService.getInventoryList(
+                InventorySearchReqDTO.builder()
+                        .characterId(charactersDO.getId())
+                        .inventoryType(InventoryType.EQUIPPED.getType())
+                        .build()
+        );
+
+        Inventory equipInventory = chr.getInventory(InventoryType.EQUIPPED);
+        for (InventorySearchRtnDTO itemDTO : equippedItems) {
+            equipInventory.addItemFromDB(itemDTO.toItem());
+        }
+        return chr;
+    }
     public static Character fromCharactersDO(CharactersDO charactersDO, Client client) {
         Character chr = new Character();
         chr.setClient(client);

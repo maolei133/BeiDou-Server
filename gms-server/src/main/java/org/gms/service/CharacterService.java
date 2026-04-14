@@ -31,7 +31,6 @@ import org.gms.net.server.guild.GuildCharacter;
 import org.gms.net.server.world.Messenger;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
-import org.gms.net.server.world.PartyOperation;
 import org.gms.net.server.world.World;
 import org.gms.server.CashShop;
 import org.gms.server.Storage;
@@ -64,7 +63,6 @@ import java.util.stream.Collectors;
 
 import static com.mybatisflex.core.query.QueryMethods.dateDiff;
 import static com.mybatisflex.core.query.QueryMethods.now;
-import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.gms.dao.entity.table.AccountsDOTableDef.ACCOUNTS_D_O;
 import static org.gms.dao.entity.table.AreaInfoDOTableDef.AREA_INFO_D_O;
 import static org.gms.dao.entity.table.BbsRepliesDOTableDef.BBS_REPLIES_D_O;
@@ -1201,6 +1199,23 @@ public class CharacterService {
 
     public List<WishlistsDO> getWishlistsByCharacter(Integer cid) {
         return wishlistsMapper.selectListByQuery(QueryWrapper.create().where(WISHLISTS_D_O.CHARID.eq(cid)));
+    }
+
+    /**
+     * 根据账号ID获取角色视图列表（轻量级数据，用于登录界面显示）
+     * 只查询必要字段，避免全量加载
+     * @param worldId 世界ID，-1时查询所有世界
+     * @param accountId 账号ID
+     * @return 角色实体列表，只包含视图所需字段
+     */
+    public List<CharactersDO> getCharactersViewByAccountId(int worldId,int accountId) {
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .select()
+                .from(CHARACTERS_D_O)
+                .where(CHARACTERS_D_O.ACCOUNTID.eq(accountId))
+                .and(CHARACTERS_D_O.WORLD.ge(worldId, id -> worldId >= 0)
+                );
+        return charactersMapper.selectListByQuery(queryWrapper);
     }
 
     public List<CharactersDO> getCharactersByAccountId(int accountId) {

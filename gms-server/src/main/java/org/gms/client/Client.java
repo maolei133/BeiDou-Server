@@ -353,9 +353,11 @@ public class Client extends ChannelInboundHandlerAdapter {
     public List<Character> loadCharacters(int serverId) {
         List<Character> chars = new ArrayList<>(15);
         try {
-            for (CharNameAndId cni : loadCharactersInternal(serverId)) {
+/*            for (CharNameAndId cni : loadCharactersInternal(serverId)) {
                 chars.add(Character.loadCharFromDB(cni.id, this, false));
-            }
+            }*/
+            // 只加载当前账号所有角色的外观数据
+            chars.addAll(Character.fromCharactersViewList(serverId,getAccID()));
         } catch (Exception e) {
             e.printStackTrace();
         }
