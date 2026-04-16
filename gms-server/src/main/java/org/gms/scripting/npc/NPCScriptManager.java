@@ -135,6 +135,7 @@ public class NPCScriptManager extends AbstractScriptManager {
                     }
                 }
                 if (engine == null) {
+                    if (fileName != null) log.info("NpcID: {} 调用{} {} 不存在，无法执行脚本。", npc,itemScript ? " item/" : "", fileName);
                     engine = getInvocableScriptEngine("npc/" + npc + ".js", c);
                     cm.resetItemScript();
                 }
