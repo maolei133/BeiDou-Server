@@ -26,10 +26,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 
 import static com.mybatisflex.core.query.QueryMethods.distinct;
-import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
-import static org.gms.dao.entity.table.InventoryequipmentDOTableDef.INVENTORYEQUIPMENT_D_O;
-import static org.gms.dao.entity.table.InventoryitemsDOTableDef.INVENTORYITEMS_D_O;
-import static org.gms.dao.entity.table.PetignoresDOTableDef.PETIGNORES_D_O;
+import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_DO;
+import static org.gms.dao.entity.table.InventoryequipmentDOTableDef.INVENTORYEQUIPMENT_DO;
+import static org.gms.dao.entity.table.InventoryitemsDOTableDef.INVENTORYITEMS_DO;
+import static org.gms.dao.entity.table.PetignoresDOTableDef.PETIGNORES_DO;
 
 @Transactional
 @Service
@@ -51,13 +51,13 @@ public class InventoryService {
 
     public Page<InventorySearchReqDTO> getCharacterList(InventorySearchReqDTO data) {
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .select(distinct(CHARACTERS_D_O.ID, CHARACTERS_D_O.NAME, CHARACTERS_D_O.ACCOUNTID))
-                .from(INVENTORYITEMS_D_O.as("i"))
-                .leftJoin(CHARACTERS_D_O.as("c")).on(INVENTORYITEMS_D_O.CHARACTERID.eq(CHARACTERS_D_O.ID))
-                .where(INVENTORYITEMS_D_O.TYPE.eq(ItemFactory.INVENTORY.getValue()));
-        if (data.getCharacterId() != null) queryWrapper.and(CHARACTERS_D_O.ID.eq(data.getCharacterId()));
+                .select(distinct(CHARACTERS_DO.ID, CHARACTERS_DO.NAME, CHARACTERS_DO.ACCOUNTID))
+                .from(INVENTORYITEMS_DO.as("i"))
+                .leftJoin(CHARACTERS_DO.as("c")).on(INVENTORYITEMS_DO.CHARACTERID.eq(CHARACTERS_DO.ID))
+                .where(INVENTORYITEMS_DO.TYPE.eq(ItemFactory.INVENTORY.getValue()));
+        if (data.getCharacterId() != null) queryWrapper.and(CHARACTERS_DO.ID.eq(data.getCharacterId()));
         if (!RequireUtil.isEmpty(data.getCharacterName()))
-            queryWrapper.and(CHARACTERS_D_O.NAME.like(data.getCharacterName()));
+            queryWrapper.and(CHARACTERS_DO.NAME.like(data.getCharacterName()));
         Page<CharactersDO> paginate = inventoryitemsMapper.paginateAs(data.getPageNo(), data.getPageSize(), queryWrapper, CharactersDO.class);
         return new Page<>(
                 paginate.getRecords().stream()
@@ -84,18 +84,18 @@ public class InventoryService {
         InventoryType inventoryType = InventoryType.getByType(data.getInventoryType());
         RequireUtil.requireNotNull(inventoryType, I18nUtil.getExceptionMessage("UNKNOWN_PARAMETER_VALUE", "inventoryType", data.getInventoryType()));
         QueryWrapper query = QueryWrapper.create()
-                .select(INVENTORYITEMS_D_O.ALL_COLUMNS, INVENTORYEQUIPMENT_D_O.ALL_COLUMNS)
-                .from(INVENTORYITEMS_D_O.as("i"))
-                .leftJoin(INVENTORYEQUIPMENT_D_O.as("e")).on(INVENTORYITEMS_D_O.INVENTORYITEMID.eq(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID))
+                .select(INVENTORYITEMS_DO.ALL_COLUMNS, INVENTORYEQUIPMENT_DO.ALL_COLUMNS)
+                .from(INVENTORYITEMS_DO.as("i"))
+                .leftJoin(INVENTORYEQUIPMENT_DO.as("e")).on(INVENTORYITEMS_DO.INVENTORYITEMID.eq(INVENTORYEQUIPMENT_DO.INVENTORYITEMID))
                 // 只查询指定栏目
-                .where(INVENTORYITEMS_D_O.INVENTORYTYPE.eq(data.getInventoryType()))
+                .where(INVENTORYITEMS_DO.INVENTORYTYPE.eq(data.getInventoryType()))
                 // 只查询背包
-                .and(INVENTORYITEMS_D_O.TYPE.eq(ItemFactory.INVENTORY.getValue()))
-                .and(INVENTORYITEMS_D_O.CHARACTERID.eq(data.getCharacterId()));
+                .and(INVENTORYITEMS_DO.TYPE.eq(ItemFactory.INVENTORY.getValue()))
+                .and(INVENTORYITEMS_DO.CHARACTERID.eq(data.getCharacterId()));
         
         // [新增] 如果是加载装备栏，则排除宠物装备
         if (data.getInventoryType() == InventoryType.EQUIPPED.getType()) {
-            query.and(INVENTORYITEMS_D_O.PETID.le(0)); // 小于等于0，-1为非宠物，0为历史数据兼容
+            query.and(INVENTORYITEMS_DO.PETID.le(0)); // 小于等于0，-1为非宠物，0为历史数据兼容
         }
 
         List<Row> results = inventoryitemsMapper.selectListByQueryAs(query, Row.class);
@@ -120,7 +120,7 @@ public class InventoryService {
 
     @Transactional(rollbackFor = Exception.class)
     public void deleteInventoryByCharacterId(int cid) {
-        QueryWrapper itemQueryWrapper = QueryWrapper.create().where(INVENTORYITEMS_D_O.CHARACTERID.eq(cid));
+        QueryWrapper itemQueryWrapper = QueryWrapper.create().where(INVENTORYITEMS_DO.CHARACTERID.eq(cid));
         List<InventoryitemsDO> inventoryItemsDOS = inventoryitemsMapper.selectListByQuery(itemQueryWrapper);
         List<Long> inventoryItemIds = inventoryItemsDOS.stream().map(InventoryitemsDO::getInventoryitemid).toList();
         if (inventoryItemIds.isEmpty()) {
@@ -136,7 +136,7 @@ public class InventoryService {
             petIds.forEach(CashIdGenerator::freeCashId);
         }
 
-        QueryWrapper equipmentQueryWrapper = QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(inventoryItemIds));
+        QueryWrapper equipmentQueryWrapper = QueryWrapper.create().where(INVENTORYEQUIPMENT_DO.INVENTORYITEMID.in(inventoryItemIds));
         List<InventoryequipmentDO> inventoryEquipmentDOS = inventoryequipmentMapper.selectListByQuery(equipmentQueryWrapper);
         List<Integer> ringIds = inventoryEquipmentDOS.stream()
                 .map(InventoryequipmentDO::getRingid)
@@ -348,7 +348,7 @@ public class InventoryService {
                             .jump(Optional.ofNullable(equipment.getJump()).map(Short::intValue).orElse(null))
                             .vicious(Optional.ofNullable(equipment.getVicious()).map(Short::intValue).orElse(null))
                             .build(),
-                    QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.eq(inventoryitemsDO.getInventoryitemid())));
+                    QueryWrapper.create().where(INVENTORYEQUIPMENT_DO.INVENTORYITEMID.eq(inventoryitemsDO.getInventoryitemid())));
         }
         inventoryitemsMapper.update(InventoryitemsDO.builder()
                 .inventoryitemid(inventoryitemsDO.getInventoryitemid())
@@ -377,13 +377,13 @@ public class InventoryService {
             character.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(3, item))));
         } else {
             InventoryitemsDO inventoryitemsDO = getModifyItemOffline(data);
-            inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.eq(inventoryitemsDO.getInventoryitemid())));
+            inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_DO.INVENTORYITEMID.eq(inventoryitemsDO.getInventoryitemid())));
             inventoryitemsMapper.deleteById(inventoryitemsDO.getInventoryitemid());
         }
     }
 
     public List<PetignoresDO> getPetIgnoreByPetId(Integer petId) {
-        return petignoresMapper.selectListByQuery(QueryWrapper.create().where(PETIGNORES_D_O.PETID.eq(petId)));
+        return petignoresMapper.selectListByQuery(QueryWrapper.create().where(PETIGNORES_DO.PETID.eq(petId)));
     }
 
     private void modifyInventoryCheck(InventorySearchRtnDTO data) {
@@ -406,10 +406,10 @@ public class InventoryService {
 
     private InventoryitemsDO getModifyItemOffline(InventorySearchRtnDTO data) {
         QueryWrapper itemQueryWrapper = QueryWrapper.create()
-                .where(INVENTORYITEMS_D_O.CHARACTERID.eq(data.getCharacterId()))
-                .and(INVENTORYITEMS_D_O.ITEMID.eq(data.getItemId()))
-                .and(INVENTORYITEMS_D_O.POSITION.eq(data.getPosition()))
-                .and(INVENTORYITEMS_D_O.INVENTORYTYPE.eq(data.getInventoryType()));
+                .where(INVENTORYITEMS_DO.CHARACTERID.eq(data.getCharacterId()))
+                .and(INVENTORYITEMS_DO.ITEMID.eq(data.getItemId()))
+                .and(INVENTORYITEMS_DO.POSITION.eq(data.getPosition()))
+                .and(INVENTORYITEMS_DO.INVENTORYTYPE.eq(data.getInventoryType()));
         InventoryitemsDO inventoryItemsDO = inventoryitemsMapper.selectOneByQuery(itemQueryWrapper);
         RequireUtil.requireNotNull(inventoryItemsDO, I18nUtil.getExceptionMessage("InventoryService.updateInventory.exception2"));
         if (!Objects.equals(data.getItemId(), inventoryItemsDO.getItemid())) {

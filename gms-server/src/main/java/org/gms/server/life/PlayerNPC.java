@@ -56,8 +56,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.mybatisflex.core.query.QueryMethods.distinct;
-import static org.gms.dao.entity.table.PlayernpcsDOTableDef.PLAYERNPCS_D_O;
-import static org.gms.dao.entity.table.PlayernpcsEquipDOTableDef.PLAYERNPCS_EQUIP_D_O;
+import static org.gms.dao.entity.table.PlayernpcsDOTableDef.PLAYERNPCS_DO;
+import static org.gms.dao.entity.table.PlayernpcsEquipDOTableDef.PLAYERNPCS_EQUIP_DO;
 
 /**
  * @author XoticStory
@@ -235,10 +235,10 @@ public class PlayerNPC extends AbstractMapObject {
 
         List<Integer> availables = new ArrayList<>(20);
         List<PlayernpcsDO> usedNpcs = playernpcsMapper.selectListByQuery(QueryWrapper.create()
-                .select(PLAYERNPCS_D_O.SCRIPTID)
-                .where(PLAYERNPCS_D_O.SCRIPTID.ge(branchSid))
-                .and(PLAYERNPCS_D_O.SCRIPTID.lt(nextBranchSid))
-                .orderBy(PLAYERNPCS_D_O.SCRIPTID.asc()));
+                .select(PLAYERNPCS_DO.SCRIPTID)
+                .where(PLAYERNPCS_DO.SCRIPTID.ge(branchSid))
+                .and(PLAYERNPCS_DO.SCRIPTID.lt(nextBranchSid))
+                .orderBy(PLAYERNPCS_DO.SCRIPTID.asc()));
         Set<Integer> usedScriptIds = usedNpcs.stream().map(PlayernpcsDO::getScriptid).collect(Collectors.toSet());
 
         int j = 0;
@@ -349,14 +349,14 @@ public class PlayerNPC extends AbstractMapObject {
         mapids.add(chr.getWorld());
 
         List<PlayernpcsDO> npcs = playernpcsMapper.selectListByQuery(QueryWrapper.create()
-                .select(PLAYERNPCS_D_O.ID, PLAYERNPCS_D_O.MAP)
-                .where(PLAYERNPCS_D_O.NAME.like(chr.getName()))
-                .and(map != null ? PLAYERNPCS_D_O.MAP.eq(map.getId()) : null));
+                .select(PLAYERNPCS_DO.ID, PLAYERNPCS_DO.MAP)
+                .where(PLAYERNPCS_DO.NAME.like(chr.getName()))
+                .and(map != null ? PLAYERNPCS_DO.MAP.eq(map.getId()) : null));
         for (PlayernpcsDO npc : npcs) {
             updateMapids.add(npc.getMap());
             int npcId = npc.getId();
             playernpcsMapper.deleteById(npcId);
-            playernpcsEquipMapper.deleteByQuery(QueryWrapper.create().where(PLAYERNPCS_EQUIP_D_O.NPCID.eq(npcId)));
+            playernpcsEquipMapper.deleteByQuery(QueryWrapper.create().where(PLAYERNPCS_EQUIP_DO.NPCID.eq(npcId)));
         }
 
         mapids.addAll(updateMapids);
@@ -450,7 +450,7 @@ public class PlayerNPC extends AbstractMapObject {
     }
 
     public static void removeAllPlayerNPC() {
-        List<PlayernpcsDO> npcs = playernpcsMapper.selectListByQuery(QueryWrapper.create().select(distinct(PLAYERNPCS_D_O.WORLD), PLAYERNPCS_D_O.MAP));
+        List<PlayernpcsDO> npcs = playernpcsMapper.selectListByQuery(QueryWrapper.create().select(distinct(PLAYERNPCS_DO.WORLD), PLAYERNPCS_DO.MAP));
         int wsize = Server.getInstance().getWorldsSize();
         for (PlayernpcsDO npc : npcs) {
             int world = npc.getWorld();

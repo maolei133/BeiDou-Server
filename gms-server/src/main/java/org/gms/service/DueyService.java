@@ -29,8 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
-import static org.gms.dao.entity.table.DueypackagesDOTableDef.DUEYPACKAGES_D_O;
+import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_DO;
+import static org.gms.dao.entity.table.DueypackagesDOTableDef.DUEYPACKAGES_DO;
 
 @Service
 public class DueyService {
@@ -51,34 +51,34 @@ public class DueyService {
 
     public Page<DueyPackageRtnDTO> getDueyList(DueySearchReqDTO req) {
         QueryWrapper query = QueryWrapper.create()
-                .select(DUEYPACKAGES_D_O.ALL_COLUMNS, CHARACTERS_D_O.NAME.as("receiverName"))
-                .from(DUEYPACKAGES_D_O)
-                .leftJoin(CHARACTERS_D_O).on(DUEYPACKAGES_D_O.RECEIVERID.eq(CHARACTERS_D_O.ID));
+                .select(DUEYPACKAGES_DO.ALL_COLUMNS, CHARACTERS_DO.NAME.as("receiverName"))
+                .from(DUEYPACKAGES_DO)
+                .leftJoin(CHARACTERS_DO).on(DUEYPACKAGES_DO.RECEIVERID.eq(CHARACTERS_DO.ID));
 
         if (req.getReceiverName() != null && !req.getReceiverName().isEmpty()) {
-            query.where(CHARACTERS_D_O.NAME.like(req.getReceiverName()));
+            query.where(CHARACTERS_DO.NAME.like(req.getReceiverName()));
         }
         if (req.getSenderName() != null && !req.getSenderName().isEmpty()) {
-            query.where(DUEYPACKAGES_D_O.SENDERNAME.like(req.getSenderName()));
+            query.where(DUEYPACKAGES_DO.SENDERNAME.like(req.getSenderName()));
         }
         if (req.getStartTime() != null) {
-            query.where(DUEYPACKAGES_D_O.TIMESTAMP.ge(new Timestamp(req.getStartTime())));
+            query.where(DUEYPACKAGES_DO.TIMESTAMP.ge(new Timestamp(req.getStartTime())));
         }
         if (req.getEndTime() != null) {
-            query.where(DUEYPACKAGES_D_O.TIMESTAMP.le(new Timestamp(req.getEndTime())));
+            query.where(DUEYPACKAGES_DO.TIMESTAMP.le(new Timestamp(req.getEndTime())));
         }
         if (req.getItemType() != null) {
-            query.where(DUEYPACKAGES_D_O.TYPE.eq(req.getItemType()));
+            query.where(DUEYPACKAGES_DO.TYPE.eq(req.getItemType()));
         }
         if (req.getChecked() != null) {
-            query.where(DUEYPACKAGES_D_O.CHECKED.eq(req.getChecked()));
+            query.where(DUEYPACKAGES_DO.CHECKED.eq(req.getChecked()));
         }
         // **关键修复**：修复了调用不存在的方法的错误，正确使用 DTO 中的 itemId 字段
         if (req.getItemId() != null && req.getItemId() > 0) {
-            query.where(DUEYPACKAGES_D_O.ITEM_ID.eq(req.getItemId()));
+            query.where(DUEYPACKAGES_DO.ITEM_ID.eq(req.getItemId()));
         }
 
-        query.orderBy(DUEYPACKAGES_D_O.TIMESTAMP.desc());
+        query.orderBy(DUEYPACKAGES_DO.TIMESTAMP.desc());
 
         Page<Row> page = new Page<>(req.getPageNo(), req.getPageSize());
         Page<Row> rowPage = Db.paginate(null, page, query);
@@ -267,12 +267,12 @@ public class DueyService {
             // 批量发送逻辑
             List<Integer> targetReceiverIds = new ArrayList<>();
             if (Boolean.TRUE.equals(req.getIsAll())) {
-                QueryWrapper query = QueryWrapper.create().select(CHARACTERS_D_O.ID);
+                QueryWrapper query = QueryWrapper.create().select(CHARACTERS_DO.ID);
                 targetReceiverIds.addAll(charactersMapper.selectListByQueryAs(query, Integer.class));
             } else if (req.getReceiverIds() != null && !req.getReceiverIds().isEmpty()) {
                 targetReceiverIds.addAll(req.getReceiverIds());
             } else if (req.getReceiverName() != null) {
-                CharactersDO chr = charactersMapper.selectOneByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(req.getReceiverName())));
+                CharactersDO chr = charactersMapper.selectOneByQuery(QueryWrapper.create().where(CHARACTERS_DO.NAME.eq(req.getReceiverName())));
                 if (chr != null) {
                     targetReceiverIds.add(chr.getId());
                 } else {
@@ -304,7 +304,7 @@ public class DueyService {
         if (req.getReceiverIds() != null && !req.getReceiverIds().isEmpty()) {
             existingPackage.setReceiverid(req.getReceiverIds().get(0).longValue());
         } else if (req.getReceiverName() != null) {
-            CharactersDO chr = charactersMapper.selectOneByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(req.getReceiverName())));
+            CharactersDO chr = charactersMapper.selectOneByQuery(QueryWrapper.create().where(CHARACTERS_DO.NAME.eq(req.getReceiverName())));
             if (chr != null) {
                 existingPackage.setReceiverid(chr.getId().longValue());
             }

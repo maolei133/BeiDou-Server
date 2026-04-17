@@ -10,8 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-import static org.gms.dao.entity.table.MtsCartDOTableDef.MTS_CART_D_O;
-import static org.gms.dao.entity.table.MtsItemsDOTableDef.MTS_ITEMS_D_O;
+import static org.gms.dao.entity.table.MtsCartDOTableDef.MTS_CART_DO;
+import static org.gms.dao.entity.table.MtsItemsDOTableDef.MTS_ITEMS_DO;
 
 @Service
 @AllArgsConstructor
@@ -21,11 +21,11 @@ public class MtsService {
 
     @Transactional(rollbackFor = Exception.class)
     public void deleteMtsByCharacterId(int cid) {
-        QueryWrapper queryWrapper = QueryWrapper.create().where(MTS_CART_D_O.CID.eq(cid));
+        QueryWrapper queryWrapper = QueryWrapper.create().where(MTS_CART_DO.CID.eq(cid));
         List<MtsCartDO> mtsCartDOS = mtsCartMapper.selectListByQuery(queryWrapper);
         List<Integer> mtsIds = mtsCartDOS.stream().map(MtsCartDO::getId).toList();
         if (!mtsIds.isEmpty()) {
-            mtsItemsMapper.deleteByQuery(QueryWrapper.create().where(MTS_ITEMS_D_O.ID.in(mtsIds)));
+            mtsItemsMapper.deleteByQuery(QueryWrapper.create().where(MTS_ITEMS_DO.ID.in(mtsIds)));
             mtsCartMapper.deleteByQuery(queryWrapper);
         }
     }

@@ -43,7 +43,7 @@ import org.gms.util.SpringContextUtil;
 
 import java.util.*;
 
-import static org.gms.dao.entity.table.MonstercarddataDOTableDef.MONSTERCARDDATA_D_O;
+import static org.gms.dao.entity.table.MonstercarddataDOTableDef.MONSTERCARDDATA_DO;
 
 /**
  * 怪物信息提供者
@@ -296,7 +296,7 @@ public class MonsterInformationProvider {
         
         MonstercarddataMapper mapper = SpringContextUtil.getBean(MonstercarddataMapper.class);
         if (mapper != null) {
-            MonstercarddataDO data = mapper.selectOneByQuery(QueryWrapper.create().where(MONSTERCARDDATA_D_O.CARDID.eq(cardId)));
+            MonstercarddataDO data = mapper.selectOneByQuery(QueryWrapper.create().where(MONSTERCARDDATA_DO.CARDID.eq(cardId)));
             if (data != null) {
                 cardMobCache.put(cardId, data.getMobid());
                 return data.getMobid();

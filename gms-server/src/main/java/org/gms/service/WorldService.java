@@ -9,8 +9,8 @@ import org.gms.dao.mapper.PlayernpcsFieldMapper;
 import org.gms.util.Pair;
 import org.springframework.stereotype.Service;
 
-import static org.gms.dao.entity.table.MarriagesDOTableDef.MARRIAGES_D_O;
-import static org.gms.dao.entity.table.PlayernpcsFieldDOTableDef.PLAYERNPCS_FIELD_D_O;
+import static org.gms.dao.entity.table.MarriagesDOTableDef.MARRIAGES_DO;
+import static org.gms.dao.entity.table.PlayernpcsFieldDOTableDef.PLAYERNPCS_FIELD_DO;
 
 @Service
 @AllArgsConstructor
@@ -20,11 +20,11 @@ public class WorldService {
     private final PlayernpcsFieldMapper playernpcsFieldMapper;
 
     public Pair<Integer, Pair<Integer, Integer>> getRelationshipCoupleFromDb(int id, boolean usingMarriageId) {
-        QueryWrapper queryWrapper = QueryWrapper.create().from(MARRIAGES_D_O);
+        QueryWrapper queryWrapper = QueryWrapper.create().from(MARRIAGES_DO);
         if (usingMarriageId) {
-            queryWrapper.where(MARRIAGES_D_O.MARRIAGEID.eq(id));
+            queryWrapper.where(MARRIAGES_DO.MARRIAGEID.eq(id));
         } else {
-            queryWrapper.where(MARRIAGES_D_O.HUSBANDID.eq(id)).or(MARRIAGES_D_O.WIFEID.eq(id));
+            queryWrapper.where(MARRIAGES_DO.HUSBANDID.eq(id)).or(MARRIAGES_DO.WIFEID.eq(id));
         }
         MarriagesDO marriagesDO = marriagesMapper.selectOneByQuery(queryWrapper);
         if (marriagesDO == null) {
@@ -55,9 +55,9 @@ public class WorldService {
 
         if (exists) {
             QueryWrapper queryWrapper = QueryWrapper.create()
-                    .from(PLAYERNPCS_FIELD_D_O)
-                    .where(PLAYERNPCS_FIELD_D_O.WORLD.eq(worldId))
-                    .and(PLAYERNPCS_FIELD_D_O.MAP.eq(mapId));
+                    .from(PLAYERNPCS_FIELD_DO)
+                    .where(PLAYERNPCS_FIELD_DO.WORLD.eq(worldId))
+                    .and(PLAYERNPCS_FIELD_DO.MAP.eq(mapId));
             playernpcsFieldMapper.updateByQuery(playernpcsFieldDO, queryWrapper);
         } else {
             playernpcsFieldDO.setWorld(worldId);

@@ -23,8 +23,8 @@ import java.util.stream.Collectors;
 
 import static com.mybatisflex.core.query.QueryMethods.count;
 import static com.mybatisflex.core.query.QueryMethods.floor;
-import static org.gms.dao.entity.table.MonsterbookDOTableDef.MONSTERBOOK_D_O;
-import static org.gms.dao.entity.table.MonstercarddataDOTableDef.MONSTERCARDDATA_D_O;
+import static org.gms.dao.entity.table.MonsterbookDOTableDef.MONSTERBOOK_DO;
+import static org.gms.dao.entity.table.MonstercarddataDOTableDef.MONSTERCARDDATA_DO;
 
 @Service
 @AllArgsConstructor
@@ -33,14 +33,14 @@ public class MonsterBookService {
     private final MonstercarddataMapper monstercarddataMapper;
 
     public List<MonsterbookDO> getByCharacterId(int cid) {
-        return monsterbookMapper.selectListByQuery(QueryWrapper.create().where(MONSTERBOOK_D_O.CHARID.eq(cid)).orderBy(MONSTERBOOK_D_O.CHARID, true));
+        return monsterbookMapper.selectListByQuery(QueryWrapper.create().where(MONSTERBOOK_DO.CHARID.eq(cid)).orderBy(MONSTERBOOK_DO.CHARID, true));
     }
 
     @Transactional
     public void saveCards(int chrId, Map<Integer, Integer> cards) {
         // 1. 从数据库加载旧的卡片
         List<MonsterbookDO> dbCards = monsterbookMapper.selectListByQuery(
-            QueryWrapper.create().where(MONSTERBOOK_D_O.CHARID.eq(chrId))
+            QueryWrapper.create().where(MONSTERBOOK_DO.CHARID.eq(chrId))
         );
         Map<Integer, MonsterbookDO> dbMap = dbCards.stream()
             .collect(Collectors.toMap(MonsterbookDO::getCardid, Function.identity()));
@@ -94,9 +94,9 @@ public class MonsterBookService {
     public int[] getCardTierSize() {
         // SELECT COUNT(*) FROM monstercarddata GROUP BY floor(cardid / 1000);
         QueryWrapper query = QueryWrapper.create()
-                .select(count(MONSTERCARDDATA_D_O.ID))
-                .from(MONSTERCARDDATA_D_O)
-                .groupBy(floor(MONSTERCARDDATA_D_O.CARDID.divide(1000)));
+                .select(count(MONSTERCARDDATA_DO.ID))
+                .from(MONSTERCARDDATA_DO)
+                .groupBy(floor(MONSTERCARDDATA_DO.CARDID.divide(1000)));
         
         List<Integer> counts = monstercarddataMapper.selectObjectListByQueryAs(query, Integer.class);
         
@@ -151,9 +151,9 @@ public class MonsterBookService {
         // 2. 离线查询或批量查询
         QueryWrapper query = QueryWrapper.create();
         if (req.getCharIds() != null && !req.getCharIds().isEmpty()) {
-            query.where(MONSTERBOOK_D_O.CHARID.in(req.getCharIds()));
+            query.where(MONSTERBOOK_DO.CHARID.in(req.getCharIds()));
         }
-        query.orderBy(MONSTERBOOK_D_O.CHARID, true);
+        query.orderBy(MONSTERBOOK_DO.CHARID, true);
         
         int pageNo = req.getPageNo() != null ? req.getPageNo() : 1;
         int pageSize = req.getPageSize() != null ? req.getPageSize() : 10;
@@ -196,8 +196,8 @@ public class MonsterBookService {
                 chr.getMonsterBook().modifyCard(chr.getClient(), item.getCardid(), 0);
             } else {
                 monsterbookMapper.deleteByQuery(QueryWrapper.create()
-                        .where(MONSTERBOOK_D_O.CHARID.eq(item.getCharid()))
-                        .and(MONSTERBOOK_D_O.CARDID.eq(item.getCardid())));
+                        .where(MONSTERBOOK_DO.CHARID.eq(item.getCharid()))
+                        .and(MONSTERBOOK_DO.CARDID.eq(item.getCardid())));
             }
         }
     }
@@ -219,8 +219,8 @@ public class MonsterBookService {
             } else {
                 // 离线：检查是否存在，存在则更新，不存在则插入
                 MonsterbookDO existing = monsterbookMapper.selectOneByQuery(QueryWrapper.create()
-                        .where(MONSTERBOOK_D_O.CHARID.eq(item.getCharid()))
-                        .and(MONSTERBOOK_D_O.CARDID.eq(item.getCardid())));
+                        .where(MONSTERBOOK_DO.CHARID.eq(item.getCharid()))
+                        .and(MONSTERBOOK_DO.CARDID.eq(item.getCardid())));
                 
                 if (existing != null) {
                     existing.setLevel(item.getLevel());
@@ -255,14 +255,14 @@ public class MonsterBookService {
                 // 如果卡片ID变了，先删除旧的
                 if (!item.getOldCardId().equals(item.getNewCardId())) {
                     monsterbookMapper.deleteByQuery(QueryWrapper.create()
-                            .where(MONSTERBOOK_D_O.CHARID.eq(item.getOldCharId()))
-                            .and(MONSTERBOOK_D_O.CARDID.eq(item.getOldCardId())));
+                            .where(MONSTERBOOK_DO.CHARID.eq(item.getOldCharId()))
+                            .and(MONSTERBOOK_DO.CARDID.eq(item.getOldCardId())));
                 }
                 
                 // 检查新卡片是否存在
                 MonsterbookDO existing = monsterbookMapper.selectOneByQuery(QueryWrapper.create()
-                        .where(MONSTERBOOK_D_O.CHARID.eq(item.getOldCharId()))
-                        .and(MONSTERBOOK_D_O.CARDID.eq(item.getNewCardId())));
+                        .where(MONSTERBOOK_DO.CHARID.eq(item.getOldCharId()))
+                        .and(MONSTERBOOK_DO.CARDID.eq(item.getNewCardId())));
 
                 if (existing != null) {
                     existing.setLevel(item.getNewLevel());
@@ -295,8 +295,8 @@ public class MonsterBookService {
                 srcChr.getMonsterBook().modifyCard(srcChr.getClient(), item.getCardid(), 0);
             } else {
                 monsterbookMapper.deleteByQuery(QueryWrapper.create()
-                        .where(MONSTERBOOK_D_O.CHARID.eq(item.getCharid()))
-                        .and(MONSTERBOOK_D_O.CARDID.eq(item.getCardid())));
+                        .where(MONSTERBOOK_DO.CHARID.eq(item.getCharid()))
+                        .and(MONSTERBOOK_DO.CARDID.eq(item.getCardid())));
             }
 
             // 处理目标角色（添加）
@@ -311,8 +311,8 @@ public class MonsterBookService {
             } else {
                 // 离线：检查是否存在
                 MonsterbookDO existing = monsterbookMapper.selectOneByQuery(QueryWrapper.create()
-                        .where(MONSTERBOOK_D_O.CHARID.eq(req.getNewCharId()))
-                        .and(MONSTERBOOK_D_O.CARDID.eq(item.getCardid())));
+                        .where(MONSTERBOOK_DO.CHARID.eq(req.getNewCharId()))
+                        .and(MONSTERBOOK_DO.CARDID.eq(item.getCardid())));
 
                 if (existing != null) {
                     existing.setLevel(item.getLevel());

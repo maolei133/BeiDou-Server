@@ -40,7 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.gms.dao.entity.table.ReactordropsDOTableDef.REACTORDROPS_D_O;
+import static org.gms.dao.entity.table.ReactordropsDOTableDef.REACTORDROPS_DO;
 
 /**
  * @author Lerk
@@ -88,8 +88,8 @@ public class ReactorScriptManager extends AbstractScriptManager {
         List<ReactorDropEntry> ret = drops.get(reactorId);
         if (ret == null) {
             List<ReactordropsDO> dropList = reactordropsMapper.selectListByQuery(QueryWrapper.create()
-                    .where(REACTORDROPS_D_O.REACTORID.eq(reactorId))
-                    .and(REACTORDROPS_D_O.CHANCE.ge(0)));
+                    .where(REACTORDROPS_DO.REACTORID.eq(reactorId))
+                    .and(REACTORDROPS_DO.CHANCE.ge(0)));
             ret = dropList.stream()
                     .map(drop -> new ReactorDropEntry(drop.getItemid(), drop.getChance(), drop.getQuestid()))
                     .collect(Collectors.toList());

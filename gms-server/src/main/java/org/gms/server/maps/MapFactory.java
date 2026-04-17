@@ -44,7 +44,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.gms.dao.entity.table.PlifeDOTableDef.PLIFE_D_O;
+import static org.gms.dao.entity.table.PlifeDOTableDef.PLIFE_DO;
 
 public class MapFactory {
     private static final Data nameData = DataProviderFactory.getDataProvider(WZFiles.STRING).getData("Map.img");
@@ -81,8 +81,8 @@ public class MapFactory {
 
     private static void loadLifeFromDb(MapleMap map) {
         List<PlifeDO> plifeList = plifeMapper.selectListByQuery(QueryWrapper.create()
-                .where(PLIFE_D_O.MAP.eq(map.getId()))
-                .and(PLIFE_D_O.WORLD.eq(map.getWorld())));
+                .where(PLIFE_DO.MAP.eq(map.getId()))
+                .and(PLIFE_DO.WORLD.eq(map.getWorld())));
         for (PlifeDO plife : plifeList) {
             loadLifeRaw(map, plife.getLife(), plife.getType(), plife.getCy(), plife.getF(), plife.getFh(),
                     plife.getRx0(), plife.getRx1(), plife.getX(), plife.getY(), plife.getHide(),

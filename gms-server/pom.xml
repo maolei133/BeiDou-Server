@@ -50,7 +50,7 @@
         <flyway-mysql.version>9.15.2</flyway-mysql.version>
         <lombok.version>1.18.30</lombok.version>
         <fastjson2.version>2.0.47</fastjson2.version>
-        <mybatis-flex.version>1.8.9</mybatis-flex.version>
+        <mybatis-flex.version>1.11.6</mybatis-flex.version>
         <swagger.version>2.5.0</swagger.version>
     </properties>
 

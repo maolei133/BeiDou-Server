@@ -61,7 +61,7 @@ import java.util.Random;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static org.gms.dao.entity.table.GiftsDOTableDef.GIFTS_D_O;
+import static org.gms.dao.entity.table.GiftsDOTableDef.GIFTS_DO;
 
 /*
  * @author Flav
@@ -465,7 +465,7 @@ public class CashShop {
 
     public List<Pair<Item, String>> loadGifts() {
         List<Pair<Item, String>> gifts = new ArrayList<>();
-        List<GiftsDO> giftList = giftsMapper.selectListByQuery(QueryWrapper.create().where(GIFTS_D_O.TO.eq(characterId)));
+        List<GiftsDO> giftList = giftsMapper.selectListByQuery(QueryWrapper.create().where(GIFTS_DO.TO.eq(characterId)));
 
         for (GiftsDO gift : giftList) {
             notes++;
@@ -492,7 +492,7 @@ public class CashShop {
         }
 
         if (!giftList.isEmpty()) {
-            giftsMapper.deleteByQuery(QueryWrapper.create().where(GIFTS_D_O.TO.eq(characterId)));
+            giftsMapper.deleteByQuery(QueryWrapper.create().where(GIFTS_DO.TO.eq(characterId)));
         }
 
         return gifts;

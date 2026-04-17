@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_D_O;
+import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_DO;
 
 /**
  * 物品溯源日志清理定时任务 (V2.3 - 强类型配置版).
@@ -57,8 +57,8 @@ public class TraceabilityCleanupTask {
         if (days > 0) {
             long deleteDeadline = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(days);
             QueryWrapper timeQuery = new QueryWrapper()
-                    .where(ITEM_TRACE_LOGS_D_O.IS_VALUABLE.eq(isValuable))
-                    .and(ITEM_TRACE_LOGS_D_O.TIMESTAMP.lt(deleteDeadline));
+                    .where(ITEM_TRACE_LOGS_DO.IS_VALUABLE.eq(isValuable))
+                    .and(ITEM_TRACE_LOGS_DO.TIMESTAMP.lt(deleteDeadline));
             int deletedByTime = itemTraceLogsMapper.deleteByQuery(timeQuery);
             if (deletedByTime > 0) {
                 log.info("溯源日志清理({}): 已通过时间策略(超过{}天)删除 {} 条记录。", logType, days, deletedByTime);
@@ -73,15 +73,15 @@ public class TraceabilityCleanupTask {
             log.info("溯源日志清理({}): 记录数 {} 超过上限 {}，需要删除 {} 条最旧的记录。", logType, totalCount, maxCount, excessCount);
 
             QueryWrapper subQuery = new QueryWrapper()
-                    .select(ITEM_TRACE_LOGS_D_O.ID)
-                    .where(ITEM_TRACE_LOGS_D_O.IS_VALUABLE.eq(isValuable))
-                    .orderBy(ITEM_TRACE_LOGS_D_O.TIMESTAMP.asc())
+                    .select(ITEM_TRACE_LOGS_DO.ID)
+                    .where(ITEM_TRACE_LOGS_DO.IS_VALUABLE.eq(isValuable))
+                    .orderBy(ITEM_TRACE_LOGS_DO.TIMESTAMP.asc())
                     .limit(excessCount);
 
             java.util.List<Long> idsToDelete = itemTraceLogsMapper.selectListByQueryAs(subQuery, Long.class);
 
             if (!idsToDelete.isEmpty()) {
-                QueryWrapper deleteQuery = new QueryWrapper().where(ITEM_TRACE_LOGS_D_O.ID.in(idsToDelete));
+                QueryWrapper deleteQuery = new QueryWrapper().where(ITEM_TRACE_LOGS_DO.ID.in(idsToDelete));
                 int deletedByCount = itemTraceLogsMapper.deleteByQuery(deleteQuery);
                 log.info("溯源日志清理({}): 已通过数量策略成功删除 {} 条记录。", logType, deletedByCount);
             }
@@ -89,7 +89,7 @@ public class TraceabilityCleanupTask {
     }
 
     private long countLogs(boolean isValuable) {
-        QueryWrapper countQuery = new QueryWrapper().where(ITEM_TRACE_LOGS_D_O.IS_VALUABLE.eq(isValuable));
+        QueryWrapper countQuery = new QueryWrapper().where(ITEM_TRACE_LOGS_DO.IS_VALUABLE.eq(isValuable));
         return itemTraceLogsMapper.selectCountByQuery(countQuery);
     }
 }

@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 
-import static org.gms.dao.entity.table.GameConfigDOTableDef.GAME_CONFIG_D_O;
+import static org.gms.dao.entity.table.GameConfigDOTableDef.GAME_CONFIG_DO;
 
 /**
  * 物品溯源配置服务 (V2.11 - 统一后端JSON字段命名).
@@ -147,7 +147,7 @@ public class TraceabilityConfigService {
         }
         String configValue = actualConfigContent.toString();
 
-        QueryWrapper query = QueryWrapper.create().where(GAME_CONFIG_D_O.CONFIG_CODE.eq(CONFIG_CODE));
+        QueryWrapper query = QueryWrapper.create().where(GAME_CONFIG_DO.CONFIG_CODE.eq(CONFIG_CODE));
         GameConfigDO gameConfigDO = gameConfigMapper.selectOneByQuery(query);
 
         if (gameConfigDO != null) {

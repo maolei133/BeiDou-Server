@@ -31,8 +31,8 @@ import org.gms.util.SpringContextUtil;
 
 import java.util.*;
 
-import static org.gms.dao.entity.table.BuddiesDOTableDef.BUDDIES_D_O;
-import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
+import static org.gms.dao.entity.table.BuddiesDOTableDef.BUDDIES_DO;
+import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_DO;
 
 public class BuddyList {
     public enum BuddyOperation {
@@ -145,10 +145,10 @@ public class BuddyList {
         if (buddiesMapper == null) return;
 
         QueryWrapper query = QueryWrapper.create()
-                .select(BUDDIES_D_O.BUDDYID, BUDDIES_D_O.PENDING, BUDDIES_D_O.GROUP, CHARACTERS_D_O.NAME.as("buddyname"))
-                .from(BUDDIES_D_O)
-                .join(CHARACTERS_D_O).on(CHARACTERS_D_O.ID.eq(BUDDIES_D_O.BUDDYID))
-                .where(BUDDIES_D_O.CHARACTERID.eq(characterId));
+                .select(BUDDIES_DO.BUDDYID, BUDDIES_DO.PENDING, BUDDIES_DO.GROUP, CHARACTERS_DO.NAME.as("buddyname"))
+                .from(BUDDIES_DO)
+                .join(CHARACTERS_DO).on(CHARACTERS_DO.ID.eq(BUDDIES_DO.BUDDYID))
+                .where(BUDDIES_DO.CHARACTERID.eq(characterId));
         
         List<Row> results = buddiesMapper.selectRowsByQuery(query);
         
@@ -168,7 +168,7 @@ public class BuddyList {
         }
 
         buddiesMapper.deleteByQuery(
-                QueryWrapper.create().where(BUDDIES_D_O.PENDING.eq(1)).and(BUDDIES_D_O.CHARACTERID.eq(characterId))
+                QueryWrapper.create().where(BUDDIES_DO.PENDING.eq(1)).and(BUDDIES_DO.CHARACTERID.eq(characterId))
         );
     }
 

@@ -38,7 +38,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
+import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_DO;
 
 /**
  * 角色排名更新定时任务
@@ -54,12 +54,12 @@ public class RankingLoginTask implements Runnable {
         if (isJobRank) {
             UpdateChain.of(CharactersDO.class)
                     .set(CharactersDO::getJobRankMove, 0)
-                    .where(CHARACTERS_D_O.ID.gt(0))
+                    .where(CHARACTERS_DO.ID.gt(0))
                     .update();
         } else {
             UpdateChain.of(CharactersDO.class)
                     .set(CharactersDO::getRankMove, 0)
-                    .where(CHARACTERS_D_O.ID.gt(0))
+                    .where(CHARACTERS_DO.ID.gt(0))
                     .update();
         }
     }

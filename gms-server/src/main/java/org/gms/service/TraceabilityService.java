@@ -38,7 +38,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_D_O;
+import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_DO;
 
 /**
  * 物品溯源服务 (V3.4 - 精细化日志字段).
@@ -87,14 +87,14 @@ public class TraceabilityService {
         }
 
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .where(ITEM_TRACE_LOGS_D_O.UID.eq(uidForQuery, uidForQuery != null))
-                .and(ITEM_TRACE_LOGS_D_O.ITEM_ID.eq(queryDTO.getItemId(), queryDTO.getItemId() != null))
-                .and(ITEM_TRACE_LOGS_D_O.CHARACTER_ID.eq(queryDTO.getCharacterId(), queryDTO.getCharacterId() != null))
-                .and(ITEM_TRACE_LOGS_D_O.ACTION_TYPE.like(queryDTO.getActionType(), RequireUtil.isNotEmpty(queryDTO.getActionType())))
-                .and(ITEM_TRACE_LOGS_D_O.ACTION_SOURCE.like(queryDTO.getActionSource(), RequireUtil.isNotEmpty(queryDTO.getActionSource())))
-                .and(ITEM_TRACE_LOGS_D_O.TIMESTAMP.ge(queryDTO.getStartTime(), queryDTO.getStartTime() != null))
-                .and(ITEM_TRACE_LOGS_D_O.TIMESTAMP.le(queryDTO.getEndTime(), queryDTO.getEndTime() != null))
-                .orderBy(ITEM_TRACE_LOGS_D_O.TIMESTAMP.desc());
+                .where(ITEM_TRACE_LOGS_DO.UID.eq(uidForQuery, uidForQuery != null))
+                .and(ITEM_TRACE_LOGS_DO.ITEM_ID.eq(queryDTO.getItemId(), queryDTO.getItemId() != null))
+                .and(ITEM_TRACE_LOGS_DO.CHARACTER_ID.eq(queryDTO.getCharacterId(), queryDTO.getCharacterId() != null))
+                .and(ITEM_TRACE_LOGS_DO.ACTION_TYPE.like(queryDTO.getActionType(), RequireUtil.isNotEmpty(queryDTO.getActionType())))
+                .and(ITEM_TRACE_LOGS_DO.ACTION_SOURCE.like(queryDTO.getActionSource(), RequireUtil.isNotEmpty(queryDTO.getActionSource())))
+                .and(ITEM_TRACE_LOGS_DO.TIMESTAMP.ge(queryDTO.getStartTime(), queryDTO.getStartTime() != null))
+                .and(ITEM_TRACE_LOGS_DO.TIMESTAMP.le(queryDTO.getEndTime(), queryDTO.getEndTime() != null))
+                .orderBy(ITEM_TRACE_LOGS_DO.TIMESTAMP.desc());
 
         Page<ItemTraceLogsDO> page = itemTraceLogsMapper.paginate(queryDTO.getPageNumber(), queryDTO.getPageSize(), queryWrapper);
 
@@ -465,14 +465,14 @@ public class TraceabilityService {
         long now = System.currentTimeMillis();
         int retentionDays = GameConfig.getServerInt("trace_log_retention_days", 30);
         long deleteDeadline = now - TimeUnit.DAYS.toMillis(retentionDays);
-        int deletedCount = itemTraceLogsMapper.deleteByQuery(QueryWrapper.create().where(ITEM_TRACE_LOGS_D_O.TIMESTAMP.lt(deleteDeadline)));
+        int deletedCount = itemTraceLogsMapper.deleteByQuery(QueryWrapper.create().where(ITEM_TRACE_LOGS_DO.TIMESTAMP.lt(deleteDeadline)));
         if (deletedCount > 0) log.info("已物理删除 {} 条超过 {} 天保留期的物品溯源日志。", deletedCount, retentionDays);
 
         int shortRetentionDays = GameConfig.getServerInt("trace_log_short_retention_days", 3);
         long shortDeleteDeadline = now - TimeUnit.DAYS.toMillis(shortRetentionDays);
         int shortDeletedCount = itemTraceLogsMapper.deleteByQuery(QueryWrapper.create()
-                .where(ITEM_TRACE_LOGS_D_O.TIMESTAMP.lt(shortDeleteDeadline))
-                .and(ITEM_TRACE_LOGS_D_O.ACTION_TYPE.in(TraceabilityService.ActionType.SYSTEM.name(), TraceabilityService.ActionType.SYSTEM.name())));
+                .where(ITEM_TRACE_LOGS_DO.TIMESTAMP.lt(shortDeleteDeadline))
+                .and(ITEM_TRACE_LOGS_DO.ACTION_TYPE.in(TraceabilityService.ActionType.SYSTEM.name(), TraceabilityService.ActionType.SYSTEM.name())));
         if (shortDeletedCount > 0) log.info("已物理删除 {} 条超过 {} 天保留期的短期物品溯源日志 (SPAWN/DESPAWN)。", shortDeletedCount, shortRetentionDays);
     }
 }

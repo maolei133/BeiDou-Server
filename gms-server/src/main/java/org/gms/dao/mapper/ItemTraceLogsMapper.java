@@ -8,7 +8,7 @@ import org.gms.dao.entity.ItemTraceLogsDO;
 import java.util.List;
 import java.util.Map;
 
-import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_D_O;
+import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_DO;
 
 /**
  * 物品溯源日志表 Mapper
@@ -22,7 +22,7 @@ public interface ItemTraceLogsMapper extends BaseMapper<ItemTraceLogsDO> {
      */
     default long countToday() {
         long todayStart = java.time.LocalDate.now().atStartOfDay().toInstant(java.time.ZoneOffset.UTC).toEpochMilli();
-        return selectCountByQuery(QueryWrapper.create().where(ITEM_TRACE_LOGS_D_O.TIMESTAMP.ge(todayStart)));
+        return selectCountByQuery(QueryWrapper.create().where(ITEM_TRACE_LOGS_DO.TIMESTAMP.ge(todayStart)));
     }
 
     /**

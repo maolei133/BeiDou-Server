@@ -7,16 +7,16 @@ import org.gms.manager.ServerManager;
 
 import java.sql.Date;
 
-import static org.gms.dao.entity.table.ExtendValueDOTableDef.EXTEND_VALUE_D_O;
+import static org.gms.dao.entity.table.ExtendValueDOTableDef.EXTEND_VALUE_DO;
 
 public class ExtendUtil {
     private static final ExtendValueMapper extendValueMapper = ServerManager.getApplicationContext().getBean(ExtendValueMapper.class);
 
     public static ExtendValueDO getExtendValue(String extendId, String extendType, String extendName) {
         return extendValueMapper.selectOneByQuery(QueryWrapper.create()
-                .where(EXTEND_VALUE_D_O.EXTEND_ID.eq(extendId))
-                .and(EXTEND_VALUE_D_O.EXTEND_TYPE.eq(extendType))
-                .and(EXTEND_VALUE_D_O.EXTEND_NAME.eq(extendName)));
+                .where(EXTEND_VALUE_DO.EXTEND_ID.eq(extendId))
+                .and(EXTEND_VALUE_DO.EXTEND_TYPE.eq(extendType))
+                .and(EXTEND_VALUE_DO.EXTEND_NAME.eq(extendName)));
 
     }
 

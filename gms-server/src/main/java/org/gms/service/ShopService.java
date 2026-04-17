@@ -22,8 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import static org.gms.dao.entity.table.ShopitemsDOTableDef.SHOPITEMS_D_O;
-import static org.gms.dao.entity.table.ShopsDOTableDef.SHOPS_D_O;
+import static org.gms.dao.entity.table.ShopitemsDOTableDef.SHOPITEMS_DO;
+import static org.gms.dao.entity.table.ShopsDOTableDef.SHOPS_DO;
 
 @Service
 @AllArgsConstructor
@@ -32,16 +32,16 @@ public class ShopService {
     private final ShopitemsMapper shopitemsMapper;
 
     public Page<ShopSearchRtnDTO> getShopList(ShopSearchReqDTO data) {
-        QueryWrapper queryWrapper = QueryWrapper.create().select().from(SHOPS_D_O)
-                .leftJoin(SHOPITEMS_D_O).on(SHOPS_D_O.SHOPID.eq(SHOPITEMS_D_O.SHOPID));
+        QueryWrapper queryWrapper = QueryWrapper.create().select().from(SHOPS_DO)
+                .leftJoin(SHOPITEMS_DO).on(SHOPS_DO.SHOPID.eq(SHOPITEMS_DO.SHOPID));
         if (data.getNpcId() != null) {
-            queryWrapper.and(SHOPS_D_O.NPCID.eq(data.getNpcId()));
+            queryWrapper.and(SHOPS_DO.NPCID.eq(data.getNpcId()));
         }
         if (data.getShopId() != null) {
-            queryWrapper.and(SHOPS_D_O.SHOPID.eq(data.getShopId()));
+            queryWrapper.and(SHOPS_DO.SHOPID.eq(data.getShopId()));
         }
         if (data.getItemId() != null) {
-            queryWrapper.and(SHOPITEMS_D_O.ITEMID.eq(data.getItemId()));
+            queryWrapper.and(SHOPITEMS_DO.ITEMID.eq(data.getItemId()));
         }
         List<Row> queryAsList = shopsMapper.selectListByQueryAs(queryWrapper, Row.class);
         List<ShopSearchRtnDTO> matchedShopsDOList = new ArrayList<>();

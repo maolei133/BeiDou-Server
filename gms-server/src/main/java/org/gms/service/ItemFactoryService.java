@@ -24,10 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
-import static org.gms.dao.entity.table.InventoryequipmentDOTableDef.INVENTORYEQUIPMENT_D_O;
-import static org.gms.dao.entity.table.InventoryitemsDOTableDef.INVENTORYITEMS_D_O;
-import static org.gms.dao.entity.table.InventorymerchantDOTableDef.INVENTORYMERCHANT_D_O;
+import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_DO;
+import static org.gms.dao.entity.table.InventoryequipmentDOTableDef.INVENTORYEQUIPMENT_DO;
+import static org.gms.dao.entity.table.InventoryitemsDOTableDef.INVENTORYITEMS_DO;
+import static org.gms.dao.entity.table.InventorymerchantDOTableDef.INVENTORYMERCHANT_DO;
 
 @Service
 @AllArgsConstructor
@@ -40,19 +40,19 @@ public class ItemFactoryService {
 
     public List<Pair<Item, InventoryType>> loadItems(int typeValue, boolean isAccount, int id, boolean login) {
         QueryWrapper query = QueryWrapper.create()
-                .select(INVENTORYITEMS_D_O.ALL_COLUMNS, INVENTORYEQUIPMENT_D_O.ALL_COLUMNS)
-                .from(INVENTORYITEMS_D_O)
-                .leftJoin(INVENTORYEQUIPMENT_D_O).on(INVENTORYITEMS_D_O.INVENTORYITEMID.eq(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID))
-                .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue));
+                .select(INVENTORYITEMS_DO.ALL_COLUMNS, INVENTORYEQUIPMENT_DO.ALL_COLUMNS)
+                .from(INVENTORYITEMS_DO)
+                .leftJoin(INVENTORYEQUIPMENT_DO).on(INVENTORYITEMS_DO.INVENTORYITEMID.eq(INVENTORYEQUIPMENT_DO.INVENTORYITEMID))
+                .where(INVENTORYITEMS_DO.TYPE.eq(typeValue));
 
         if (isAccount) {
-            query.and(INVENTORYITEMS_D_O.ACCOUNTID.eq(id));
+            query.and(INVENTORYITEMS_DO.ACCOUNTID.eq(id));
         } else {
-            query.and(INVENTORYITEMS_D_O.CHARACTERID.eq(id));
+            query.and(INVENTORYITEMS_DO.CHARACTERID.eq(id));
         }
 
         if (login) {
-            query.and(INVENTORYITEMS_D_O.INVENTORYTYPE.eq(InventoryType.EQUIPPED.getType()));
+            query.and(INVENTORYITEMS_DO.INVENTORYTYPE.eq(InventoryType.EQUIPPED.getType()));
         }
 
         List<Row> rows = inventoryitemsMapper.selectRowsByQuery(query);
@@ -94,15 +94,15 @@ public class ItemFactoryService {
 
     public List<Pair<Item, InventoryType>> loadItemsMerchant(int typeValue, int charId, boolean login) {
         QueryWrapper query = QueryWrapper.create()
-                .select(INVENTORYITEMS_D_O.ALL_COLUMNS, INVENTORYEQUIPMENT_D_O.ALL_COLUMNS, INVENTORYMERCHANT_D_O.BUNDLES)
-                .from(INVENTORYITEMS_D_O)
-                .leftJoin(INVENTORYEQUIPMENT_D_O).on(INVENTORYITEMS_D_O.INVENTORYITEMID.eq(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID))
-                .leftJoin(INVENTORYMERCHANT_D_O).on(INVENTORYITEMS_D_O.INVENTORYITEMID.eq(INVENTORYMERCHANT_D_O.INVENTORYITEMID))
-                .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue))
-                .and(INVENTORYITEMS_D_O.CHARACTERID.eq(charId));
+                .select(INVENTORYITEMS_DO.ALL_COLUMNS, INVENTORYEQUIPMENT_DO.ALL_COLUMNS, INVENTORYMERCHANT_DO.BUNDLES)
+                .from(INVENTORYITEMS_DO)
+                .leftJoin(INVENTORYEQUIPMENT_DO).on(INVENTORYITEMS_DO.INVENTORYITEMID.eq(INVENTORYEQUIPMENT_DO.INVENTORYITEMID))
+                .leftJoin(INVENTORYMERCHANT_DO).on(INVENTORYITEMS_DO.INVENTORYITEMID.eq(INVENTORYMERCHANT_DO.INVENTORYITEMID))
+                .where(INVENTORYITEMS_DO.TYPE.eq(typeValue))
+                .and(INVENTORYITEMS_DO.CHARACTERID.eq(charId));
 
         if (login) {
-            query.and(INVENTORYITEMS_D_O.INVENTORYTYPE.eq(InventoryType.EQUIPPED.getType()));
+            query.and(INVENTORYITEMS_DO.INVENTORYTYPE.eq(InventoryType.EQUIPPED.getType()));
         }
 
         List<Row> rows = inventoryitemsMapper.selectRowsByQuery(query);
@@ -158,17 +158,17 @@ public class ItemFactoryService {
         //log.info("开始保存物品. 归属: {}, 存储类型: {}, 目标背包: {}", ownerIdentifier, typeValue, targetTypesStr);
 
         QueryWrapper selectQuery = QueryWrapper.create()
-                .select(INVENTORYITEMS_D_O.INVENTORYITEMID, INVENTORYITEMS_D_O.UID)
-                .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue));
+                .select(INVENTORYITEMS_DO.INVENTORYITEMID, INVENTORYITEMS_DO.UID)
+                .where(INVENTORYITEMS_DO.TYPE.eq(typeValue));
         if (isAccount) {
-            selectQuery.and(INVENTORYITEMS_D_O.ACCOUNTID.eq(id));
+            selectQuery.and(INVENTORYITEMS_DO.ACCOUNTID.eq(id));
         } else {
-            selectQuery.and(INVENTORYITEMS_D_O.CHARACTERID.eq(id));
+            selectQuery.and(INVENTORYITEMS_DO.CHARACTERID.eq(id));
         }
 
         if (targetTypes != null && !targetTypes.isEmpty()) {
             List<Integer> typeCodes = targetTypes.stream().map(InventoryType::getType).map(Byte::intValue).collect(Collectors.toList());
-            selectQuery.and(INVENTORYITEMS_D_O.INVENTORYTYPE.in(typeCodes));
+            selectQuery.and(INVENTORYITEMS_DO.INVENTORYTYPE.in(typeCodes));
         }
 
         List<InventoryitemsDO> existingItems = inventoryitemsMapper.selectListByQuery(selectQuery);
@@ -252,7 +252,7 @@ public class ItemFactoryService {
                         equipDO.setRingid(equip.getRingId());
 
                         inventoryequipmentMapper.updateByQuery(equipDO,
-                                QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.eq(targetDbId)));
+                                QueryWrapper.create().where(INVENTORYEQUIPMENT_DO.INVENTORYITEMID.eq(targetDbId)));
                     }
                     item.setDirty(false); // 更新成功后，重置脏标记
                 } else {
@@ -261,8 +261,8 @@ public class ItemFactoryService {
                     // [核心修复] 只对装备（不可堆叠物品）进行全局UID检查，防止消耗品堆叠拆分后出现数据覆盖
                     if (item instanceof Equip && item.getUid() > 0) {
                         existingGlobalId = inventoryitemsMapper.selectOneByQueryAs(
-                                QueryWrapper.create().select(INVENTORYITEMS_D_O.INVENTORYITEMID)
-                                        .where(INVENTORYITEMS_D_O.UID.eq(item.getUid())),
+                                QueryWrapper.create().select(INVENTORYITEMS_DO.INVENTORYITEMID)
+                                        .where(INVENTORYITEMS_DO.UID.eq(item.getUid())),
                                 Long.class
                         );
                     }
@@ -271,23 +271,23 @@ public class ItemFactoryService {
                         //log.info("物品跨栏移动:ID={} UID={}, ItemID={}, 从其他Type移动到Type={}",item.getInventoryItemId(), item.getUid(), item.getItemId(), typeValue);
                         
                         QueryWrapper updateWrapper = QueryWrapper.create()
-                                .where(INVENTORYITEMS_D_O.INVENTORYITEMID.eq(existingGlobalId));
+                                .where(INVENTORYITEMS_DO.INVENTORYITEMID.eq(existingGlobalId));
                         
                         Row updates = new Row();
-                        updates.set(INVENTORYITEMS_D_O.TYPE.getName(), typeValue);
-                        updates.set(INVENTORYITEMS_D_O.INVENTORYTYPE.getName(), (int) mit.getType());
-                        updates.set(INVENTORYITEMS_D_O.POSITION.getName(), (int) item.getPosition());
-                        updates.set(INVENTORYITEMS_D_O.QUANTITY.getName(), (int) item.getQuantity());
+                        updates.set(INVENTORYITEMS_DO.TYPE.getName(), typeValue);
+                        updates.set(INVENTORYITEMS_DO.INVENTORYTYPE.getName(), (int) mit.getType());
+                        updates.set(INVENTORYITEMS_DO.POSITION.getName(), (int) item.getPosition());
+                        updates.set(INVENTORYITEMS_DO.QUANTITY.getName(), (int) item.getQuantity());
                         
                         if (isAccount) {
-                            updates.set(INVENTORYITEMS_D_O.ACCOUNTID.getName(), id);
-                            updates.set(INVENTORYITEMS_D_O.CHARACTERID.getName(), null);
+                            updates.set(INVENTORYITEMS_DO.ACCOUNTID.getName(), id);
+                            updates.set(INVENTORYITEMS_DO.CHARACTERID.getName(), null);
                         } else {
-                            updates.set(INVENTORYITEMS_D_O.ACCOUNTID.getName(), null);
-                            updates.set(INVENTORYITEMS_D_O.CHARACTERID.getName(), id);
+                            updates.set(INVENTORYITEMS_DO.ACCOUNTID.getName(), null);
+                            updates.set(INVENTORYITEMS_DO.CHARACTERID.getName(), id);
                         }
                         
-                        Db.updateByQuery(INVENTORYITEMS_D_O.getName(), updates, updateWrapper);
+                        Db.updateByQuery(INVENTORYITEMS_DO.getName(), updates, updateWrapper);
                         item.setInventoryItemId(existingGlobalId);
                         item.setDirty(false);
                     } else {
@@ -361,14 +361,14 @@ public class ItemFactoryService {
             //log.info("准备删除 {} 个物品. DB IDs: {}", idsToDelete.size(), idsToDelete);
             
             inventoryequipmentMapper.deleteByQuery(QueryWrapper.create()
-                    .where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(idsToDelete)));
+                    .where(INVENTORYEQUIPMENT_DO.INVENTORYITEMID.in(idsToDelete)));
             
             inventorymerchantMapper.deleteByQuery(QueryWrapper.create()
-                    .where(INVENTORYMERCHANT_D_O.INVENTORYITEMID.in(idsToDelete)));
+                    .where(INVENTORYMERCHANT_DO.INVENTORYITEMID.in(idsToDelete)));
             
             int deletedCount = inventoryitemsMapper.deleteByQuery(QueryWrapper.create()
-                    .where(INVENTORYITEMS_D_O.INVENTORYITEMID.in(idsToDelete))
-                    .and(INVENTORYITEMS_D_O.TYPE.eq(typeValue)));
+                    .where(INVENTORYITEMS_DO.INVENTORYITEMID.in(idsToDelete))
+                    .and(INVENTORYITEMS_DO.TYPE.eq(typeValue)));
             //log.info("从 inventoryitems 表中删除了 {} 条记录 (限定 Type={})", deletedCount, typeValue);
         }
         //log.info("物品保存完成. 归属: {}, 存储类型: {}", ownerIdentifier, typeValue);
@@ -377,9 +377,9 @@ public class ItemFactoryService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveItemsMerchant(int typeValue, List<Pair<Item, InventoryType>> items, List<Short> bundlesList, int id) {
         QueryWrapper selectMerchantItemsQuery = QueryWrapper.create()
-                .select(INVENTORYITEMS_D_O.INVENTORYITEMID, INVENTORYITEMS_D_O.UID)
-                .where(INVENTORYITEMS_D_O.TYPE.eq(typeValue))
-                .and(INVENTORYITEMS_D_O.CHARACTERID.eq(id));
+                .select(INVENTORYITEMS_DO.INVENTORYITEMID, INVENTORYITEMS_DO.UID)
+                .where(INVENTORYITEMS_DO.TYPE.eq(typeValue))
+                .and(INVENTORYITEMS_DO.CHARACTERID.eq(id));
 
         List<InventoryitemsDO> existingItems = inventoryitemsMapper.selectListByQuery(selectMerchantItemsQuery);
         Map<Long, Long> dbUidToIdMap = new HashMap<>();
@@ -433,7 +433,7 @@ public class ItemFactoryService {
                     InventorymerchantDO merchantDO = new InventorymerchantDO();
                     merchantDO.setBundles(bundles.intValue());
                     inventorymerchantMapper.updateByQuery(merchantDO,
-                            QueryWrapper.create().where(INVENTORYMERCHANT_D_O.INVENTORYITEMID.eq(targetDbId)));
+                            QueryWrapper.create().where(INVENTORYMERCHANT_DO.INVENTORYITEMID.eq(targetDbId)));
 
                     if (mit.equals(InventoryType.EQUIP) || mit.equals(InventoryType.EQUIPPED)) {
                         Equip equip = (Equip) item;
@@ -462,14 +462,14 @@ public class ItemFactoryService {
                         equipDO.setRingid(equip.getRingId());
 
                         inventoryequipmentMapper.updateByQuery(equipDO,
-                                QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.eq(targetDbId)));
+                                QueryWrapper.create().where(INVENTORYEQUIPMENT_DO.INVENTORYITEMID.eq(targetDbId)));
                     }
                     item.setDirty(false);
                 } else {
                     if (item.getUid() > 0) {
                         QueryWrapper checkUidQuery = QueryWrapper.create()
-                                .select(INVENTORYITEMS_D_O.INVENTORYITEMID)
-                                .where(INVENTORYITEMS_D_O.UID.eq(item.getUid()));
+                                .select(INVENTORYITEMS_DO.INVENTORYITEMID)
+                                .where(INVENTORYITEMS_DO.UID.eq(item.getUid()));
 
                         Long existingId = inventoryitemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
                         if (existingId != null) {
@@ -546,27 +546,27 @@ public class ItemFactoryService {
         }
 
         if (!idsToDelete.isEmpty()) {
-            inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID.in(idsToDelete)));
-            inventorymerchantMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYMERCHANT_D_O.INVENTORYITEMID.in(idsToDelete)));
-            inventoryitemsMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYITEMS_D_O.INVENTORYITEMID.in(idsToDelete)));
+            inventoryequipmentMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYEQUIPMENT_DO.INVENTORYITEMID.in(idsToDelete)));
+            inventorymerchantMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYMERCHANT_DO.INVENTORYITEMID.in(idsToDelete)));
+            inventoryitemsMapper.deleteByQuery(QueryWrapper.create().where(INVENTORYITEMS_DO.INVENTORYITEMID.in(idsToDelete)));
         }
     }
 
     public List<Pair<Item, Integer>> loadEquippedItems(int id, boolean isAccount, boolean login) {
         QueryWrapper query = QueryWrapper.create()
-                .select(INVENTORYITEMS_D_O.ALL_COLUMNS, INVENTORYEQUIPMENT_D_O.ALL_COLUMNS, CHARACTERS_D_O.ID.as("characterid"))
-                .from(CHARACTERS_D_O)
-                .rightJoin(INVENTORYITEMS_D_O).on(CHARACTERS_D_O.ID.eq(INVENTORYITEMS_D_O.CHARACTERID))
-                .leftJoin(INVENTORYEQUIPMENT_D_O).on(INVENTORYITEMS_D_O.INVENTORYITEMID.eq(INVENTORYEQUIPMENT_D_O.INVENTORYITEMID));
+                .select(INVENTORYITEMS_DO.ALL_COLUMNS, INVENTORYEQUIPMENT_DO.ALL_COLUMNS, CHARACTERS_DO.ID.as("characterid"))
+                .from(CHARACTERS_DO)
+                .rightJoin(INVENTORYITEMS_DO).on(CHARACTERS_DO.ID.eq(INVENTORYITEMS_DO.CHARACTERID))
+                .leftJoin(INVENTORYEQUIPMENT_DO).on(INVENTORYITEMS_DO.INVENTORYITEMID.eq(INVENTORYEQUIPMENT_DO.INVENTORYITEMID));
 
         if (isAccount) {
-            query.where(CHARACTERS_D_O.ACCOUNTID.eq(id));
+            query.where(CHARACTERS_DO.ACCOUNTID.eq(id));
         } else {
-            query.where(CHARACTERS_D_O.ID.eq(id));
+            query.where(CHARACTERS_DO.ID.eq(id));
         }
 
         if (login) {
-            query.and(INVENTORYITEMS_D_O.INVENTORYTYPE.eq(InventoryType.EQUIPPED.getType()));
+            query.and(INVENTORYITEMS_DO.INVENTORYTYPE.eq(InventoryType.EQUIPPED.getType()));
         }
 
         List<Row> rows = inventoryitemsMapper.selectRowsByQuery(query);
