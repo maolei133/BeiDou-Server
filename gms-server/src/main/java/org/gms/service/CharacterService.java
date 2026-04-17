@@ -964,7 +964,7 @@ public class CharacterService {
      * @param player 角色对象
      * @param notAutosave 是否非自动保存（用于日志区分）
      */
-    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_UNCOMMITTED)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public void saveCharToDB(Character player, boolean notAutosave) {
         if (!player.isLoggedIn()) {
             return;
@@ -991,6 +991,8 @@ public class CharacterService {
         if (player.getCashShop() != null) {
             player.getCashShop().save();
         }
+        // 保存愿望单
+        saveWishlist(player);
         // 保存技能
         saveSkills(player.getId(), player.getSkills());
         // 保存技能宏
@@ -1023,6 +1025,50 @@ public class CharacterService {
 
         // 保存任务
         questService.saveQuestStatus(player.getId(), new ArrayList<>(player.getQuests().values()));
+    }
+
+    /**
+     * 增量保存角色的愿望单
+     * @param player 角色对象
+     */
+    @Transactional
+    public void saveWishlist(Character player) {
+        if (player == null || player.getCashShop() == null) {
+            return;
+        }
+        int characterId = player.getId();
+        List<Integer> currentWishlist = player.getCashShop().getWishList();
+
+        // 1. 从数据库加载旧的 wishlist
+        List<WishlistsDO> dbWishlist = wishlistsMapper.selectListByQuery(
+            QueryWrapper.create().where(WISHLISTS_D_O.CHARID.eq(characterId))
+        );
+        Map<Integer, WishlistsDO> dbMap = dbWishlist.stream()
+            .collect(Collectors.toMap(WishlistsDO::getSn, Function.identity()));
+
+        Set<Integer> currentSnSet = new HashSet<>(currentWishlist);
+
+        // 2. 找出需要删除的
+        List<Integer> idsToDelete = dbWishlist.stream()
+            .filter(dbItem -> !currentSnSet.contains(dbItem.getSn()))
+            .map(WishlistsDO::getId)
+            .collect(Collectors.toList());
+
+        if (!idsToDelete.isEmpty()) {
+            wishlistsMapper.deleteBatchByIds(idsToDelete);
+        }
+
+        // 3. 找出需要新增的
+        List<WishlistsDO> toInsert = new ArrayList<>();
+        for (Integer sn : currentWishlist) {
+            if (!dbMap.containsKey(sn)) {
+                toInsert.add(WishlistsDO.builder().charid(characterId).sn(sn).build());
+            }
+        }
+
+        if (!toInsert.isEmpty()) {
+            wishlistsMapper.insertBatch(toInsert);
+        }
     }
 
     /**

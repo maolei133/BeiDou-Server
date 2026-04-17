@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.mybatisflex.core.query.QueryMethods.count;
 import static com.mybatisflex.core.query.QueryMethods.floor;
@@ -36,19 +38,56 @@ public class MonsterBookService {
 
     @Transactional
     public void saveCards(int chrId, Map<Integer, Integer> cards) {
-        // 先删除该角色的所有卡片，然后批量插入
-        monsterbookMapper.deleteByQuery(QueryWrapper.create().where(MONSTERBOOK_D_O.CHARID.eq(chrId)));
+        // 1. 从数据库加载旧的卡片
+        List<MonsterbookDO> dbCards = monsterbookMapper.selectListByQuery(
+            QueryWrapper.create().where(MONSTERBOOK_D_O.CHARID.eq(chrId))
+        );
+        Map<Integer, MonsterbookDO> dbMap = dbCards.stream()
+            .collect(Collectors.toMap(MonsterbookDO::getCardid, Function.identity()));
 
-        List<MonsterbookDO> list = new ArrayList<>();
+        List<MonsterbookDO> toInsert = new ArrayList<>();
+        List<MonsterbookDO> toUpdate = new ArrayList<>();
+
+        // 2. 比较并找出需要新增和更新的
         for (Map.Entry<Integer, Integer> entry : cards.entrySet()) {
-            MonsterbookDO entity = new MonsterbookDO();
-            entity.setCharid(chrId);
-            entity.setCardid(entry.getKey());
-            entity.setLevel(entry.getValue());
-            list.add(entity);
+            Integer cardId = entry.getKey();
+            Integer level = entry.getValue();
+
+            MonsterbookDO dbCard = dbMap.get(cardId);
+            if (dbCard != null) {
+                // 存在，检查是否需要更新
+                if (!dbCard.getLevel().equals(level)) {
+                    dbCard.setLevel(level);
+                    toUpdate.add(dbCard);
+                }
+            } else {
+                // 不存在，需要新增
+                toInsert.add(MonsterbookDO.builder().charid(chrId).cardid(cardId).level(level).build());
+            }
         }
-        if (!list.isEmpty()) {
-            monsterbookMapper.insertBatch(list);
+
+        // 3. 找出需要删除的
+        List<MonsterbookDO> toDelete = dbCards.stream()
+            .filter(dbCard -> !cards.containsKey(dbCard.getCardid()))
+            .collect(Collectors.toList());
+
+        // 4. 执行数据库操作
+        if (!toDelete.isEmpty()) {
+            // 因为是复合主键，循环删除是当前最稳妥的方式
+            for (MonsterbookDO item : toDelete) {
+                monsterbookMapper.delete(item);
+            }
+        }
+
+        if (!toUpdate.isEmpty()) {
+            // 改回循环单次更新，这是最直接且不会出错的方式
+            for (MonsterbookDO item : toUpdate) {
+                monsterbookMapper.update(item);
+            }
+        }
+
+        if (!toInsert.isEmpty()) {
+            monsterbookMapper.insertBatch(toInsert);
         }
     }
 

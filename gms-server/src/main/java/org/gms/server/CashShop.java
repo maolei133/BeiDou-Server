@@ -83,6 +83,7 @@ public class CashShop {
     private boolean opened;
     private ItemFactory factory;
     private final List<Item> inventory = new ArrayList<>();
+    @Getter
     private final List<Integer> wishList = new ArrayList<>();
     private int notes = 0;
     private final Lock lock = new ReentrantLock();
@@ -440,10 +441,6 @@ public class CashShop {
         }
     }
 
-    public List<Integer> getWishList() {
-        return wishList;
-    }
-
     public void clearWishList() {
         wishList.clear();
     }
@@ -525,15 +522,6 @@ public class CashShop {
         }
 
         itemFactoryService.saveItems(factory.getValue(), factory.isAccount(), itemsWithType, accountId);
-
-        characterService.deleteWishlistsByCharacter(characterId);
-        if (!wishList.isEmpty()) {
-            List<WishlistsDO> wishlistsDOList = new ArrayList<>();
-            for (int sn : wishList) {
-                wishlistsDOList.add(WishlistsDO.builder().charid(characterId).sn(sn).build());
-            }
-            characterService.batchInsertWishlists(wishlistsDOList);
-        }
     }
 
     public Optional<CashShopSurpriseResult> openCashShopSurprise(long cashId) {
