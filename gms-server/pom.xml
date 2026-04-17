@@ -47,7 +47,6 @@
         <mysql-connector-j.version>8.4.0</mysql-connector-j.version> <!-- MySQL JDBC driver -->
         <junit.version>5.10.2</junit.version> <!-- Unit test -->
         <mockito.version>5.11.0</mockito.version> <!-- Unit test -->
-        <flyway-mysql.version>9.15.2</flyway-mysql.version>
         <lombok.version>1.18.30</lombok.version>
         <fastjson2.version>2.0.47</fastjson2.version>
         <mybatis-flex.version>1.11.6</mybatis-flex.version>
@@ -56,10 +55,11 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- 统一管理 Spring Boot 依赖版本，更新到 3.3.1 以修复潜在的安全问题 -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
-                <version>3.2.3</version>
+                <version>3.3.1</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -90,15 +90,31 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
+
+        <!-- jjwt 用于处理 token, 从 0.9.1 更新到 0.12.5 以修复严重的安全漏洞 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt</artifactId>
-            <version>0.9.1</version>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.5</version>
         </dependency>
         <dependency>
-            <groupId>javax.xml.bind</groupId>
-            <artifactId>jaxb-api</artifactId>
-            <version>2.3.1</version>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.5</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.5</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- JAXB API, 使用 jakarta 命名空间以兼容 Java 11+ -->
+        <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+            <version>4.0.0</version>
         </dependency>
 
         <!-- Tool -->
@@ -110,7 +126,7 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-mysql</artifactId>
-            <version>${flyway-mysql.version}</version>
+            <!-- 注解：移除版本号，让 Spring Boot BOM 来管理版本，以确保与flyway-core兼容 -->
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -157,6 +173,7 @@
             <groupId>com.alibaba</groupId>
             <artifactId>druid-spring-boot-starter</artifactId>
             <version>${druid.version}</version>
+            <!-- 注解：恢复版本号。Druid不是由Spring Boot BOM管理的，需要明确指定版本。 -->
         </dependency>
         <dependency>
             <groupId>com.mybatis-flex</groupId>
