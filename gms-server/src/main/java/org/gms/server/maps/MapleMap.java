@@ -176,7 +176,6 @@ public class MapleMap {
     private boolean allowSummons = true; // All maps should have this true at the beginning
     private Character mapOwner = null;
     private long mapOwnerLastActivityTime = Long.MAX_VALUE;
-    private long lastChrLeftTime = 0;
 
     // events
     private boolean eventstarted = false, isMuted = false;
@@ -574,9 +573,9 @@ public class MapleMap {
     }
 
     public Point calcDropPos(Point initial, Point fallback) {
-        if (xLimits.left != null && initial.x < xLimits.left) {
+        if (initial.x < xLimits.left) {
             initial.x = xLimits.left;
-        } else if (xLimits.right != null && initial.x > xLimits.right) {
+        } else if (initial.x > xLimits.right) {
             initial.x = xLimits.right;
         }
 
@@ -683,7 +682,7 @@ public class MapleMap {
         boolean aoeAdjustmentEnabled = GameConfig.getServerBoolean("aoe_drop_rate_adjustment_enabled"); // 获取是否启用群攻掉率调整配置
         double penaltyFactor = aoeAdjustmentEnabled ? GameConfig.getServerDouble("aoe_drop_rate_penalty_factor") : 0.0d; // 获取群攻掉率惩罚系数，若未启用则为0
         boolean shouldApplyAoeAdjustment = aoeAdjustmentEnabled && targetCount > 1; // 判断是否需要应用群攻掉率调整（启用配置且目标数量大于1）
-        
+
         for (final MonsterDropEntry de : shuffledDropEntry) {
             float cardRate = chr.getCardRate(de.itemId);
             int dropChance = (int) Math.min((float) de.chance * chRate * cardRate, Integer.MAX_VALUE);
@@ -843,25 +842,19 @@ public class MapleMap {
     }
 
     private void stopItemMonitor() {
-        if (itemMonitor != null) {
-            itemMonitor.cancel(false);
-            itemMonitor = null;
-        }
+        itemMonitor.cancel(false);
+        itemMonitor = null;
 
-        if (expireItemsTask != null) {
-            expireItemsTask.cancel(false);
-            expireItemsTask = null;
-        }
+        expireItemsTask.cancel(false);
+        expireItemsTask = null;
 
-        if (GameConfig.getServerBoolean("use_spawn_loot_on_animation") && mobSpawnLootTask != null) {
+        if (GameConfig.getServerBoolean("use_spawn_loot_on_animation")) {
             mobSpawnLootTask.cancel(false);
             mobSpawnLootTask = null;
         }
 
-        if (characterStatUpdateTask != null) {
-            characterStatUpdateTask.cancel(false);
-            characterStatUpdateTask = null;
-        }
+        characterStatUpdateTask.cancel(false);
+        characterStatUpdateTask = null;
     }
 
     private void cleanItemMonitor() {
@@ -1011,7 +1004,7 @@ public class MapleMap {
 
         for (MapItem mmi : toDisappear) {
             makeDisappearItemFromMap(mmi);
-            
+
             // 溯源日志：过期清除
             if (mmi.getItem() != null) {
                 traceabilityService.log(mmi.getItem(), mmi.getOwnerAccid(), mmi.getOwnerId(), getId(), TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_EXPIRED_DESPAWN, mmi.getItem().getQuantity(), null, null);
@@ -1377,27 +1370,15 @@ public class MapleMap {
         return count;
     }
 
-    /**
-     * 获取地图中的Boss数量
-     * @return Boss数量
-     */
     public int countBosses() {
         int count = 0;
-        // 直接在主对象集合上加读锁并遍历，避免创建任何新集合
-        objectRLock.lock();
-        try {
-            for (MapObject obj : mapobjects.values()) {
-                // 检查对象类型是否为怪物
-                if (obj.getType() == MapObjectType.MONSTER) {
-                    // 检查怪物是否为Boss
-                    if (((Monster) obj).isBoss()) {
-                        count++;
-                    }
-                }
+
+        for (Monster mob : getAllMonsters()) {
+            if (mob.isBoss()) {
+                count++;
             }
-        } finally {
-            objectRLock.unlock();
         }
+
         return count;
     }
 
@@ -1429,11 +1410,11 @@ public class MapleMap {
         }
         return false;
     }
-    
+
     public boolean damageMonsterBySummon(Character chr, Monster monster, int damage) {
         if (monster.isAlive()) {
             monster.applySummonDamage(chr, damage, false);
-            
+
             selfDestruction selfDestr = monster.getStats().selfDestruction();
             if (selfDestr != null && selfDestr.getHp() > -1) {// should work ;p
                 if (monster.getHp() <= selfDestr.getHp()) {
@@ -1441,7 +1422,7 @@ public class MapleMap {
                     return true;
                 }
             }
-            
+
             if (!monster.isAlive()) {
                 killMonster(monster, chr, true);
                 return true;
@@ -2559,8 +2540,6 @@ public class MapleMap {
     }
 
     public void addPlayer(final Character chr) {
-        lastChrLeftTime = 0;
-        getChannelServer().getMapFactory().removeFromInactiveMaps(this); // 从待清理队列中移除该地图
         int chrSize;
         Party party = chr.getParty();
         chrWLock.lock();
@@ -2868,10 +2847,6 @@ public class MapleMap {
             }
 
             characters.remove(chr);
-            if (cserv.getMapFactory().canAddDisposeMap(this)) {
-                lastChrLeftTime = System.currentTimeMillis(); // 记录玩家最后一次离开时间
-                cserv.getMapFactory().addToInactiveMaps(this); // 将地图添加到空闲待清理地图列表中
-            }
         } finally {
             chrWLock.unlock();
         }
@@ -3364,11 +3339,6 @@ public class MapleMap {
                     monsterSpawn.remove(sp);
                 }
             }
-            synchronized (monsterSpawnBoss) {
-                for (SpawnPoint sp : toRemove) {
-                    monsterSpawnBoss.remove(sp);
-                }
-            }
         }
     }
 
@@ -3405,7 +3375,7 @@ public class MapleMap {
         for (SpawnPoint sp : getAllMonsterSpawn()) {
             chr.dropMessage(6,
                     "┃ ID:" + sp.getMonsterId() + " | 可刷怪:" + (sp.getDenySpawn() ? "×" : "√") + " | 现存:" + sp.getSpawned() + "\n" +
-                    "┃ 坐标:(" +(int) sp.getPosition().getX() + " , " + (int) sp.getPosition().getY() + ") | 刷新:" + sp.getMobTime() + "ms | 阵营:" + sp.getTeam()
+                            "┃ 坐标:(" +(int) sp.getPosition().getX() + " , " + (int) sp.getPosition().getY() + ") | 刷新:" + sp.getMobTime() + "ms | 阵营:" + sp.getTeam()
             );
         }
         chr.dropMessage(6, "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -3642,7 +3612,7 @@ public class MapleMap {
                 }
 
                 MapleMap.this.pickItemDrop(PacketCreator.removeItemFromMap(mapitem.getObjectId(), 0, 0), mapitem);
-                
+
                 // 物品找回系统拦截点：物品从地图上消失时记录找回
                 if (mapitem.getItem() != null && InventoryManipulator.isValuableForRecovery(mapitem.getItem())) {
                     Character owner = null;
@@ -4724,10 +4694,8 @@ public class MapleMap {
 
         chrWLock.lock();
         try {
-            if (aggroMonitor != null) {
-                aggroMonitor.dispose();
-                aggroMonitor = null;
-            }
+            aggroMonitor.dispose();
+            aggroMonitor = null;
 
             if (itemMonitor != null) {
                 itemMonitor.cancel(false);
@@ -4807,15 +4775,6 @@ public class MapleMap {
         }
         return list;
     }
-
-    /**
-     * 获取玩家最后一次离开的时间
-     * @return 玩家最后一次离开的时间
-     */
-    public long getLastChrLeftTime() {
-        return lastChrLeftTime;
-    }
-
     /**
      * 获取玩家数量
      * @return 玩家数量
