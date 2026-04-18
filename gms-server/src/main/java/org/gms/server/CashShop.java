@@ -24,6 +24,7 @@ package org.gms.server;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import net.jcip.annotations.GuardedBy;
 import org.gms.client.inventory.Equip;
 import org.gms.client.inventory.InventoryType;
@@ -67,6 +68,7 @@ import static org.gms.dao.entity.table.GiftsDOTableDef.GIFTS_DO;
  * @author Flav
  * @author Ponk
  */
+@Slf4j
 public class CashShop {
     public static final int NX_CREDIT = 1;
     public static final int MAPLE_POINT = 2;
@@ -291,6 +293,10 @@ public class CashShop {
                         .filter(item -> ItemConstants.isPetEquip(item.getItemId())) //宠物装备
                         .filter(item -> {
                             Item cItem = item.toItem();
+                            if (cItem == null) {
+                                log.error("CashItemFactory.processPetEquipItems: 物品不存在 {}", item.getItemId());
+                                return false;
+                            }
                             return cItem.getInventoryType().equals(InventoryType.EQUIP) && ((Equip) cItem).getUpgradeSlots() > 0;
                         })
                         .forEach(item -> {
