@@ -21,6 +21,7 @@
  */
 package org.gms.server;
 
+import lombok.extern.slf4j.Slf4j;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.Job;
@@ -44,8 +45,7 @@ import org.gms.manager.ServerManager;
 import org.gms.net.server.Server;
 import org.gms.service.ItemInformationService;
 import org.gms.util.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import org.gms.provider.Data;
 import org.gms.provider.DataDirectoryEntry;
 import org.gms.provider.DataFileEntry;
@@ -71,8 +71,8 @@ import java.util.Set;
 /**
  * @author Matze
  */
+@Slf4j
 public class ItemInformationProvider {
-    private static final Logger log = LoggerFactory.getLogger(ItemInformationProvider.class);
     private final static ItemInformationProvider instance = new ItemInformationProvider();
     private static ItemInformationService itemInformationService;
 
@@ -431,47 +431,21 @@ public class ItemInformationProvider {
     }
 
     public short getSlotMax(Client c, int itemId) {
-        Short slotMax = slotMaxCache.get(itemId);
-        // 原先使用getServerShort() 超过有效范围(-32767 ~ 32767) 会抛异常，改用getServerint() 并限制最大值32767，由于判断>0才生效，所以无需做负数处理
-        // 现在可以支持控制台的实时参数
-        short itemSlotMax = (short) Math.min(32767,GameConfig.getServerInt("item_slot_max"));
-        if (slotMax != null) {
-            if (slotMax > 1 && itemSlotMax != slotMax) {
-                slotMax = itemSlotMax;
-                slotMaxCache.put(itemId, slotMax);  //更新缓存值
-            }
-            return (short) (slotMax + getExtraSlotMaxFromPlayer(c, itemId));
-        }
-        short ret = 0;
-        Data item = getItemData(itemId);
-        if (item != null) {
-            Data smEntry = item.getChildByPath("info/slotMax");
-            InventoryType inventoryType = ItemConstants.getInventoryType(itemId);
-            if (smEntry == null) {
-                if (inventoryType.getType() == InventoryType.EQUIP.getType()) {
-                    ret = 1;
-                } else if (inventoryType.canChangeSlotMax() && itemSlotMax > 0) {
-                    ret = itemSlotMax;
-                } else {
-                    ret = 100;
-                }
-            } else {
-                ret = inventoryType.canChangeSlotMax() && itemSlotMax > 0 ? itemSlotMax : (short) DataTool.getInt(smEntry);
-            }
-        }
-
-        slotMaxCache.put(itemId, ret);
-        return (short) (ret + getExtraSlotMaxFromPlayer(c, itemId));
+        return (short) (getSlotMax(itemId) + getExtraSlotMaxFromPlayer(c, itemId));
     }
     
     public short getSlotMax(int itemId) {
         Short slotMax = slotMaxCache.get(itemId);
+        // 原先使用getServerShort() 超过有效范围(-32767 ~ 32767) 会抛异常，改用getServerint() 并限制最大值32767，由于判断>0才生效，所以无需做负数处理
+        // 现在可以支持控制台的实时参数
         short itemSlotMax = (short) Math.min(32767, GameConfig.getServerInt("item_slot_max"));
         
         if (slotMax != null) {
-            if (slotMax > 1 && itemSlotMax != slotMax) {
-                slotMax = itemSlotMax;
+            if (slotMax >= 1 && itemSlotMax != slotMax) {
+                slotMax = itemSlotMax > 0 ? itemSlotMax : slotMax;
                 slotMaxCache.put(itemId, slotMax);
+            } else if (slotMax <= 0) {
+                log.error("物品最大可堆叠数量异常： {}，{}，已强制设为100", itemId, slotMax);
             }
             return slotMax;
         }
