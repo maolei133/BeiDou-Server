@@ -350,17 +350,69 @@ public class HiredMerchant extends AbstractMapObject {
     }
 
     public void withdrawMesos(Character chr) {
+        // 检查调用此方法的角色是否为商店的拥有者
         if (isOwner(chr)) {
+            // 同步代码块，确保在处理商店物品和金币时的线程安全
             synchronized (items) {
+                // 确保这是一个已在数据库中注册的商店
                 if (merchantId > 0) {
+                    // 从数据库中原子性地取出所有金币，并将数据库中的记录清零，防止并发问题
                     long withdrawn = hiredMerchantService.withdrawAllMesos(merchantId);
+
+                    // 如果确实取出了金币
                     if (withdrawn > 0) {
-                        chr.gainMeso((int) withdrawn, true);
-                        chr.dropMessage(1, "已从雇佣商人取出" + withdrawn + "金币。");
-                        this.mesos = 0;
-                        loadItemsFromDb(hiredMerchantService.getMerchantItems(merchantId));
+                        long playerCurrentMeso = chr.getMeso();
+                        // 计算玩家背包还能容纳多少金币（以Integer.MAX_VALUE为上限）
+                        long space = (long)Integer.MAX_VALUE - playerCurrentMeso;
+
+                        // 如果玩家背包已满或无法再容纳任何金币
+                        if (space <= 0) {
+                            // 必须将刚才取出的所有金币安全地存回数据库
+                            HiredMerchantsDO merchantDO = hiredMerchantService.getMerchantById(merchantId);
+                            if (merchantDO != null) {
+                                merchantDO.setMesos(withdrawn);
+                                hiredMerchantService.updateMerchant(merchantDO);
+                                // 更新内存中的金币缓存
+                                this.mesos = (int) Math.min(withdrawn, Integer.MAX_VALUE);
+                            }
+                            // 弹窗提示玩家金币已达上限
+                            chr.dropMessage(1, "您的金币已达上限，无法取出更多金币。");
+                            chr.dropMessage(5, "您的金币已达上限，无法取出更多金币。");
+                            return; // 终止操作
+                        }
+
+                        // 计算本次实际可以给予玩家的金币数量（取“商店总额”和“背包剩余空间”的较小值）
+                        long amountToGive = Math.min(withdrawn, space);
+                        // 计算需要存回商店的剩余金币
+                        long amountToReturn = withdrawn - amountToGive;
+
+                        // 将计算出的金额给予玩家
+                        if (amountToGive > 0) {
+                            chr.gainMeso((int) amountToGive, true);
+                        }
+
+                        // 如果有剩余金币需要存回
+                        if (amountToReturn > 0) {
+                            // 将剩余金额更新回数据库
+                            HiredMerchantsDO merchantDO = hiredMerchantService.getMerchantById(merchantId);
+                            if (merchantDO != null) {
+                                merchantDO.setMesos(amountToReturn);
+                                hiredMerchantService.updateMerchant(merchantDO);
+                            }
+                            // 更新内存中的金币缓存
+                            this.mesos = (int) Math.min(amountToReturn, Integer.MAX_VALUE);
+                            // 明确告知玩家本次取出的金额和剩余金额
+                            chr.dropMessage(1, "由于金币已达上限，本次取出 " + amountToGive + " 金币，商店中剩余 " + amountToReturn + " 金币。");
+                            chr.dropMessage(0, "由于金币已达上限，本次取出 " + amountToGive + " 金币，商店中剩余 " + amountToReturn + " 金币。");
+                        } else {
+                            // 如果所有金币都被成功取出
+                            this.mesos = 0; // 清空内存缓存
+                            chr.dropMessage(1, "已从雇佣商人取出 " + amountToGive + " 金币。");
+                            chr.dropMessage(0, "已从雇佣商人取出 " + amountToGive + " 金币。");
+                        }
                     }
                 }
+                // 处理旧的、可能与Fredrick相关的金币系统（保持原样）
                 chr.withdrawMerchantMesos();
             }
         }
