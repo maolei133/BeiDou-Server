@@ -36,30 +36,30 @@
         <mainClass>org.gms.ServerApplication</mainClass>
 
         <!-- Maven plugins -->
-        <spring-boot-maven-plugin>3.3.1</spring-boot-maven-plugin> <!-- Disabled. (for building thin jar) -->
+        <!-- 注解：修正为Spring Boot最新的稳定版本 3.5.9 -->
+        <spring-boot.version>3.5.9</spring-boot.version>
 
         <!-- Dependencies -->
         <graalvm-js.version>23.0.4</graalvm-js.version>
         <graalvm-js-scriptengine.version>24.0.1</graalvm-js-scriptengine.version> <!-- ScriptEngine implementation -->
-        <netty.version>4.1.109.Final</netty.version> <!-- Networking -->
         <jcip-annotations.version>1.0</jcip-annotations.version> <!-- Annotations for concurrency documentation -->
         <druid.version>1.2.22</druid.version> <!-- Database connection pool -->
         <mysql-connector-j.version>8.4.0</mysql-connector-j.version> <!-- MySQL JDBC driver -->
-        <junit.version>5.10.2</junit.version> <!-- Unit test -->
-        <mockito.version>5.11.0</mockito.version> <!-- Unit test -->
         <lombok.version>1.18.30</lombok.version>
         <fastjson2.version>2.0.47</fastjson2.version>
         <mybatis-flex.version>1.11.6</mybatis-flex.version>
-        <swagger.version>2.5.0</swagger.version>
+        <!-- 注解：升级 springdoc-openapi 到 2.6.0 以修复潜在漏洞 -->
+        <swagger.version>2.8.14</swagger.version>
+        <jjwt.version>0.13.0</jjwt.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <!-- 统一管理 Spring Boot 依赖版本，更新到 3.3.1 以修复潜在的安全问题 -->
+            <!-- 统一管理 Spring Boot 依赖版本 -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
-                <version>3.3.1</version>
+                <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -91,22 +91,21 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!-- jjwt 用于处理 token, 从 0.9.1 更新到 0.12.5 以修复严重的安全漏洞 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
-            <version>0.12.5</version>
+            <version>${jjwt.version}</version>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
-            <version>0.12.5</version>
+            <version>${jjwt.version}</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
-            <version>0.12.5</version>
+            <version>${jjwt.version}</version>
             <scope>runtime</scope>
         </dependency>
 
@@ -126,7 +125,6 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-mysql</artifactId>
-            <!-- 注解：移除版本号，让 Spring Boot BOM 来管理版本，以确保与flyway-core兼容 -->
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -143,13 +141,11 @@
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
-            <version>3.1.8</version>
         </dependency>
         <!-- Jakarta (Java 21 annotations) -->
         <dependency>
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
-            <version>2.1.1</version>
         </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>
@@ -183,25 +179,22 @@
 
 
         <!-- Networking -->
+        <!-- 注解：移除Netty版本，让Spring Boot BOM来管理，以使用更安全的版本 -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-transport</artifactId>
-            <version>${netty.version}</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec</artifactId>
-            <version>${netty.version}</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-buffer</artifactId>
-            <version>${netty.version}</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-handler</artifactId>
-            <version>${netty.version}</version>
         </dependency>
 
         <!-- Logging -->
@@ -240,25 +233,21 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -268,7 +257,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
     <build>
 <!--        <finalName>BeiDou</finalName>-->
         <plugins>
@@ -288,7 +276,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>${spring-boot-maven-plugin}</version>
+                <version>${spring-boot.version}</version>
                 <configuration>
                     <outputDirectory>${outputDirectory}</outputDirectory>
                     <finalName>${finalName}</finalName>
