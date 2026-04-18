@@ -67,6 +67,9 @@ import org.gms.server.ThreadManager;
 import org.gms.server.TimerManager;
 import org.gms.server.life.Monster;
 import org.gms.server.logging.AuditContext;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.server.maps.FieldLimit;
 import org.gms.server.maps.MapleMap;
 import org.gms.server.maps.MiniDungeonInfo;
@@ -232,8 +235,14 @@ public class Client extends ChannelInboundHandlerAdapter {
                 handler.handlePacket(packet, this);
             } catch (final Throwable t) {
                 final String chrInfo = player != null ? player.getName() + " 地图 [" + player.getMap().getMapName() + "] (" + player.getMapId() + ")" : "?";
-                log.warn("封包处理器 {} 出错. 账号 {}, 玩家 {}. 封包: {}", handler.getClass().getSimpleName(),
+                log.error("封包处理器 {} 出错. 账号 {}, 玩家 {}. 封包: {}", handler.getClass().getSimpleName(),
                         getAccountName(), chrInfo, packet, t);
+                AuditLogger.error(
+                        LogModule.SYSTEM,
+                        LogAction.ERROR,
+                        "封包处理器 " + handler.getClass().getSimpleName() + " 出错. 账号 " + getAccountName() + ", 玩家 " + chrInfo + ". 封包: " + packet,
+                        t
+                );
                 enableActions();//解除客户端假死
             } finally {
                 AuditContext.clear();
