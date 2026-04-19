@@ -167,7 +167,7 @@ public class AutobanManager {
     }
 
     public int addPoint(AutobanFactory fac, String reason) {
-        return addPoint(fac, reason, null);
+        return addPoint(fac, reason, new MapMessage());
     }
 
     /**
@@ -205,7 +205,8 @@ public class AutobanManager {
 
         // 在接近阈值时记录警告日志
         if (useAutoBanLog() && (fac != AutobanFactory.FAST_ATTACK && currentPunishPoints >= (fac.getMaximum() * 0.90))) {
-            MapMessage logData = new MapMessage(extraData.getData()).with("points", currentPunishPoints);
+            MapMessage logData = (extraData == null) ? new MapMessage() : new MapMessage(extraData.getData());
+            logData.with("points", currentPunishPoints);
             AutobanLogger.log(chr, fac, LogAction.CHEAT_WARNING, reason, logData);
         }
 
@@ -233,15 +234,16 @@ public class AutobanManager {
                 } else if (useAutoBanLog()) {
                     // 记录日志但不执行封号
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + fac.getName() + " 但未启用自动封禁，因此无事发生。"));
-                    MapMessage logData = new MapMessage(extraData.getData()).with("msg", "未启用封禁");
+                    MapMessage logData = (extraData == null) ? new MapMessage() : new MapMessage(extraData.getData());
+                    logData.with("msg", "未启用封禁");
                     AutobanLogger.log(chr, fac, LogAction.CHEAT_DETECTED, reason, logData);
                 }
             } else {
                 // 记录日志
                 if (useAutoBanLog()) {
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 触发 " + fac.getName() + " - " + reason));
-                    MapMessage logData = new MapMessage(extraData.getData())
-                        .with("points", fac.getMaximum())
+                    MapMessage logData = (extraData == null) ? new MapMessage() : new MapMessage(extraData.getData());
+                    logData.with("points", fac.getMaximum())
                         .with("banPoints", currentBanPoints)
                         .with("msg", "增加封号点数");
                     AutobanLogger.log(chr, fac, LogAction.CHEAT_DETECTED, reason, logData);
@@ -635,7 +637,7 @@ public class AutobanManager {
                 String reason = "坐标: (" + s.x + "," + s.y + ") 附近一致性检测 " + consistentCount + "/" + currentSamples.size() +
                                 " 同类占比: " + nearbyTypeCount + "/" + totalTypeMonsters + " (" + String.format("%.2f", mapRatio*100) + "%)" +
                                 " (移动类型: " + (movetype == 0 ? "陆地" : (movetype == 1 ? "飞行" : "未知")) + ")"; // 构建违规原因描述
-                int ret = addPoint(AutobanFactory.MONSTER_VAC, reason); // 添加到反作弊积分系统
+                int ret = addPoint(AutobanFactory.MONSTER_VAC, reason, new MapMessage()); // 添加到反作弊积分系统
                 if (ret >= 1) { // 如果积分达到阈值，执行惩罚措施
                     map.killAllMonsters(); // 击杀所有怪物
                     map.restoreMapSpawnPoints(); // 恢复地图出生点
