@@ -147,12 +147,14 @@ public class ItemInformationProvider {
         equipData = DataProviderFactory.getDataProvider(WZFiles.CHARACTER);
         stringData = DataProviderFactory.getDataProvider(WZFiles.STRING);
         etcData = DataProviderFactory.getDataProvider(WZFiles.ETC);
-        cashStringData = stringData.getData("Cash.img");
-        consumeStringData = stringData.getData("Consume.img");
-        eqpStringData = stringData.getData("Eqp.img");
-        etcStringData = stringData.getData("Etc.img");
-        insStringData = stringData.getData("Ins.img");
-        petStringData = stringData.getData("Pet.img");
+        
+        // 移除了在这里强制解析 String.wz 下各个 img 的代码，改为按需懒加载，以节省超100MB的启动内存
+        // cashStringData = stringData.getData("Cash.img");
+        // consumeStringData = stringData.getData("Consume.img");
+        // eqpStringData = stringData.getData("Eqp.img");
+        // etcStringData = stringData.getData("Etc.img");
+        // insStringData = stringData.getData("Ins.img");
+        // petStringData = stringData.getData("Pet.img");
 
         isQuestItemCache.put(0, false);
         isPartyQuestItemCache.put(0, false);
@@ -224,78 +226,9 @@ public class ItemInformationProvider {
         return itemPairs;
     }
 
-    private Data getStringData_old(int itemId) {
-        String cat = "null";
-        Data theData;
-        if (itemId >= 5010000) {
-            theData = cashStringData;
-        } else if (itemId >= 2000000 && itemId < 3000000) {
-            theData = consumeStringData;
-        } else if ((itemId >= 1010000 && itemId < 1040000) || (itemId >= 1122000 && itemId < 1123000) || (itemId >= 1132000 && itemId < 1133000) || (itemId >= 1142000 && itemId < 1143000)) {
-            theData = eqpStringData;
-            cat = "Eqp/Accessory";
-        } else if (itemId >= 1000000 && itemId < 1010000) {
-            theData = eqpStringData;
-            cat = "Eqp/Cap";
-        } else if (itemId >= 1102000 && itemId < 1103000) {
-            theData = eqpStringData;
-            cat = "Eqp/Cape";
-        } else if (itemId >= 1040000 && itemId < 1050000) {
-            theData = eqpStringData;
-            cat = "Eqp/Coat";
-        } else if (ItemConstants.isFace(itemId)) {
-            theData = eqpStringData;
-            cat = "Eqp/Face";
-        } else if (itemId >= 1080000 && itemId < 1090000) {
-            theData = eqpStringData;
-            cat = "Eqp/Glove";
-        } else if (ItemConstants.isHair(itemId)) {
-            theData = eqpStringData;
-            cat = "Eqp/Hair";
-        } else if (itemId >= 1050000 && itemId < 1060000) {
-            theData = eqpStringData;
-            cat = "Eqp/Longcoat";
-        } else if (itemId >= 1060000 && itemId < 1070000) {
-            theData = eqpStringData;
-            cat = "Eqp/Pants";
-        } else if (itemId >= 1802000 && itemId < 1842000) {
-            theData = eqpStringData;
-            cat = "Eqp/PetEquip";
-        } else if (itemId >= 1112000 && itemId < 1120000) {
-            theData = eqpStringData;
-            cat = "Eqp/Ring";
-        } else if (itemId >= 1092000 && itemId < 1100000) {
-            theData = eqpStringData;
-            cat = "Eqp/Shield";
-        } else if (itemId >= 1070000 && itemId < 1080000) {
-            theData = eqpStringData;
-            cat = "Eqp/Shoes";
-        } else if (itemId >= 1900000 && itemId < 2000000) {
-            theData = eqpStringData;
-            cat = "Eqp/Taming";
-        } else if (itemId >= 1300000 && itemId < 1800000) {
-            theData = eqpStringData;
-            cat = "Eqp/Weapon";
-        } else if (itemId >= 4000000 && itemId < 5000000) {
-            theData = etcStringData;
-            cat = "Etc";
-        } else if (itemId >= 3000000 && itemId < 4000000) {
-            theData = insStringData;
-        } else if (ItemConstants.isPet(itemId)) {
-            theData = petStringData;
-        } else {
-            return null;
-        }
-        if (cat.equalsIgnoreCase("null")) {
-            return theData.getChildByPath(String.valueOf(itemId));
-        } else {
-            return theData.getChildByPath(cat + "/" + itemId);
-        }
-    }
-
     /**
      * 根据物品ID查询String.xml里的名称和描述
-     * 大部分物品不再限制查询范围，便于后续扩展
+     * 采用懒加载模式，避免启动时一次性加载所有字符串数据导致内存暴增
      * @param itemId
      * @return
      */
@@ -303,20 +236,39 @@ public class ItemInformationProvider {
         Data theData = null;
         // 1. 处理非Eqp类别
         if (itemId >= 5010000) {    //现金道具
+            if (cashStringData == null) {
+                cashStringData = stringData.getData("Cash.img");
+            }
             theData = cashStringData;
         } else if (itemId >= 2000000 && itemId < 3000000) {
+            if (consumeStringData == null) {
+                consumeStringData = stringData.getData("Consume.img");
+            }
             theData = consumeStringData;
         } else if (itemId >= 4000000 && itemId < 5000000) {
+            if (etcStringData == null) {
+                etcStringData = stringData.getData("Etc.img");
+            }
             return etcStringData.getChildByPath("Etc/" + itemId);
         } else if (itemId >= 3000000 && itemId < 4000000) {
+            if (insStringData == null) {
+                insStringData = stringData.getData("Ins.img");
+            }
             theData = insStringData;
         } else if (ItemConstants.isPet(itemId)) {
+            if (petStringData == null) {
+                petStringData = stringData.getData("Pet.img");
+            }
             theData = petStringData;
         }
         if (theData != null) {
             return theData.getChildByPath(String.valueOf(itemId));
         }
         // 2. 定义所有可能的Eqp子路径
+        if (eqpStringData == null) {
+            eqpStringData = stringData.getData("Eqp.img");
+        }
+
         final String[] eqpPaths = {
                 "Eqp/Accessory",
                 "Eqp/Cap",
