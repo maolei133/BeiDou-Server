@@ -44,6 +44,7 @@ import org.gms.model.pojo.NewYearCardRecord;
 import org.gms.net.ChannelDependencies;
 import org.gms.net.PacketProcessor;
 import org.gms.net.netty.LoginServer;
+import org.gms.net.netty.NettyServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.channel.Channel;
 import org.gms.net.server.coordinator.session.IpAddresses;
@@ -54,7 +55,6 @@ import org.gms.net.server.guild.GuildCharacter;
 import org.gms.net.server.task.*;
 import org.gms.net.server.world.World;
 import org.gms.property.ServiceProperty;
-import org.gms.server.CashShop;
 import org.gms.server.CashShop.CashItemFactory;
 import org.gms.server.SkillbookInformationProvider;
 import org.gms.server.ThreadManager;
@@ -1711,6 +1711,7 @@ public class Server {
         TimerManager.getInstance().purge();
         TimerManager.getInstance().stop();
         loginServer.stop();
+        NettyServerManager.getInstance().shutdown();    // 关闭全局 Netty 线程组
         online = false;
         log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info4"));
         if (restart) {

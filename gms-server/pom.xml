@@ -40,8 +40,9 @@
         <spring-boot.version>3.5.9</spring-boot.version>
 
         <!-- Dependencies -->
-        <graalvm-js.version>23.0.4</graalvm-js.version>
-        <graalvm-js-scriptengine.version>24.0.1</graalvm-js-scriptengine.version> <!-- ScriptEngine implementation -->
+        <!-- >= 24.2.1 版本修复 解构赋值（如 const { a, b } = obj） 内存泄露问题-->
+        <graalvm-js.version>24.2.1</graalvm-js.version>
+        <graalvm-js-scriptengine.version>24.2.1</graalvm-js-scriptengine.version> <!-- ScriptEngine implementation -->
         <jcip-annotations.version>1.0</jcip-annotations.version> <!-- Annotations for concurrency documentation -->
         <druid.version>1.2.22</druid.version> <!-- Database connection pool -->
         <mysql-connector-j.version>8.4.0</mysql-connector-j.version> <!-- MySQL JDBC driver -->
@@ -222,6 +223,7 @@
             <groupId>org.graalvm.js</groupId>
             <artifactId>js</artifactId>
             <version>${graalvm-js.version}</version>
+            <type>pom</type>
         </dependency>
         <dependency>
             <groupId>org.graalvm.js</groupId>

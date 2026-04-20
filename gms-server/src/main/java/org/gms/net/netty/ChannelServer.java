@@ -2,8 +2,6 @@ package org.gms.net.netty;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 public class ChannelServer extends AbstractServer {
@@ -19,10 +17,10 @@ public class ChannelServer extends AbstractServer {
 
     @Override
     public void start() {
-        EventLoopGroup parentGroup = new NioEventLoopGroup();
-        EventLoopGroup childGroup = new NioEventLoopGroup();
+        // 使用全局共享的 EventLoopGroup 代替每个 Channel 创建一个新的 NioEventLoopGroup()
+        // 以此修复数百兆直接内存（Direct Memory）和冗余线程暴增的问题。
         ServerBootstrap bootstrap = new ServerBootstrap()
-                .group(parentGroup, childGroup)
+                .group(NettyServerManager.getInstance().getBossGroup(), NettyServerManager.getInstance().getWorkerGroup())
                 .channel(NioServerSocketChannel.class)
                 .childHandler(new ChannelServerInitializer(world, channel));
 
@@ -32,7 +30,7 @@ public class ChannelServer extends AbstractServer {
     @Override
     public void stop() {
         if (nettyChannel == null) {
-            throw new IllegalStateException("Must start ChannelServer before stopping it");
+            throw new IllegalStateException("必须在停止之前启动 ChannelServer");
         }
 
         nettyChannel.close().syncUninterruptibly();
