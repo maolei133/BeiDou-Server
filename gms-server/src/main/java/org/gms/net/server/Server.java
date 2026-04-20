@@ -669,30 +669,28 @@ public class Server {
 
         // 发送信件
         registerChannelDependencies();
-
-        // 利用虚拟线程，减少开销
-        log.info(I18nUtil.getLogMessage("Server.init.info2"));
+        // 根据配置初始化WZ数据加载
         try (ExecutorService initExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
-            // 加载wz
             final List<Future<?>> futures = new ArrayList<>();
-            futures.add(initExecutor.submit(SkillFactory::loadAllSkills));
-            futures.add(initExecutor.submit(CashItemFactory::loadAllCashItems));
-            futures.add(initExecutor.submit(Quest::loadAllQuests));
-            futures.add(initExecutor.submit(SkillbookInformationProvider::loadAllSkillbookInformation));
-            // Wait on all async tasks to complete
+            if (serviceProperty.getStartup().isAllWz()) {
+                long time = System.currentTimeMillis();
+                // 利用虚拟线程，减少开销
+                log.info(I18nUtil.getLogMessage("Server.init.info2"));
+                futures.add(initExecutor.submit(SkillFactory::loadAllSkills));
+                futures.add(initExecutor.submit(Quest::loadAllQuests));
+                futures.add(initExecutor.submit(CashItemFactory::loadAllCashItems));
+                log.info(I18nUtil.getLogMessage("Server.init.info3"), System.currentTimeMillis() - time);
+            } else {
+                log.info("wz数据采用懒加载模式");
+            }
+            futures.add(initExecutor.submit(SkillbookInformationProvider::loadAllSkillbookInformation)); // 必须提前全量加载技能书的来源信息，无其它位置加载
             for (Future<?> future : futures) {
                 future.get();
             }
-            initExecutor.shutdown();
-            //加载商城自定义数据
-            CashShop.CashItemFactory.processRateCouponItems((GameConfig.getServerBoolean("use_supply_rate_coupons"))); //重载商城是否允许出售倍率卡
-            CashShop.CashItemFactory.processPetEquipItems(GameConfig.getServerBoolean("use_pet_equip_permanent"));  //重载宠物装备有效期
         } catch (Exception e) {
             log.error(I18nUtil.getLogMessage("Server.init.error1"), e);
             throw new IllegalStateException(e);
         }
-        log.info(I18nUtil.getLogMessage("Server.init.info3"));
-
         TimeZone.setDefault(TimeZone.getTimeZone(GameConfig.getServerString("timezone")));
 
         log.info(I18nUtil.getLogMessage("Server.init.info4"));
@@ -748,7 +746,7 @@ public class Server {
             for (World w : getWorlds()) {
                 w.loadActiveHiredMerchants();
             }
-            
+
         } catch (Exception e) {
             log.error(I18nUtil.getLogMessage("Server.init.error3"), e); //For those who get errors
             System.exit(0);
@@ -758,9 +756,9 @@ public class Server {
         log.info(I18nUtil.getLogMessage("Server.init.info6"), serviceProperty.getLoginPort());
 
         OpcodeConstants.generateOpcodeNames();
+        log.info(I18nUtil.getLogMessage("Server.init.info7"));
         CommandsExecutor.getInstance().loadCommandsExecutor();
 
-        log.info(I18nUtil.getLogMessage("Server.init.info7"));
         for (Channel ch : this.getAllChannels()) {
             ch.reloadEventScriptManager();
         }

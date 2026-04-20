@@ -1,102 +1,82 @@
 /*
- This file is part of the OdinMS Maple Story Server
- Copyright (C) 2008 Patrick Huy <patrick.huy@frz.cc>
- Matthias Butz <matze@odinms.de>
- Jan Christian Meyer <vimes@odinms.de>
-
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU Affero General Public License as
- published by the Free Software Foundation version 3 as published by
- the Free Software Foundation. You may not use, modify or distribute
- this program under any other version of the GNU Affero General Public
- License.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU Affero General Public License for more details.
-
- You should have received a copy of the GNU Affero General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * 本文件是 OdinMS Maple Story 服务器的一部分
+ * 版权所有 (C) 2008 Patrick Huy <patrick.huy@frz.cc>
+ *             Matthias Butz <matze@odinms.de>
+ *             Jan Christian Meyer <vimes@odinms.de>
+ *
+ * 本程序是自由软件：您可以根据自由软件基金会发布的 GNU Affero 通用公共许可证的条款重新分发和/或修改它。
+ * 您不得在 GNU Affero 通用公共许可证的任何其他版本下使用、修改或分发本程序。
+ *
+ * 本程序的发布希望能对您有所帮助，但没有任何担保；甚至没有对适销性或特定用途适用性的默示担保。
+ * 有关更多详细信息，请参阅 GNU Affero 通用公共许可证。
+ *
+ * 您应该已经随本程序收到一份 GNU Affero 通用公共许可证的副本。如果没有，请参阅 <http://www.gnu.org/licenses/>。
  */
 package org.gms.server.quest;
 
+import lombok.extern.slf4j.Slf4j;
 import org.gms.client.Character;
 import org.gms.client.QuestStatus;
 import org.gms.client.QuestStatus.Status;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.DelayedQuestUpdate;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.provider.Data;
 import org.gms.provider.DataProvider;
 import org.gms.provider.DataProviderFactory;
 import org.gms.provider.DataTool;
 import org.gms.provider.wz.WZFiles;
-import org.gms.server.quest.actions.AbstractQuestAction;
-import org.gms.server.quest.actions.BuffAction;
-import org.gms.server.quest.actions.ExpAction;
-import org.gms.server.quest.actions.FameAction;
-import org.gms.server.quest.actions.InfoAction;
-import org.gms.server.quest.actions.ItemAction;
-import org.gms.server.quest.actions.MesoAction;
-import org.gms.server.quest.actions.NextQuestAction;
-import org.gms.server.quest.actions.PetSkillAction;
-import org.gms.server.quest.actions.PetSpeedAction;
-import org.gms.server.quest.actions.PetTamenessAction;
-import org.gms.server.quest.actions.QuestAction;
-import org.gms.server.quest.actions.SkillAction;
-import org.gms.server.quest.requirements.AbstractQuestRequirement;
-import org.gms.server.quest.requirements.BuffExceptRequirement;
-import org.gms.server.quest.requirements.BuffRequirement;
-import org.gms.server.quest.requirements.CompletedQuestRequirement;
-import org.gms.server.quest.requirements.EndDateRequirement;
-import org.gms.server.quest.requirements.FieldEnterRequirement;
-import org.gms.server.quest.requirements.InfoExRequirement;
-import org.gms.server.quest.requirements.InfoNumberRequirement;
-import org.gms.server.quest.requirements.IntervalRequirement;
-import org.gms.server.quest.requirements.ItemRequirement;
-import org.gms.server.quest.requirements.JobRequirement;
-import org.gms.server.quest.requirements.MaxLevelRequirement;
-import org.gms.server.quest.requirements.MesoRequirement;
-import org.gms.server.quest.requirements.MinLevelRequirement;
-import org.gms.server.quest.requirements.MinTamenessRequirement;
-import org.gms.server.quest.requirements.MobRequirement;
-import org.gms.server.quest.requirements.MonsterBookCountRequirement;
-import org.gms.server.quest.requirements.NpcRequirement;
-import org.gms.server.quest.requirements.PetRequirement;
-import org.gms.server.quest.requirements.QuestRequirement;
-import org.gms.server.quest.requirements.ScriptRequirement;
+import org.gms.server.quest.actions.*;
+import org.gms.server.quest.requirements.*;
 import org.gms.util.PacketCreator;
 import org.gms.util.StringUtil;
 
-import java.util.Collection;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.concurrent.TimeUnit.HOURS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
+ * 任务数据和逻辑处理类
  * @author Matze
- * @author Ronan - support for medal quests
+ * @author Ronan - 增加了对勋章任务的支持
  */
+@Slf4j
 public class Quest {
-    private static final Logger log = LoggerFactory.getLogger(Quest.class);
-    private static volatile Map<Integer, Quest> quests = new HashMap<>();
-    private static volatile Map<Integer, Integer> infoNumberQuests = new HashMap<>();
-    private static final Map<Short, Integer> medals = new HashMap<>();
-
+    // 使用 ConcurrentHashMap 实现线程安全的懒加载缓存
+    private static final Map<Integer, Quest> quests = new ConcurrentHashMap<>();
+    private static final Map<Integer, Integer> infoNumberQuests = new ConcurrentHashMap<>();
+    private static final Map<Short, Integer> medals = new ConcurrentHashMap<>();
     private static final Set<Short> exploitableQuests = new HashSet<>();
 
+    // WZ数据提供者，保持静态以供所有任务实例共享
+    private final static DataProvider questData;
+    private final static Data questInfo;
+    private final static Data questAct;
+    private final static Data questReq;
+
+    // 静态初始化块，用于加载和校验核心WZ数据
     static {
-        exploitableQuests.add((short) 2338);    // there are a lot more exploitable quests, they need to be nit-picked
+        questData = DataProviderFactory.getDataProvider(WZFiles.QUEST);
+        if (questData == null) {
+            throw new IllegalStateException("加载任务失败：无法找到或读取 Quest.wz 文件。");
+        }
+        questInfo = questData.getData("QuestInfo.img");
+        if (questInfo == null) {
+            throw new IllegalStateException("加载任务失败：在 Quest.wz 中找不到 QuestInfo.img 节点。");
+        }
+        questAct = questData.getData("Act.img");
+        if (questAct == null) {
+            throw new IllegalStateException("加载任务失败：在 Quest.wz 中找不到 Act.img 节点。");
+        }
+        questReq = questData.getData("Check.img");
+        if (questReq == null) {
+            throw new IllegalStateException("加载任务失败：在 Quest.wz 中找不到 Check.img 节点。");
+        }
+
+        // 填充一些硬编码的数据
+        exploitableQuests.add((short) 2338);
         exploitableQuests.add((short) 3637);
         exploitableQuests.add((short) 3714);
         exploitableQuests.add((short) 21752);
@@ -113,110 +93,116 @@ public class Quest {
     private boolean autoPreComplete, autoComplete;
     private boolean repeatable = false;
     private String name = "", parent = "";
-    private final static DataProvider questData = DataProviderFactory.getDataProvider(WZFiles.QUEST);
-    private final static Data questInfo = questData.getData("QuestInfo.img");
-    private final static Data questAct = questData.getData("Act.img");
-    private final static Data questReq = questData.getData("Check.img");
 
+    /**
+     * 私有构造函数，用于加载单个任务的数据。
+     * @param id 任务ID
+     */
     private Quest(int id) {
         this.id = (short) id;
 
+        // 修正懒加载问题：即使任务在Check.img中没有需求节点，也必须继续加载QuestInfo和Act中的数据。
+        // 不能因为reqData为null就提前返回，否则纯脚本任务或只有奖励的任务会加载失败。
+
+        // 1. 加载任务基本信息 (QuestInfo.img)
+        Data reqInfo = questInfo.getChildByPath(String.valueOf(id));
+        if (reqInfo != null) {
+            name = DataTool.getString("name", reqInfo, "");
+            parent = DataTool.getString("parent", reqInfo, "");
+
+            timeLimit = DataTool.getInt("timeLimit", reqInfo, 0);
+            timeLimit2 = DataTool.getInt("timeLimit2", reqInfo, 0);
+            autoStart = DataTool.getInt("autoStart", reqInfo, 0) == 1;
+            autoPreComplete = DataTool.getInt("autoPreComplete", reqInfo, 0) == 1;
+            autoComplete = DataTool.getInt("autoComplete", reqInfo, 0) == 1;
+
+            int medalid = DataTool.getInt("viewMedalItem", reqInfo, 0);
+            if (medalid != 0) {
+                medals.put(this.id, medalid);
+            }
+        } else {
+            log.error("在 QuestInfo.img 中找不到ID为 {} 的任务数据", id);
+        }
+
+        // 2. 加载任务需求 (Check.img)，如果存在
         Data reqData = questReq.getChildByPath(String.valueOf(id));
-        if (reqData == null) {//most likely infoEx
-            return;
-        }
-
-        if (questInfo != null) {
-            Data reqInfo = questInfo.getChildByPath(String.valueOf(id));
-            if (reqInfo != null) {
-                name = DataTool.getString("name", reqInfo, "");
-                parent = DataTool.getString("parent", reqInfo, "");
-
-                timeLimit = DataTool.getInt("timeLimit", reqInfo, 0);
-                timeLimit2 = DataTool.getInt("timeLimit2", reqInfo, 0);
-                autoStart = DataTool.getInt("autoStart", reqInfo, 0) == 1;
-                autoPreComplete = DataTool.getInt("autoPreComplete", reqInfo, 0) == 1;
-                autoComplete = DataTool.getInt("autoComplete", reqInfo, 0) == 1;
-
-                int medalid = DataTool.getInt("viewMedalItem", reqInfo, 0);
-                if (medalid != 0) {
-                    medals.put(this.id, medalid);
-                }
-            } else {
-                log.warn("No quest data for id {}", id);
-            }
-        }
-
-        Data startReqData = reqData.getChildByPath("0");
-        if (startReqData != null) {
-            for (Data startReq : startReqData.getChildren()) {
-                QuestRequirementType type = QuestRequirementType.getByWZName(startReq.getName());
-                switch (type) {
-                case INTERVAL:
-                    repeatable = true;
-                    break;
-                case MOB:
-                    for (Data mob : startReq.getChildren()) {
-                        relevantMobs.add(DataTool.getInt(mob.getChildByPath("id")));
+        if (reqData != null) {
+            Data startReqData = reqData.getChildByPath("0");
+            if (startReqData != null) {
+                for (Data startReq : startReqData.getChildren()) {
+                    QuestRequirementType type = QuestRequirementType.getByWZName(startReq.getName());
+                    if (type == null) continue;
+                    switch (type) {
+                        case INTERVAL:
+                            repeatable = true;
+                            break;
+                        case MOB:
+                            for (Data mob : startReq.getChildren()) {
+                                relevantMobs.add(DataTool.getInt(mob.getChildByPath("id")));
+                            }
+                            break;
                     }
-                    break;
-                }
 
-                AbstractQuestRequirement req = this.getRequirement(type, startReq);
-                if (req == null) {
-                    continue;
-                }
-
-                startReqs.put(type, req);
-            }
-        }
-
-        Data completeReqData = reqData.getChildByPath("1");
-        if (completeReqData != null) {
-            for (Data completeReq : completeReqData.getChildren()) {
-                QuestRequirementType type = QuestRequirementType.getByWZName(completeReq.getName());
-
-                AbstractQuestRequirement req = this.getRequirement(type, completeReq);
-                if (req == null) {
-                    continue;
-                }
-
-                if (type.equals(QuestRequirementType.MOB)) {
-                    for (Data mob : completeReq.getChildren()) {
-                        relevantMobs.add(DataTool.getInt(mob.getChildByPath("id")));
+                    AbstractQuestRequirement req = this.getRequirement(type, startReq);
+                    if (req == null) {
+                        continue;
                     }
+
+                    startReqs.put(type, req);
                 }
-                completeReqs.put(type, req);
+            }
+
+            Data completeReqData = reqData.getChildByPath("1");
+            if (completeReqData != null) {
+                for (Data completeReq : completeReqData.getChildren()) {
+                    QuestRequirementType type = QuestRequirementType.getByWZName(completeReq.getName());
+                    if (type == null) continue;
+
+                    AbstractQuestRequirement req = this.getRequirement(type, completeReq);
+                    if (req == null) {
+                        continue;
+                    }
+
+                    if (type.equals(QuestRequirementType.MOB)) {
+                        for (Data mob : completeReq.getChildren()) {
+                            relevantMobs.add(DataTool.getInt(mob.getChildByPath("id")));
+                        }
+                    }
+                    completeReqs.put(type, req);
+                }
             }
         }
+
+        // 3. 加载任务动作/奖励 (Act.img)，如果存在
         Data actData = questAct.getChildByPath(String.valueOf(id));
-        if (actData == null) {
-            return;
-        }
-        final Data startActData = actData.getChildByPath("0");
-        if (startActData != null) {
-            for (Data startAct : startActData.getChildren()) {
-                QuestActionType questActionType = QuestActionType.getByWZName(startAct.getName());
-                AbstractQuestAction act = this.getAction(questActionType, startAct);
+        if (actData != null) {
+            final Data startActData = actData.getChildByPath("0");
+            if (startActData != null) {
+                for (Data startAct : startActData.getChildren()) {
+                    QuestActionType questActionType = QuestActionType.getByWZName(startAct.getName());
+                    if (questActionType == null) continue;
+                    AbstractQuestAction act = this.getAction(questActionType, startAct);
 
-                if (act == null) {
-                    continue;
+                    if (act == null) {
+                        continue;
+                    }
+
+                    startActs.put(questActionType, act);
                 }
-
-                startActs.put(questActionType, act);
             }
-        }
-        Data completeActData = actData.getChildByPath("1");
-        if (completeActData != null) {
-            for (Data completeAct : completeActData.getChildren()) {
-                QuestActionType questActionType = QuestActionType.getByWZName(completeAct.getName());
-                AbstractQuestAction act = this.getAction(questActionType, completeAct);
+            Data completeActData = actData.getChildByPath("1");
+            if (completeActData != null) {
+                for (Data completeAct : completeActData.getChildren()) {
+                    QuestActionType questActionType = QuestActionType.getByWZName(completeAct.getName());
+                    if (questActionType == null) continue;
+                    AbstractQuestAction act = this.getAction(questActionType, completeAct);
 
-                if (act == null) {
-                    continue;
+                    if (act == null) {
+                        continue;
+                    }
+
+                    completeActs.put(questActionType, act);
                 }
-
-                completeActs.put(questActionType, act);
             }
         }
     }
@@ -229,21 +215,55 @@ public class Quest {
         return autoStart;
     }
 
+    /**
+     * 获取任务实例的唯一入口。
+     * 使用 ConcurrentHashMap 的 computeIfAbsent 方法实现线程安全的懒加载。
+     * @param id 任务ID
+     * @return 任务实例
+     */
     public static Quest getInstance(int id) {
-        Quest ret = quests.get(id);
-        if (ret == null) {
-            ret = new Quest(id);
-            quests.put(id, ret);
+        return quests.computeIfAbsent(id, questId -> {
+//            log.info("懒加载任务: {}", questId);
+            return new Quest(questId);
+        });
+    }
+
+    /**
+     * 懒加载 infoNumber 到 questID 的映射。
+     */
+    private static void lazyLoadInfoNumberMap() {
+        // 双重检查锁定，确保只加载一次
+        if (infoNumberQuests.isEmpty()) {
+            synchronized (infoNumberQuests) {
+                if (infoNumberQuests.isEmpty()) {
+                    long startTime = System.currentTimeMillis();
+                    for (Data quest : questInfo.getChildren()) {
+                        int questID = Integer.parseInt(quest.getName());
+                        Quest q = getInstance(questID); // 复用懒加载
+
+                        int infoNumber;
+                        infoNumber = q.getInfoNumber(Status.STARTED);
+                        if (infoNumber > 0) {
+                            infoNumberQuests.put(infoNumber, questID);
+                        }
+
+                        infoNumber = q.getInfoNumber(Status.COMPLETED);
+                        if (infoNumber > 0) {
+                            infoNumberQuests.put(infoNumber, questID);
+                        }
+                    }
+                    log.info("任务映射表加载完成 infoNumber -> QuestID，耗时：{} 毫秒", System.currentTimeMillis() - startTime);
+                }
+            }
         }
-        return ret;
     }
 
     public static Quest getInstanceFromInfoNumber(int infoNumber) {
+        lazyLoadInfoNumberMap(); // 确保映射表已加载
         Integer id = infoNumberQuests.get(infoNumber);
         if (id == null) {
             id = infoNumber;
         }
-
         return getInstance(id);
     }
 
@@ -268,7 +288,7 @@ public class Quest {
             short questid = mqs.getQuestID();
             short infoNumber = mqs.getInfoNumber();
             if (infoNumber <= 0) {
-                infoNumber = questid;  // on default infoNumber mimics questid
+                infoNumber = questid;  // 默认情况下，infoNumber 与 questid 相同
             }
 
             int ixSize = ix.size();
@@ -318,7 +338,7 @@ public class Quest {
         if (autoStart || canStart(chr, npc)) {
             Collection<AbstractQuestAction> acts = startActs.values();
             for (AbstractQuestAction a : acts) {
-                if (!a.check(chr, null)) { // would null be good ?
+                if (!a.check(chr, null)) { // null 是否合适？
                     return;
                 }
             }
@@ -416,8 +436,8 @@ public class Quest {
         newStatus.setCompletionTime(System.currentTimeMillis());
         chr.updateQuestStatus(newStatus);
 
-        chr.sendPacket(PacketCreator.showSpecialEffect(9)); // Quest completion
-        chr.getMap().broadcastMessage(chr, PacketCreator.showForeignEffect(chr.getId(), 9), false); //use 9 instead of 12 for both
+        chr.sendPacket(PacketCreator.showSpecialEffect(9)); // 任务完成特效
+        chr.getMap().broadcastMessage(chr, PacketCreator.showForeignEffect(chr.getId(), 9), false); // 对其他玩家广播特效
         return true;
     }
 
@@ -577,7 +597,6 @@ public class Quest {
             case END:
                 break;
             default:
-                //FilePrinter.printError(FilePrinter.EXCEPTION_CAUGHT, "Unhandled Requirement Type: " + type.toString() + " QuestID: " + this.getId());
                 break;
         }
         return ret;
@@ -623,7 +642,6 @@ public class Quest {
                 ret = new InfoAction(this, data);
                 break;
             default:
-                //FilePrinter.printError(FilePrinter.EXCEPTION_CAUGHT, "Unhandled Action Type: " + type.toString() + " QuestID: " + this.getId());
                 break;
         }
         return ret;
@@ -689,6 +707,8 @@ public class Quest {
         List<Quest> ret = new LinkedList<>();
 
         search = search.toLowerCase();
+        // 注意：这里遍历 quests.values() 会触发所有任务的加载，这是一个高成本操作。
+        // 在懒加载模式下，应谨慎使用或寻找替代方案。
         for (Quest mq : quests.values()) {
             if (mq.name.toLowerCase().contains(search) || mq.parent.toLowerCase().contains(search)) {
                 ret.add(mq);
@@ -698,31 +718,21 @@ public class Quest {
         return ret;
     }
 
+    /**
+     * 全量加载所有任务数据到缓存中。
+     * 用于预加载模式。
+     */
     public static void loadAllQuests() {
-        final Map<Integer, Quest> loadedQuests = new HashMap<>();
-        final Map<Integer, Integer> loadedInfoNumberQuests = new HashMap<>();
-
+        // 遍历QuestInfo.img中的所有任务ID，触发加载
+        long start = System.currentTimeMillis();
         for (Data quest : questInfo.getChildren()) {
             int questID = Integer.parseInt(quest.getName());
-
-            Quest q = new Quest(questID);
-            loadedQuests.put(questID, q);
-
-            int infoNumber;
-
-            infoNumber = q.getInfoNumber(Status.STARTED);
-            if (infoNumber > 0) {
-                loadedInfoNumberQuests.put(infoNumber, questID);
-            }
-
-            infoNumber = q.getInfoNumber(Status.COMPLETED);
-            if (infoNumber > 0) {
-                loadedInfoNumberQuests.put(infoNumber, questID);
-            }
+            getInstance(questID);
         }
+        log.info("任务加载完成，总共 {} 个任务，耗时：{} 毫秒", quests.size(), System.currentTimeMillis() - start);
 
-        Quest.quests = loadedQuests;
-        Quest.infoNumberQuests = loadedInfoNumberQuests;
+        // 确保infoNumber映射也被完全加载
+        lazyLoadInfoNumberMap();
     }
 
     public void expireQuest(Character chr) {
