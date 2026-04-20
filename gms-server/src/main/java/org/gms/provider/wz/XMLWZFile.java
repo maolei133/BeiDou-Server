@@ -21,8 +21,7 @@
 */
 package org.gms.provider.wz;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.gms.provider.Data;
 import org.gms.provider.DataDirectoryEntry;
 import org.gms.provider.DataProvider;
@@ -34,8 +33,8 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+@Slf4j
 public class XMLWZFile implements DataProvider {
-	private static final Logger log = LoggerFactory.getLogger(DataProvider.class);
 	private final Path root;
     private final WZDirectoryEntry rootForNavigation;
 
@@ -59,24 +58,35 @@ public class XMLWZFile implements DataProvider {
                 }
             }
         } catch (IOException e) {
-            log.warn("Can not open file/directory at " + lroot.toAbsolutePath().toString());
+            log.warn("无法打开文件/目录，路径: {}", lroot.toAbsolutePath());
         }
     }
 
     @Override
     public synchronized Data getData(String path) {
         Path dataFile = root.resolve(path + ".xml");
-        Path imageDataDir = root.resolve(path);
+        
+        // 在尝试加载前，先检查文件是否存在
         if (!Files.exists(dataFile)) {
+            // 如果文件不存在，记录错误日志并返回null
+            log.error("数据文件不存在，路径: {}", dataFile.toAbsolutePath());
             return null;
         }
+
+        Path imageDataDir = root.resolve(path);
         final XMLDomMapleData domMapleData;
-        try (FileInputStream fis = new FileInputStream(dataFile.toString())) {
+        try (FileInputStream fis = new FileInputStream(dataFile.toFile())) {
             domMapleData = new XMLDomMapleData(fis, imageDataDir.getParent());
         } catch (FileNotFoundException e) {
-            throw new RuntimeException("Datafile " + path + " does not exist in " + root.toAbsolutePath());
+            // 这个异常理论上不应该再触发，因为我们已经提前检查了文件存在性
+            log.error("严重错误：文件在检查后消失了。路径: {}", dataFile.toAbsolutePath(), e);
+            return null;
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            log.error("读取或解析XML文件时发生IO异常，路径: {}", dataFile.toAbsolutePath(), e);
+            throw new RuntimeException("读取或解析XML文件失败: " + dataFile.toAbsolutePath(), e);
+        } catch (Exception e) {
+            log.error("解析XML文件时发生未知异常，文件可能已损坏。路径: {}", dataFile.toAbsolutePath(), e);
+            throw new RuntimeException("解析XML文件失败: " + dataFile.toAbsolutePath(), e);
         }
 
         return domMapleData;
