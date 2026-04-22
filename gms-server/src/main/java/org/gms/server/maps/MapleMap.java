@@ -573,9 +573,10 @@ public class MapleMap {
     }
 
     public Point calcDropPos(Point initial, Point fallback) {
-        if (initial.x < xLimits.left) {
+        // 增加Null检查，防止xLimits未初始化时导致崩溃
+        if (xLimits != null && xLimits.left != null && initial.x < xLimits.left) {
             initial.x = xLimits.left;
-        } else if (initial.x > xLimits.right) {
+        } else if (xLimits != null && xLimits.right != null && initial.x > xLimits.right) {
             initial.x = xLimits.right;
         }
 
@@ -780,7 +781,7 @@ public class MapleMap {
     }
 
     private void dropFromMonster(final Character chr, final Monster mob, final boolean useBaseRate) {
-        if (mob.dropsDisabled() || !dropsOn) {
+        if (mob.isDropsDisabled() || !dropsOn) {
             return;
         }
 
@@ -820,7 +821,7 @@ public class MapleMap {
     }
 
     public void dropItemsFromMonster(List<MonsterDropEntry> list, final Character chr, final Monster mob) {
-        if (mob.dropsDisabled() || !dropsOn) {
+        if (mob.isDropsDisabled() || !dropsOn) {
             return;
         }
 
@@ -1549,7 +1550,7 @@ public class MapleMap {
                     }
 
                     Character dropOwner = monster.killBy(chr);
-                    if (withDrops && !monster.dropsDisabled()) {
+                    if (withDrops && !monster.isDropsDisabled()) {
                         if (dropOwner == null) {
                             dropOwner = chr;
                         }
@@ -2059,8 +2060,9 @@ public class MapleMap {
     }
 
     public void spawnMonster(final Monster monster, int difficulty, boolean isPq) {
-        if (mobCapacity != -1 && mobCapacity == spawnedMonstersOnMap.get()) {
-            return;//PyPQ
+        // 如果怪物不是BOSS，则检查容量限制
+        if (!monster.isBoss() && mobCapacity != -1 && mobCapacity <= spawnedMonstersOnMap.get()) {
+            return;
         }
 
         monster.changeDifficulty(difficulty, isPq);
@@ -3858,31 +3860,43 @@ public class MapleMap {
             return;
         }
 
-        int numPlayers;
-        chrRLock.lock();
-        try {
-            numPlayers = characters.size();
-
-            if (numPlayers == 0) {
-                return;
-            }
-        } finally {
-            chrRLock.unlock();
+        int numPlayers = getCharacterCount();
+        if (numPlayers == 0) {
+            return;
         }
 
-        int numShouldSpawn = getNumShouldSpawn(numPlayers);
-        if (numShouldSpawn > 0) {
-            List<SpawnPoint> randomSpawn = new ArrayList<>(getMonsterSpawn());
-            Collections.shuffle(randomSpawn);
-            short spawned = 0;
-            for (SpawnPoint spawnPoint : randomSpawn) {
-                if (spawnPoint.shouldSpawn()) {
-                    spawnMonster(spawnPoint.getMonster());
-                    spawned++;
+        // 1. 优先处理并刷新所有应该出现的BOSS
+        List<SpawnPoint> bossSpawns = getMonsterSpawnBoss();
+        for (SpawnPoint spawnPoint : bossSpawns) {
+            if (spawnPoint.shouldSpawn()) {
+                spawnMonster(spawnPoint.getMonster());
+            }
+        }
 
-                    if (spawned >= numShouldSpawn) {
-                        break;
-                    }
+        // 2. 基于刷新BOSS后的怪物数量，计算还需要生成的普通怪物数量
+        int numShouldSpawn = getNumShouldSpawn(numPlayers);
+        if (numShouldSpawn <= 0) {
+            return;
+        }
+
+        // 3. 刷新普通怪物
+        List<SpawnPoint> randomSpawn = getMonsterSpawn();
+        Collections.shuffle(randomSpawn);
+
+        // 为了高效查询，将BOSS刷怪点放入Set中
+        Set<SpawnPoint> bossSpawnSet = new HashSet<>(bossSpawns);
+        short spawned = 0;
+        for (SpawnPoint spawnPoint : randomSpawn) {
+            // 跳过BOSS刷怪点，因为已经处理过了
+            if (bossSpawnSet.contains(spawnPoint)) {
+                continue;
+            }
+
+            if (spawnPoint.shouldSpawn()) {
+                spawnMonster(spawnPoint.getMonster());
+                spawned++;
+                if (spawned >= numShouldSpawn) {
+                    break;
                 }
             }
         }

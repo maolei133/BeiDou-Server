@@ -21,6 +21,9 @@
  */
 package org.gms.server.life;
 
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Client;
@@ -52,8 +55,6 @@ import org.gms.net.server.services.type.ChannelServices;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.util.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.EventInstanceManager;
 import org.gms.server.StatEffect;
 import org.gms.server.TimerManager;
@@ -83,46 +84,124 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+@Slf4j
+@Setter @Getter
 public class Monster extends AbstractLoadedLife {
-    private static final Logger log = LoggerFactory.getLogger(Monster.class);
 
-    private ChangeableStats ostats = null;  //unused, v83 WZs offers no support for changeable stats.
+    /*
+    ======================================
+     C核心属性 (Core Attributes)
+    ======================================
+    */
+    /** 基础属性-怪物的静态数据模板 */
     private MonsterStats stats;
+    /** 动态属性-怪物可覆盖的动态属性 */
+    private ChangeableStats ostats = null;
+    /** 当前生命值-怪物的当前HP */
     private final AtomicInteger hp = new AtomicInteger(1);
-    private final AtomicLong maxHpPlusHeal = new AtomicLong(1);
-    private final AtomicInteger lastSkillId = new AtomicInteger(0);  // 记录上一次玩家释放的技能ID，线程安全
-    private final AtomicInteger lastSkillTargetCount = new AtomicInteger(0);  // 记录上一次玩家攻击的目标数，线程安全
+    /** 当前魔法值-怪物的当前MP */
     private int mp;
-    private WeakReference<Character> controller = new WeakReference<>(null);
-    private boolean controllerHasAggro, controllerKnowsAboutAggro, controllerHasPuppet;
-    private final Collection<MonsterListener> listeners = new LinkedList<>();
-    private final EnumMap<MonsterStatus, MonsterStatusEffect> stati = new EnumMap<>(MonsterStatus.class);
-    private final Map<Element, ElementalEffectiveness> tempEffectiveness = new EnumMap<>(Element.class);
-    private final ArrayList<MonsterStatus> alreadyBuffed = new ArrayList<>();
+    /** 最大生命值记录-用于计算总伤害，包含治疗量 */
+    private final AtomicLong maxHpPlusHeal = new AtomicLong(1);
+    /** 所在地图-怪物当前所在的地图实例 */
     private MapleMap map;
-    private int VenomMultiplier = 0;
-    private boolean fake = false;
-    private boolean dropsDisabled = false;
-    private final Set<MobSkillId> usedSkills = new HashSet<>();
-    private final Set<Integer> usedAttacks = new HashSet<>();
-    private Set<Integer> calledMobOids = null;
-    private WeakReference<Monster> callerMob = new WeakReference<>(null);
-    private final List<Integer> stolenItems = new ArrayList<>(5);
-    private int team;
-    private int parentMobOid = 0;
-    private int spawnEffect = 0;
-    private final HashMap<Integer, AtomicLong> takenDamage = new HashMap<>();
-    private final HashMap<Integer, Long> takenDamageTime = new HashMap<>();  // 记录每个玩家了最后一次伤害的时间戳
-    private final HashMap<Integer, Boolean> summonDamageFlag = new HashMap<>();  // 标记是否是召唤兽伤害，key=playerId, value=true为召唤兽,false为玩家直接伤害
-    private ScheduledFuture<?> monsterItemDrop = null;
-    private Runnable removeAfterAction = null;
-    private boolean availablePuppetUpdate = true;
-    private int markedBy = 0; // 新增字段，用于存储标记该怪物的玩家ID
 
+    /*
+    ======================================
+     状态与效果 (Status & Effects)
+    ======================================
+    */
+    /** 状态效果-怪物当前承受的状态效果集合 */
+    private final EnumMap<MonsterStatus, MonsterStatusEffect> stati = new EnumMap<>(MonsterStatus.class);
+    /** 临时元素抗性-怪物的临时元素属性效果 */
+    private final Map<Element, ElementalEffectiveness> tempEffectiveness = new EnumMap<>(Element.class);
+    /** 已应用Buff列表-记录已施加的状态以避免重复 */
+    private final ArrayList<MonsterStatus> alreadyBuffed = new ArrayList<>();
+    /** 中毒效果倍率-用于计算持续伤害 */
+    private int VenomMultiplier = 0;
+
+    /*
+    ======================================
+     行为与交互 (Behavior & Interaction)
+    ======================================
+    */
+    /** 控制者-当前控制该怪物的玩家 */
+    private WeakReference<Character> controller = new WeakReference<>(null);
+    /** 控制者仇恨状态-标记控制者是否对怪物有仇恨 */
+    private boolean controllerHasAggro;
+    /** 控制者仇恨感知-标记控制者是否已知晓其仇恨状态 */
+    private boolean controllerKnowsAboutAggro;
+    /** 控制者傀儡状态-标记控制者是否拥有傀儡 */
+    private boolean controllerHasPuppet;
+    /** 伤害记录-记录所有玩家对该怪物的伤害量 */
+    private final HashMap<Integer, AtomicLong> takenDamage = new HashMap<>();
+    /** 最近伤害时间-记录每个玩家的最后伤害时间戳 */
+    private final HashMap<Integer, Long> takenDamageTime = new HashMap<>();
+    /** 召唤兽伤害标记-区分伤害来源是玩家还是召唤兽 */
+    private final HashMap<Integer, Boolean> summonDamageFlag = new HashMap<>();
+    /** 最近攻击技能ID-记录造成伤害的最后一个技能ID */
+    private final AtomicInteger lastSkillId = new AtomicInteger(0);
+    /** 最近攻击目标数-记录最后一个技能攻击的目标数量 */
+    private final AtomicInteger lastSkillTargetCount = new AtomicInteger(0);
+    /** 已使用技能-记录已进入冷却的技能 */
+    private final Set<MobSkillId> usedSkills = new HashSet<>();
+    /** 已使用攻击-记录已进入冷却的普通攻击 */
+    private final Set<Integer> usedAttacks = new HashSet<>();
+    /** 召唤者-召唤出此怪物的父怪物 */
+    private WeakReference<Monster> callerMob = new WeakReference<>(null);
+    /** 被召唤物列表-记录此怪物召唤出的其他怪物的OID */
+    private Set<Integer> calledMobOids = null;
+    /** 被偷物品-记录被玩家偷走的物品ID */
+    private final List<Integer> stolenItems = new ArrayList<>(5);
+    /** 标记玩家ID-用于特殊技能，标记怪物的玩家ID */
+    private int markedBy = 0;
+
+    /*
+    ======================================
+     特殊与元数据 (Special & Metadata)
+    ======================================
+    */
+    /** 阵营-用于怪物嘉年华等玩法的队伍标识 */
+    private int team;
+    /** 父怪物OID-用于召唤物，关联召唤者 */
+    private int parentMobOid = 0;
+    /** 刷新特效-怪物出生时的视觉特效ID */
+    private int spawnEffect = 0;
+    /** 伪装状态-标记是否为假怪物（无实际交互） */
+    private boolean fake = false;
+    /** 禁用掉落-标记是否禁止该怪物掉落物品 */
+    private boolean dropsDisabled = false;
+    /** 持久化标记-标记该怪物是否需要在死亡后将其刷新时间持久化到数据库 */
+    private boolean shouldPersist = false;
+
+    /*
+    ======================================
+     定时任务与监听器 (Tasks & Listeners)
+    ======================================
+    */
+    /** 怪物监听器-用于在特定事件发生时通知其他对象 */
+    private final Collection<MonsterListener> listeners = new LinkedList<>();
+    /** 怪物定时掉落-用于月妙等需要定时产出物品的怪物 */
+    private ScheduledFuture<?> monsterItemDrop = null;
+    /** 消失动作-用于在怪物被移除时执行的额外逻辑 */
+    private Runnable removeAfterAction = null;
+    /** 傀儡更新可用性-防止短时间内重复更新傀儡仇恨 */
+    private boolean availablePuppetUpdate = true;
+
+    /*
+    ======================================
+     线程锁 (Locks)
+    ======================================
+    */
+    /** 外部锁-用于保护怪物对象的并发访问 */
     private final Lock externalLock = new ReentrantLock();
+    /** 怪物内部锁-保护怪物核心数据的线程安全 */
     private final Lock monsterLock = new ReentrantLock(true);
+    /** 状态锁-保护怪物状态效果集合的线程安全 */
     private final Lock statiLock = new ReentrantLock();
+    /** 动画锁-防止动画效果的并发冲突 */
     private final Lock animationLock = new ReentrantLock();
+    /** 仇恨更新锁-保护仇恨控制器切换逻辑的线程安全 */
     private final Lock aggroUpdateLock = new ReentrantLock();
 
     public Monster(int id, MonsterStats stats) {
@@ -152,36 +231,12 @@ public class Monster extends AbstractLoadedLife {
         maxHpPlusHeal.set(hp.get());
     }
 
-    public void setSpawnEffect(int effect) {
-        spawnEffect = effect;
-    }
-
-    public int getSpawnEffect() {
-        return spawnEffect;
-    }
-
     public void disableDrops() {
         this.dropsDisabled = true;
     }
 
     public void enableDrops() {
         this.dropsDisabled = false;
-    }
-
-    public boolean dropsDisabled() {
-        return dropsDisabled;
-    }
-
-    public void setMap(MapleMap map) {
-        this.map = map;
-    }
-
-    public int getParentMobOid() {
-        return parentMobOid;
-    }
-
-    public void setParentMobOid(int parentMobId) {
-        this.parentMobOid = parentMobId;
     }
 
     public int countAvailableMobSummons(int summonsSize, int skillLimit) {    // limit prop for summons has another conotation, found thanks to MedicOP
@@ -295,10 +350,6 @@ public class Monster extends AbstractLoadedLife {
         lastSkillTargetCount.set(targetCount);
     }
 
-    public int getMp() {
-        return mp;
-    }
-
     public void setMp(int mp) {
         if (mp < 0) {
             mp = 0;
@@ -322,28 +373,12 @@ public class Monster extends AbstractLoadedLife {
         return stats.getCP();
     }
 
-    public int getTeam() {
-        return team;
-    }
-
-    public void setTeam(int team) {
-        this.team = team;
-    }
-
     public int getVenomMulti() {
         return this.VenomMultiplier;
     }
 
     public void setVenomMulti(int multiplier) {
         this.VenomMultiplier = multiplier;
-    }
-
-    public MonsterStats getStats() {
-        return stats;
-    }
-
-    public void setStats(MonsterStats stats) {
-        this.stats = stats;
     }
 
     public boolean isBoss() {
@@ -370,7 +405,7 @@ public class Monster extends AbstractLoadedLife {
         applyAndGetHpDamage(Integer.MAX_VALUE, false);
     }
 
-    private boolean applyAnimationIfRoaming(int attackPos, MobSkill skill) {   // roam: not casting attack or skill animations
+    private boolean applyAnimationIfRoaming(int attackPos, MobSkill skill) {   // 漫游：不播放攻击或技能动画
         if (!animationLock.tryLock()) {
             return false;
         }
@@ -494,10 +529,13 @@ public class Monster extends AbstractLoadedLife {
     }
 
     /**
-     * @param from      the player that dealt the damage
-     * @param damage
-     * @param stayAlive
-     * @param isFromSummon  true为召唤兽伤害，false为玩家直接伤害
+     * 应用伤害到怪物
+     * 
+     * @param from 攻击者角色
+     * @param damage 伤害值
+     * @param stayAlive 是否保持存活（防止死亡）
+     * @param fake 是否为虚假伤害（不触发监听器等逻辑）
+     * @param isFromSummon 是否为召唤兽伤害，true为召唤兽伤害，false为玩家直接伤害
      */
     private void applyDamage(Character from, int damage, boolean stayAlive, boolean fake, boolean isFromSummon) {
         Integer trueDamage = applyAndGetHpDamage(damage, stayAlive);
@@ -589,7 +627,7 @@ public class Monster extends AbstractLoadedLife {
 
         float varExpReward = 0.0f;
         for (Float exp : entryExpRatio) {
-            varExpReward += Math.pow(exp - avgExpReward, 2);
+            varExpReward += (float) Math.pow(exp - avgExpReward, 2);
         }
         varExpReward /= entryExpRatio.size();
 
@@ -879,9 +917,9 @@ public class Monster extends AbstractLoadedLife {
         Integer holySymbol = attacker.getBuffedValue(BuffStat.HOLY_SYMBOL);
         if (holySymbol != null) {
             if (GameConfig.getServerBoolean("use_full_holy_symbol")) { // thanks Mordred, xinyifly, AyumiLove, andy33 for noticing HS hands out 20% of its potential on less than 3 players
-                multiplier *= (1.0 + (holySymbol.doubleValue() / 100.0));
+                multiplier *= (float) (1.0 + (holySymbol.doubleValue() / 100.0));
             } else {
-                multiplier *= (1.0 + (holySymbol.doubleValue() / (hasPartySharers ? 100.0 : 500.0)));
+                multiplier *= (float) (1.0 + (holySymbol.doubleValue() / (hasPartySharers ? 100.0 : 500.0)));
             }
         }
 
@@ -889,7 +927,7 @@ public class Monster extends AbstractLoadedLife {
         try {
             MonsterStatusEffect mse = stati.get(MonsterStatus.SHOWDOWN);
             if (mse != null) {
-                multiplier *= (1.0 + (mse.getStati().get(MonsterStatus.SHOWDOWN).doubleValue() / 100.0));
+                multiplier *= (float) (1.0 + (mse.getStati().get(MonsterStatus.SHOWDOWN).doubleValue() / 100.0));
             }
         } finally {
             statiLock.unlock();
@@ -985,7 +1023,7 @@ public class Monster extends AbstractLoadedLife {
                 }
             }
 
-            if (toSpawn.size() > 0) {
+            if (!toSpawn.isEmpty()) {
                 final EventInstanceManager eim = this.getMap().getEventInstance();
 
                 TimerManager.getInstance().schedule(() -> {
@@ -994,11 +1032,13 @@ public class Monster extends AbstractLoadedLife {
 
                     for (Integer mid : toSpawn) {
                         final Monster mob = LifeFactory.getMonster(mid);
-                        mob.setPosition(getPosition());
+                        if (mob != null) {
+                            mob.setPosition(getPosition());
+                        }
                         mob.setFh(getFh());
                         mob.setParentMobOid(getObjectId());
 
-                        if (dropsDisabled()) {
+                        if (isDropsDisabled()) {
                             mob.disableDrops();
                         }
                         reviveMap.spawnMonster(mob);
@@ -1056,7 +1096,7 @@ public class Monster extends AbstractLoadedLife {
             MapleMap map = m.getMap();
             List<Character> chrList = map.getAllPlayers();
             if (!chrList.isEmpty()) {
-                Character chr = chrList.get(0);
+                Character chr = chrList.getFirst();
 
                 EventInstanceManager eim = map.getEventInstance();
                 if (eim != null) {
@@ -1371,7 +1411,7 @@ public class Monster extends AbstractLoadedLife {
 
         final Channel ch = map.getChannelServer();
         final int mapid = map.getId();
-        if (statis.size() > 0) {
+        if (!statis.isEmpty()) {
             statiLock.lock();
             try {
                 for (MonsterStatus stat : statis.keySet()) {
@@ -1629,10 +1669,6 @@ public class Monster extends AbstractLoadedLife {
         }
     }
 
-    public MapleMap getMap() {
-        return map;
-    }
-
     public MonsterAggroCoordinator getMapAggroCoordinator() {
         return map.getAggroCoordinator();
     }
@@ -1782,7 +1818,7 @@ public class Monster extends AbstractLoadedLife {
 
     public MobSkillId getRandomSkill() {
         Set<MobSkillId> skills = stats.getSkills();
-        if (skills.size() == 0) {
+        if (skills.isEmpty()) {
             return null;
         }
         // There is no simple way of getting a random element from a Set. Have to make do with this.
@@ -1871,15 +1907,12 @@ public class Monster extends AbstractLoadedLife {
         } finally {
             monsterLock.unlock();
         }
-        TimerManager.getInstance().schedule(new Runnable() {
-            @Override
-            public void run() {
-                monsterLock.lock();
-                try {
-                    tempEffectiveness.remove(e);
-                } finally {
-                    monsterLock.unlock();
-                }
+        TimerManager.getInstance().schedule(() -> {
+            monsterLock.lock();
+            try {
+                tempEffectiveness.remove(e);
+            } finally {
+                monsterLock.unlock();
             }
         }, milli);
     }
@@ -1969,20 +2002,15 @@ public class Monster extends AbstractLoadedLife {
     }
 
     private float getDifficultyRate(final int difficulty) {
-        switch (difficulty) {
-            case 6:
-                return (7.7f);
-            case 5:
-                return (5.6f);
-            case 4:
-                return (3.2f);
-            case 3:
-                return (2.1f);
-            case 2:
-                return (1.4f);
-        }
+        return switch (difficulty) {
+            case 6 -> (7.7f);
+            case 5 -> (5.6f);
+            case 4 -> (3.2f);
+            case 3 -> (2.1f);
+            case 2 -> (1.4f);
+            default -> (1.0f);
+        };
 
-        return (1.0f);
     }
 
     private void changeLevelByDifficulty(final int difficulty, boolean pqMob) {
@@ -2392,11 +2420,4 @@ public class Monster extends AbstractLoadedLife {
         this.getMap().dismissRemoveAfter(this);
     }
 
-    public int getMarkedBy() {
-        return markedBy;
-    }
-
-    public void setMarkedBy(int playerId) {
-        this.markedBy = playerId;
-    }
 }

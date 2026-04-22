@@ -42,6 +42,7 @@ import java.awt.*;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.gms.dao.entity.table.PlifeDOTableDef.PLIFE_DO;
@@ -82,11 +83,13 @@ public class MapFactory {
     private static void loadLifeFromDb(MapleMap map) {
         List<PlifeDO> plifeList = plifeMapper.selectListByQuery(QueryWrapper.create()
                 .where(PLIFE_DO.MAP.eq(map.getId()))
-                .and(PLIFE_DO.WORLD.eq(map.getWorld())));
-        for (PlifeDO plife : plifeList) {
-            loadLifeRaw(map, plife.getLife(), plife.getType(), plife.getCy(), plife.getF(), plife.getFh(),
-                    plife.getRx0(), plife.getRx1(), plife.getX(), plife.getY(), plife.getHide(),
-                    plife.getMobtime(), plife.getTeam());
+                .and((Consumer<QueryWrapper>) qw -> qw.where(PLIFE_DO.WORLD.eq(map.getWorld())).or(PLIFE_DO.WORLD.eq(-1))));
+        if (plifeList != null) {
+            for (PlifeDO plife : plifeList) {
+                loadLifeRaw(map, plife.getLife(), plife.getType(), plife.getCy(), plife.getF(), plife.getFh(),
+                        plife.getRx0(), plife.getRx1(), plife.getX(), plife.getY(), plife.getHide(),
+                        plife.getMobtime(), plife.getTeam());
+            }
         }
     }
 
