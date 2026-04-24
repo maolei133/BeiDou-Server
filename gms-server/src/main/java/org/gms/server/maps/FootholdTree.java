@@ -204,6 +204,12 @@ public class FootholdTree {
      * @return 找到的 Foothold
      */
     public Foothold findBelow(Point p) {
+        // 优先使用旧的逻辑进行查找,如果找到则直接返回,避免影响原来的逻辑
+        Foothold foothold = findBelow_old(p);
+        if (foothold != null) {
+            return foothold;
+        }
+
 //        System.out.println("======== 正在寻找位于点 p: " + p.x + ", " + p.y + " 下方的平台 ========");
         List<Foothold> relevants = getRelevants(p);
 
