@@ -54,6 +54,7 @@ public enum LogAction {
 
     // --- FIELD ---
     /** 切换地图 */ MAP_CHANGE,
+    /** BOSS被击杀 */ BOSS_KILLED,
 
     // --- AUTOBAN ---
     /** 检测到作弊 */ CHEAT_DETECTED,

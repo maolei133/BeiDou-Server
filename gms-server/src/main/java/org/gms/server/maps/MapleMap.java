@@ -21,6 +21,7 @@
  */
 package org.gms.server.maps;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Client;
@@ -78,6 +79,10 @@ import org.gms.server.partyquest.GuardianSpawnPoint;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
 import org.gms.util.Randomizer;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogModule;
+import org.gms.server.logging.LogAction;
+import org.gms.service.BossScheduleService;
 
 import java.awt.*;
 import java.lang.ref.WeakReference;
@@ -104,6 +109,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -1486,7 +1492,7 @@ public class MapleMap {
 
         if (chr == null) {
             if (removeKilledMonsterObject(monster)) {
-                monster.dispatchMonsterKilled(false);
+                monster.dispatchMonsterKilled(false, this.world, this.channel, this.mapid);
                 broadcastMessage(PacketCreator.killMonster(monster.getObjectId(), animation), monster.getPosition());
                 monster.aggroSwitchController(null, false);
             }
@@ -1564,10 +1570,26 @@ public class MapleMap {
                             }
                         }
                     }
+
+                    // 【新增】Loki日志记录
+                    if (monster.isBoss()) {
+                        // 获取当时在场的所有玩家名称
+                        // 构建地图所有角色的JSON结构 [id, name]
+                        List<Object[]> playerInfoList = monster.getMap().getAllPlayers().stream()
+                                .map(p -> new Object[]{p.getId(), p.getName()})
+                                .collect(Collectors.toList());
+
+                        MapMessage data = new MapMessage()
+                            .with("怪物ID", monster.getId())
+                            .with("怪物名称", monster.getName())
+                            .with("地图角色", playerInfoList);
+
+                        AuditLogger.info(LogModule.FIELD, LogAction.BOSS_KILLED, data);
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 } finally {     // thanks resinate for pointing out a memory leak possibly from an exception thrown
-                    monster.dispatchMonsterKilled(true);
+                    monster.dispatchMonsterKilled(true, this.world, this.channel, this.mapid);
                     broadcastMessage(PacketCreator.killMonster(monster.getObjectId(), animation), monster.getPosition());
                 }
             }
@@ -1619,7 +1641,7 @@ public class MapleMap {
             }
 
             if (removeKilledMonsterObject(monster)) {
-                monster.dispatchMonsterKilled(false);
+                monster.dispatchMonsterKilled(false, this.world, this.channel, this.mapid);
             }
         }
     }
@@ -2064,8 +2086,9 @@ public class MapleMap {
         if (!monster.isBoss() && mobCapacity != -1 && mobCapacity <= spawnedMonstersOnMap.get()) {
             return;
         }
-
-        monster.changeDifficulty(difficulty, isPq);
+        if (monster.getMsgRebirth() != null && !monster.getMsgRebirth().isEmpty()) {
+            dropMessage(5,monster.getName() + " " + monster.getMsgRebirth());
+        }
 
         monster.setMap(this);
         if (getEventInstance() != null) {
@@ -3296,17 +3319,23 @@ public class MapleMap {
     public MonsterAggroCoordinator getAggroCoordinator() {
         return aggroMonitor;
     }
+    public void addMonsterSpawn(Monster monster, int mobTime, int team) {
+        addMonsterSpawn(monster, mobTime, team, 0);
+    }
 
     /**
-     * it's threadsafe, gtfo :D
-     *
-     * @param monster
-     * @param mobTime
+     * 添加怪物刷新点
+     * @param monster 怪物对象
+     * @param mobTime 刷新间隔（秒）
+     * @param team 队伍/阵营
+     * @param nextSpawnTime 下次刷新时间戳
      */
-    public void addMonsterSpawn(Monster monster, int mobTime, int team) {
+    public void addMonsterSpawn(Monster monster, int mobTime, int team, long nextSpawnTime) {
         Point newpos = calcPointBelow(monster.getPosition());
         newpos.y -= 1;
         SpawnPoint sp = new SpawnPoint(monster, newpos, !monster.isMobile(), mobTime, mobInterval, team);
+
+        if (nextSpawnTime > 0) sp.setNextPossibleSpawn(nextSpawnTime); // 设置下次刷新时间
         monsterSpawn.add(sp);
         if (monster.isBoss()) monsterSpawnBoss.add(sp); // 添加到BOSS刷新点
         if (sp.shouldSpawn() || mobTime == -1) {// -1 不刷新，也不应该刷新，但强制生成一次
@@ -4342,7 +4371,7 @@ public class MapleMap {
         ht.setParentMobOid(htIntro.getObjectId());
         ht.addListener(new MonsterListener() {
             @Override
-            public void monsterKilled(int aniTime) {
+            public void monsterKilled(int aniTime, boolean hasKiller, int world, int channel, int mapid) {
             }
 
             @Override
@@ -4363,7 +4392,7 @@ public class MapleMap {
 
             m.addListener(new MonsterListener() {
                 @Override
-                public void monsterKilled(int aniTime) {
+                public void monsterKilled(int aniTime, boolean hasKiller, int world, int channel, int mapid) {
                 }
 
                 @Override

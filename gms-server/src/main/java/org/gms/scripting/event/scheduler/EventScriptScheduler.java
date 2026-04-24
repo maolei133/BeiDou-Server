@@ -83,7 +83,7 @@ public class EventScriptScheduler {
                     r.run();  // 运行计划任务
                 } catch (Exception e) {
                     // 记录异常但继续处理其他任务
-                    log.error("[事件脚本] 计划任务执行失败，任务: {}", r, e);
+                    log.error("[事件脚本] 计划任务执行失败，路径：{} ，任务: {}", r, e);
                 } finally {
                     // 无论任务是否成功执行，都标记为需要移除
                     toRemove.add(r);

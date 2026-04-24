@@ -21,14 +21,19 @@
  */
 package org.gms.server.life;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.gms.client.Character;
 import org.gms.net.server.Server;
+import org.gms.server.maps.MapleMap;
+import org.gms.service.BossScheduleService;
 
 import java.awt.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+@Setter @Getter
 public class SpawnPoint {
     private final int monster;
     private final int mobTime;
@@ -41,6 +46,11 @@ public class SpawnPoint {
     private final AtomicInteger spawnedMonsters = new AtomicInteger(0);
     private final boolean immobile;
     private boolean denySpawn = false;
+    // [新增] 用于持久化BOSS刷新计划的属性
+    private final boolean shouldPersist;
+    private int shouldId; // [修改] 允许被更新
+    private final String msgRebirth, msgDeath; //出场广播消息和死亡广播消息，在当前地图广播
+
 
     public SpawnPoint(final Monster monster, Point pos, boolean immobile, int mobTime, int mobInterval, int team) {
         this.monster = monster.getId();
@@ -52,14 +62,15 @@ public class SpawnPoint {
         this.immobile = immobile;
         this.mobInterval = mobInterval;
         this.nextPossibleSpawn = Server.getInstance().getCurrentTime();
+        // [修改] 在构造时保存 shouldPersist 和 shouldId 属性
+        this.shouldPersist = monster.isShouldPersist();
+        this.shouldId = monster.getShouldId();
+        this.msgRebirth = monster.getMsgRebirth();
+        this.msgDeath = monster.getMsgDeath();
     }
 
     public int getSpawned() {
         return spawnedMonsters.intValue();
-    }
-
-    public void setDenySpawn(boolean val) {
-        denySpawn = val;
     }
 
     public boolean getDenySpawn() {
@@ -83,15 +94,33 @@ public class SpawnPoint {
         mob.setTeam(team);
         mob.setFh(fh);
         mob.setF(f);
+        // [修改] 将保存的属性应用到新创建的怪物实例上
+        mob.setShouldPersist(this.shouldPersist);
+        mob.setShouldId(this.shouldId);
+        mob.setMsgRebirth(this.msgRebirth);
+        mob.setMsgDeath(this.msgDeath);
         spawnedMonsters.incrementAndGet();
         mob.addListener(new MonsterListener() {
             @Override
-            public void monsterKilled(int aniTime) {
+            public void monsterKilled(int aniTime, boolean hasKiller,int world, int channel, int mapid) {
+                if (mob.getMsgDeath() != null && !mob.getMsgDeath().isEmpty()) {
+                    mob.getMap().dropMessage(5,mob.getMsgDeath());  // 广播死亡文案
+                }
                 nextPossibleSpawn = Server.getInstance().getCurrentTime();
                 if (mobTime > 0) {
                     nextPossibleSpawn += SECONDS.toMillis(mobTime);
                 } else {
                     nextPossibleSpawn += aniTime;
+                }
+                // 有击杀者、非其他怪物召唤的，才将下次刷新时间添加到数据库，避免关服等情况导致插入数据库报错影响关服
+                if (hasKiller && mob.getParentMobOid() <= 0 && mob.isShouldPersist()) {
+                    if (mob.getShouldId() > 0) {
+                        BossScheduleService.getInstance().updateNextSpawnTime(mob.getShouldId(), nextPossibleSpawn);
+                    } else {
+                        // [修改] 调用新的 findOrCreateSchedule 方法，并更新当前刷新点的 shouldId
+                        int newId = BossScheduleService.getInstance().findOrCreateSchedule(world, channel, mapid, mob.getId(), nextPossibleSpawn);
+                        setShouldId(newId); // 更新当前SpawnPoint的ID，以便下次getMonster时传递正确的ID
+                    }
                 }
                 spawnedMonsters.decrementAndGet();
             }
@@ -124,11 +153,4 @@ public class SpawnPoint {
         return fh;
     }
 
-    public int getMobTime() {
-        return mobTime;
-    }
-
-    public int getTeam() {
-        return team;
-    }
 }

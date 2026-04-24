@@ -1,5 +1,6 @@
 package org.gms.dao.entity;
 
+import com.mybatisflex.annotation.Column;
 import com.mybatisflex.annotation.Id;
 import com.mybatisflex.annotation.KeyType;
 import com.mybatisflex.annotation.Table;
@@ -57,5 +58,8 @@ public class PlifeDO implements Serializable {
     private Integer mobtime;
 
     private Integer team;
-
-}
+    @Column("msgRebirth")
+    private String msgRebirth;
+    @Column("msgDeath")
+    private String msgDeath;
+    }

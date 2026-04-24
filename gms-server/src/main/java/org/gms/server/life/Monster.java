@@ -153,7 +153,7 @@ public class Monster extends AbstractLoadedLife {
     private Set<Integer> calledMobOids = null;
     /** 被偷物品-记录被玩家偷走的物品ID */
     private final List<Integer> stolenItems = new ArrayList<>(5);
-    /** 标记玩家ID-用于特殊技能，标记怪物的玩家ID */
+    /** 标记玩家ID-用于特殊技能，标记怪物的玩家ID，比如导航标记 */
     private int markedBy = 0;
 
     /*
@@ -173,6 +173,13 @@ public class Monster extends AbstractLoadedLife {
     private boolean dropsDisabled = false;
     /** 持久化标记-标记该怪物是否需要在死亡后将其刷新时间持久化到数据库 */
     private boolean shouldPersist = false;
+    /** 持久化ID-数据库里对应的记录ID */
+    private int shouldId = -1;
+    /** 出场消息-用于怪物出生时显示的提示消息 */
+    private String msgRebirth = null; //出场广播消息，在当前地图广播
+    /** 死亡消息-用于怪物死亡时显示的提示消息 */
+    private String msgDeath = null; //死亡广播消息，在当前地图广播
+
 
     /*
     ======================================
@@ -1126,8 +1133,8 @@ public class Monster extends AbstractLoadedLife {
         }
     }
 
-    public void dispatchMonsterKilled(boolean hasKiller) {
-        processMonsterKilled(hasKiller);
+    public void dispatchMonsterKilled(boolean hasKiller, int world, int channel, int mapid) {
+        processMonsterKilled(hasKiller, world, channel, mapid);
 
         EventInstanceManager eim = getMap().getEventInstance();
         if (eim != null) {
@@ -1139,8 +1146,8 @@ public class Monster extends AbstractLoadedLife {
         }
     }
 
-    private synchronized void processMonsterKilled(boolean hasKiller) {
-        if (!hasKiller) {    // players won't gain EXP from a mob that has no killer, but a quest count they should
+    private synchronized void processMonsterKilled(boolean hasKiller, int world, int channel, int mapid) {
+        if (!hasKiller) {    // 如果没有击杀者，玩家不会获得经验值，但应该增加任务计数
             dispatchRaiseQuestMobCount();
         }
 
@@ -1156,7 +1163,7 @@ public class Monster extends AbstractLoadedLife {
         }
 
         for (MonsterListener listener : listenersList) {
-            listener.monsterKilled(getAnimationTime("die1"));
+            listener.monsterKilled(getAnimationTime("die1"),hasKiller, world, channel, mapid);
         }
 
         statiLock.lock();

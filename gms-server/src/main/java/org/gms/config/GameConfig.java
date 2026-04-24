@@ -373,13 +373,16 @@ public class GameConfig {
     }
 
     public static float getServerFloat(String key) {
+        return getServerFloat(key, 0);
+    }
+
+    public static float getServerFloat(String key, float defaultValue) {
         JSONObject valueProp = getValueProp("server", key);
         if (valueProp == null) {
             return 0F;
         }
         return valueProp.getFloatValue("value");
     }
-
     public static double getWorldDouble(int worldId, String key) {
         JSONObject valueProp = getValueProp("world", String.valueOf(worldId), key);
         if (valueProp == null) {

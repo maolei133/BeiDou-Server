@@ -731,9 +731,10 @@ public class Server {
         //基于lxconan的实时任务聚合方法 ，需要在newYearCardService.startPendingNewYearCardRequests()方法之前调用，否则存在概率造成TimerManager的ses为null导致无法启动
         initializeTimelyTasks();    // aggregated method for timely tasks thanks to lxconan
         newYearCardService.startPendingNewYearCardRequests();
+//        BossScheduleService.getInstance().loadAllSchedules();
         try {
             for (int i = 0; i < worldCount; i++) {
-                initWorld();
+                initWorld();    // 初始化世界也会占用内存
             }
             // world初始化后需要加载的
             reloadWorldsPlayerRanking();
@@ -760,7 +761,7 @@ public class Server {
         CommandsExecutor.getInstance().loadCommandsExecutor();
 
         for (Channel ch : this.getAllChannels()) {
-            ch.reloadEventScriptManager();
+            ch.reloadEventScriptManager();  // 载入频道事件也会占用内存
         }
         log.info(I18nUtil.getLogMessage("Server.init.info8"));
         online = true;

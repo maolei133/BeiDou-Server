@@ -24,7 +24,9 @@ package org.gms.server.maps;
 import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.MapId;
+import org.gms.dao.entity.BossScheduleDO;
 import org.gms.dao.entity.PlifeDO;
+import org.gms.dao.mapper.BossScheduleMapper;
 import org.gms.dao.mapper.PlifeMapper;
 import org.gms.manager.ServerManager;
 import org.gms.provider.*;
@@ -35,13 +37,16 @@ import org.gms.server.life.LifeFactory;
 import org.gms.server.life.Monster;
 import org.gms.server.life.PlayerNPC;
 import org.gms.server.partyquest.GuardianSpawnPoint;
+import org.gms.service.BossScheduleService;
 import org.gms.util.NumberTool;
 import org.gms.util.StringUtil;
 
 import java.awt.*;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -51,8 +56,9 @@ public class MapFactory {
     private static final Data nameData = DataProviderFactory.getDataProvider(WZFiles.STRING).getData("Map.img");
     private static final DataProvider mapSource = DataProviderFactory.getDataProvider(WZFiles.MAP);
     private static final PlifeMapper plifeMapper = ServerManager.getApplicationContext().getBean(PlifeMapper.class);
+    private static final BossScheduleMapper bossScheduleMapper = ServerManager.getApplicationContext().getBean(BossScheduleMapper.class);
 
-    private static void loadLifeFromWz(MapleMap map, Data mapData) {
+    private static void loadLifeFromWz(MapleMap map, Data mapData, List<BossScheduleDO> schedules) {
         for (Data life : mapData.getChildByPath("life")) {
             life.getName();
             String id = DataTool.getString(life.getChildByPath("id"));
@@ -76,50 +82,87 @@ public class MapFactory {
             int hide = DataTool.getInt("hide", life, 0);
             int mobTime = DataTool.getInt("mobTime", life, 0);
 
-            loadLifeRaw(map, Integer.parseInt(id), type, cy, f, fh, rx0, rx1, x, y, hide, mobTime, team);
+            loadLifeRaw(map, Integer.parseInt(id), type, cy, f, fh, rx0, rx1, x, y, hide, mobTime, team, schedules,null,null);
         }
     }
 
-    private static void loadLifeFromDb(MapleMap map) {
+    private static void loadLifeFromDb(MapleMap map, List<BossScheduleDO> schedules) {
         List<PlifeDO> plifeList = plifeMapper.selectListByQuery(QueryWrapper.create()
                 .where(PLIFE_DO.MAP.eq(map.getId()))
                 .and((Consumer<QueryWrapper>) qw -> qw.where(PLIFE_DO.WORLD.eq(map.getWorld())).or(PLIFE_DO.WORLD.eq(-1))));
-        if (plifeList != null) {
+        if (plifeList != null && !plifeList.isEmpty()) {
             for (PlifeDO plife : plifeList) {
                 loadLifeRaw(map, plife.getLife(), plife.getType(), plife.getCy(), plife.getF(), plife.getFh(),
                         plife.getRx0(), plife.getRx1(), plife.getX(), plife.getY(), plife.getHide(),
-                        plife.getMobtime(), plife.getTeam());
+                        plife.getMobtime(), plife.getTeam(), schedules, plife.getMsgRebirth(), plife.getMsgDeath());
             }
         }
     }
 
-    private static void loadLifeRaw(MapleMap map, int id, String type, int cy, int f, int fh, int rx0, int rx1, int x, int y, int hide, int mobTime, int team) {
+    /**
+     * 加载地图中的NPC/怪物
+     * @param map 地图
+     * @param id 生物ID
+     * @param type 生物类型
+     * @param cy Y坐标
+     * @param f F坐标
+     * @param fh FH坐标
+     * @param rx0 X坐标
+     * @param rx1 X坐标
+     * @param x X坐标
+     * @param y Y坐标
+     * @param hide 隐藏
+     * @param mobTime 怪物时间
+     * @param team 队伍
+     * @param schedules BOSS刷新调度列表
+     */
+    private static void loadLifeRaw(MapleMap map, int id, String type, int cy, int f, int fh, int rx0, int rx1, int x, int y, int hide, int mobTime, int team, List<BossScheduleDO> schedules, String msgRebirth, String msgDeath) {
         AbstractLoadedLife myLife = loadLife(id, type, cy, f, fh, rx0, rx1, x, y, hide);
+        
         if (myLife instanceof Monster monster) {
-            int mobRespawnRate = GameConfig.getServerInt("mob_respawn_rate");
-            float mobTimeRate = GameConfig.getServerFloat("boss_respawn_mob_time_rate");
-            mobTimeRate = (mobTimeRate <= 0 || mobTimeRate > 1) ? 1 : mobTimeRate;  //将值限定在0~1之间的范围
-            if (mobRespawnRate < 1) {   //如果读入的值小于1，或者怪物为boss，则设定生怪倍率为1
-                mobRespawnRate = 1;
-            }
+            monster.setMsgRebirth(msgRebirth);
+            monster.setMsgDeath(msgDeath);
+            
+            long nextSpawnTime = 0; // 默认下次刷新时间为0
+
             if (monster.isBoss()) {
-                mobRespawnRate = 1;
-                mobTime = NumberTool.floatToInt(mobTime * mobTimeRate);
-            }
-            // 如果是事件地图，刷新倍率保持不变
-            if (map.getEventInstance() != null) {
-                mobRespawnRate = 1;
+                monster.setShouldPersist(true);
+
+                // [修改] 查找对应的刷新计划，但不再从列表中移除
+                if (schedules != null) {
+                    Optional<BossScheduleDO> scheduleOpt = schedules.stream()
+                            .filter(s -> s.getMob() == monster.getId())
+                            .findFirst();
+                    
+                    if (scheduleOpt.isPresent()) {
+                        BossScheduleDO schedule = scheduleOpt.get();
+                        monster.setShouldId(schedule.getId());
+                        nextSpawnTime = schedule.getNextSpawnTime(); // 使用数据库中的时间
+
+                        // [重要] 从列表中移除，以确保下一个同类BOSS刷新点能找到它自己的记录（如果数据库中有重复记录的话）
+                        // 这一步是为了兼容当前可能存在的脏数据。在数据库清理干净后，可以考虑更优的匹配逻辑（例如匹配坐标）。
+                        schedules.remove(schedule);
+                    }
+                }
+                
+                // [修改] 调整刷新时间计算
+                float mobTimeRate = GameConfig.getServerFloat("boss_respawn_mob_time_rate", 1.0f);
+                mobTime = (int) (mobTime * Math.max(0, Math.min(1, mobTimeRate)));
             }
 
+            int mobRespawnRate = monster.isBoss() || map.getEventInstance() != null ? 1 : GameConfig.getServerInt("mob_respawn_rate", 1);
+            
             for (int i = 0; i < mobRespawnRate; i++) {
-                if (mobTime == -1) { //does not respawn, force spawn once
-                    map.spawnMonster(monster);
+                if (mobTime == -1) {
+                    // 对于不重生的怪物，如果 nextSpawnTime > 当前时间，则不应该生成
+                    if (nextSpawnTime <= System.currentTimeMillis()) {
+                        map.spawnMonster(monster);
+                    }
                 } else {
-                    map.addMonsterSpawn(monster, mobTime, team);
+                    map.addMonsterSpawn(monster, mobTime, team, nextSpawnTime);
                 }
             }
-
-            //should the map be reseted, use allMonsterSpawn list of monsters to spawn them again
+            // 如果地图被重置，使用 allMonsterSpawn 列表中的怪物再次生成它们
             map.addAllMonsterSpawn(monster, mobTime, team);
         } else {
             map.addMapObject(myLife);
@@ -132,7 +175,6 @@ public class MapFactory {
         String mapName = getMapName(mapid);
         Data mapData = mapSource.getData(mapName);    // source.getData issue with giving nulls in rare ocasions found thanks to MedicOP
         Data infoData = mapData.getChildByPath("info");
-
         String link = DataTool.getString(infoData.getChildByPath("link"), "");
         if (!link.equals("")) { //nexon made hundreds of dojo maps so to reduce the size they added links.
             mapName = getMapName(Integer.parseInt(link));
@@ -238,8 +280,12 @@ public class MapFactory {
             PlayerNPC.addPlayerNPCMapObject(map);
         }
 
-        loadLifeFromWz(map, mapData);
-        loadLifeFromDb(map);
+        // 从数据库服务加载此地图的BOSS刷新调度，以覆盖WZ/DB中的BOSS下次刷新时间
+        List<BossScheduleDO> schedules = BossScheduleService.getInstance().getSchedulesForMap(world, channel, mapid);
+
+        // 从WZ和DB加载生命体，并传入调度列表进行增强
+        loadLifeFromWz(map, mapData, schedules);
+        loadLifeFromDb(map, schedules);
 
         if (map.isCPQMap()) {
             Data mcData = mapData.getChildByPath("monsterCarnival");
@@ -321,11 +367,11 @@ public class MapFactory {
 
     private static AbstractLoadedLife loadLife(int id, String type, int cy, int f, int fh, int rx0, int rx1, int x, int y, int hide) {
         AbstractLoadedLife myLife = LifeFactory.getLife(id, type);
-        myLife.setCy(cy);
+        myLife.setCy(cy > 0 ? cy : y);
         myLife.setF(f);
         myLife.setFh(fh);
-        myLife.setRx0(rx0);
-        myLife.setRx1(rx1);
+        myLife.setRx0(rx0 > 0 ? rx0 : x - 50);
+        myLife.setRx1(rx1 > 0 ? rx1 : x + 50);
         myLife.setPosition(new Point(x, y));
         if (hide == 1) {
             myLife.setHide(true);
