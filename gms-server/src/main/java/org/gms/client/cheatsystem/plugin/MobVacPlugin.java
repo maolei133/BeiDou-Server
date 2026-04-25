@@ -95,7 +95,7 @@ public class MobVacPlugin extends BaseCheatPlugin {
             speedEffect = new MonsterStatusEffect(stati, skill, null, false);
         } catch (Exception e) {
             // 系统初始化异常，记录为系统级错误
-            AuditLogger.error(LogModule.SYSTEM, LogAction.ERROR, "初始化SPEED状态效果失败", e);
+            AuditLogger.error(LogModule.SYSTEM, LogAction.SYSTEM_ERROR, "初始化SPEED状态效果失败", e);
         }
     }
     

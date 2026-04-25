@@ -122,7 +122,7 @@ public enum AutobanFactory {
             return;
         }
         // 调用新的中央日志记录器
-        AutobanLogger.log(chr, this, LogAction.CHEAT_ALERT, reason);
+        AutobanLogger.log(chr, this, LogAction.AUTOBAN_CHEAT_ALERT, reason);
     }
 
 
@@ -135,7 +135,7 @@ public enum AutobanFactory {
     public void autoban(Character chr, String value) {
         if (chr.getAutoBanManager().useAutoBan()) {
             // 调用新的中央日志记录器
-            AutobanLogger.log(chr, this, LogAction.CHEAT_BAN, value);
+            AutobanLogger.log(chr, this, LogAction.AUTOBAN_CHEAT_BAN, value);
             chr.autoBan("因 [" + this.getName() + "] 被自动封禁: " + value);
         }
     }

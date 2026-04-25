@@ -2,10 +2,10 @@ package org.gms;
 
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
+import org.gms.service.TraceabilityService;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
-import org.gms.util.RequireUtil;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -19,9 +19,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.Map;
 
 @SpringBootApplication
 @MapperScan("org.gms.dao.mapper")
@@ -34,17 +32,22 @@ public class ServerApplication {
         } catch (Exception e) {
             log.error("自动创建数据库失败：", e);
             // 记录到 Loki
-            AuditLogger.error(LogModule.SYSTEM, LogAction.ERROR, "数据库创建失败", e);
+            AuditLogger.error(LogModule.SYSTEM, LogAction.SYSTEM_ERROR, "数据库创建失败", e);
             return;
         }
-        
+
         // 记录服务器启动日志
-        AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_START, "正在启动服务端中...");
+        AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_START, "正在启动服务端中...");
         long startTime = System.currentTimeMillis();
         SpringApplication.run(ServerApplication.class, args);
-        
+
+        // 检查国际化键值
+        LogModule.checkMissingI18nKeys();
+        LogAction.checkMissingI18nKeys();
+        TraceabilityService.checkMissingI18nKeys();
+
         // 记录服务器启动完成日志
-        AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_START, "服务端启动完成，耗时：" + (System.currentTimeMillis() - startTime) / 1000.0 + " 秒");
+        AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_START, "服务端启动完成，耗时：" + (System.currentTimeMillis() - startTime) / 1000.0 + " 秒");
     }
 
     /**
@@ -90,12 +93,12 @@ public class ServerApplication {
             if (resultSet.next()) {
                 return;
             }
-            AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_START, "正在创建数据库");
+            AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_START, "正在创建数据库");
             resultSet.close();
             preparedStatement = connection.prepareStatement("CREATE DATABASE " + dbName + " DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci");
             preparedStatement.executeUpdate();
             preparedStatement.close();
-            AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_START, "数据库创建完成");
+            AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_START, "数据库创建完成");
 
         }
     }

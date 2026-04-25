@@ -757,7 +757,7 @@ public class Server {
         log.info(I18nUtil.getLogMessage("Server.init.info6"), serviceProperty.getLoginPort());
 
         OpcodeConstants.generateOpcodeNames();
-        log.info(I18nUtil.getLogMessage("Server.init.info7"));
+//        log.info(I18nUtil.getLogMessage("Server.init.info7"));
         CommandsExecutor.getInstance().loadCommandsExecutor();
 
         for (Channel ch : this.getAllChannels()) {
@@ -1685,7 +1685,7 @@ public class Server {
         this.shutdown = true;
         String msg =  I18nUtil.getLogMessage("Server.shutdownInternal.info1", I18nUtil.getLogMessage(restart ? "Server.shutdownInternal.info2" : "Server.shutdownInternal.info3"));
         log.info(msg);
-        AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_SHUTDOWN, msg);
+        AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_SHUTDOWN, msg);
         if (getWorlds() == null) {
             return;//already shutdown
         }
@@ -1717,12 +1717,12 @@ public class Server {
         log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info4"));
         if (restart) {
             log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info5"));
-            AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_SHUTDOWN, I18nUtil.getLogMessage("Server.shutdownInternal.info5"));
+            AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_SHUTDOWN, I18nUtil.getLogMessage("Server.shutdownInternal.info5"));
             instance = null;
             getInstance().init();
         } else if (exit) {
             log.info("服务器关闭完成。正在退出应用程序。");
-            AuditLogger.info(LogModule.SYSTEM, LogAction.SERVER_SHUTDOWN, "服务器关闭完成。正在退出应用程序。");
+            AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_SHUTDOWN, "服务器关闭完成。正在退出应用程序。");
             SpringApplication.exit(ServerManager.getApplicationContext());
             System.exit(0);
         }

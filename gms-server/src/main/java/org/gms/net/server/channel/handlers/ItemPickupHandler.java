@@ -63,7 +63,7 @@ public final class ItemPickupHandler extends AbstractPacketHandler {
         if (Math.abs(charPos.getX() - obPos.getX()) > 800 || Math.abs(charPos.getY() - obPos.getY()) > 600) {
             log.warn("角色 {} 尝试拾取距离过远的物品。地图ID: {}, 玩家位置: {}, 物品位置: {}",
                     c.getPlayer().getName(), chr.getMapId(), charPos, obPos);
-            AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_WARNING, new MapMessage().with("msg", "拾取物品距离过远").with("map", chr.getMapId()).with("pos", charPos).with("objPos", obPos));
+            AuditLogger.info(LogModule.AUTOBAN, LogAction.AUTOBAN_CHEAT_WARNING, new MapMessage().with("msg", "拾取物品距离过远").with("map", chr.getMapId()).with("pos", charPos).with("objPos", obPos));
             return;
         }
 

@@ -367,7 +367,7 @@ public class StorageProcessor {
                 chr.dropMessage(1, "仓库操作失败");
                 // 异常日志：记录详细堆栈
                 log.error("[Storage] 仓库操作异常: Char={}, Mode={}", chr.getName(), mode, e);
-                AuditLogger.error(LogModule.STORAGE, LogAction.ERROR,
+                AuditLogger.error(LogModule.STORAGE, LogAction.SYSTEM_ERROR,
                         new MapMessage()
                                 .with("msg", "仓库操作异常")
                                 .with("mode", mode)

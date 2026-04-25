@@ -207,7 +207,7 @@ public class AutobanManager {
         if (useAutoBanLog() && (fac != AutobanFactory.FAST_ATTACK && currentPunishPoints >= (fac.getMaximum() * 0.90))) {
             MapMessage logData = (extraData == null) ? new MapMessage() : new MapMessage(extraData.getData());
             logData.with("points", currentPunishPoints);
-            AutobanLogger.log(chr, fac, LogAction.CHEAT_WARNING, reason, logData);
+            AutobanLogger.log(chr, fac, LogAction.AUTOBAN_CHEAT_WARNING, reason, logData);
         }
 
         // 惩罚点数达到最大值时增加封号点数并清零惩罚点数
@@ -229,14 +229,14 @@ public class AutobanManager {
                 } else if (useAntiCheatDisconnect()) {
                     chr.getClient().disconnect(false,false);
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + fac.getName() + " 而被断开连接"));
-                    AutobanLogger.log(chr, fac, LogAction.CHEAT_DISCONNECT, reason, extraData);
+                    AutobanLogger.log(chr, fac, LogAction.AUTOBAN_CHEAT_DISCONNECT, reason, extraData);
                     return 1;
                 } else if (useAutoBanLog()) {
                     // 记录日志但不执行封号
                     Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常触发] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + fac.getName() + " 但未启用自动封禁，因此无事发生。"));
                     MapMessage logData = (extraData == null) ? new MapMessage() : new MapMessage(extraData.getData());
                     logData.with("msg", "未启用封禁");
-                    AutobanLogger.log(chr, fac, LogAction.CHEAT_DETECTED, reason, logData);
+                    AutobanLogger.log(chr, fac, LogAction.AUTOBAN_CHEAT_DETECTED, reason, logData);
                 }
             } else {
                 // 记录日志
@@ -246,7 +246,7 @@ public class AutobanManager {
                     logData.with("points", fac.getMaximum())
                         .with("banPoints", currentBanPoints)
                         .with("msg", "增加封号点数");
-                    AutobanLogger.log(chr, fac, LogAction.CHEAT_DETECTED, reason, logData);
+                    AutobanLogger.log(chr, fac, LogAction.AUTOBAN_CHEAT_DETECTED, reason, logData);
                 }
             }
             return 0; // 需要惩罚但未达到封号条件
@@ -266,7 +266,7 @@ public class AutobanManager {
         if (!useAntiCheatLoseHpMp() || chr == null || chr.gmLevel() >= 4) {
             if (chr.gmLevel() >= 4) {
                 MapMessage logData = new MapMessage().with("reason", "GM等级>=4");
-                AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.CHEAT_ALERT, "跳过HP/MP扣除惩罚", logData);
+                AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.AUTOBAN_CHEAT_ALERT, "跳过HP/MP扣除惩罚", logData);
             }
             return;
         }
@@ -282,7 +282,7 @@ public class AutobanManager {
         // 记录日志
         if (useAutoBanLog()) {
             MapMessage logData = new MapMessage().with("hpLoss", actualHpLoss).with("mpLoss", actualMpLoss);
-            AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.CHEAT_PENALTY, "扣除HP/MP惩罚", logData);
+            AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.AUTOBAN_CHEAT_PENALTY, "扣除HP/MP惩罚", logData);
         }
     }
 
@@ -317,7 +317,7 @@ public class AutobanManager {
         MobSkillFactory.getMobSkill(MobSkillType.DARKNESS, 1).ifPresent(skill -> chr.giveDebuff(Disease.DARKNESS, skill, duration));
         if (useAutoBanLog()) {
             MapMessage logData = new MapMessage().with("duration", duration);
-            AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.CHEAT_PENALTY, "施加Debuff惩罚", logData);
+            AutobanLogger.log(chr, AutobanFactory.GENERAL, LogAction.AUTOBAN_CHEAT_PENALTY, "施加Debuff惩罚", logData);
         }
     }
 

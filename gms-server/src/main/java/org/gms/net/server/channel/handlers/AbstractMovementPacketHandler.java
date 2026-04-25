@@ -164,7 +164,7 @@ public abstract class AbstractMovementPacketHandler extends AbstractPacketHandle
                 }
                 default:
                     log.warn("未处理的移动类型: {}", command); // 记录未处理的移动类型
-                    AuditLogger.info(LogModule.FIELD, LogAction.ERROR, new MapMessage().with("msg", "未处理的移动类型").with("cmd", command));
+                    AuditLogger.info(LogModule.FIELD, LogAction.SYSTEM_ERROR, new MapMessage().with("msg", "未处理的移动类型").with("cmd", command));
                     
                     if (c != null) {
                         checkAndDisconnect(c, command);
@@ -289,7 +289,7 @@ public abstract class AbstractMovementPacketHandler extends AbstractPacketHandle
                 }
                 default:
                     log.warn("未处理的移动类型: {}", command); // 记录未处理的移动类型
-                    AuditLogger.info(LogModule.FIELD, LogAction.ERROR, new MapMessage().with("msg", "未处理的移动类型").with("cmd", command));
+                    AuditLogger.info(LogModule.FIELD, LogAction.SYSTEM_ERROR, new MapMessage().with("msg", "未处理的移动类型").with("cmd", command));
                     
                     if (c != null) {
                         checkAndDisconnect(c, command);
@@ -371,7 +371,7 @@ public abstract class AbstractMovementPacketHandler extends AbstractPacketHandle
                     log.warn("玩家 {} (账号: {}) 因持续发送未处理的移动类型 {} 而被断开连接。", 
                             c.getPlayer() != null ? c.getPlayer().getName() : "Unknown", 
                             c.getAccountName(), command);
-                    AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DISCONNECT, 
+                    AuditLogger.info(LogModule.AUTOBAN, LogAction.AUTOBAN_CHEAT_DISCONNECT,
                             new MapMessage().with("msg", "持续发送未处理移动类型").with("cmd", command));
                     c.disconnect(false, false);
                     return null; // 移除记录

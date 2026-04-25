@@ -3,6 +3,7 @@ package org.gms.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.inventory.InventoryType;
@@ -19,14 +20,12 @@ import org.gms.server.logging.AuditContext;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogModule;
 import org.gms.server.maps.MapFactory;
-import org.gms.server.maps.MapleMap;
 import org.gms.util.I18nUtil;
 import org.gms.util.RequireUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.NoSuchMessageException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -48,9 +47,9 @@ import static org.gms.dao.entity.table.ItemTraceLogsDOTableDef.ITEM_TRACE_LOGS_D
  * </p>
  */
 @Service
+@Slf4j
 public class TraceabilityService {
 
-    private static final Logger log = LoggerFactory.getLogger(TraceabilityService.class);
     private static final ExecutorService logExecutor = Executors.newSingleThreadExecutor();
 
     private final ItemTraceLogsMapper itemTraceLogsMapper;
@@ -474,5 +473,39 @@ public class TraceabilityService {
                 .where(ITEM_TRACE_LOGS_DO.TIMESTAMP.lt(shortDeleteDeadline))
                 .and(ITEM_TRACE_LOGS_DO.ACTION_TYPE.in(TraceabilityService.ActionType.SYSTEM.name(), TraceabilityService.ActionType.SYSTEM.name())));
         if (shortDeletedCount > 0) log.info("已物理删除 {} 条超过 {} 天保留期的短期物品溯源日志 (SPAWN/DESPAWN)。", shortDeletedCount, shortRetentionDays);
+    }
+
+    /**
+     * 检查并列出所有未在i18n属性文件中注册的物品溯源相关键值
+     */
+    public static boolean checkMissingI18nKeys() {
+        List<String> missingKeys = new ArrayList<>();
+
+        // 检查 ActionType
+        for (ActionType type : ActionType.values()) {
+            try {
+                I18nUtil.logSource.getMessage(type.getI18nKey(), null, I18nUtil.LANGUAGE);
+            } catch (NoSuchMessageException e) {
+                missingKeys.add(type.getI18nKey());
+            }
+        }
+
+        // 检查 ActionSourceType
+        for (ActionSourceType type : ActionSourceType.values()) {
+            try {
+                I18nUtil.logSource.getMessage(type.getI18nKey(), null, I18nUtil.LANGUAGE);
+            } catch (NoSuchMessageException e) {
+                missingKeys.add(type.getI18nKey());
+            }
+        }
+
+        if (!missingKeys.isEmpty()) {
+            log.warn("检测到以下 i18n 物品溯源 键值未注册，请添加到 `log_zh_CN.properties` 和 `log_en_US.properties` 文件中：");
+            for (String key : missingKeys) {
+                log.warn(" - " + key);
+            }
+            return false;
+        }
+        return true;
     }
 }

@@ -21,6 +21,9 @@
  */
 package org.gms.server.maps;
 
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
@@ -51,8 +54,6 @@ import org.gms.net.server.world.World;
 import org.gms.service.ItemRecoveryService;
 import org.gms.service.TraceabilityService;
 import org.gms.util.NumberTool;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.EventInstanceManager;
 import org.gms.scripting.map.MapScriptManager;
 import org.gms.server.ItemInformationProvider;
@@ -82,7 +83,6 @@ import org.gms.util.Randomizer;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogModule;
 import org.gms.server.logging.LogAction;
-import org.gms.service.BossScheduleService;
 
 import java.awt.*;
 import java.lang.ref.WeakReference;
@@ -113,9 +113,9 @@ import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
-
+@Slf4j
+@Getter @Setter
 public class MapleMap {
-    private static final Logger log = LoggerFactory.getLogger(MapleMap.class);
     private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
     private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
     private static final List<MapObjectType> rangedMapobjectTypes = Arrays.asList(MapObjectType.SHOP, MapObjectType.ITEM, MapObjectType.NPC, MapObjectType.MONSTER, MapObjectType.DOOR, MapObjectType.SUMMON, MapObjectType.REACTOR, MapObjectType.HIRED_MERCHANT);
@@ -135,8 +135,8 @@ public class MapleMap {
     private final Map<String, Integer> environment = new LinkedHashMap<>();
     private final Map<MapItem, Long> droppedItems = new LinkedHashMap<>();
     private final LinkedList<WeakReference<MapObject>> registeredDrops = new LinkedList<>();
-    private final Map<MobLootEntry, Long> mobLootEntries = new HashMap(20);
-    private final List<Runnable> statUpdateRunnables = new ArrayList(50);
+    private final Map<MobLootEntry, Long> mobLootEntries = new HashMap<>(20);
+    private final List<Runnable> statUpdateRunnables = new ArrayList<>(50);
     private final List<Rectangle> areas = new ArrayList<>();
     private FootholdTree footholds = null;
     private Pair<Integer, Integer> xLimits;  // caches the min and max x's with available footholds
@@ -171,7 +171,7 @@ public class MapleMap {
     private int fieldType;
     private int fieldLimit = 0;
     private int mobCapacity = -1;
-    private MonsterAggroCoordinator aggroMonitor = null;   // aggroMonitor activity in sync with itemMonitor
+    private MonsterAggroCoordinator aggroMonitor;   // 仇恨监控器活动与物品监控器同步
     private ScheduledFuture<?> itemMonitor = null;
     private ScheduledFuture<?> expireItemsTask = null;
     private ScheduledFuture<?> mobSpawnLootTask = null;
@@ -236,14 +236,6 @@ public class MapleMap {
         return event;
     }
 
-    public Rectangle getMapArea() {
-        return mapArea;
-    }
-
-    public int getWorld() {
-        return world;
-    }
-
     public void broadcastPacket(Character source, Packet packet) {
         broadcastPacket(packet, chr -> chr != null && chr.getClient() != null && chr != source);
     }
@@ -263,6 +255,7 @@ public class MapleMap {
         }
     }
 
+    /** 允许或禁止掉落 - 大量脚本进行了调用*/
     public void toggleDrops() {
         this.dropsOn = !dropsOn;
     }
@@ -307,10 +300,6 @@ public class MapleMap {
         return getChannelServer().getMapFactory().getMap(returnMapId);
     }
 
-    public int getReturnMapId() {
-        return returnMapId;
-    }
-
     public MapleMap getForcedReturnMap() {
         return getChannelServer().getMapFactory().getMap(forcedReturnMap);
     }
@@ -319,22 +308,13 @@ public class MapleMap {
         return forcedReturnMap;
     }
 
-    public void setForcedReturnMap(int map) {
-        this.forcedReturnMap = map;
-    }
-
-    public int getTimeLimit() {
-        return timeLimit;
-    }
-
-    public void setTimeLimit(int timeLimit) {
-        this.timeLimit = timeLimit;
-    }
-
     public int getTimeLeft() {
         return (int) ((mapTimer - System.currentTimeMillis()) / 1000);
     }
 
+    /**
+     * 改变地图状态 - 大量脚本调用了该方法
+     */
     public void setReactorState() {
         for (MapObject o : getMapObjects()) {
             if (o.getType() == MapObjectType.REACTOR) {
@@ -352,6 +332,9 @@ public class MapleMap {
         }
     }
 
+    /**
+     * 限制地图中某个反应堆的数量
+     */
     public final void limitReactor(final int rid, final int num) {
         List<Reactor> toDestroy = new ArrayList<>();
         Map<Integer, Integer> contained = new LinkedHashMap<>();
@@ -385,6 +368,9 @@ public class MapleMap {
         return true;
     }
 
+    /**
+     * 获取地图中某个反应堆的数量
+     */
     public int getCurrentPartyId() {
         for (Character chr : this.getCharacters()) {
             if (chr.getPartyId() != -1) {
@@ -456,6 +442,12 @@ public class MapleMap {
         }
     }
 
+    /**
+     * 添加地图对象并广播给可见角色
+     * @param mapobject 地图对象
+     * @param packetbakery 发送包
+     * @param condition  添加条件
+     */
     private void spawnRangedMapObject(MapObject mapobject, DelayedPacketCreation packetbakery, SpawnCondition condition) {
         List<Character> inRangeCharacters = new LinkedList<>();
 
@@ -604,12 +596,13 @@ public class MapleMap {
     }
 
     /**
+     * 获取生成点与门点之间的相对角度，其中3点钟方向为0度，12点钟方向为270度<br>
      * Fetches angle relative between spawn and door points where 3 O'Clock is 0
      * and 12 O'Clock is 270 degrees
      *
-     * @param spawnPoint
-     * @param doorPoint
-     * @return angle in degress from 0-360.
+     * @param spawnPoint 刷新点
+     * @param doorPoint 传送点
+     * @return 返回角度值 0~360°； angle in degress from 0-360.
      */
     private static double getAngle(Point doorPoint, Point spawnPoint) {
         double dx = doorPoint.getX() - spawnPoint.getX();
@@ -629,10 +622,11 @@ public class MapleMap {
     }
 
     /**
+     * 将角度（度）转换为四舍五入后的方位坐标。
      * Converts angle in degrees to rounded cardinal coordinate.
      *
-     * @param angle
-     * @return correspondent coordinate.
+     * @param angle 角度
+     * @return 对应的方位坐标。 correspondent coordinate.
      */
     public static String getRoundedCoordinate(double angle) {
         String[] directions = {"E", "SE", "S", "SW", "W", "NW", "N", "NE", "E"};
@@ -798,7 +792,7 @@ public class MapleMap {
 
         MonsterStatusEffect stati = mob.getStati(MonsterStatus.SHOWDOWN);
         if (stati != null) {
-            chRate *= (stati.getStati().get(MonsterStatus.SHOWDOWN).doubleValue() / 100.0 + 1.0);
+            chRate *= (float) (stati.getStati().get(MonsterStatus.SHOWDOWN).doubleValue() / 100.0 + 1.0);
         }
 
         if (chr.isFamilyBuff()) {
@@ -961,7 +955,7 @@ public class MapleMap {
                         if (registeredDrops.isEmpty()) {
                             break;
                         }
-                        mapobj = registeredDrops.remove(0).get();
+                        mapobj = registeredDrops.removeFirst().get();
                     }
                 } finally {
                     objectWLock.unlock();
@@ -1584,7 +1578,7 @@ public class MapleMap {
                             .with("怪物名称", monster.getName())
                             .with("地图角色", playerInfoList);
 
-                        AuditLogger.info(LogModule.FIELD, LogAction.BOSS_KILLED, data);
+                        AuditLogger.info(LogModule.FIELD, LogAction.FIELD_BOSS_KILLED, data);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();

@@ -21,7 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.client;
 
-import com.mybatisflex.core.row.*;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -239,7 +238,7 @@ public class Client extends ChannelInboundHandlerAdapter {
                         getAccountName(), chrInfo, packet, t);
                 AuditLogger.error(
                         LogModule.SYSTEM,
-                        LogAction.ERROR,
+                        LogAction.SYSTEM_ERROR,
                         "封包处理器 " + handler.getClass().getSimpleName() + " 出错. 账号 " + getAccountName() + ", 玩家 " + chrInfo + ". 封包: " + packet,
                         t
                 );

@@ -29,7 +29,6 @@ import org.gms.property.ServiceProperty;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
 import org.gms.server.logging.LogModule;
-import org.gms.util.I18nUtil;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.HostAccess;
@@ -159,7 +158,7 @@ public abstract class AbstractScriptManager {
                     .with("engine", managerType)
                     .with("script", scriptFileName)
                     .with("path", actualPath.toString());
-            AuditLogger.error(LogModule.SCRIPT, LogAction.ERROR, data, t);
+            AuditLogger.error(LogModule.SCRIPT, LogAction.SYSTEM_ERROR, data, t);
             return null;
         }
 

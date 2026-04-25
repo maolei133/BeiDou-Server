@@ -680,7 +680,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             if (isCheat) {
                 MapMessage msg = new MapMessage()
                     .with("msg", finalDebugMessage.toString());
-                AuditLogger.info(LogModule.AUTOBAN, LogAction.CHEAT_DETECTED, msg);
+                AuditLogger.info(LogModule.AUTOBAN, LogAction.AUTOBAN_CHEAT_DETECTED, msg);
             }
 //            System.out.println(finalDebugMessage.toString());
         }

@@ -129,7 +129,7 @@ public final class LoginPasswordHandler implements PacketHandler {
         if (loginok != 0) {
             c.sendPacket(PacketCreator.getLoginFailed(loginok));
             log.warn("客户端 {} 尝试登录账号 {} ，但是登录失败，状态码：{}", c.getRemoteAddress(), login, loginok);
-            AuditLogger.info(LogModule.ACCOUNT, LogAction.ACC_LOGIN_FAIL, "登录失败: " + loginok);
+            AuditLogger.info(LogModule.ACCOUNT, LogAction.ACCOUNT_LOGIN_FAIL, "登录失败: " + loginok);
             return;
         }
 
@@ -141,7 +141,7 @@ public final class LoginPasswordHandler implements PacketHandler {
 
             // 刷新上下文并记录登录成功日志
             AuditContext.set(c);
-            AuditLogger.info(LogModule.ACCOUNT, LogAction.ACC_LOGIN_SUCCESS, "登录成功");
+            AuditLogger.info(LogModule.ACCOUNT, LogAction.ACCOUNT_LOGIN_SUCCESS, "登录成功");
         } else {
             // 已在其他地方登录
             c.sendPacket(PacketCreator.getLoginFailed(7));

@@ -100,7 +100,7 @@ public class AssignSPProcessor {
                 } else {
                     player.changeSkillLevel(skill, (byte) (curLevel + 1), player.getMasterLevel(skill), player.getSkillExpiration(skill));
                 }
-                AuditLogger.info(LogModule.CHARACTER, LogAction.CHR_SP_DISTRIBUTE, new MapMessage().with("skill", skillid).with("level", curLevel + 1));
+                AuditLogger.info(LogModule.CHARACTER, LogAction.CHARACTER_SP_DISTRIBUTE, new MapMessage().with("skill", skillid).with("level", curLevel + 1));
             }
         } finally {
             c.unlockClient();

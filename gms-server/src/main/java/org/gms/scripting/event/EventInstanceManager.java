@@ -275,7 +275,7 @@ public class EventInstanceManager {
                 .with("event", eventName)
                 .with("func", functionName)
                 .with("path", scriptPath);
-        AuditLogger.error(LogModule.SCRIPT, LogAction.ERROR, data, e);
+        AuditLogger.error(LogModule.SCRIPT, LogAction.SYSTEM_ERROR, data, e);
     }
 
     public Object invokeScriptFunction(String name, Object... args) {
