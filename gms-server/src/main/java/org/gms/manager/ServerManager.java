@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.gms.ServerApplication;
 import org.gms.constants.net.ServerConstants;
 import org.gms.net.server.Server;
+import org.gms.provider.CachingDataProvider;
+import org.gms.provider.DataProviderFactory;
 import org.gms.server.ItemInformationProvider;
 import org.gms.util.I18nUtil;
 import org.springdoc.core.properties.SpringDocConfigProperties;
@@ -21,6 +23,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
 import java.net.InetAddress;
+import java.util.Map;
 
 @Component
 @Slf4j
@@ -35,9 +38,34 @@ public class ServerManager implements ApplicationContextAware, ApplicationRunner
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
+        // --- 两阶段缓存流程 ---
+        CachingDataProvider.startRecording();
         ItemInformationProvider.initItemInformationService();
         Server.getInstance().init();
+        CachingDataProvider.stopRecording();
 
+        DataProviderFactory.getProviders().values().stream()
+                .filter(p -> p instanceof CachingDataProvider)
+                .map(p -> (CachingDataProvider) p)
+                .forEach(CachingDataProvider::transferStartupToLongTerm);
+
+        // --- 新增：启动后缓存状态分析 ---
+        log.info("========== 启动后长期缓存状态分析 ==========");
+        long totalCachedItems = 0;
+        for (Map.Entry<String, CachingDataProvider> entry : DataProviderFactory.getProviders().entrySet()) {
+            String wzName = entry.getKey();
+            CachingDataProvider provider = entry.getValue();
+            long cacheSize = provider.getLongTermCache().estimatedSize();
+            if (cacheSize > 0) {
+                log.info("WZ文件: {} -> 持有的DOM对象数量: {}", wzName, cacheSize);
+                totalCachedItems += cacheSize;
+            }
+        }
+        log.info("总计持有的DOM对象数量: {}", totalCachedItems);
+        log.info("==========================================");
+
+
+        // --- 原始的服务器启动后日志打印代码 ---
         SpringDocConfigProperties springDocConfigProperties = applicationContext.getBean(SpringDocConfigProperties.class);
         SwaggerUiConfigProperties swaggerUiConfigProperties = applicationContext.getBean(SwaggerUiConfigProperties.class);
         Environment environment = applicationContext.getBean(Environment.class);

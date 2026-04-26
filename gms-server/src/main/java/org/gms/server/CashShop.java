@@ -41,10 +41,7 @@ import org.gms.dao.mapper.GiftsMapper;
 import org.gms.manager.ServerManager;
 import org.gms.model.pojo.CashCategory;
 import org.gms.net.server.Server;
-import org.gms.provider.Data;
-import org.gms.provider.DataProvider;
-import org.gms.provider.DataProviderFactory;
-import org.gms.provider.DataTool;
+import org.gms.provider.*;
 import org.gms.provider.wz.WZFiles;
 import org.gms.service.AccountService;
 import org.gms.service.CashShopService;
@@ -61,11 +58,6 @@ import java.util.stream.Stream;
 
 import static org.gms.dao.entity.table.GiftsDOTableDef.GIFTS_DO;
 
-/**
- * 商城核心逻辑处理类
- * @author Flav
- * @author Ponk
- */
 @Slf4j @Getter @Setter
 public class CashShop {
     public static final int NX_CREDIT = 1;
@@ -123,101 +115,74 @@ public class CashShop {
 
     @Slf4j
     public static class CashItemFactory {
-        private static final DataProvider etcData = DataProviderFactory.getDataProvider(WZFiles.ETC);
-        // 主缓存，用于懒加载所有商场道具的原始WZ数据
+        private static final CachingDataProvider etcData = DataProviderFactory.getDataProvider(WZFiles.ETC);
+        // 主缓存，存储所有从WZ加载并转换完成的商品POJO
         @Getter
         private static final Map<Integer, ModifiedCashItemDO> items = new ConcurrentHashMap<>();
-        // 礼包缓存
         private static final Map<Integer, List<Integer>> packages = new ConcurrentHashMap<>();
         @Getter
         private static final List<CashCategory> cashCategories = new ArrayList<>();
-        // 数据库修改项缓存
         @Getter
         private static final Map<Integer, ModifiedCashItemDO> modifiedCashItems = new ConcurrentHashMap<>();
-        // 动态生成的特殊状态列表
         @Getter
         private static final Map<Integer, ModifiedCashItemDO> discontinuedCashItems = new ConcurrentHashMap<>();
         @Getter
         private static final Map<Integer, ModifiedCashItemDO> permanentCashItems = new ConcurrentHashMap<>();
-
-        // 优化：预构建SN到节点的映射，以加速单品加载，但只在第一次需要时构建
-        private static final Map<Integer, Data> snToNodeMap = new HashMap<>();
-        private static volatile boolean commodityIndexBuilt = false;
-
-        // 客户端最终商品缓存
         private static Collection<ModifiedCashItemDO> clientItemsCache = Collections.emptyList();
-
-        // 专用索引，用于快速定位需要全局处理的商品
         private static final List<Integer> rateCouponSnList = new ArrayList<>();
         private static final List<Integer> upgradablePetEquipSnList = new ArrayList<>();
 
-        /**
-         * 在购买时更新动态修改的商品缓存。
-         * @param updatedItem 状态已更新的商品对象
-         */
         public static void updateItemInCache(ModifiedCashItemDO updatedItem) {
-            if (updatedItem == null) {
-                return;
-            }
-            // 检查商品是否属于某个动态分类，并更新它
+            if (updatedItem == null) return;
             if (ItemConstants.isUpgradablePetEquip(updatedItem.getItemId())) {
                 updatedItem.setPeriod(0L);
                 permanentCashItems.put(updatedItem.getSn(), updatedItem);
-//                log.info("【商城缓存】购买时更新了永久宠物装备 SN: {}", updatedItem.getSn());
             } else if (ItemConstants.isRateCoupon(updatedItem.getItemId())) {
                 discontinuedCashItems.put(updatedItem.getSn(), updatedItem);
-//                log.info("【商城缓存】购买时更新了倍率卡 SN: {}", updatedItem.getSn());
             }
         }
 
-        /**
-         * 重建用于客户端的商品缓存。
-         * 该方法合并所有修改和动态配置，生成最终的商品列表。
-         */
         public static void rebuildClientCache() {
-            // 使用 Stream 按优先级顺序合并和滤重
-            Map<Integer, ModifiedCashItemDO> itemMap = Stream.of(//生效的优先级从高到低，确保控制台商城管理的优先级最高，并且减少重复的现金道具。
-                            getDiscontinuedCashItems().values(), // 合并已下架现金道具列表
-                            getModifiedCashItems().values(),  // 获取修改过的现金道具信息
-                            getPermanentCashItems().values() // 合并永久现金道具列表
+            Map<Integer, ModifiedCashItemDO> itemMap = Stream.of(
+                            getDiscontinuedCashItems().values(),
+                            getModifiedCashItems().values(),
+                            getPermanentCashItems().values()
                     )
                     .flatMap(Collection::stream)
                     .collect(Collectors.toMap(
                             ModifiedCashItemDO::getSn,
                             item -> item,
-                            (existing, replacement) -> existing, // 保留先出现的（高优先级）
-                            LinkedHashMap::new // 保持插入顺序
+                            (existing, replacement) -> existing,
+                            LinkedHashMap::new
                     ));
             clientItemsCache = itemMap.values();
-//            log.info("商城商品缓存重建完毕，共缓存 {} 个商品。", clientItemsCache.size());
         }
 
-        /**
-         * 获取供客户端使用的、已缓存的最终商品列表。
-         * @return 最终商品列表的集合
-         */
         public static Collection<ModifiedCashItemDO> getClientCache() {
             if (clientItemsCache.isEmpty()) {
-                loadAllModifiedCashItems(); // 加载所有修改过的现金道具
-                processRateCouponItems((GameConfig.getServerBoolean("use_supply_rate_coupons"))); //重载商城是否允许出售倍率卡
-                processPetEquipItems(GameConfig.getServerBoolean("use_pet_equip_permanent"));  //重载宠物装备有效期
+                loadAllModifiedCashItems();
+                processRateCouponItems((GameConfig.getServerBoolean("use_supply_rate_coupons")));
+                processPetEquipItems(GameConfig.getServerBoolean("use_pet_equip_permanent"));
             }
-            rebuildClientCache();   // 重新生成客户端缓存
+            rebuildClientCache();
             return clientItemsCache;
         }
 
-        /**
-         * 恢复全量加载逻辑，用于调试或特定的预加载场景。
-         * 调用此方法将一次性加载所有商城道具到内存中。
-         */
         public static void loadAllCashItems() {
+            loadAllCashItems(false);
+        }
+        
+        /**
+         * 启动时全量加载所有商城数据。
+         * @param releaseData 加载后是否立即释放DOM数据
+         */
+        public static void loadAllCashItems(boolean releaseData) {
             long startTime = System.currentTimeMillis();
-            long time;
-
-            // 1. 加载所有商品
-            Map<Integer, ModifiedCashItemDO> loadedItems = new HashMap<>();
-            Data commodityData = etcData.getData("Commodity.img");
+            
+            // 1. 加载并转换所有商品
+            Data commodityData = releaseData ? etcData.getDataAndRelease("Commodity.img") : etcData.getData("Commodity.img");
             if (commodityData != null) {
+                Map<Integer, ModifiedCashItemDO> loadedItems = new HashMap<>();
                 for (Data itemNode : commodityData.getChildren()) {
                     int sn = DataTool.getIntConvert("SN", itemNode);
                     int itemId = DataTool.getIntConvert("ItemId", itemNode);
@@ -238,34 +203,26 @@ public class CashShop {
                     Integer packageSN = DataTool.getInteger("PackageSN", itemNode);
 
                     loadedItems.put(sn, ModifiedCashItemDO.builder()
-                            .sn(sn)
-                            .itemId(itemId)
-                            .count(count)
-                            .price(price)
-                            .bonus(bonus)
-                            .priority(priority)
-                            .period(period == 0 ? 90 : period)
-                            .maplePoint(maplePoint)
-                            .meso(meso)
-                            .forPremiumUser(forPremiumUser)
-                            .commodityGender(gender)
-                            .onSale(onSale)
-                            .clz(clz)
-                            .pbCash(pbCash)
-                            .pbPoint(pbPoint)
-                            .pbGift(pbGift)
-                            .packageSn(packageSN)
-                            .build());
+                            .sn(sn).itemId(itemId).count(count).price(price).bonus(bonus)
+                            .priority(priority).period(period == 0 ? 90 : period).maplePoint(maplePoint)
+                            .meso(meso).forPremiumUser(forPremiumUser).commodityGender(gender)
+                            .onSale(onSale).clz(clz).pbCash(pbCash).pbPoint(pbPoint)
+                            .pbGift(pbGift).packageSn(packageSN).build());
+                    
+                    // 同时构建专用索引
+                    if (ItemConstants.isRateCoupon(itemId)) rateCouponSnList.add(sn);
+                    if (ItemConstants.isUpgradablePetEquip(itemId)) upgradablePetEquipSnList.add(sn);
                 }
+                items.clear();
+                items.putAll(loadedItems);
+                log.info("商城加载了 {} 个商品，耗时：{} 毫秒", items.size(), System.currentTimeMillis() - startTime);
             }
-            items.clear();
-            items.putAll(loadedItems);
-            log.info("商城加载了 {} 个商品，耗时：{} 毫秒", items.size(), System.currentTimeMillis() - startTime);
-            time = System.currentTimeMillis();
-            // 2. 加载所有礼包
-            Map<Integer, List<Integer>> loadedPackages = new HashMap<>();
-            Data cashPackageData = etcData.getData("CashPackage.img");
+
+            // 2. 加载并转换所有礼包
+            long time = System.currentTimeMillis();
+            Data cashPackageData = releaseData ? etcData.getDataAndRelease("CashPackage.img") : etcData.getData("CashPackage.img");
             if (cashPackageData != null) {
+                Map<Integer, List<Integer>> loadedPackages = new HashMap<>();
                 for (Data cashPackage : cashPackageData.getChildren()) {
                     List<Integer> cPackage = new ArrayList<>();
                     for (Data item : cashPackage.getChildByPath("SN").getChildren()) {
@@ -273,136 +230,21 @@ public class CashShop {
                     }
                     loadedPackages.put(Integer.parseInt(cashPackage.getName()), cPackage);
                 }
+                packages.clear();
+                packages.putAll(loadedPackages);
+                log.info("商城加载了 {} 个礼包，耗时：{} 毫秒", packages.size(), System.currentTimeMillis() - time);
             }
-            packages.clear();
-            packages.putAll(loadedPackages);
-            log.info("商城加载了 {} 个礼包，耗时：{} 毫秒", packages.size(), System.currentTimeMillis() - time);
 
             // 3. 加载数据库相关数据
             loadCashCategories();
             loadAllModifiedCashItems();
-
-            // 4. 确保索引也已构建，以便后续单品加载逻辑（如getItem）能正常工作
-            ensureCommodityIndex();
             log.info("商城加载完毕，总耗时：{} 毫秒", System.currentTimeMillis() - startTime);
-        }
-
-        /**
-         * 确保商品索引已构建。这是一个线程安全的、一次性的操作。
-         * 它会在第一次访问商城数据时被触发，构建SN到数据节点的映射以优化后续加载。
-         */
-        private static void ensureCommodityIndex() {
-            if (!commodityIndexBuilt) {
-                synchronized (snToNodeMap) {
-                    if (!commodityIndexBuilt) {
-                        long startTime = System.currentTimeMillis();
-                        Data commodityData = etcData.getData("Commodity.img");
-                        if (commodityData != null) {
-                            for (Data itemNode : commodityData.getChildren()) {
-                                int sn = DataTool.getIntConvert("SN", itemNode);
-                                snToNodeMap.put(sn, itemNode);
-
-                                // 建立专用索引
-                                int itemId = DataTool.getIntConvert("ItemId", itemNode);
-                                if (ItemConstants.isRateCoupon(itemId)) {
-                                    rateCouponSnList.add(sn);
-                                }
-                                if (ItemConstants.isUpgradablePetEquip(itemId)) {
-                                    upgradablePetEquipSnList.add(sn);
-                                }
-                            }
-                        } else {
-                            log.error("无法加载 Commodity.img，商城功能可能异常！");
-                        }
-                        commodityIndexBuilt = true;
-                        log.info("商城商品索引构建完成，耗时：{} 毫秒。", System.currentTimeMillis() - startTime);
-                        log.info("专用索引：找到 {} 个倍率卡, {} 个可升级宠物装备。", rateCouponSnList.size(), upgradablePetEquipSnList.size());
-                    }
-                }
-            }
-        }
-
-        /**
-         * 懒加载商城礼包数据。
-         */
-        private static void lazyLoadPackages() {
-            if (packages.isEmpty()) {
-                synchronized (packages) {
-                    if (packages.isEmpty()) {
-                        long startTime = System.currentTimeMillis();
-                        Data cashPackageData = etcData.getData("CashPackage.img");
-                        if (cashPackageData != null) {
-                            for (Data cashPackage : cashPackageData.getChildren()) {
-                                List<Integer> cPackage = new ArrayList<>();
-                                for (Data item : cashPackage.getChildByPath("SN").getChildren()) {
-                                    cPackage.add(Integer.parseInt(item.getData().toString()));
-                                }
-                                packages.put(Integer.parseInt(cashPackage.getName()), cPackage);
-                            }
-                        }
-                        log.info("商城礼包数据加载完成，耗时：{} 毫秒", System.currentTimeMillis() - startTime);
-                    }
-                }
-            }
-        }
-
-        /**
-         * 从WZ文件中加载单个商城道具的数据。
-         * @param sn 商品序列号 (SN)
-         * @return 商城道具信息，如果找不到则返回 null
-         */
-        private static ModifiedCashItemDO loadSingleItemFromWZ(int sn) {
-            ensureCommodityIndex(); // 确保索引已构建
-            Data itemData = snToNodeMap.get(sn);
-
-            if (itemData == null) {
-                log.warn("在 Commodity.img 索引中找不到 SN 为 {} 的道具", sn);
-                return null;
-            }
-
-            int itemId = DataTool.getIntConvert("ItemId", itemData);
-            int price = DataTool.getIntConvert("Price", itemData, 0);
-            long period = DataTool.getIntConvert("Period", itemData, 1);
-            short count = (short) DataTool.getIntConvert("Count", itemData, 1);
-            int onSale = DataTool.getIntConvert("OnSale", itemData, 0);
-            Integer priority = DataTool.getInteger("Priority", itemData);
-            Integer bonus = DataTool.getInteger("Bonus", itemData);
-            Integer maplePoint = DataTool.getInteger("MaplePoint", itemData);
-            Integer meso = DataTool.getInteger("Meso", itemData);
-            Integer forPremiumUser = DataTool.getInteger("ForPremiumUser", itemData);
-            Integer gender = DataTool.getInteger("Gender", itemData);
-            Integer clz = DataTool.getInteger("Class", itemData);
-            Integer pbCash = DataTool.getInteger("PbCash", itemData);
-            Integer pbPoint = DataTool.getInteger("PbPoint", itemData);
-            Integer pbGift = DataTool.getInteger("PbGift", itemData);
-            Integer packageSN = DataTool.getInteger("PackageSN", itemData);
-
-            return ModifiedCashItemDO.builder()
-                    .sn(sn)
-                    .itemId(itemId)
-                    .count(count)
-                    .price(price)
-                    .bonus(bonus)
-                    .priority(priority)
-                    .period(period == 0 ? 90 : period)
-                    .maplePoint(maplePoint)
-                    .meso(meso)
-                    .forPremiumUser(forPremiumUser)
-                    .commodityGender(gender)
-                    .onSale(onSale)
-                    .clz(clz)
-                    .pbCash(pbCash)
-                    .pbPoint(pbPoint)
-                    .pbGift(pbGift)
-                    .packageSn(packageSN)
-                    .build();
         }
 
         public static void loadAllModifiedCashItems() {
             modifiedCashItems.clear();
             CashShopService cashShopService = ServerManager.getApplicationContext().getBean(CashShopService.class);
             cashShopService.loadAllModifiedCashItems().forEach(modifiedCashItemDO -> modifiedCashItems.put(modifiedCashItemDO.getSn(), modifiedCashItemDO));
-             // 数据变更，重建缓存
         }
 
         private static void loadCashCategories() {
@@ -412,27 +254,17 @@ public class CashShop {
         }
 
         public static Optional<ModifiedCashItemDO> getRandomCashItem() {
-            ensureCommodityIndex(); // 确保索引已构建
-            // 随机选择一个SN，然后加载它
-            List<Integer> snList = new ArrayList<>(snToNodeMap.keySet());
-            if (snList.isEmpty()) {
-                return Optional.empty();
-            }
+            if (items.isEmpty()) return Optional.empty();
+            List<Integer> snList = new ArrayList<>(items.keySet());
             int randomSN = snList.get(new Random().nextInt(snList.size()));
             return Optional.ofNullable(getItem(randomSN));
         }
 
-        /**
-         * 处理倍率卡商品的上架/下架状态。
-         * 此方法在配置变更时调用，用于回顾性地更新已缓存道具的状态。
-         * @param sale true表示上架倍率卡商品，false表示下架倍率卡商品
-         */
         public static void processRateCouponItems(boolean sale) {
             discontinuedCashItems.values().removeIf(item -> ItemConstants.isRateCoupon(item.getItemId()));
             if (!sale) {
-                // 使用专用索引，只处理相关商品
                 for (int sn : rateCouponSnList) {
-                    ModifiedCashItemDO item = getItem(sn); // getItem内部会处理懒加载
+                    ModifiedCashItemDO item = getItem(sn);
                     if (item != null) {
                         ModifiedCashItemDO clone = item.clone();
                         clone.setOnSale(0);
@@ -440,20 +272,13 @@ public class CashShop {
                     }
                 }
             }
-             // 数据变更，重建缓存
         }
 
-        /**
-         * 处理宠物装备商品的永久化设置。
-         * 此方法在配置变更时调用，用于回顾性地更新已缓存道具的状态。
-         * @param makePermanent true表示将符合条件的宠物装备设置为永久，false表示取消永久设置
-         */
         public static void processPetEquipItems(boolean makePermanent) {
             permanentCashItems.values().removeIf(item -> ItemConstants.isPetEquip(item.getItemId()));
             if (makePermanent) {
-                // 使用专用索引，只处理相关商品
                 for (int sn : upgradablePetEquipSnList) {
-                    ModifiedCashItemDO item = getItem(sn); // getItem内部会处理懒加载
+                    ModifiedCashItemDO item = getItem(sn);
                     if (item != null) {
                         ModifiedCashItemDO clone = item.clone();
                         clone.setPeriod(0L);
@@ -461,19 +286,22 @@ public class CashShop {
                     }
                 }
             }
-             // 数据变更，重建缓存
         }
 
+        /**
+         * 注解：重构后的 getItem 方法。
+         * 它现在直接从已全量加载的 'items' Map 中获取数据，不再有懒加载逻辑。
+         * @param sn 商品序列号
+         * @return 最终的商品信息对象，可能为 null
+         */
         public static ModifiedCashItemDO getItem(int sn) {
-            // 1. 从主缓存获取或懒加载WZ原始数据
-            ModifiedCashItemDO wzItem = items.computeIfAbsent(sn, CashItemFactory::loadSingleItemFromWZ);
+            ModifiedCashItemDO wzItem = items.get(sn);
             if (wzItem == null) {
-                return null; // WZ中不存在此SN
+                return null; // 在全量加载模式下，如果这里找不到，就是真的不存在
             }
 
-            // 2. 应用数据库中的修改
             ModifiedCashItemDO dbItem = modifiedCashItems.get(sn);
-            ModifiedCashItemDO finalItem = wzItem.clone(); // 创建副本以避免修改缓存
+            ModifiedCashItemDO finalItem = wzItem.clone();
 
             if (dbItem != null) {
                 finalItem.setItemId(Optional.ofNullable(dbItem.getItemId()).orElse(wzItem.getItemId()));
@@ -495,15 +323,12 @@ public class CashShop {
                 finalItem.setPackageSn(Optional.ofNullable(dbItem.getPackageSn()).orElse(wzItem.getPackageSn()));
             }
 
-            // 3. 根据当前动态配置，即时处理特殊状态
-            // 处理倍率卡
             if (ItemConstants.isRateCoupon(finalItem.getItemId())) {
                 if (!GameConfig.getServerBoolean("use_supply_rate_coupons")) {
                     finalItem.setOnSale(0);
                     discontinuedCashItems.put(finalItem.getSn(), finalItem);
                 }
             }
-            // 处理宠物装备
             if (ItemConstants.isUpgradablePetEquip(finalItem.getItemId())) {
                 if (GameConfig.getServerBoolean("use_pet_equip_permanent")) {
                     finalItem.setPeriod(0L);
@@ -515,15 +340,13 @@ public class CashShop {
         }
 
         public static ModifiedCashItemDO getWzItem(int sn) {
-            return items.computeIfAbsent(sn, CashItemFactory::loadSingleItemFromWZ);
+            return items.get(sn);
         }
 
         public static List<Item> getPackage(int itemId) {
-            lazyLoadPackages(); // 确保礼包数据已加载
+            // 注解：由于已全量加载，不再需要懒加载
             List<Integer> packageSNs = packages.get(itemId);
-            if (packageSNs == null) {
-                return Collections.emptyList();
-            }
+            if (packageSNs == null) return Collections.emptyList();
 
             List<Item> cashPackage = new ArrayList<>();
             for (int sn : packageSNs) {
@@ -536,13 +359,11 @@ public class CashShop {
         }
 
         public static boolean isPackage(int itemId) {
-            lazyLoadPackages(); // 确保礼包数据已加载
             return packages.containsKey(itemId);
         }
     }
 
-    public record CashShopSurpriseResult(Item usedCashShopSurprise, Item reward) {
-    }
+    public record CashShopSurpriseResult(Item usedCashShopSurprise, Item reward) {}
 
     public String getCashName(int type) {
         return switch (type) {

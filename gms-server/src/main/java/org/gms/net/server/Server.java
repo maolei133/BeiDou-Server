@@ -36,7 +36,6 @@ import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.net.OpcodeConstants;
 import org.gms.constants.net.ServerConstants;
 import org.gms.dao.entity.CharactersDO;
-import org.gms.dao.entity.NxcouponsDO;
 import org.gms.dao.entity.PlayernpcsFieldDO;
 import org.gms.manager.ServerManager;
 import org.gms.model.dto.ServerShutdownDTO;
@@ -667,71 +666,61 @@ public class Server {
         Instant beforeInit = Instant.now();
         log.info(I18nUtil.getLogMessage("Server.init.info1"), ServerConstants.VERSION);
 
-        // 发送信件
-        registerChannelDependencies();
-        // 根据配置初始化WZ数据加载
+        // 注解：最终生产方案。恢复并发加载，并应用智能缓存策略。
         try (ExecutorService initExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
             final List<Future<?>> futures = new ArrayList<>();
-            if (serviceProperty.getStartup().isAllWz()) {
-                long time = System.currentTimeMillis();
-                // 利用虚拟线程，减少开销
-                log.info(I18nUtil.getLogMessage("Server.init.info2"));
-                futures.add(initExecutor.submit(SkillFactory::loadAllSkills));
-                futures.add(initExecutor.submit(Quest::loadAllQuests));
-                futures.add(initExecutor.submit(CashItemFactory::loadAllCashItems));
-                log.info(I18nUtil.getLogMessage("Server.init.info3"), System.currentTimeMillis() - time);
-            } else {
-                log.info("wz数据采用懒加载模式");
-            }
-            futures.add(initExecutor.submit(SkillbookInformationProvider::loadAllSkillbookInformation)); // 必须提前全量加载技能书的来源信息，无其它位置加载
+            
+            // 1. 提交所有可以并发执行的初始化任务
+            log.info("开始并发提交启动任务 (生产模式)...");
+            
+            // WZ加载任务
+
+            // “用完即弃”模式
+            futures.add(initExecutor.submit(() -> SkillFactory.loadAllSkills(true)));
+            futures.add(initExecutor.submit(() -> CashItemFactory.loadAllCashItems(true)));
+            // “长期缓存”模式
+            futures.add(initExecutor.submit(Quest::loadAllQuests)); // 任务：加载所有任务
+            futures.add(initExecutor.submit(SkillbookInformationProvider::loadAllSkillbookInformation));    // 技能书信息加载
+
+            // 其他独立任务
+            futures.add(initExecutor.submit(this::registerChannelDependencies));
+            futures.add(initExecutor.submit(() -> accountService.resetAllLoggedIn()));
+            futures.add(initExecutor.submit(characterService::resetMerchant));
+            futures.add(initExecutor.submit(itemRecoveryService::cleanupExpiredLogs));
+            futures.add(initExecutor.submit(itemRecoveryService::updatePendingDrop));
+            futures.add(initExecutor.submit(nxCodeService::clearExpirations));
+            futures.add(initExecutor.submit(this::updateActiveCoupons));
+            futures.add(initExecutor.submit(CashIdGenerator::loadExistentCashIdsFromDb));
+            futures.add(initExecutor.submit(nameChangeService::applyAllNameChange));
+            futures.add(initExecutor.submit(worldTransferService::applyAllWorldTransfer));
+            futures.add(initExecutor.submit(() -> PlayerNPC.loadRunningRankData(Math.min(GameConstants.WORLD_NAMES.length, GameConfig.getConfig().getJSONObject("world").size()))));
+            futures.add(initExecutor.submit(new BossLogTask()));    // 重置boss日志
+            futures.add(initExecutor.submit(new ExtendValueTask()));    // 清理扩展表类型
+            futures.add(initExecutor.submit(CommandsExecutor.getInstance()::loadCommandsExecutor)); // 加载GM命令
+            futures.add(initExecutor.submit(OpcodeConstants::generateOpcodeNames)); // 生成Opcode名称
+
+            // 2. 等待所有并发任务完成
+            log.info("等待 {} 个启动任务完成...", futures.size());
             for (Future<?> future : futures) {
                 future.get();
             }
+            log.info("所有并发启动任务已完成。");
+
         } catch (Exception e) {
             log.error(I18nUtil.getLogMessage("Server.init.error1"), e);
             throw new IllegalStateException(e);
         }
+
         TimeZone.setDefault(TimeZone.getTimeZone(GameConfig.getServerString("timezone")));
 
         log.info(I18nUtil.getLogMessage("Server.init.info4"));
         final int worldCount = Math.min(GameConstants.WORLD_NAMES.length, GameConfig.getConfig().getJSONObject("world").size());
 
-        // 重置登录状态和雇佣商店状态
-        accountService.resetAllLoggedIn();  // 重置登录状态
-        characterService.resetMerchant();  // 重置雇佣商店状态
-
-        itemRecoveryService.cleanupExpiredLogs(); // 清理过期找回记录
-        itemRecoveryService.updatePendingDrop();  // 更新待找回物品标记
-
-        // 清空失效的现金物品
-        nxCodeService.clearExpirations();
-
-        // 重载倍率卡
-        List<NxcouponsDO> nxcouponsDOList = nxCouponService.getNxCoupons(new NxcouponsDO());
-        couponRates.clear();
-        nxcouponsDOList.forEach(nxcouponsDO -> couponRates.put(nxcouponsDO.getCouponid(), nxcouponsDO.getRate()));
-        updateActiveCoupons();
-        CashIdGenerator.loadExistentCashIdsFromDb();
-
-        // 接受未完成的改名
-        nameChangeService.applyAllNameChange();
-
-        // 接受转区
-        worldTransferService.applyAllWorldTransfer();
-
-        // 加载玩家排名
-        PlayerNPC.loadRunningRankData(worldCount);
-
-        // 主动清理每日零点需要清理的数据
-        new BossLogTask().run();
-        new ExtendValueTask().run();
-        log.info(I18nUtil.getLogMessage("Server.init.info5"));
-
+        // 注解：以下为必须在上述任务完成后，顺序执行的逻辑
         ThreadManager.getInstance().start();
         //基于lxconan的实时任务聚合方法 ，需要在newYearCardService.startPendingNewYearCardRequests()方法之前调用，否则存在概率造成TimerManager的ses为null导致无法启动
         initializeTimelyTasks();    // aggregated method for timely tasks thanks to lxconan
         newYearCardService.startPendingNewYearCardRequests();
-//        BossScheduleService.getInstance().loadAllSchedules();
         try {
             for (int i = 0; i < worldCount; i++) {
                 initWorld();    // 初始化世界也会占用内存
@@ -749,17 +738,16 @@ public class Server {
             }
 
         } catch (Exception e) {
-            log.error(I18nUtil.getLogMessage("Server.init.error3"), e); //For those who get errors
+            log.error(I18nUtil.getLogMessage("Server.init.error3"), e);
             System.exit(0);
         }
 
         loginServer = initLoginServer(serviceProperty.getLoginPort());
         log.info(I18nUtil.getLogMessage("Server.init.info6"), serviceProperty.getLoginPort());
 
-        OpcodeConstants.generateOpcodeNames();
+//        OpcodeConstants.generateOpcodeNames();
 //        log.info(I18nUtil.getLogMessage("Server.init.info7"));
-        CommandsExecutor.getInstance().loadCommandsExecutor();
-
+//        CommandsExecutor.getInstance().loadCommandsExecutor();
         for (Channel ch : this.getAllChannels()) {
             ch.reloadEventScriptManager();  // 载入频道事件也会占用内存
         }

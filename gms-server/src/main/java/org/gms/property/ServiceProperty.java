@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 public class ServiceProperty {
     private String language;
     private RateLimitProperty rateLimit;
-    private StartupProperty startup;
     private String wanHost;
     private String lanHost;
     private String localhost;
@@ -19,11 +18,7 @@ public class ServiceProperty {
     /**
      * 启动参数
      */
-    @Data
-    public static class StartupProperty {
-        /** 是否在启动时全量预加载所有WZ数据（如Skill, Quest, CashShop等） */
-        private boolean allWz;
-    }
+
     /** 速率限制 */
     @Data
     public static class RateLimitProperty {
