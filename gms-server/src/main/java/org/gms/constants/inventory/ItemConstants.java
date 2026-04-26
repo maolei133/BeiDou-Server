@@ -72,6 +72,8 @@ public final class ItemConstants {
     private static final int PREFIX_WEAPON_END = 149;
     /** 宠物装备前缀 */
     private static final int PREFIX_PET_EQUIP = 18;
+    /** 可升级宠物装备前缀 */
+    private static final int PREFIX_UPGRADABLE_PET_EQUIP = 180;
     /** 骑宠前缀 */
     private static final int PREFIX_TAMING_MOB = 190;
     /** 鞍具前缀 */
@@ -384,6 +386,15 @@ public final class ItemConstants {
      */
     public static boolean isPetEquip(int itemId) {
         return itemId / 100000 == PREFIX_PET_EQUIP;
+    }
+
+    /**
+     * 判断是否为可升级的宠物装备
+     * @param itemId 物品ID
+     * @return true 如果是可升级的宠物装备
+     */
+    public static boolean isUpgradablePetEquip(int itemId) {
+        return itemId / 10000 == PREFIX_UPGRADABLE_PET_EQUIP;
     }
 
     /**

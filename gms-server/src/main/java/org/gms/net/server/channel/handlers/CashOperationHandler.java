@@ -623,7 +623,6 @@ public final class CashOperationHandler extends AbstractPacketHandler {
         // 将重复调用的方法设为变量
         String playerName = chr.getName();
         String itemName = ItemInformationProvider.getInstance().getName(cItem.getItemId());
-        Item item = cItem.toItem();
         int itemId = cItem.getItemId();
         int sn = cItem.getSn();
         int price = cItem.getPrice();
@@ -645,16 +644,16 @@ public final class CashOperationHandler extends AbstractPacketHandler {
             return false;
         }
 
-        if (GameConfig.getServerBoolean("use_pet_equip_permanent") && ItemConstants.isPetEquip(itemId)) {//商城是否允许将可升级次数>0的宠物装备时效设为永久。
-            if (item.getInventoryType().equals(InventoryType.EQUIP) && ((Equip) item).getUpgradeSlots() > 0) {
-                cItem.setPeriod(-1L);
-            }
+        if (GameConfig.getServerBoolean("use_pet_equip_permanent") && ItemConstants.isUpgradablePetEquip(itemId)) {
+            cItem.setPeriod(-1L);
+            CashItemFactory.updateItemInCache(cItem); // 状态变更后，立即更新缓存
         }
 
         // 重新获取period值，因为可能被修改
         long period = cItem.getPeriod();
         String periodDesc = period > 0 ? period + "天" : "永久";
         String cashName = chr.getCashShop().getCashName(useNX);
+        Item item = cItem.toItem();
 
         log.info("玩家 {} 购买了现金道具 {}({}) (SN {}) 有效期 {} 数量 {} 花费 {}{}",playerName, itemName, itemId, sn, periodDesc, cItem.getCount(), price, cashName);
         // 日志记录

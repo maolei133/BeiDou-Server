@@ -57,21 +57,8 @@ public class CashShopPackets {
                     (byte) 0x4E, (byte) 0xC1, (byte) 0xCA, 1});
         } else {
             p.writeInt(0);
-            // 使用 Stream 按优先级顺序合并和滤重
-            Map<Integer, ModifiedCashItemDO> itemMap = Stream.of(//生效的优先级从高到低，确保控制台商城管理的优先级最高，并且减少重复的现金道具。
-                            CashItemFactory.getDiscontinuedCashItems().values(), // 合并已下架现金道具列表
-                            CashItemFactory.getModifiedCashItems().values(),  // 获取修改过的现金道具信息
-                            CashItemFactory.getPermanentCashItems().values() // 合并永久现金道具列表
-                    )
-                    .flatMap(Collection::stream)
-                    .collect(Collectors.toMap(
-                            ModifiedCashItemDO::getSn,
-                            item -> item,
-                            (existing, replacement) -> existing, // 保留先出现的（高优先级）
-                            LinkedHashMap::new // 保持插入顺序
-                    ));
-            Collection<ModifiedCashItemDO> items = itemMap.values();
-            p.writeShort(items.size());// 猜猜看
+            Collection<ModifiedCashItemDO> items = CashItemFactory.getClientCache();
+            p.writeShort(items.size());// 发送修改过的商城物品数量
             for (ModifiedCashItemDO item : items) {
                 PacketHelper.writeModifiedCashItem(p, item);
             }

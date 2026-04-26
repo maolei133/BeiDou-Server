@@ -57,6 +57,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.gms.dao.entity.table.GiftsDOTableDef.GIFTS_DO;
 
@@ -65,7 +66,7 @@ import static org.gms.dao.entity.table.GiftsDOTableDef.GIFTS_DO;
  * @author Flav
  * @author Ponk
  */
-@Slf4j
+@Slf4j @Getter @Setter
 public class CashShop {
     public static final int NX_CREDIT = 1;
     public static final int MAPLE_POINT = 2;
@@ -73,16 +74,12 @@ public class CashShop {
 
     private final int accountId;
     private final int characterId;
-    @Setter
     private int nxCredit;
-    @Setter
     private int maplePoint;
-    @Setter
     private int nxPrepaid;
     private boolean opened;
     private ItemFactory factory;
     private final List<Item> inventory = new ArrayList<>();
-    @Getter
     private final List<Integer> wishList = new ArrayList<>();
     private int notes = 0;
     private final Lock lock = new ReentrantLock();
@@ -147,13 +144,75 @@ public class CashShop {
         private static final Map<Integer, Data> snToNodeMap = new HashMap<>();
         private static volatile boolean commodityIndexBuilt = false;
 
+        // 客户端最终商品缓存
+        private static Collection<ModifiedCashItemDO> clientItemsCache = Collections.emptyList();
+
+        // 专用索引，用于快速定位需要全局处理的商品
+        private static final List<Integer> rateCouponSnList = new ArrayList<>();
+        private static final List<Integer> upgradablePetEquipSnList = new ArrayList<>();
+
+        /**
+         * 在购买时更新动态修改的商品缓存。
+         * @param updatedItem 状态已更新的商品对象
+         */
+        public static void updateItemInCache(ModifiedCashItemDO updatedItem) {
+            if (updatedItem == null) {
+                return;
+            }
+            // 检查商品是否属于某个动态分类，并更新它
+            if (ItemConstants.isUpgradablePetEquip(updatedItem.getItemId())) {
+                updatedItem.setPeriod(0L);
+                permanentCashItems.put(updatedItem.getSn(), updatedItem);
+//                log.info("【商城缓存】购买时更新了永久宠物装备 SN: {}", updatedItem.getSn());
+            } else if (ItemConstants.isRateCoupon(updatedItem.getItemId())) {
+                discontinuedCashItems.put(updatedItem.getSn(), updatedItem);
+//                log.info("【商城缓存】购买时更新了倍率卡 SN: {}", updatedItem.getSn());
+            }
+        }
+
+        /**
+         * 重建用于客户端的商品缓存。
+         * 该方法合并所有修改和动态配置，生成最终的商品列表。
+         */
+        public static void rebuildClientCache() {
+            // 使用 Stream 按优先级顺序合并和滤重
+            Map<Integer, ModifiedCashItemDO> itemMap = Stream.of(//生效的优先级从高到低，确保控制台商城管理的优先级最高，并且减少重复的现金道具。
+                            getDiscontinuedCashItems().values(), // 合并已下架现金道具列表
+                            getModifiedCashItems().values(),  // 获取修改过的现金道具信息
+                            getPermanentCashItems().values() // 合并永久现金道具列表
+                    )
+                    .flatMap(Collection::stream)
+                    .collect(Collectors.toMap(
+                            ModifiedCashItemDO::getSn,
+                            item -> item,
+                            (existing, replacement) -> existing, // 保留先出现的（高优先级）
+                            LinkedHashMap::new // 保持插入顺序
+                    ));
+            clientItemsCache = itemMap.values();
+//            log.info("商城商品缓存重建完毕，共缓存 {} 个商品。", clientItemsCache.size());
+        }
+
+        /**
+         * 获取供客户端使用的、已缓存的最终商品列表。
+         * @return 最终商品列表的集合
+         */
+        public static Collection<ModifiedCashItemDO> getClientCache() {
+            if (clientItemsCache.isEmpty()) {
+                loadAllModifiedCashItems(); // 加载所有修改过的现金道具
+                processRateCouponItems((GameConfig.getServerBoolean("use_supply_rate_coupons"))); //重载商城是否允许出售倍率卡
+                processPetEquipItems(GameConfig.getServerBoolean("use_pet_equip_permanent"));  //重载宠物装备有效期
+            }
+            rebuildClientCache();   // 重新生成客户端缓存
+            return clientItemsCache;
+        }
+
         /**
          * 恢复全量加载逻辑，用于调试或特定的预加载场景。
          * 调用此方法将一次性加载所有商城道具到内存中。
          */
         public static void loadAllCashItems() {
             long startTime = System.currentTimeMillis();
-            long time = startTime;
+            long time;
 
             // 1. 加载所有商品
             Map<Integer, ModifiedCashItemDO> loadedItems = new HashMap<>();
@@ -242,12 +301,22 @@ public class CashShop {
                             for (Data itemNode : commodityData.getChildren()) {
                                 int sn = DataTool.getIntConvert("SN", itemNode);
                                 snToNodeMap.put(sn, itemNode);
+
+                                // 建立专用索引
+                                int itemId = DataTool.getIntConvert("ItemId", itemNode);
+                                if (ItemConstants.isRateCoupon(itemId)) {
+                                    rateCouponSnList.add(sn);
+                                }
+                                if (ItemConstants.isUpgradablePetEquip(itemId)) {
+                                    upgradablePetEquipSnList.add(sn);
+                                }
                             }
                         } else {
                             log.error("无法加载 Commodity.img，商城功能可能异常！");
                         }
                         commodityIndexBuilt = true;
                         log.info("商城商品索引构建完成，耗时：{} 毫秒。", System.currentTimeMillis() - startTime);
+                        log.info("专用索引：找到 {} 个倍率卡, {} 个可升级宠物装备。", rateCouponSnList.size(), upgradablePetEquipSnList.size());
                     }
                 }
             }
@@ -333,6 +402,7 @@ public class CashShop {
             modifiedCashItems.clear();
             CashShopService cashShopService = ServerManager.getApplicationContext().getBean(CashShopService.class);
             cashShopService.loadAllModifiedCashItems().forEach(modifiedCashItemDO -> modifiedCashItems.put(modifiedCashItemDO.getSn(), modifiedCashItemDO));
+             // 数据变更，重建缓存
         }
 
         private static void loadCashCategories() {
@@ -360,15 +430,17 @@ public class CashShop {
         public static void processRateCouponItems(boolean sale) {
             discontinuedCashItems.values().removeIf(item -> ItemConstants.isRateCoupon(item.getItemId()));
             if (!sale) {
-                // 遍历已缓存的道具，将倍率卡加入下架列表
-                for (ModifiedCashItemDO item : items.values()) {
-                    if (ItemConstants.isRateCoupon(item.getItemId())) {
+                // 使用专用索引，只处理相关商品
+                for (int sn : rateCouponSnList) {
+                    ModifiedCashItemDO item = getItem(sn); // getItem内部会处理懒加载
+                    if (item != null) {
                         ModifiedCashItemDO clone = item.clone();
                         clone.setOnSale(0);
                         discontinuedCashItems.put(clone.getSn(), clone);
                     }
                 }
             }
+             // 数据变更，重建缓存
         }
 
         /**
@@ -379,18 +451,17 @@ public class CashShop {
         public static void processPetEquipItems(boolean makePermanent) {
             permanentCashItems.values().removeIf(item -> ItemConstants.isPetEquip(item.getItemId()));
             if (makePermanent) {
-                // 遍历已缓存的道具，将符合条件的宠物装备加入永久列表
-                for (ModifiedCashItemDO item : items.values()) {
-                    if (ItemConstants.isPetEquip(item.getItemId())) {
-                        Item cItem = item.toItem();
-                        if (cItem != null && cItem.getInventoryType().equals(InventoryType.EQUIP) && ((Equip) cItem).getUpgradeSlots() > 0) {
-                            ModifiedCashItemDO clone = item.clone();
-                            clone.setPeriod(0L);
-                            permanentCashItems.put(clone.getSn(), clone);
-                        }
+                // 使用专用索引，只处理相关商品
+                for (int sn : upgradablePetEquipSnList) {
+                    ModifiedCashItemDO item = getItem(sn); // getItem内部会处理懒加载
+                    if (item != null) {
+                        ModifiedCashItemDO clone = item.clone();
+                        clone.setPeriod(0L);
+                        permanentCashItems.put(clone.getSn(), clone);
                     }
                 }
             }
+             // 数据变更，重建缓存
         }
 
         public static ModifiedCashItemDO getItem(int sn) {
@@ -433,13 +504,10 @@ public class CashShop {
                 }
             }
             // 处理宠物装备
-            if (ItemConstants.isPetEquip(finalItem.getItemId())) {
+            if (ItemConstants.isUpgradablePetEquip(finalItem.getItemId())) {
                 if (GameConfig.getServerBoolean("use_pet_equip_permanent")) {
-                    Item cItem = finalItem.toItem();
-                    if (cItem != null && cItem.getInventoryType().equals(InventoryType.EQUIP) && ((Equip) cItem).getUpgradeSlots() > 0) {
-                        finalItem.setPeriod(0L);
-                        permanentCashItems.put(finalItem.getSn(), finalItem);
-                    }
+                    finalItem.setPeriod(0L);
+                    permanentCashItems.put(finalItem.getSn(), finalItem);
                 }
             }
 
@@ -506,10 +574,6 @@ public class CashShop {
         if (!GameConfig.getServerBoolean("use_enforce_item_suggestion")) {
             Server.getInstance().getWorld(world).addCashItemBought(buyItem.getSn());
         }
-    }
-
-    public boolean isOpened() {
-        return opened;
     }
 
     public void open(boolean b) {
