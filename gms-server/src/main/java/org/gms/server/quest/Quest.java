@@ -40,41 +40,18 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  * 任务数据和逻辑处理类
  * @author Matze
  * @author Ronan - 增加了对勋章任务的支持
+ * @author Holoper - 重构为POJO模式，实现“用完即弃”内存策略
  */
 @Slf4j
 public class Quest {
-    // 由于改为全量加载，这些Map在启动时就会被完全填充
+    // 缓存所有任务实例，现在这些实例是包含完整数据的POJO
     private static final Map<Integer, Quest> quests = new ConcurrentHashMap<>();
     private static final Map<Integer, Integer> infoNumberQuests = new ConcurrentHashMap<>();
     private static final Map<Short, Integer> medals = new ConcurrentHashMap<>();
     private static final Set<Short> exploitableQuests = new HashSet<>();
 
-    // WZ数据提供者，保持静态以供所有任务实例共享
-    private final static DataProvider questData;
-    private final static Data questInfo;
-    private final static Data questAct;
-    private final static Data questReq;
-
-    // 静态初始化块，用于加载和校验核心WZ数据
+    // 静态初始化块，仅填充硬编码数据
     static {
-        questData = DataProviderFactory.getDataProvider(WZFiles.QUEST);
-        if (questData == null) {
-            throw new IllegalStateException("加载任务失败：无法找到或读取 Quest.wz 文件。");
-        }
-        questInfo = questData.getData("QuestInfo.img");
-        if (questInfo == null) {
-            throw new IllegalStateException("加载任务失败：在 Quest.wz 中找不到 QuestInfo.img 节点。");
-        }
-        questAct = questData.getData("Act.img");
-        if (questAct == null) {
-            throw new IllegalStateException("加载任务失败：在 Quest.wz 中找不到 Act.img 节点。");
-        }
-        questReq = questData.getData("Check.img");
-        if (questReq == null) {
-            throw new IllegalStateException("加载任务失败：在 Quest.wz 中找不到 Check.img 节点。");
-        }
-
-        // 填充一些硬编码的数据
         exploitableQuests.add((short) 2338);
         exploitableQuests.add((short) 3637);
         exploitableQuests.add((short) 3714);
@@ -94,28 +71,37 @@ public class Quest {
     private String name = "", parent = "";
 
     /**
-     * 私有构造函数，用于加载单个任务的数据。
+     * 私有构造函数，用于创建一个空的、无效的任务对象。
+     * 当请求一个不存在的任务ID时调用，以避免返回null。
      * @param id 任务ID
      */
     private Quest(int id) {
         this.id = (short) id;
+//        this.name = "MISSING QUEST";
+    }
 
-        // 修正懒加载问题：即使任务在Check.img中没有需求节点，也必须继续加载QuestInfo和Act中的数据。
-        // 不能因为reqData为null就提前返回，否则纯脚本任务或只有奖励的任务会加载失败。
+    /**
+     * 私有构造函数，用于从WZ节点全量加载单个任务的数据。
+     * @param id 任务ID
+     * @param infoNode 该任务在 QuestInfo.img 中的数据节点
+     * @param actNode 该任务在 Act.img 中的数据节点
+     * @param checkNode 该任务在 Check.img 中的数据节点
+     */
+    private Quest(int id, Data infoNode, Data actNode, Data checkNode) {
+        this.id = (short) id;
 
-        // 1. 加载任务基本信息 (QuestInfo.img)
-        var reqInfo = questInfo.getChildByPath(String.valueOf(id));
-        if (reqInfo != null) {
-            name = DataTool.getString("name", reqInfo, "");
-            parent = DataTool.getString("parent", reqInfo, "");
+        // 1. 加载任务基本信息 (来自 infoNode)
+        if (infoNode != null) {
+            name = DataTool.getString("name", infoNode, "");
+            parent = DataTool.getString("parent", infoNode, "");
 
-            timeLimit = DataTool.getInt("timeLimit", reqInfo, 0);
-            timeLimit2 = DataTool.getInt("timeLimit2", reqInfo, 0);
-            autoStart = DataTool.getInt("autoStart", reqInfo, 0) == 1;
-            autoPreComplete = DataTool.getInt("autoPreComplete", reqInfo, 0) == 1;
-            autoComplete = DataTool.getInt("autoComplete", reqInfo, 0) == 1;
+            timeLimit = DataTool.getInt("timeLimit", infoNode, 0);
+            timeLimit2 = DataTool.getInt("timeLimit2", infoNode, 0);
+            autoStart = DataTool.getInt("autoStart", infoNode, 0) == 1;
+            autoPreComplete = DataTool.getInt("autoPreComplete", infoNode, 0) == 1;
+            autoComplete = DataTool.getInt("autoComplete", infoNode, 0) == 1;
 
-            var medalid = DataTool.getInt("viewMedalItem", reqInfo, 0);
+            var medalid = DataTool.getInt("viewMedalItem", infoNode, 0);
             if (medalid != 0) {
                 medals.put(this.id, medalid);
             }
@@ -123,25 +109,19 @@ public class Quest {
             log.error("在 QuestInfo.img 中找不到ID为 {} 的任务数据", id);
         }
 
-        // 2. 加载任务需求 (Check.img)，如果存在
-        var reqData = questReq.getChildByPath(String.valueOf(id));
-        if (reqData != null) {
-            var startReqData = reqData.getChildByPath("0");
+        // 2. 加载任务需求 (来自 checkNode)
+        if (checkNode != null) {
+            var startReqData = checkNode.getChildByPath("0");
             if (startReqData != null) {
                 for (var startReq : startReqData.getChildren()) {
                     var type = QuestRequirementType.getByWZName(startReq.getName());
                     if (type == null) continue;
                     
-                    // 注解：使用增强型 switch 语句 (Java 14+)
-                    switch (type) {
-                        case INTERVAL -> repeatable = true;
-                        case MOB -> {
-                            for (var mob : startReq.getChildren()) {
-                                relevantMobs.add(DataTool.getInt(mob.getChildByPath("id")));
-                            }
-                        }
-                        default -> {
-                            // 其他情况不做处理
+                    if (type == QuestRequirementType.INTERVAL) {
+                        repeatable = true;
+                    } else if (type == QuestRequirementType.MOB) {
+                        for (var mob : startReq.getChildren()) {
+                            relevantMobs.add(DataTool.getInt(mob.getChildByPath("id")));
                         }
                     }
 
@@ -152,7 +132,7 @@ public class Quest {
                 }
             }
 
-            var completeReqData = reqData.getChildByPath("1");
+            var completeReqData = checkNode.getChildByPath("1");
             if (completeReqData != null) {
                 for (var completeReq : completeReqData.getChildren()) {
                     var type = QuestRequirementType.getByWZName(completeReq.getName());
@@ -173,10 +153,9 @@ public class Quest {
             }
         }
 
-        // 3. 加载任务动作/奖励 (Act.img)，如果存在
-        var actData = questAct.getChildByPath(String.valueOf(id));
-        if (actData != null) {
-            final var startActData = actData.getChildByPath("0");
+        // 3. 加载任务动作/奖励 (来自 actNode)
+        if (actNode != null) {
+            final var startActData = actNode.getChildByPath("0");
             if (startActData != null) {
                 for (var startAct : startActData.getChildren()) {
                     var questActionType = QuestActionType.getByWZName(startAct.getName());
@@ -188,7 +167,7 @@ public class Quest {
                     }
                 }
             }
-            var completeActData = actData.getChildByPath("1");
+            var completeActData = actNode.getChildByPath("1");
             if (completeActData != null) {
                 for (var completeAct : completeActData.getChildren()) {
                     var questActionType = QuestActionType.getByWZName(completeAct.getName());
@@ -213,31 +192,61 @@ public class Quest {
 
     /**
      * 获取任务实例的唯一入口。
-     * 使用 ConcurrentHashMap 的 computeIfAbsent 方法确保线程安全，并保证永不返回null。
-     * 在全量加载模式下，此方法通常会直接命中缓存。
-     * 如果请求一个不存在的ID（例如，来自数据库的脏数据），它会动态创建一个空Quest对象以确保向后兼容。
+     * 在全量加载模式下，此方法会直接从内存缓存中获取已完全加载的Quest对象。
+     * 如果请求一个不存在的ID（例如，来自数据库的脏数据），它会动态创建一个空的Quest对象以确保向后兼容，并打印警告。
      * @param id 任务ID
      * @return 任务实例，永不为null
      */
     public static Quest getInstance(int id) {
-        return quests.computeIfAbsent(id, Quest::new);
+        Quest ret = quests.get(id);
+        if (ret == null) {
+            // 在全量加载后，理论上不应该出现这种情况。
+            // 但为了系统的健壮性，我们返回一个空的Quest对象，防止NPE。
+            log.warn("尝试获取一个未被加载的任务，ID: {}。可能是一个无效的ID。", id);
+            ret = new Quest(id);
+            quests.put(id,ret);
+        }
+        return ret;
     }
 
     /**
      * 全量加载所有任务数据到缓存中。
-     * 此方法由 Server.java 在启动时通过虚拟线程调用。
-     * 同时填充 infoNumber -> questID 的映射。
+     * 此方法采用“提取-转换-释放”模式：
+     * 1. 临时加载 WZ 文件。
+     * 2. 遍历所有任务，将数据提取并填充到 Quest POJO 实例中。
+     * 3. 方法结束时，底层的 WZ 数据（DOM）将被垃圾回收器自动释放。
      */
     public static void loadAllQuests() {
         var startTime = System.currentTimeMillis();
-        // 1. 遍历QuestInfo.img中的所有任务ID，触发加载并填充缓存
-        for (var quest : questInfo.getChildren()) {
-            var questID = Integer.parseInt(quest.getName());
-            getInstance(questID); // 使用getInstance来加载，确保缓存被填充
+        
+        // 1. 临时加载WZ数据
+        DataProvider questDataProvider = DataProviderFactory.getDataProvider(WZFiles.QUEST);
+        if (questDataProvider == null) {
+            throw new IllegalStateException("加载任务失败：无法找到或读取 Quest.wz 文件。");
+        }
+        Data questInfoData = questDataProvider.getData("QuestInfo.img");
+        Data questActData = questDataProvider.getData("Act.img");
+        Data questCheckData = questDataProvider.getData("Check.img");
+
+        if (questInfoData == null || questActData == null || questCheckData == null) {
+            throw new IllegalStateException("加载任务失败：Quest.wz 文件中的核心 img 节点不完整。");
+        }
+
+        // 2. 遍历并填充所有任务实例
+        for (var questNode : questInfoData.getChildren()) {
+            var questID = Integer.parseInt(questNode.getName());
+            
+            // 从其他img文件中找到对应的任务节点
+            Data actNode = questActData.getChildByPath(String.valueOf(questID));
+            Data checkNode = questCheckData.getChildByPath(String.valueOf(questID));
+
+            // 使用新的构造函数创建包含完整数据的Quest实例
+            Quest newQuest = new Quest(questID, questNode, actNode, checkNode);
+            quests.put(questID, newQuest);
         }
         log.info("任务加载完成，总共 {} 个任务，耗时：{} 毫秒", quests.size(), System.currentTimeMillis() - startTime);
 
-        // 2. 填充 infoNumber -> QuestID 的映射表
+        // 3. 填充 infoNumber -> QuestID 的映射表
         var mapStartTime = System.currentTimeMillis();
         for (var q : quests.values()) {
             int infoNumber;
@@ -252,13 +261,15 @@ public class Quest {
             }
         }
         log.info("任务映射表加载完成 infoNumber -> QuestID，耗时：{} 毫秒", System.currentTimeMillis() - mapStartTime);
+
+        // 4. 释放资源
+        // 此方法结束后，questDataProvider, questInfoData, questActData, questCheckData
+        // 将超出作用域，它们引用的庞大DOM树将在下一次GC时被回收。
     }
 
 
     public static Quest getInstanceFromInfoNumber(int infoNumber) {
-        // 注解：使用 getOrDefault 简化代码
         var id = infoNumberQuests.getOrDefault(infoNumber, infoNumber);
-        // 统一使用getInstance获取，确保健壮性
         return getInstance(id);
     }
 
@@ -268,7 +279,6 @@ public class Quest {
         }
 
         var req = startReqs.get(QuestRequirementType.INTERVAL);
-        // 注解：使用 instanceof 模式匹配 (Java 16+)
         if (req instanceof IntervalRequirement ir) {
             return ir.getInterval() < HOURS.toMillis(GameConfig.getServerLong("quest_point_repeatable_interval"));
         }
@@ -280,6 +290,12 @@ public class Quest {
         return !(!mqs.getStatus().equals(Status.NOT_STARTED) && !(mqs.getStatus().equals(Status.COMPLETED) && repeatable));
     }
 
+    /**
+     * 检查任务的infoEx进度是否满足要求。
+     * 这是任务开始和完成的附加检查。
+     * @param chr 角色对象
+     * @return 如果满足infoEx要求或没有infoEx要求，则返回true
+     */
     public boolean canQuestByInfoProgress(Character chr) {
         var mqs = chr.getQuest(this);
         var ix = mqs.getInfoEx();
@@ -287,7 +303,7 @@ public class Quest {
             short questid = mqs.getQuestID();
             short infoNumber = mqs.getInfoNumber();
             if (infoNumber <= 0) {
-                infoNumber = questid;  // 默认情况下，infoNumber 与 questid 相同
+                infoNumber = questid;
             }
 
             var ixSize = ix.size();
@@ -300,7 +316,6 @@ public class Quest {
                 }
             }
         }
-
         return true;
     }
 
@@ -315,6 +330,7 @@ public class Quest {
             }
         }
 
+        // 恢复对 infoEx 进度的检查
         return canQuestByInfoProgress(chr);
     }
 
@@ -330,6 +346,7 @@ public class Quest {
             }
         }
 
+        // 恢复对 infoEx 进度的检查
         return canQuestByInfoProgress(chr);
     }
 
@@ -337,7 +354,7 @@ public class Quest {
         if (autoStart || canStart(chr, npc)) {
             var acts = startActs.values();
             for (var a : acts) {
-                if (!a.check(chr, null)) { // null 是否合适？
+                if (!a.check(chr, null)) {
                     return;
                 }
             }
@@ -491,7 +508,7 @@ public class Quest {
             if (req instanceof InfoExRequirement ixReq) {
                 return ixReq.getInfo().get(index);
             }
-        } catch (Exception e) { // 注解：使用未命名变量 (Java 21+)
+        } catch (Exception e) {
             return "";
         }
         return "";
@@ -505,10 +522,9 @@ public class Quest {
             if (req instanceof InfoExRequirement ixReq) {
                 return ixReq.getInfo();
             }
-        } catch (Exception e) { // 注解：使用未命名变量 (Java 21+)
+        } catch (Exception e) {
             return Collections.emptyList();
         }
-        // 注解：使用 Collections.emptyList() 替代 new LinkedList<>()，以提高性能
         return Collections.emptyList();
     }
 
@@ -523,7 +539,6 @@ public class Quest {
      */
     public static void clearCache(int questId) {
         quests.remove(questId);
-        // 注意：此操作不会自动更新 infoNumberQuests 映射，可能需要重新加载所有任务来重建映射。
     }
 
     /**
@@ -536,7 +551,6 @@ public class Quest {
     }
 
     private AbstractQuestRequirement getRequirement(QuestRequirementType type, Data data) {
-        // 注解：使用 switch 表达式 (Java 14+)
         return switch (type) {
             case END_DATE -> new EndDateRequirement(this, data);
             case JOB -> new JobRequirement(this, data);
@@ -564,7 +578,6 @@ public class Quest {
     }
 
     private AbstractQuestAction getAction(QuestActionType type, Data data) {
-        // 注解：使用 switch 表达式 (Java 14+)
         return switch (type) {
             case BUFF -> new BuffAction(this, data);
             case EXP -> new ExpAction(this, data);
@@ -632,10 +645,8 @@ public class Quest {
     }
 
     public static List<Quest> getMatchedQuests(String search) {
-        // 注解：使用 ArrayList 替代 LinkedList，并使用 var
         var ret = new ArrayList<Quest>();
         var lowerCaseSearch = search.toLowerCase();
-        // 由于是全量加载，可以直接遍历
         for (var mq : quests.values()) {
             if (mq.name.toLowerCase().contains(lowerCaseSearch) || mq.parent.toLowerCase().contains(lowerCaseSearch)) {
                 ret.add(mq);
