@@ -21,18 +21,19 @@
 */
 package org.gms.scripting.event;
 
+import lombok.extern.slf4j.Slf4j;
 import org.gms.client.Character;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.server.Server;
 import org.gms.net.server.channel.Channel;
 import org.gms.net.server.guild.Guild;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.World;
+import org.gms.property.ServiceProperty;
 import org.gms.util.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.scheduler.EventScriptScheduler;
 import org.gms.server.Marriage;
 import org.gms.server.ThreadManager;
@@ -58,8 +59,9 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  * @author Matze
  * @author Ronan
  */
+@Slf4j
 public class EventManager {
-    private static final Logger log = LoggerFactory.getLogger(EventManager.class);
+    ServiceProperty serviceProperty = ServerManager.getApplicationContext().getBean(ServiceProperty.class);
     private Invocable iv;  // 可调用的脚本引擎
     private Channel cserv;  // 频道服务器
     private World wserv;  // 世界服务器
@@ -74,6 +76,7 @@ public class EventManager {
     private Integer readyId = 0, onLoadInstances = 0;  // 准备ID和加载中的实例数
     private final Properties props = new Properties();  // 属性配置
     private final String name;  // 事件名称
+    private final String scriptPath; // 脚本路径
     private final Lock lobbyLock = new ReentrantLock();  // 大厅锁
     private final Lock queueLock = new ReentrantLock();  // 队列锁
     private final Lock startLock = new ReentrantLock();  // 启动锁
@@ -95,6 +98,7 @@ public class EventManager {
         this.cserv = cserv;
         this.wserv = server.getWorld(cserv.getWorld());
         this.name = name;
+        this.scriptPath = "scripts-" + serviceProperty.getLanguage() + "/event/" + name + ".js"; // 初始化脚本路径
 
         this.openedLobbys = new ArrayList<>();
         for (int i = 0; i < maxLobbys; i++) {
@@ -214,7 +218,7 @@ public class EventManager {
             }
         };
 
-        ess.registerEntry(r, delay);
+        ess.registerEntry(r, delay, this.scriptPath, methodName);
         return new EventScheduledFuture(r, ess);
     }
 
@@ -233,7 +237,7 @@ public class EventManager {
             }
         };
 
-        ess.registerEntry(r, timestamp - server.getCurrentTime());
+        ess.registerEntry(r, timestamp - server.getCurrentTime(), this.scriptPath, methodName);
         return new EventScheduledFuture(r, ess);
     }
 
@@ -329,13 +333,14 @@ public class EventManager {
      * @param name 实例名称
      */
     public void disposeInstance(final String name) {
-        ess.registerEntry(() -> {
+        Runnable r = () -> {
             freeLobbyInstance(name);
 
             synchronized (instances) {
                 instances.remove(name);
             }
-        }, SECONDS.toMillis(GameConfig.getServerLong("event_lobby_delay")));
+        };
+        ess.registerEntry(r, SECONDS.toMillis(GameConfig.getServerLong("event_lobby_delay")), this.scriptPath, "disposeInstance");
     }
 
     /**
@@ -445,6 +450,14 @@ public class EventManager {
      */
     public String getName() {
         return name;
+    }
+
+    /**
+     * 获取脚本路径
+     * @return 脚本路径
+     */
+    public String getScriptPath() {
+        return scriptPath;
     }
 
     /**
@@ -1193,7 +1206,7 @@ public class EventManager {
         }
 
         if (startInstance(chr)) {
-            exportReadyGuild(guildInstance.get(0));
+            exportReadyGuild(guildInstance.getFirst());
             return true;
         } else {
             return false;
@@ -1264,7 +1277,7 @@ public class EventManager {
                 return null;
             }
 
-            EventInstanceManager eim = readyInstances.remove(0);
+            EventInstanceManager eim = readyInstances.removeFirst();
             fillEimQueue();
 
             return eim;

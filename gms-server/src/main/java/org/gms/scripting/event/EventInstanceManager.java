@@ -247,7 +247,7 @@ public class EventInstanceManager {
 
     }
 
-    private void handleScriptException(Exception e, String functionName) {
+    private void handleScriptException(Throwable t, String functionName) {
         // 定义一个包含所有可选函数名的集合。这些函数如果不存在于脚本中，不应报错。
         final Set<String> optionalFunctions = Set.of(
                 "changedMap",
@@ -261,21 +261,27 @@ public class EventInstanceManager {
         );
 
         // 如果异常是“方法未找到”，并且该方法在我们的可选列表中，则直接返回，不记录日志。
-        if (e instanceof NoSuchMethodException && optionalFunctions.contains(functionName)) {
+        if (t instanceof NoSuchMethodException && optionalFunctions.contains(functionName)) {
             return;
         }
 
-        // 对于所有其他异常（如ScriptException），或对于必需但缺失的方法，则记录详细错误。
-        String eventName = em.getName();
-        String scriptPath = "scripts/event/" + eventName + ".js"; // 推断脚本路径
-        log.error("事件脚本[{}]的函数[{}]执行失败。脚本路径: {}, 异常: {}", eventName, functionName, scriptPath, e.getMessage());
+        String scriptPath = em.getScriptPath(); // 从EventManager获取准确路径
+
+        // 对于 ScriptException，提取行号
+        if (t instanceof ScriptException se) {
+            log.error("[事件脚本] 执行失败！脚本路径: '{}', 事件/函数: '{}', 错误: {}, 行号: {}",
+                    scriptPath, functionName, se.getMessage(), se.getLineNumber());
+        } else {
+            log.error("[事件脚本] 执行失败！脚本路径: '{}', 事件/函数: '{}'",
+                    scriptPath, functionName, t);
+        }
 
         // 使用AuditLogger记录到Loki
         MapMessage data = new MapMessage()
-                .with("event", eventName)
+                .with("event", em.getName())
                 .with("func", functionName)
                 .with("path", scriptPath);
-        AuditLogger.error(LogModule.SCRIPT, LogAction.SYSTEM_ERROR, data, e);
+        AuditLogger.error(LogModule.SCRIPT, LogAction.SYSTEM_ERROR, data, t);
     }
 
     public Object invokeScriptFunction(String name, Object... args) {
@@ -284,6 +290,8 @@ public class EventInstanceManager {
                 return em.getIv().invokeFunction(name, args);
             } catch (ScriptException | NoSuchMethodException e) {
                 handleScriptException(e, name);
+            } catch (Throwable t) { // 捕获所有其他严重错误
+                handleScriptException(t, name);
             }
         }
         return null;
@@ -665,11 +673,9 @@ public class EventInstanceManager {
         readLock.lock();
         try {
             if (ess != null) {
-                Runnable r = () -> {
-                    invokeScriptFunction(methodName, EventInstanceManager.this);
-                };
-
-                ess.registerEntry(r, delay);
+                Runnable r = () -> invokeScriptFunction(methodName, EventInstanceManager.this);
+                // 从 EventManager 获取准确的脚本路径
+                ess.registerEntry(r, delay, em.getScriptPath(), methodName);
             }
         } finally {
             readLock.unlock();
