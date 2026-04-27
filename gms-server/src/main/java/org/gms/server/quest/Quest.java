@@ -31,7 +31,6 @@ import org.gms.util.PacketCreator;
 import org.gms.util.StringUtil;
 
 import java.util.*;
-import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.concurrent.TimeUnit.HOURS;
@@ -44,7 +43,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  */
 @Slf4j
 public class Quest {
-    // 使用 ConcurrentHashMap 实现线程安全的懒加载缓存
+    // 由于改为全量加载，这些Map在启动时就会被完全填充
     private static final Map<Integer, Quest> quests = new ConcurrentHashMap<>();
     private static final Map<Integer, Integer> infoNumberQuests = new ConcurrentHashMap<>();
     private static final Map<Short, Integer> medals = new ConcurrentHashMap<>();
@@ -105,7 +104,7 @@ public class Quest {
         // 不能因为reqData为null就提前返回，否则纯脚本任务或只有奖励的任务会加载失败。
 
         // 1. 加载任务基本信息 (QuestInfo.img)
-        Data reqInfo = questInfo.getChildByPath(String.valueOf(id));
+        var reqInfo = questInfo.getChildByPath(String.valueOf(id));
         if (reqInfo != null) {
             name = DataTool.getString("name", reqInfo, "");
             parent = DataTool.getString("parent", reqInfo, "");
@@ -116,7 +115,7 @@ public class Quest {
             autoPreComplete = DataTool.getInt("autoPreComplete", reqInfo, 0) == 1;
             autoComplete = DataTool.getInt("autoComplete", reqInfo, 0) == 1;
 
-            int medalid = DataTool.getInt("viewMedalItem", reqInfo, 0);
+            var medalid = DataTool.getInt("viewMedalItem", reqInfo, 0);
             if (medalid != 0) {
                 medals.put(this.id, medalid);
             }
@@ -125,46 +124,47 @@ public class Quest {
         }
 
         // 2. 加载任务需求 (Check.img)，如果存在
-        Data reqData = questReq.getChildByPath(String.valueOf(id));
+        var reqData = questReq.getChildByPath(String.valueOf(id));
         if (reqData != null) {
-            Data startReqData = reqData.getChildByPath("0");
+            var startReqData = reqData.getChildByPath("0");
             if (startReqData != null) {
-                for (Data startReq : startReqData.getChildren()) {
-                    QuestRequirementType type = QuestRequirementType.getByWZName(startReq.getName());
+                for (var startReq : startReqData.getChildren()) {
+                    var type = QuestRequirementType.getByWZName(startReq.getName());
                     if (type == null) continue;
+                    
+                    // 注解：使用增强型 switch 语句 (Java 14+)
                     switch (type) {
-                        case INTERVAL:
-                            repeatable = true;
-                            break;
-                        case MOB:
-                            for (Data mob : startReq.getChildren()) {
+                        case INTERVAL -> repeatable = true;
+                        case MOB -> {
+                            for (var mob : startReq.getChildren()) {
                                 relevantMobs.add(DataTool.getInt(mob.getChildByPath("id")));
                             }
-                            break;
+                        }
+                        default -> {
+                            // 其他情况不做处理
+                        }
                     }
 
-                    AbstractQuestRequirement req = this.getRequirement(type, startReq);
-                    if (req == null) {
-                        continue;
+                    var req = this.getRequirement(type, startReq);
+                    if (req != null) {
+                        startReqs.put(type, req);
                     }
-
-                    startReqs.put(type, req);
                 }
             }
 
-            Data completeReqData = reqData.getChildByPath("1");
+            var completeReqData = reqData.getChildByPath("1");
             if (completeReqData != null) {
-                for (Data completeReq : completeReqData.getChildren()) {
-                    QuestRequirementType type = QuestRequirementType.getByWZName(completeReq.getName());
+                for (var completeReq : completeReqData.getChildren()) {
+                    var type = QuestRequirementType.getByWZName(completeReq.getName());
                     if (type == null) continue;
 
-                    AbstractQuestRequirement req = this.getRequirement(type, completeReq);
+                    var req = this.getRequirement(type, completeReq);
                     if (req == null) {
                         continue;
                     }
 
                     if (type.equals(QuestRequirementType.MOB)) {
-                        for (Data mob : completeReq.getChildren()) {
+                        for (var mob : completeReq.getChildren()) {
                             relevantMobs.add(DataTool.getInt(mob.getChildByPath("id")));
                         }
                     }
@@ -174,34 +174,30 @@ public class Quest {
         }
 
         // 3. 加载任务动作/奖励 (Act.img)，如果存在
-        Data actData = questAct.getChildByPath(String.valueOf(id));
+        var actData = questAct.getChildByPath(String.valueOf(id));
         if (actData != null) {
-            final Data startActData = actData.getChildByPath("0");
+            final var startActData = actData.getChildByPath("0");
             if (startActData != null) {
-                for (Data startAct : startActData.getChildren()) {
-                    QuestActionType questActionType = QuestActionType.getByWZName(startAct.getName());
+                for (var startAct : startActData.getChildren()) {
+                    var questActionType = QuestActionType.getByWZName(startAct.getName());
                     if (questActionType == null) continue;
-                    AbstractQuestAction act = this.getAction(questActionType, startAct);
+                    var act = this.getAction(questActionType, startAct);
 
-                    if (act == null) {
-                        continue;
+                    if (act != null) {
+                        startActs.put(questActionType, act);
                     }
-
-                    startActs.put(questActionType, act);
                 }
             }
-            Data completeActData = actData.getChildByPath("1");
+            var completeActData = actData.getChildByPath("1");
             if (completeActData != null) {
-                for (Data completeAct : completeActData.getChildren()) {
-                    QuestActionType questActionType = QuestActionType.getByWZName(completeAct.getName());
+                for (var completeAct : completeActData.getChildren()) {
+                    var questActionType = QuestActionType.getByWZName(completeAct.getName());
                     if (questActionType == null) continue;
-                    AbstractQuestAction act = this.getAction(questActionType, completeAct);
+                    var act = this.getAction(questActionType, completeAct);
 
-                    if (act == null) {
-                        continue;
+                    if (act != null) {
+                        completeActs.put(questActionType, act);
                     }
-
-                    completeActs.put(questActionType, act);
                 }
             }
         }
@@ -217,53 +213,52 @@ public class Quest {
 
     /**
      * 获取任务实例的唯一入口。
-     * 使用 ConcurrentHashMap 的 computeIfAbsent 方法实现线程安全的懒加载。
+     * 使用 ConcurrentHashMap 的 computeIfAbsent 方法确保线程安全，并保证永不返回null。
+     * 在全量加载模式下，此方法通常会直接命中缓存。
+     * 如果请求一个不存在的ID（例如，来自数据库的脏数据），它会动态创建一个空Quest对象以确保向后兼容。
      * @param id 任务ID
-     * @return 任务实例
+     * @return 任务实例，永不为null
      */
     public static Quest getInstance(int id) {
-        return quests.computeIfAbsent(id, questId -> {
-//            log.info("懒加载任务: {}", questId);
-            return new Quest(questId);
-        });
+        return quests.computeIfAbsent(id, Quest::new);
     }
 
     /**
-     * 懒加载 infoNumber 到 questID 的映射。
+     * 全量加载所有任务数据到缓存中。
+     * 此方法由 Server.java 在启动时通过虚拟线程调用。
+     * 同时填充 infoNumber -> questID 的映射。
      */
-    private static void lazyLoadInfoNumberMap() {
-        // 双重检查锁定，确保只加载一次
-        if (infoNumberQuests.isEmpty()) {
-            synchronized (infoNumberQuests) {
-                if (infoNumberQuests.isEmpty()) {
-                    long startTime = System.currentTimeMillis();
-                    for (Data quest : questInfo.getChildren()) {
-                        int questID = Integer.parseInt(quest.getName());
-                        Quest q = getInstance(questID); // 复用懒加载
+    public static void loadAllQuests() {
+        var startTime = System.currentTimeMillis();
+        // 1. 遍历QuestInfo.img中的所有任务ID，触发加载并填充缓存
+        for (var quest : questInfo.getChildren()) {
+            var questID = Integer.parseInt(quest.getName());
+            getInstance(questID); // 使用getInstance来加载，确保缓存被填充
+        }
+        log.info("任务加载完成，总共 {} 个任务，耗时：{} 毫秒", quests.size(), System.currentTimeMillis() - startTime);
 
-                        int infoNumber;
-                        infoNumber = q.getInfoNumber(Status.STARTED);
-                        if (infoNumber > 0) {
-                            infoNumberQuests.put(infoNumber, questID);
-                        }
+        // 2. 填充 infoNumber -> QuestID 的映射表
+        var mapStartTime = System.currentTimeMillis();
+        for (var q : quests.values()) {
+            int infoNumber;
+            infoNumber = q.getInfoNumber(Status.STARTED);
+            if (infoNumber > 0) {
+                infoNumberQuests.put(infoNumber, (int) q.getId());
+            }
 
-                        infoNumber = q.getInfoNumber(Status.COMPLETED);
-                        if (infoNumber > 0) {
-                            infoNumberQuests.put(infoNumber, questID);
-                        }
-                    }
-                    log.info("任务映射表加载完成 infoNumber -> QuestID，耗时：{} 毫秒", System.currentTimeMillis() - startTime);
-                }
+            infoNumber = q.getInfoNumber(Status.COMPLETED);
+            if (infoNumber > 0) {
+                infoNumberQuests.put(infoNumber, (int) q.getId());
             }
         }
+        log.info("任务映射表加载完成 infoNumber -> QuestID，耗时：{} 毫秒", System.currentTimeMillis() - mapStartTime);
     }
 
+
     public static Quest getInstanceFromInfoNumber(int infoNumber) {
-        lazyLoadInfoNumberMap(); // 确保映射表已加载
-        Integer id = infoNumberQuests.get(infoNumber);
-        if (id == null) {
-            id = infoNumber;
-        }
+        // 注解：使用 getOrDefault 简化代码
+        var id = infoNumberQuests.getOrDefault(infoNumber, infoNumber);
+        // 统一使用getInstance获取，确保健壮性
         return getInstance(id);
     }
 
@@ -272,18 +267,22 @@ public class Quest {
             return false;
         }
 
-        IntervalRequirement ir = (IntervalRequirement) startReqs.get(QuestRequirementType.INTERVAL);
-        return ir.getInterval() < HOURS.toMillis(GameConfig.getServerLong("quest_point_repeatable_interval"));
+        var req = startReqs.get(QuestRequirementType.INTERVAL);
+        // 注解：使用 instanceof 模式匹配 (Java 16+)
+        if (req instanceof IntervalRequirement ir) {
+            return ir.getInterval() < HOURS.toMillis(GameConfig.getServerLong("quest_point_repeatable_interval"));
+        }
+        return false;
     }
 
     public boolean canStartQuestByStatus(Character chr) {
-        QuestStatus mqs = chr.getQuest(this);
+        var mqs = chr.getQuest(this);
         return !(!mqs.getStatus().equals(Status.NOT_STARTED) && !(mqs.getStatus().equals(Status.COMPLETED) && repeatable));
     }
 
     public boolean canQuestByInfoProgress(Character chr) {
-        QuestStatus mqs = chr.getQuest(this);
-        List<String> ix = mqs.getInfoEx();
+        var mqs = chr.getQuest(this);
+        var ix = mqs.getInfoEx();
         if (!ix.isEmpty()) {
             short questid = mqs.getQuestID();
             short infoNumber = mqs.getInfoNumber();
@@ -291,10 +290,10 @@ public class Quest {
                 infoNumber = questid;  // 默认情况下，infoNumber 与 questid 相同
             }
 
-            int ixSize = ix.size();
+            var ixSize = ix.size();
             for (int i = 0; i < ixSize; i++) {
-                String progress = chr.getAbstractPlayerInteraction().getQuestProgress(infoNumber, i);
-                String ixProgress = ix.get(i);
+                var progress = chr.getAbstractPlayerInteraction().getQuestProgress(infoNumber, i);
+                var ixProgress = ix.get(i);
 
                 if (!progress.contentEquals(ixProgress)) {
                     return false;
@@ -310,7 +309,7 @@ public class Quest {
             return false;
         }
 
-        for (AbstractQuestRequirement r : startReqs.values()) {
+        for (var r : startReqs.values()) {
             if (!r.check(chr, npcid)) {
                 return false;
             }
@@ -320,12 +319,12 @@ public class Quest {
     }
 
     public boolean canComplete(Character chr, Integer npcid) {
-        QuestStatus mqs = chr.getQuest(this);
+        var mqs = chr.getQuest(this);
         if (!mqs.getStatus().equals(Status.STARTED)) {
             return false;
         }
 
-        for (AbstractQuestRequirement r : completeReqs.values()) {
+        for (var r : completeReqs.values()) {
             if (!r.check(chr, npcid)) {
                 return false;
             }
@@ -336,13 +335,13 @@ public class Quest {
 
     public void start(Character chr, int npc) {
         if (autoStart || canStart(chr, npc)) {
-            Collection<AbstractQuestAction> acts = startActs.values();
-            for (AbstractQuestAction a : acts) {
+            var acts = startActs.values();
+            for (var a : acts) {
                 if (!a.check(chr, null)) { // null 是否合适？
                     return;
                 }
             }
-            for (AbstractQuestAction a : acts) {
+            for (var a : acts) {
                 a.run(chr, null);
             }
             forceStart(chr, npc);
@@ -355,14 +354,14 @@ public class Quest {
 
     public void complete(Character chr, int npc, Integer selection) {
         if (autoPreComplete || canComplete(chr, npc)) {
-            Collection<AbstractQuestAction> acts = completeActs.values();
-            for (AbstractQuestAction a : acts) {
+            var acts = completeActs.values();
+            for (var a : acts) {
                 if (!a.check(chr, selection)) {
                     return;
                 }
             }
             forceComplete(chr, npc);
-            for (AbstractQuestAction a : acts) {
+            for (var a : acts) {
                 a.run(chr, selection);
             }
             if (!this.hasNextQuestAction()) {
@@ -372,7 +371,7 @@ public class Quest {
     }
 
     public void reset(Character chr) {
-        QuestStatus newStatus = new QuestStatus(this, QuestStatus.Status.NOT_STARTED);
+        var newStatus = new QuestStatus(this, QuestStatus.Status.NOT_STARTED);
         chr.updateQuestStatus(newStatus);
     }
 
@@ -383,26 +382,26 @@ public class Quest {
         if (timeLimit > 0) {
             chr.sendPacket(PacketCreator.removeQuestTimeLimit(id));
         }
-        QuestStatus newStatus = new QuestStatus(this, QuestStatus.Status.NOT_STARTED);
+        var newStatus = new QuestStatus(this, QuestStatus.Status.NOT_STARTED);
         newStatus.setForfeited(chr.getQuest(this).getForfeited() + 1);
         chr.updateQuestStatus(newStatus);
         return true;
     }
 
     public boolean forceStart(Character chr, int npc) {
-        QuestStatus newStatus = new QuestStatus(this, QuestStatus.Status.STARTED, npc);
+        var newStatus = new QuestStatus(this, QuestStatus.Status.STARTED, npc);
 
-        QuestStatus oldStatus = chr.getQuest(this.getId());
-        for (Entry<Integer, String> e : oldStatus.getProgress().entrySet()) {
+        var oldStatus = chr.getQuest(this.getId());
+        for (var e : oldStatus.getProgress().entrySet()) {
             newStatus.setProgress(e.getKey(), e.getValue());
         }
 
         if (id / 100 == 35 && GameConfig.getServerInt("tot_mob_quest_requirement") > 0) {
             int setProg = 999 - Math.min(999, GameConfig.getServerInt("tot_mob_quest_requirement"));
 
-            for (Integer pid : newStatus.getProgress().keySet()) {
+            for (var pid : newStatus.getProgress().keySet()) {
                 if (pid >= 8200000 && pid <= 8200012) {
-                    String pr = StringUtil.getLeftPaddedStr(Integer.toString(setProg), '0', 3);
+                    var pr = StringUtil.getLeftPaddedStr(Integer.toString(setProg), '0', 3);
                     newStatus.setProgress(pid, pr);
                 }
             }
@@ -430,7 +429,7 @@ public class Quest {
             chr.sendPacket(PacketCreator.removeQuestTimeLimit(id));
         }
 
-        QuestStatus newStatus = new QuestStatus(this, QuestStatus.Status.COMPLETED, npc);
+        var newStatus = new QuestStatus(this, QuestStatus.Status.COMPLETED, npc);
         newStatus.setForfeited(chr.getQuest(this).getForfeited());
         newStatus.setCompleted(chr.getQuest(this).getCompleted());
         newStatus.setCompletionTime(System.currentTimeMillis());
@@ -450,208 +449,144 @@ public class Quest {
     }
 
     public int getStartItemAmountNeeded(int itemid) {
-        AbstractQuestRequirement req = startReqs.get(QuestRequirementType.ITEM);
-        if (req == null) {
-            return Integer.MIN_VALUE;
+        var req = startReqs.get(QuestRequirementType.ITEM);
+        if (req instanceof ItemRequirement ireq) {
+            return ireq.getItemAmountNeeded(itemid, false);
         }
-
-        ItemRequirement ireq = (ItemRequirement) req;
-        return ireq.getItemAmountNeeded(itemid, false);
+        return Integer.MIN_VALUE;
     }
 
     public int getCompleteItemAmountNeeded(int itemid) {
-        AbstractQuestRequirement req = completeReqs.get(QuestRequirementType.ITEM);
-        if (req == null) {
-            return Integer.MAX_VALUE;
+        var req = completeReqs.get(QuestRequirementType.ITEM);
+        if (req instanceof ItemRequirement ireq) {
+            return ireq.getItemAmountNeeded(itemid, true);
         }
-
-        ItemRequirement ireq = (ItemRequirement) req;
-        return ireq.getItemAmountNeeded(itemid, true);
+        return Integer.MAX_VALUE;
     }
 
     public int getMobAmountNeeded(int mid) {
-        AbstractQuestRequirement req = completeReqs.get(QuestRequirementType.MOB);
-        if (req == null) {
-            return 0;
+        var req = completeReqs.get(QuestRequirementType.MOB);
+        if (req instanceof MobRequirement mreq) {
+            return mreq.getRequiredMobCount(mid);
         }
-
-        MobRequirement mreq = (MobRequirement) req;
-
-        return mreq.getRequiredMobCount(mid);
+        return 0;
     }
 
     public short getInfoNumber(Status qs) {
-        boolean checkEnd = qs.equals(Status.STARTED);
-        Map<QuestRequirementType, AbstractQuestRequirement> reqs = !checkEnd ? startReqs : completeReqs;
+        var checkEnd = qs.equals(Status.STARTED);
+        var reqs = !checkEnd ? startReqs : completeReqs;
 
-        AbstractQuestRequirement req = reqs.get(QuestRequirementType.INFO_NUMBER);
-        if (req != null) {
-            InfoNumberRequirement inReq = (InfoNumberRequirement) req;
+        var req = reqs.get(QuestRequirementType.INFO_NUMBER);
+        if (req instanceof InfoNumberRequirement inReq) {
             return inReq.getInfoNumber();
-        } else {
-            return 0;
         }
+        return 0;
     }
 
     public String getInfoEx(Status qs, int index) {
-        boolean checkEnd = qs.equals(Status.STARTED);
-        Map<QuestRequirementType, AbstractQuestRequirement> reqs = !checkEnd ? startReqs : completeReqs;
+        var checkEnd = qs.equals(Status.STARTED);
+        var reqs = !checkEnd ? startReqs : completeReqs;
         try {
-            AbstractQuestRequirement req = reqs.get(QuestRequirementType.INFO_EX);
-            InfoExRequirement ixReq = (InfoExRequirement) req;
-            return ixReq.getInfo().get(index);
-        } catch (Exception e) {
+            var req = reqs.get(QuestRequirementType.INFO_EX);
+            if (req instanceof InfoExRequirement ixReq) {
+                return ixReq.getInfo().get(index);
+            }
+        } catch (Exception e) { // 注解：使用未命名变量 (Java 21+)
             return "";
         }
+        return "";
     }
 
     public List<String> getInfoEx(Status qs) {
-        boolean checkEnd = qs.equals(Status.STARTED);
-        Map<QuestRequirementType, AbstractQuestRequirement> reqs = !checkEnd ? startReqs : completeReqs;
+        var checkEnd = qs.equals(Status.STARTED);
+        var reqs = !checkEnd ? startReqs : completeReqs;
         try {
-            AbstractQuestRequirement req = reqs.get(QuestRequirementType.INFO_EX);
-            InfoExRequirement ixReq = (InfoExRequirement) req;
-            return ixReq.getInfo();
-        } catch (Exception e) {
-            return new LinkedList<>();
+            var req = reqs.get(QuestRequirementType.INFO_EX);
+            if (req instanceof InfoExRequirement ixReq) {
+                return ixReq.getInfo();
+            }
+        } catch (Exception e) { // 注解：使用未命名变量 (Java 21+)
+            return Collections.emptyList();
         }
+        // 注解：使用 Collections.emptyList() 替代 new LinkedList<>()，以提高性能
+        return Collections.emptyList();
     }
 
     public int getTimeLimit() {
         return timeLimit;
     }
 
-    public static void clearCache(int quest) {
-        quests.remove(quest);
+    /**
+     * 按ID清除单个任务的缓存。
+     * 主要用于热重载或调试。
+     * @param questId 要清除的任务ID
+     */
+    public static void clearCache(int questId) {
+        quests.remove(questId);
+        // 注意：此操作不会自动更新 infoNumberQuests 映射，可能需要重新加载所有任务来重建映射。
     }
 
+    /**
+     * 清除所有任务缓存。
+     * 主要用于热重载或调试。
+     */
     public static void clearCache() {
         quests.clear();
+        infoNumberQuests.clear();
     }
 
     private AbstractQuestRequirement getRequirement(QuestRequirementType type, Data data) {
-        AbstractQuestRequirement ret = null;
-        switch (type) {
-            case END_DATE:
-                ret = new EndDateRequirement(this, data);
-                break;
-            case JOB:
-                ret = new JobRequirement(this, data);
-                break;
-            case QUEST:
-                ret = new QuestRequirement(this, data);
-                break;
-            case FIELD_ENTER:
-                ret = new FieldEnterRequirement(this, data);
-                break;
-            case INFO_NUMBER:
-                ret = new InfoNumberRequirement(this, data);
-                break;
-            case INFO_EX:
-                ret = new InfoExRequirement(this, data);
-                break;
-            case INTERVAL:
-                ret = new IntervalRequirement(this, data);
-                break;
-            case COMPLETED_QUEST:
-                ret = new CompletedQuestRequirement(this, data);
-                break;
-            case ITEM:
-                ret = new ItemRequirement(this, data);
-                break;
-            case MAX_LEVEL:
-                ret = new MaxLevelRequirement(this, data);
-                break;
-            case MESO:
-                ret = new MesoRequirement(this, data);
-                break;
-            case MIN_LEVEL:
-                ret = new MinLevelRequirement(this, data);
-                break;
-            case MIN_PET_TAMENESS:
-                ret = new MinTamenessRequirement(this, data);
-                break;
-            case MOB:
-                ret = new MobRequirement(this, data);
-                break;
-            case MONSTER_BOOK:
-                ret = new MonsterBookCountRequirement(this, data);
-                break;
-            case NPC:
-                ret = new NpcRequirement(this, data);
-                break;
-            case PET:
-                ret = new PetRequirement(this, data);
-                break;
-            case BUFF:
-                ret = new BuffRequirement(this, data);
-                break;
-            case EXCEPT_BUFF:
-                ret = new BuffExceptRequirement(this, data);
-                break;
-            case SCRIPT:
-                ret = new ScriptRequirement(this, data);
-                break;
-            case NORMAL_AUTO_START:
-            case START:
-            case END:
-                break;
-            default:
-                break;
-        }
-        return ret;
+        // 注解：使用 switch 表达式 (Java 14+)
+        return switch (type) {
+            case END_DATE -> new EndDateRequirement(this, data);
+            case JOB -> new JobRequirement(this, data);
+            case QUEST -> new QuestRequirement(this, data);
+            case FIELD_ENTER -> new FieldEnterRequirement(this, data);
+            case INFO_NUMBER -> new InfoNumberRequirement(this, data);
+            case INFO_EX -> new InfoExRequirement(this, data);
+            case INTERVAL -> new IntervalRequirement(this, data);
+            case COMPLETED_QUEST -> new CompletedQuestRequirement(this, data);
+            case ITEM -> new ItemRequirement(this, data);
+            case MAX_LEVEL -> new MaxLevelRequirement(this, data);
+            case MESO -> new MesoRequirement(this, data);
+            case MIN_LEVEL -> new MinLevelRequirement(this, data);
+            case MIN_PET_TAMENESS -> new MinTamenessRequirement(this, data);
+            case MOB -> new MobRequirement(this, data);
+            case MONSTER_BOOK -> new MonsterBookCountRequirement(this, data);
+            case NPC -> new NpcRequirement(this, data);
+            case PET -> new PetRequirement(this, data);
+            case BUFF -> new BuffRequirement(this, data);
+            case EXCEPT_BUFF -> new BuffExceptRequirement(this, data);
+            case SCRIPT -> new ScriptRequirement(this, data);
+            case NORMAL_AUTO_START, START, END -> null;
+            default -> null;
+        };
     }
 
     private AbstractQuestAction getAction(QuestActionType type, Data data) {
-        AbstractQuestAction ret = null;
-        switch (type) {
-            case BUFF:
-                ret = new BuffAction(this, data);
-                break;
-            case EXP:
-                ret = new ExpAction(this, data);
-                break;
-            case FAME:
-                ret = new FameAction(this, data);
-                break;
-            case ITEM:
-                ret = new ItemAction(this, data);
-                break;
-            case MESO:
-                ret = new MesoAction(this, data);
-                break;
-            case NEXTQUEST:
-                ret = new NextQuestAction(this, data);
-                break;
-            case PETSKILL:
-                ret = new PetSkillAction(this, data);
-                break;
-            case QUEST:
-                ret = new QuestAction(this, data);
-                break;
-            case SKILL:
-                ret = new SkillAction(this, data);
-                break;
-            case PETTAMENESS:
-                ret = new PetTamenessAction(this, data);
-                break;
-            case PETSPEED:
-                ret = new PetSpeedAction(this, data);
-                break;
-            case INFO:
-                ret = new InfoAction(this, data);
-                break;
-            default:
-                break;
-        }
-        return ret;
+        // 注解：使用 switch 表达式 (Java 14+)
+        return switch (type) {
+            case BUFF -> new BuffAction(this, data);
+            case EXP -> new ExpAction(this, data);
+            case FAME -> new FameAction(this, data);
+            case ITEM -> new ItemAction(this, data);
+            case MESO -> new MesoAction(this, data);
+            case NEXTQUEST -> new NextQuestAction(this, data);
+            case PETSKILL -> new PetSkillAction(this, data);
+            case QUEST -> new QuestAction(this, data);
+            case SKILL -> new SkillAction(this, data);
+            case PETTAMENESS -> new PetTamenessAction(this, data);
+            case PETSPEED -> new PetSpeedAction(this, data);
+            case INFO -> new InfoAction(this, data);
+            default -> null;
+        };
     }
 
     public boolean restoreLostItem(Character chr, int itemid) {
         if (chr.getQuest(this).getStatus().equals(QuestStatus.Status.STARTED)) {
-            ItemAction itemAct = (ItemAction) startActs.get(QuestActionType.ITEM);
-            if (itemAct != null) {
-                return itemAct.restoreLostItem(chr, itemid);
+            var itemAct = startActs.get(QuestActionType.ITEM);
+            if (itemAct instanceof ItemAction ia) {
+                return ia.restoreLostItem(chr, itemid);
             }
         }
 
@@ -659,36 +594,29 @@ public class Quest {
     }
 
     public int getMedalRequirement() {
-        Integer medalid = medals.get(id);
-        return medalid != null ? medalid : -1;
+        return medals.getOrDefault(id, -1);
     }
 
     public int getNpcRequirement(boolean checkEnd) {
-        Map<QuestRequirementType, AbstractQuestRequirement> reqs = !checkEnd ? startReqs : completeReqs;
-        AbstractQuestRequirement mqr = reqs.get(QuestRequirementType.NPC);
-        if (mqr != null) {
-            return ((NpcRequirement) mqr).get();
-        } else {
-            return -1;
+        var reqs = !checkEnd ? startReqs : completeReqs;
+        var mqr = reqs.get(QuestRequirementType.NPC);
+        if (mqr instanceof NpcRequirement nr) {
+            return nr.get();
         }
+        return -1;
     }
 
     public boolean hasScriptRequirement(boolean checkEnd) {
-        Map<QuestRequirementType, AbstractQuestRequirement> reqs = !checkEnd ? startReqs : completeReqs;
-        AbstractQuestRequirement mqr = reqs.get(QuestRequirementType.SCRIPT);
-
-        if (mqr != null) {
-            return ((ScriptRequirement) mqr).get();
-        } else {
-            return false;
+        var reqs = !checkEnd ? startReqs : completeReqs;
+        var mqr = reqs.get(QuestRequirementType.SCRIPT);
+        if (mqr instanceof ScriptRequirement sr) {
+            return sr.get();
         }
+        return false;
     }
 
     public boolean hasNextQuestAction() {
-        Map<QuestActionType, AbstractQuestAction> acts = completeActs;
-        AbstractQuestAction mqa = acts.get(QuestActionType.NEXTQUEST);
-
-        return mqa != null;
+        return completeActs.containsKey(QuestActionType.NEXTQUEST);
     }
 
     public String getName() {
@@ -704,35 +632,17 @@ public class Quest {
     }
 
     public static List<Quest> getMatchedQuests(String search) {
-        List<Quest> ret = new LinkedList<>();
-
-        search = search.toLowerCase();
-        // 注意：这里遍历 quests.values() 会触发所有任务的加载，这是一个高成本操作。
-        // 在懒加载模式下，应谨慎使用或寻找替代方案。
-        for (Quest mq : quests.values()) {
-            if (mq.name.toLowerCase().contains(search) || mq.parent.toLowerCase().contains(search)) {
+        // 注解：使用 ArrayList 替代 LinkedList，并使用 var
+        var ret = new ArrayList<Quest>();
+        var lowerCaseSearch = search.toLowerCase();
+        // 由于是全量加载，可以直接遍历
+        for (var mq : quests.values()) {
+            if (mq.name.toLowerCase().contains(lowerCaseSearch) || mq.parent.toLowerCase().contains(lowerCaseSearch)) {
                 ret.add(mq);
             }
         }
 
         return ret;
-    }
-
-    /**
-     * 全量加载所有任务数据到缓存中。
-     * 用于预加载模式。
-     */
-    public static void loadAllQuests() {
-        // 遍历QuestInfo.img中的所有任务ID，触发加载
-        long start = System.currentTimeMillis();
-        for (Data quest : questInfo.getChildren()) {
-            int questID = Integer.parseInt(quest.getName());
-            getInstance(questID);
-        }
-        log.info("任务加载完成，总共 {} 个任务，耗时：{} 毫秒", quests.size(), System.currentTimeMillis() - start);
-
-        // 确保infoNumber映射也被完全加载
-        lazyLoadInfoNumberMap();
     }
 
     public void expireQuest(Character chr) {
