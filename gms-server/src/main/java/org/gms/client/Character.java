@@ -7072,7 +7072,7 @@ public class Character extends AbstractCharacterObject {
             synchronized (quests) {
                 for (QuestStatus qs : getQuestValues()) {
                     lastQuestProcessed = qs.getQuest().getId();
-                    if (qs.getStatus() == QuestStatus.Status.COMPLETED || qs.getQuest().canComplete(this, null)) {
+                    if (qs.getStatus() != QuestStatus.Status.STARTED || qs.getQuest().canComplete(this, null)) {
                         continue;
                     }
 
@@ -7081,11 +7081,13 @@ public class Character extends AbstractCharacterObject {
                         if (qs.getInfoNumber() > 0) {
                             announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, true);
                         }
+                        // [修改] 调用单个任务更新方法，实现实时保存
+                        questService.updateQuestStatus(this.id, qs);
                     }
                 }
             }
         } catch (Exception e) {
-            log.warn("Character.mobKilled. chrId {}, last quest processed: {}", this.id, lastQuestProcessed, e);
+            log.warn("角色击杀怪物. 角色ID {}, 最后处理的任务: {}", this.id, lastQuestProcessed, e);
         }
     }
 
@@ -8566,8 +8568,12 @@ public class Character extends AbstractCharacterObject {
             Quest iq = Quest.getInstance(infoNumber);
             QuestStatus iqs = getQuest(iq);
             iqs.setProgress(0, progress);
+            // [修改] 调用单个任务更新方法，实现实时保存
+            questService.updateQuestStatus(this.id, iqs);
         } else {
             qs.setProgress(infoNumber, progress);   // quest progress is thoroughly a string match, infoNumber is actually another questid
+            // [修改] 调用单个任务更新方法，实现实时保存
+            questService.updateQuestStatus(this.id, qs);
         }
 
         announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, false);
@@ -8637,31 +8643,36 @@ public class Character extends AbstractCharacterObject {
         synchronized (quests) {
             quests.put(qs.getQuestID(), qs);
         }
+
         if (qs.getStatus().equals(QuestStatus.Status.STARTED)) {
             announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, false);
             if (qs.getInfoNumber() > 0) {
                 announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, true);
             }
             announceUpdateQuest(DelayedQuestUpdate.INFO, qs);
+            // [修改] 任务开始或进度更新时，调用updateQuestStatus
+            // 该方法会处理插入或更新逻辑
+            questService.updateQuestStatus(this.id, qs);
         } else if (qs.getStatus().equals(QuestStatus.Status.COMPLETED)) {
             Quest mquest = qs.getQuest();
             short questid = mquest.getId();
             if (!mquest.isSameDayRepeatable() && !Quest.isExploitableQuest(questid)) {
                 awardQuestPoint(GameConfig.getServerInt("quest_point_per_quest_complete"));
             }
-            qs.setCompleted(qs.getCompleted() + 1);   // Jayd's idea - count quest completed
+            qs.setCompleted(qs.getCompleted() + 1);
 
             announceUpdateQuest(DelayedQuestUpdate.COMPLETE, questid, qs.getCompletionTime());
-            //announceUpdateQuest(DelayedQuestUpdate.INFO, qs); // happens after giving rewards, for non-next quests only
+            // [修改] 任务完成时，调用updateQuestStatus
+            questService.updateQuestStatus(this.id, qs);
         } else if (qs.getStatus().equals(QuestStatus.Status.NOT_STARTED)) {
+            // [修改] 任务被放弃（状态变为NOT_STARTED）时，调用deleteQuestStatus
+            // 注意：原有的 announceUpdateQuest 逻辑保持不变，因为客户端需要收到更新通知
             announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, false);
             if (qs.getInfoNumber() > 0) {
                 announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, true);
             }
-            // reminder: do not reset quest progress of infoNumbers, some quests cannot backtrack
+            questService.deleteQuestStatus(this.id, qs.getQuestID());
         }
-        // [新增] 实时保存任务状态
-        questService.saveQuestStatus(id, Collections.singletonList(qs));
     }
 
     public void cancelQuestExpirationTask() {

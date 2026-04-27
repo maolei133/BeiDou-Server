@@ -1023,8 +1023,8 @@ public class CharacterService {
             player.getMonsterBook().saveCards(player.getId());
         }
 
-        // 保存任务
-        questService.saveQuestStatus(player.getId(), new ArrayList<>(player.getQuests().values()));
+        // [修改] 保存任务时，调用完全同步方法
+        questService.syncCharacterQuests(player.getId(), new ArrayList<>(player.getQuests().values()));
     }
 
     /**
