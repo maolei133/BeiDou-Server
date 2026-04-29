@@ -8,11 +8,14 @@ import com.alibaba.fastjson2.JSON;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.MapMessage;
+import org.gms.client.inventory.Item;
+import org.gms.server.ItemInformationProvider;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+@SuppressWarnings({"rawtypes", "unchecked"}) // 在类级别抑制原始类型和未经检查的转换警告
 public class AuditLogger {
     // 获取名为 "audit" 的 Logger，对应 log4j2.xml 中的配置
     private static final Logger log = LogManager.getLogger("audit");
@@ -28,10 +31,20 @@ public class AuditLogger {
     }
 
     /**
+     * 创建一个用于审计日志的 MapMessage 实例。
+     * 使用此工厂方法可以将原始类型警告限制在日志记录器内部。
+     *
+     * @return 一个新的 MapMessage 实例。
+     */
+    public static MapMessage createMapMessage() {
+        return new MapMessage();
+    }
+
+    /**
      * 记录审计日志 (枚举版 - 推荐)
      */
     public static void info(LogModule module, LogAction action, String message) {
-        info(module.name(), action.name(), new MapMessage().with("msg", message));
+        info(module.name(), action.name(), createMapMessage().with("msg", message));
     }
 
     public static void info(LogModule module, LogAction action, MapMessage data) {
@@ -42,7 +55,7 @@ public class AuditLogger {
      * 记录审计日志 (字符串版 - 底层实现)
      */
     public static void info(String module, String action, String message) {
-        info(module, action, new MapMessage().with("msg", message));
+        info(module, action, createMapMessage().with("msg", message));
     }
 
     public static void info(String module, String action, MapMessage data) {
@@ -55,7 +68,7 @@ public class AuditLogger {
         }
 
         if (data == null) {
-            data = new MapMessage();
+            data = createMapMessage();
         }
 
         // 2. 准备最终的日志 Map (使用 LinkedHashMap 保证顺序)
@@ -63,7 +76,6 @@ public class AuditLogger {
 
         // 3. 基础字段 (按预设顺序)
         logMap.put("ts", System.currentTimeMillis());
-        // logMap.put("l", "INFO"); // 移除日志级别
         logMap.put("mod", module);
         logMap.put("act", action);
         
@@ -97,22 +109,17 @@ public class AuditLogger {
             logMap.put("mapName", "未知地图");
         }
         // 5. 注入其他业务字段 (msg 等)
-        Map<String, String> rawData = data.getData();
-        for (Map.Entry<String, String> entry : rawData.entrySet()) {
+        Map<String, Object> rawData = data.getData();
+        for (Map.Entry<String, Object> entry : rawData.entrySet()) {
             String key = entry.getKey();
             // 跳过已处理的字段
             if (key.equals("mod") || key.equals("act") || key.equals("category") || key.equals("cat")) {
                 continue;
             }
-            // 如果上下文里已经有了，且业务数据里也有，通常业务数据优先？或者上下文优先？
-            // 这里我们假设业务数据可能包含更具体的覆盖值，但通常不应该冲突。
-            // 为了保持顺序，我们把剩余的字段放在最后
             if (!logMap.containsKey(key)) {
                 logMap.put(key, entry.getValue());
             }
         }
-        
-        // 确保 msg 存在 (如果 data 里有 msg，上面已经 put 了；如果没有，这里也不强制，但通常会有)
         
         // 6. 序列化为 JSON 字符串并写入日志
         log.info(JSON.toJSONString(logMap));
@@ -127,7 +134,7 @@ public class AuditLogger {
         }
 
         if (data == null) {
-            data = new MapMessage();
+            data = createMapMessage();
         }
 
         // 2. 准备最终的日志 Map (使用 LinkedHashMap 保证顺序)
@@ -135,7 +142,6 @@ public class AuditLogger {
 
         // 3. 基础字段 (按预设顺序)
         logMap.put("ts", System.currentTimeMillis());
-        // logMap.put("l", "INFO"); // 移除日志级别
         logMap.put("mod", module);
         logMap.put("act", action);
 
@@ -169,26 +175,21 @@ public class AuditLogger {
         logMap.put("cid", cid);
         logMap.put("map", mapid);
 
-        if (logMap.get("map") != null && logMap.get("mapName") == null || logMap.get("mapName").toString().isEmpty()) {
+        if (logMap.get("map") != null && (logMap.get("mapName") == null || logMap.get("mapName").toString().isEmpty())) {
             logMap.put("mapName", mapName != null ? mapName : "未知地图");
         }
         // 5. 注入其他业务字段 (msg 等)
-        Map<String, String> rawData = data.getData();
-        for (Map.Entry<String, String> entry : rawData.entrySet()) {
+        Map<String, Object> rawData = data.getData();
+        for (Map.Entry<String, Object> entry : rawData.entrySet()) {
             String key = entry.getKey();
             // 跳过已处理的字段
             if (key.equals("mod") || key.equals("act") || key.equals("category") || key.equals("cat")) {
                 continue;
             }
-            // 如果上下文里已经有了，且业务数据里也有，通常业务数据优先？或者上下文优先？
-            // 这里我们假设业务数据可能包含更具体的覆盖值，但通常不应该冲突。
-            // 为了保持顺序，我们把剩余的字段放在最后
             if (!logMap.containsKey(key)) {
                 logMap.put(key, entry.getValue());
             }
         }
-
-        // 确保 msg 存在 (如果 data 里有 msg，上面已经 put 了；如果没有，这里也不强制，但通常会有)
 
         // 6. 序列化为 JSON 字符串并写入日志
         log.info(JSON.toJSONString(logMap));
@@ -211,19 +212,18 @@ public class AuditLogger {
     }
 
     public static void error(String module, String action, String message, Throwable t) {
-        error(module, action, new MapMessage().with("msg", message), t);
+        error(module, action, createMapMessage().with("msg", message), t);
     }
 
     public static void error(String module, String action, MapMessage data, Throwable t) {
         moduleConfig.putIfAbsent(module, true);
 
         if (data == null) {
-            data = new MapMessage();
+            data = createMapMessage();
         }
 
         Map<String, Object> logMap = new LinkedHashMap<>();
         logMap.put("ts", System.currentTimeMillis());
-        // logMap.put("l", "ERROR"); // 移除日志级别
         logMap.put("mod", module);
         logMap.put("act", action);
         
@@ -241,8 +241,8 @@ public class AuditLogger {
         putIfPresent(logMap, contextData, "map");
         putIfPresent(logMap, contextData, "mapName"); // 新增
         
-        Map<String, String> rawData = data.getData();
-        for (Map.Entry<String, String> entry : rawData.entrySet()) {
+        Map<String, Object> rawData = data.getData();
+        for (Map.Entry<String, Object> entry : rawData.entrySet()) {
             String key = entry.getKey();
             if (key.equals("mod") || key.equals("act") || key.equals("category") || key.equals("cat")) {
                 continue;
@@ -271,5 +271,20 @@ public class AuditLogger {
 
     public static Map<String, Boolean> getModuleConfig() {
         return new ConcurrentHashMap<>(moduleConfig);
+    }
+
+    // --- 封装结构 ---
+
+
+    public static MapMessage getItem(int itemId, Item item) {
+        MapMessage logData = createMapMessage()
+                .with("itmId", itemId)
+                .with("itmName", String.valueOf(ItemInformationProvider.getInstance().getName(itemId)));
+        if (item != null) {
+            logData.with("uid", item.getUid())
+                    .with("qty", item.getQuantity()
+                    );
+        }
+        return logData;
     }
 }

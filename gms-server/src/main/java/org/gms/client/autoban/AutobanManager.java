@@ -528,7 +528,7 @@ public class AutobanManager {
      * @param monster 要检测的怪物对象，包含位置坐标信息
      * @return boolean 如果检测到吸怪行为返回true，否则返回false
      * @see MonsterVacSample 怪物位置采样数据结构
-     * @see AutobanFactory#MONSTER_VAC 反作弊配置工厂
+     * @see AutobanFactory#VAC_MONSTER 反作弊配置工厂
      * @since 1.0.0
      */
     public boolean detectMonsterVac(Monster monster) {
@@ -552,7 +552,7 @@ public class AutobanManager {
         }
 
         long now = Server.getInstance().getCurrentTime(); // 获取当前服务器时间
-        long expire = AutobanFactory.MONSTER_VAC.getExpire(); // 获取怪物吸怪检测的过期时间配置
+        long expire = AutobanFactory.VAC_MONSTER.getExpire(); // 获取怪物吸怪检测的过期时间配置
 
         // 清理过期的采样数据
         while (!currentSamples.isEmpty() && currentSamples.peek().ts <= now - expire) {
@@ -572,7 +572,7 @@ public class AutobanManager {
         // 将新采样添加到对应的队列末尾
         currentSamples.add(s);
 
-        int maxSize = AutobanFactory.MONSTER_VAC.getMaximum(); // 获取最大采样数量配置
+        int maxSize = AutobanFactory.VAC_MONSTER.getMaximum(); // 获取最大采样数量配置
 
         // 保持采样队列在最大容量范围内
         while (currentSamples.size() > maxSize) {
@@ -637,7 +637,7 @@ public class AutobanManager {
                 String reason = "坐标: (" + s.x + "," + s.y + ") 附近一致性检测 " + consistentCount + "/" + currentSamples.size() +
                                 " 同类占比: " + nearbyTypeCount + "/" + totalTypeMonsters + " (" + String.format("%.2f", mapRatio*100) + "%)" +
                                 " (移动类型: " + (movetype == 0 ? "陆地" : (movetype == 1 ? "飞行" : "未知")) + ")"; // 构建违规原因描述
-                int ret = addPoint(AutobanFactory.MONSTER_VAC, reason, new MapMessage()); // 添加到反作弊积分系统
+                int ret = addPoint(AutobanFactory.VAC_MONSTER, reason, new MapMessage()); // 添加到反作弊积分系统
                 if (ret >= 1) { // 如果积分达到阈值，执行惩罚措施
                     map.killAllMonsters(); // 击杀所有怪物
                     map.restoreMapSpawnPoints(); // 恢复地图出生点

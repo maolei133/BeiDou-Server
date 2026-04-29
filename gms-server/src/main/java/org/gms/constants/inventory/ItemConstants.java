@@ -552,6 +552,55 @@ public final class ItemConstants {
         return itemId == ItemId.FISHING_CHAIR;
     }
 
+    /**
+     * 判断是否为情侣或友情戒指
+     * @param itemId 物品ID
+     * @return true 如果是
+     */
+    public static boolean isFriendshipOrCoupleRing(int itemId) {
+        // 情侣戒指通常在 1112000-1112999, 友情戒指在 1112800-1112899
+        // 这里使用一个更宽泛但安全的范围
+        return itemId >= 1112000 && itemId < 1113000;
+    }
+
+    /**
+     * 判断是否为增加角色栏位券
+     * @param itemId 物品ID
+     * @return true 如果是
+     */
+    public static boolean isCharacterSlotCoupon(int itemId) {
+        // 通常这类物品ID是固定的，例如 5430000
+        return itemId == 5430000;
+    }
+
+    /**
+     * 判断是否为增加仓库/背包栏位券
+     * @param itemId 物品ID
+     * @return true 如果是
+     */
+    public static boolean isStorageSlotCoupon(int itemId) {
+        // 例如: 5021000 (4格), 5021001 (8格)
+        return itemId / 1000 == 5021;
+    }
+
+    /**
+     * 判断是否为改名卡
+     * @param itemId 物品ID
+     * @return true 如果是改名卡
+     */
+    public static boolean isNameChangeCoupon(int itemId) {
+        return itemId == 50600000;
+    }
+
+    /**
+     * 判断是否为转服券
+      * @param itemId 物品ID
+      * @return true 如果是转服券
+     */
+    public static boolean isWorldTransferCoupon(int itemId) {
+        return itemId == 50600001;
+    }
+
     // --- 其他 ---
 
     /**
