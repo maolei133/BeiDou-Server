@@ -11,7 +11,7 @@ import java.awt.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.gms.dao.entity.table.PlifeDOTableDef.PLIFE_D_O;
+import static org.gms.dao.entity.table.PlifeDOTableDef.PLIFE_DO;
 
 @Service
 @AllArgsConstructor
@@ -21,16 +21,16 @@ public class PlifeService {
 
     public List<Pair<Integer, Pair<Integer, Integer>>> removePnpc(int world, int mapId, int npcId, Point pos) {
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .from(PLIFE_D_O)
-                .where(PLIFE_D_O.WORLD.eq(world))
-                .and(PLIFE_D_O.MAP.eq(mapId))
-                .and(PLIFE_D_O.TYPE.eq("n"));
+                .from(PLIFE_DO)
+                .where(PLIFE_DO.WORLD.eq(world))
+                .and(PLIFE_DO.MAP.eq(mapId))
+                .and(PLIFE_DO.TYPE.eq("n"));
 
         if (npcId > -1) {
-            queryWrapper.and(PLIFE_D_O.LIFE.eq(npcId));
+            queryWrapper.and(PLIFE_DO.LIFE.eq(npcId));
         } else {
-            queryWrapper.and(PLIFE_D_O.X.between(pos.x - 50, pos.x + 50))
-                    .and(PLIFE_D_O.Y.between(pos.y - 50, pos.y + 50));
+            queryWrapper.and(PLIFE_DO.X.between(pos.x - 50, pos.x + 50))
+                    .and(PLIFE_DO.Y.between(pos.y - 50, pos.y + 50));
         }
 
         List<PlifeDO> toRemove = plifeMapper.selectListByQuery(queryWrapper);
@@ -45,16 +45,16 @@ public class PlifeService {
 
     public List<Pair<Integer, Pair<Integer, Integer>>> removePmob(int world, int mapId, int mobId, Point pos) {
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .from(PLIFE_D_O)
-                .where(PLIFE_D_O.WORLD.eq(world))
-                .and(PLIFE_D_O.MAP.eq(mapId))
-                .and(PLIFE_D_O.TYPE.eq("m"));
+                .from(PLIFE_DO)
+                .where(PLIFE_DO.WORLD.eq(world))
+                .and(PLIFE_DO.MAP.eq(mapId))
+                .and(PLIFE_DO.TYPE.eq("m"));
 
         if (mobId > -1) {
-            queryWrapper.and(PLIFE_D_O.LIFE.eq(mobId));
+            queryWrapper.and(PLIFE_DO.LIFE.eq(mobId));
         } else {
-            queryWrapper.and(PLIFE_D_O.X.between(pos.x - 50, pos.x + 50))
-                    .and(PLIFE_D_O.Y.between(pos.y - 50, pos.y + 50));
+            queryWrapper.and(PLIFE_DO.X.between(pos.x - 50, pos.x + 50))
+                    .and(PLIFE_DO.Y.between(pos.y - 50, pos.y + 50));
         }
 
         List<PlifeDO> toRemove = plifeMapper.selectListByQuery(queryWrapper);
@@ -82,6 +82,7 @@ public class PlifeService {
         plifeDO.setMap(mapId);
         plifeDO.setMobtime(mobTime);
         plifeDO.setHide(0);
+        plifeDO.setTeam(-1);
         plifeMapper.insert(plifeDO);
     }
 
@@ -100,6 +101,7 @@ public class PlifeService {
         plifeDO.setMap(mapId);
         plifeDO.setMobtime(-1);
         plifeDO.setHide(0);
+        plifeDO.setTeam(-1);
         plifeMapper.insert(plifeDO);
     }
 }

@@ -589,13 +589,13 @@ public class ItemVacPlugin extends BaseCheatPlugin {
      * 更新击杀BOSS时间逻辑
      */
     private void updateKillBossTime() {
-        if (!allowInEvent && player.getEventInstance() != null && player.getMap().countBosses() > 0 && player.getMap().getPlayers().size() > 1) {
+        if (!allowInEvent && player.getEventInstance() != null && player.getMap().countBosses() > 0 && player.getMap().getCharacterCount() > 1) {
             // 条件满足：不允许在事件中使用、角色在事件中、BOSS数量>0、地图人数>1，记录当前时间
             killBossTime = currentServerTime();
-        } else if (player.getMap().getPlayers().size() == 1) {
+        } else if (player.getMap().getCharacterCount() == 1) {
             // 地图人数=1时，重置时间为-1
             killBossTime = -1;
-        } else if (player.getMap().getPlayers().size() > 1 && player.getMap().countBosses() == 0) {
+        } else if (player.getMap().getCharacterCount() > 1 && player.getMap().countBosses() == 0) {
             // 地图人数>1且BOSS数量=0时
             if (killBossTime != -1) {
                 if (currentServerTime() - killBossTime < 30000) { // 30秒 = 30000毫秒

@@ -23,6 +23,7 @@
 */
 package org.gms.client.processor.stat;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.Skill;
@@ -30,6 +31,9 @@ import org.gms.client.SkillFactory;
 import org.gms.client.autoban.AutobanFactory;
 import org.gms.constants.game.GameConstants;
 import org.gms.constants.skills.Aran;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.util.PacketCreator;
@@ -48,8 +52,8 @@ public class AssignSPProcessor {
 
         Character player = c.getPlayer();
         if ((!GameConstants.isPqSkillMap(player.getMapId()) && GameConstants.isPqSkill(skillid)) || (!player.isGM() && GameConstants.isGMSkills(skillid)) || (!GameConstants.isInJobTree(skillid, player.getJob().getId()) && !player.isGM())) {
-            AutobanFactory.PACKET_EDIT.alert(player, "tried to packet edit in distributing sp.");
-            log.warn("Chr {} tried to use skill {} without it being in their job.", c.getPlayer().getName(), skillid);
+            AutobanFactory.PACKET_EDIT.alert(player, "尝试在分配技能点时进行数据包修改。");
+            log.warn("角色 {} 尝试使用技能 {}，但该技能不属于其职业。", c.getPlayer().getName(), skillid);
 
             c.disconnect(true, false);
             return false;
@@ -96,6 +100,7 @@ public class AssignSPProcessor {
                 } else {
                     player.changeSkillLevel(skill, (byte) (curLevel + 1), player.getMasterLevel(skill), player.getSkillExpiration(skill));
                 }
+                AuditLogger.info(LogModule.CHARACTER, LogAction.CHARACTER_SP_DISTRIBUTE, new MapMessage().with("skill", skillid).with("level", curLevel + 1));
             }
         } finally {
             c.unlockClient();

@@ -51,7 +51,7 @@ public class ShowRatesCommand extends Command {
         if (player.getCouponMesoRate() != 1) {
             showMsg += I18nUtil.getMessage("ShowRatesCommand.message11") + "#k" + player.getCouponMesoRate() + "x#k" + "\r\n";
         }
-        showMsg += I18nUtil.getMessage("ShowRatesCommand.message12") + "#e#b" + player.getMesoRate() + "x#k#n" + "\r\n";
+        showMsg += I18nUtil.getMessage("ShowRatesCommand.message12") + "#e#b" + player.getTotalMesoRate() + "x#k#n" + "\r\n";
 
         showMsg += "\r\n#e" + I18nUtil.getMessage("ShowRatesCommand.message13") + "#n\r\n";
         showMsg += I18nUtil.getMessage("ShowRatesCommand.message14") + "#k" + c.getWorldServer().getDropRate() + "x#k" + "\r\n";
@@ -59,7 +59,7 @@ public class ShowRatesCommand extends Command {
         if (player.getCouponDropRate() != 1) {
             showMsg += I18nUtil.getMessage("ShowRatesCommand.message16") + "#k" + player.getCouponDropRate() + "x#k" + "\r\n";
         }
-        showMsg += I18nUtil.getMessage("ShowRatesCommand.message17") + "#e#b" + player.getDropRate() + "x#k#n" + "\r\n";
+        showMsg += I18nUtil.getMessage("ShowRatesCommand.message17") + "#e#b" + player.getTotalDropRate() + "x#k#n" + "\r\n";
 
         showMsg += "\r\n#e" + I18nUtil.getMessage("ShowRatesCommand.message18") + "#n\r\n";
         showMsg += I18nUtil.getMessage("ShowRatesCommand.message19") + "#k" + c.getWorldServer().getBossDropRate() + "x#k" + "\r\n";
@@ -67,7 +67,7 @@ public class ShowRatesCommand extends Command {
         if (player.getCouponDropRate() != 1) {
             showMsg += I18nUtil.getMessage("ShowRatesCommand.message21") + "#k" + player.getCouponDropRate() + "x#k" + "\r\n";
         }
-        showMsg += I18nUtil.getMessage("ShowRatesCommand.message22") + "#e#b" + player.getBossDropRate() + "x#k#n" + "\r\n";
+        showMsg += I18nUtil.getMessage("ShowRatesCommand.message22") + "#e#b" + player.getTotalBossDropRate() + "x#k#n" + "\r\n";
 
         if (GameConfig.getServerBoolean("use_quest_rate")) {
             showMsg += "\r\n#e" + I18nUtil.getMessage("ShowRatesCommand.message23") + "#n\r\n";

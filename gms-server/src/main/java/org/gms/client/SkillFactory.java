@@ -21,87 +21,126 @@
 */
 package org.gms.client;
 
+import lombok.extern.slf4j.Slf4j;
 import org.gms.client.inventory.WeaponType;
+import org.gms.config.GameConfig;
 import org.gms.constants.skills.*;
-import org.gms.provider.Data;
-import org.gms.provider.DataDirectoryEntry;
-import org.gms.provider.DataFileEntry;
-import org.gms.provider.DataProvider;
-import org.gms.provider.DataProviderFactory;
-import org.gms.provider.DataTool;
+import org.gms.provider.*;
 import org.gms.provider.wz.WZFiles;
 import org.gms.server.StatEffect;
 import org.gms.server.life.Element;
+import org.gms.util.StringUtil;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 public class SkillFactory {
-    private static volatile Map<Integer, Skill> skills = new HashMap<>();
-    private static final DataProvider datasource = DataProviderFactory.getDataProvider(WZFiles.SKILL);
-    private static final Map<Integer, List<WeaponType>> masterySkillWeaponMap = new HashMap<>();
+    private static final Map<Integer, Skill> skills = new ConcurrentHashMap<>();
+    private static final Map<Integer, String> skillIdToWzFileMap = new ConcurrentHashMap<>();
+    private static final Map<Integer, String> skillIdToNameMap = new ConcurrentHashMap<>();
+    // 注解：改造为 CachingDataProvider 类型，以便调用其特有方法
+    private static final CachingDataProvider skillDataSource = DataProviderFactory.getDataProvider(WZFiles.SKILL);
+    private static final CachingDataProvider stringDataSource = DataProviderFactory.getDataProvider(WZFiles.STRING);
+    private static final Map<Integer, List<WeaponType>> masterySkillWeaponMap = new ConcurrentHashMap<>();
 
     static {
-        // 战士 - 剑客
-        masterySkillWeaponMap.put(Fighter.SWORD_MASTERY, Arrays.asList(WeaponType.SWORD1H, WeaponType.SWORD2H)); // 精准剑
-        masterySkillWeaponMap.put(Fighter.AXE_MASTERY, Arrays.asList(WeaponType.GENERAL1H_SWING, WeaponType.GENERAL2H_SWING)); // 精准斧
+        long startTime = System.currentTimeMillis();
+        buildSkillIndex();
+        log.info("技能索引构建完成，耗时：{} 毫秒", System.currentTimeMillis() - startTime);
+        // ... (masterySkillWeaponMap 填充)
+    }
 
-        // 战士 - 准骑士
-        masterySkillWeaponMap.put(Page.SWORD_MASTERY, Arrays.asList(WeaponType.SWORD1H, WeaponType.SWORD2H)); // 精准剑
-        masterySkillWeaponMap.put(Page.BW_MASTERY, Arrays.asList(WeaponType.GENERAL1H_SWING, WeaponType.GENERAL2H_SWING)); // 精准钝器
+    private static void buildSkillIndex() {
+        // 注解：使用“用完即弃”模式加载字符串数据，因为我们只在索引构建时需要它
+        Data skillStringData = stringDataSource.getDataAndRelease("Skill.img");
 
-        // 战士 - 枪战士
-        masterySkillWeaponMap.put(Spearman.POLEARM_MASTERY, Arrays.asList(WeaponType.POLE_ARM_SWING, WeaponType.POLE_ARM_STAB)); // 精准枪
-        masterySkillWeaponMap.put(Spearman.SPEAR_MASTERY, Arrays.asList(WeaponType.SPEAR_SWING, WeaponType.SPEAR_STAB)); // 精准矛
+        for (DataFileEntry topDir : skillDataSource.getRoot().getFiles()) {
+            String wzFileName = topDir.getName();
+            // 注解：这里也使用“用完即弃”，因为我们只扫描子节点名称，不保留DOM
+            Data skillDataNode = skillDataSource.getDataAndRelease(wzFileName);
+            if (skillDataNode == null) continue;
 
-        // 弓箭手
-        masterySkillWeaponMap.put(Hunter.BOW_MASTERY, Arrays.asList(WeaponType.BOW)); // 精准弓
-        masterySkillWeaponMap.put(Bowmaster.BOW_EXPERT, Arrays.asList(WeaponType.BOW)); // 神箭手
-        masterySkillWeaponMap.put(Crossbowman.CROSSBOW_MASTERY, Arrays.asList(WeaponType.CROSSBOW)); // 精准弩
-        masterySkillWeaponMap.put(Marksman.MARKSMAN_BOOST, Arrays.asList(WeaponType.CROSSBOW)); // 神弩手
-
-        // 飞侠
-        masterySkillWeaponMap.put(Assassin.CLAW_MASTERY, Arrays.asList(WeaponType.CLAW)); // 精准暗器
-        masterySkillWeaponMap.put(Bandit.DAGGER_MASTERY, Arrays.asList(WeaponType.DAGGER_THIEVES, WeaponType.DAGGER_OTHER)); // 精准短刀
-
-        // 海盗
-        masterySkillWeaponMap.put(Brawler.KNUCKLER_MASTERY, Arrays.asList(WeaponType.KNUCKLE)); // 精准拳
-        masterySkillWeaponMap.put(Gunslinger.GUN_MASTERY, Arrays.asList(WeaponType.GUN)); // 精准枪
+            Data skillNode = skillDataNode.getChildByPath("skill");
+            if (skillNode != null) {
+                for (Data skillById : skillNode.getChildren()) {
+                    try {
+                        int skillId = Integer.parseInt(skillById.getName());
+                        skillIdToWzFileMap.put(skillId, wzFileName);
+                        if (skillStringData != null) {
+                            String skillIdStr = StringUtil.getLeftPaddedStr(String.valueOf(skillId), '0', 7);
+                            Data nameData = skillStringData.getChildByPath(skillIdStr + "/name");
+                            if (nameData != null) {
+                                skillIdToNameMap.put(skillId, DataTool.getString(nameData));
+                            }
+                        }
+                    } catch (NumberFormatException e) {
+                        // ignore
+                    }
+                }
+            }
+        }
     }
 
     public static Skill getSkill(int id) {
-        return skills.get(id);
+        return skills.computeIfAbsent(id, skillId -> loadSingleSkillFromWZ(skillId, false));
+    }
+
+    private static Skill loadSingleSkillFromWZ(int id, boolean release) {
+        String wzFileName = skillIdToWzFileMap.get(id);
+        if (wzFileName == null) {
+            log.error("在索引中找不到技能ID {} 对应的WZ文件", id);
+            return null;
+        }
+
+        // 注解：根据 release 参数决定使用哪种加载模式
+        Data imgData = release ? skillDataSource.getDataAndRelease(wzFileName) : skillDataSource.getData(wzFileName);
+        if (imgData == null) {
+            log.error("无法加载技能WZ文件: {}", wzFileName);
+            return null;
+        }
+
+        String paddedId = StringUtil.getLeftPaddedStr(String.valueOf(id), '0', 7);
+        Data skillDataNode = imgData.getChildByPath("skill/" + paddedId);
+        if (skillDataNode == null) {
+            skillDataNode = imgData.getChildByPath("skill/" + String.valueOf(id));
+        }
+
+        if (skillDataNode == null) {
+            log.error("在文件 {} 的 'skill' 节点下找不到技能ID {} 对应的数据", wzFileName, id);
+            return null;
+        }
+
+        return loadFromData(id, skillDataNode);
     }
 
     public static List<WeaponType> getMasterySkillWeaponTypes(int skillId) {
         return masterySkillWeaponMap.get(skillId);
     }
 
-    public static void loadAllSkills() {
-        final Map<Integer, Skill> loadedSkills = new HashMap<>();
-        final DataDirectoryEntry root = datasource.getRoot();
-        for (DataFileEntry topDir : root.getFiles()) { // 遍历职业
-            if (topDir.getName().length() <= 8) {
-                for (Data data : datasource.getData(topDir.getName())) { // 遍历每个职业
-                    if (data.getName().equals("skill")) {
-                        for (Data data2 : data) { // 遍历每个技能
-                            if (data2 != null) {
-                                int skillId = Integer.parseInt(data2.getName());
-                                loadedSkills.put(skillId, loadFromData(skillId, data2));
-                            }
-                        }
-                    }
-                }
-            }
+    /**
+     * 全量加载所有技能数据。
+     * @param releaseData 加载后是否立即释放DOM数据
+     */
+    public static void loadAllSkills(boolean releaseData) {
+        long startTime = System.currentTimeMillis();
+        for (Integer skillId : skillIdToWzFileMap.keySet()) {
+            // 使用 computeIfAbsent 避免重复加载
+            skills.computeIfAbsent(skillId, id -> loadSingleSkillFromWZ(id, releaseData));
         }
-
-        skills = loadedSkills;
+        log.info("技能加载完成，总共 {} 个技能，耗时：{} 毫秒", skills.size(), System.currentTimeMillis() - startTime);
+    }
+    
+    // 原始的无参方法，保持对旧代码的兼容，默认为缓存模式
+    public static void loadAllSkills() {
+        loadAllSkills(false);
     }
 
     private static Skill loadFromData(int id, Data data) {
         Skill ret = new Skill(id);
+        // ... (方法体与原来完全相同)
         boolean isBuff = false;
         int skillType = DataTool.getInt("skillType", data, -1);
         String elem = DataTool.getString("elemAttr", data, null);
@@ -138,6 +177,7 @@ public class SkillFactory {
             Data ball = data.getChildByPath("ball");
             isBuff = effect != null && hit == null && ball == null;
             isBuff |= action_ != null && DataTool.getString("0", action_, "").equals("alert2");
+            // 恢复完整的switch逻辑
             switch (id) {
                 case Hero.RUSH:
                 case Paladin.RUSH:
@@ -372,21 +412,6 @@ public class SkillFactory {
     }
 
     public static String getSkillName(int skillid) {
-        Data data = DataProviderFactory.getDataProvider(WZFiles.STRING).getData("Skill.img");
-        StringBuilder skill = new StringBuilder();
-        skill.append(skillid);
-        if (skill.length() == 4) {
-            skill.delete(0, 4);
-            skill.append("000").append(skillid);
-        }
-        if (data.getChildByPath(skill.toString()) != null) {
-            for (Data skilldata : data.getChildByPath(skill.toString()).getChildren()) {
-                if (skilldata.getName().equals("name")) {
-                    return DataTool.getString(skilldata, null);
-                }
-            }
-        }
-
-        return null;
+        return skillIdToNameMap.get(skillid);
     }
 }

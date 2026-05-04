@@ -39,6 +39,7 @@ import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.service.HiredMerchantService;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,9 +55,12 @@ import org.gms.server.maps.PlayerShop;
 import org.gms.server.maps.PlayerShopItem;
 import org.gms.server.maps.Portal;
 import org.gms.util.PacketCreator;
+import org.gms.util.SnowflakeIdGenerator;
 
 import java.awt.*;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -276,24 +280,93 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                         c.getWorldServer().registerPlayerShop(shop);
                         //c.sendPacket(PacketCreator.getPlayerShopRemoveVisitor(1));
                     } else if (ItemConstants.isHiredMerchant(itemId)) {
+                        // 0. 检查是否有未领取的物品或金币
+                        List<HiredMerchantsDO> retrieveableMerchants = hiredMerchantService.getRetrieveableMerchants(chr.getId());
+                        if (!retrieveableMerchants.isEmpty()) {
+                            boolean hasItemsOrMesos = false;
+                            for (HiredMerchantsDO merchant : retrieveableMerchants) {
+                                if (merchant.getMesos() > 0) {
+                                    hasItemsOrMesos = true;
+                                    break;
+                                }
+                                List<HiredMerchantItemsDO> items = hiredMerchantService.getRetrieveableItems(merchant.getId());
+                                if (!items.isEmpty()) {
+                                    hasItemsOrMesos = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (hasItemsOrMesos) {
+                                chr.dropMessage(1, "您有未领取的物品或金币，请先前往弗雷德里克处领取。");
+                                return;
+                            }
+                        }
+
                         // 1. 检查是否有已开业的商店 (ACTIVE)
                         HiredMerchantsDO activeMerchant = hiredMerchantService.getActiveMerchantByOwnerId(chr.getId());
                         if (activeMerchant != null) {
                             // 检查内存中是否存在该商店
                             HiredMerchant memoryMerchant = c.getWorldServer().getHiredMerchant(chr.getId());
                             if (memoryMerchant == null) {
-                                // 僵尸商店检测：数据库显示 ACTIVE 但内存中不存在
-                                // 这种情况通常是服务器重启或异常关闭导致的，直接关闭
-                                activeMerchant.setStatus(HiredMerchantsDO.STATUS_CLOSED);
-                                activeMerchant.setCloseTime(System.currentTimeMillis());
-                                hiredMerchantService.updateMerchant(activeMerchant);
-                                chr.dropMessage(1, "检测到异常关闭的商店，已自动将其关闭。请通过弗雷德里克取回物品。");
-                                return;
+                                // 尝试从数据库恢复
+                                try {
+                                    HiredMerchant restoredMerchant = new HiredMerchant(activeMerchant, chr.getName());
+                                    
+                                    // 检查地图是否匹配
+                                    if (chr.getMapId() != activeMerchant.getMapId()) {
+                                        // 如果玩家不在商店地图，无法直接恢复可见性，提示玩家前往
+                                        chr.dropMessage(1, "您已经有一家商店开业了 (在频道 " + activeMerchant.getChannel() + "，地图 " + activeMerchant.getMapId() + ")。");
+                                        return;
+                                    }
+                                    
+                                    restoredMerchant.setMap(chr.getMap());
+                                    
+                                    // 加载物品
+                                    List<HiredMerchantItemsDO> items = hiredMerchantService.getMerchantItems(activeMerchant.getId());
+                                    restoredMerchant.loadItemsFromDb(items);
+                                    
+                                    // 注册到服务器
+                                    boolean merchantAdded = chr.getClient().getChannelServer().addHiredMerchant(chr.getId(), restoredMerchant);
+                                    if (merchantAdded) {
+                                        c.getWorldServer().registerHiredMerchant(restoredMerchant);
+                                        chr.getMap().addMapObject(restoredMerchant);
+                                        chr.getMap().broadcastMessage(PacketCreator.spawnHiredMerchantBox(restoredMerchant));
+                                        
+                                        // 恢复定时任务
+                                        restoredMerchant.rescheduleClose();
+                                        
+                                        chr.dropMessage(1, "您的商店已成功恢复。");
+                                        return;
+                                    } else {
+                                        // 注册失败，回退到关闭逻辑
+                                        throw new RuntimeException("无法注册恢复的商店");
+                                    }
+                                } catch (Exception e) {
+                                    log.error("尝试恢复 ACTIVE 商店失败，转为关闭流程", e);
+                                    // 恢复失败，判定为僵尸商店，执行关闭
+                                    activeMerchant.setStatus(HiredMerchantsDO.STATUS_CLOSED);
+                                    activeMerchant.setCloseTime(System.currentTimeMillis());
+                                    hiredMerchantService.updateMerchant(activeMerchant);
+                                    chr.dropMessage(1, "检测到异常关闭的商店且无法恢复，已自动将其关闭。请通过弗雷德里克取回物品。");
+                                    return;
+                                }
                             }
 
                             // 内存中存在商店，修正状态并提示
                             if (!chr.hasMerchant()) {
                                 chr.setHasMerchant(true);
+                            }
+                            
+                            // 尝试恢复可见性 (如果对象存在但未显示)
+                            if (memoryMerchant.getMap() == null) {
+                                memoryMerchant.setMap(chr.getMap());
+                            }
+                            if (memoryMerchant.getMap().getMapObject(memoryMerchant.getObjectId()) == null) {
+                                if (chr.getMapId() == memoryMerchant.getMapId()) {
+                                    memoryMerchant.setPosition(chr.getPosition());
+                                    memoryMerchant.getMap().addMapObject(memoryMerchant);
+                                    memoryMerchant.getMap().broadcastMessage(PacketCreator.spawnHiredMerchantBox(memoryMerchant));
+                                }
                             }
 
                             String msg = "您已经有一家商店开业了";
@@ -574,6 +647,15 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                         if (merchantDO != null) {
                             merchantDO.setStatus(HiredMerchantsDO.STATUS_ACTIVE);
                             hiredMerchantService.updateMerchant(merchantDO);
+                            
+                            // 商店开办成功后，发送通知
+                            String merchantItemName = ItemInformationProvider.getInstance().getName(merchant.getItemId());
+                            long durationMillis = GameConfig.getServerInt("hired_merchant_duration", 1440) * 60 * 1000L;
+                            long endTime = System.currentTimeMillis() + durationMillis;
+                            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                            String endTimeStr = sdf.format(new Date(endTime));
+                            
+                            chr.dropMessage(6, "[雇佣商店] 您的商店开办成功，雇员为 " + merchantItemName + " ，预计最晚到期时间 " + endTimeStr);
                         }
                     }
                 }
@@ -814,23 +896,35 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                 if (!ItemConstants.isRechargeable(ivItem.getItemId())) {
                     sellItem.setQuantity(perBundle);
                 }
+                
+                // ----------------------------------------------------------------
+                // 关键修改：UID 处理逻辑
+                // ----------------------------------------------------------------
+                if (ItemConstants.isEquipment(ivItem.getItemId())) {
+                    // 装备：必须保留原 UID，确保溯源链完整
+                    sellItem.setUid(ivItem.getUid());
+                } else {
+                    // 堆叠物品：
+                    // 1. 如果是部分上架（拆分），必须生成新 UID，因为这是新的实体
+                    // 2. 如果是全部上架，理论上可以保留原 UID，但为了简化逻辑且避免潜在的并发问题，
+                    //    对于堆叠物品，我们统一生成新 UID。
+                    //    注意：如果商店里已有同类物品，HiredMerchant.addItem 会处理合并逻辑，
+                    //    届时这个新生成的 UID 会被丢弃，保留商店内原有物品的 UID。
+                    sellItem.setUid(SnowflakeIdGenerator.getInstance().nextId());
+                }
 
                 PlayerShopItem shopItem = new PlayerShopItem(sellItem, bundles, price);
                 PlayerShop shop = chr.getPlayerShop();
                 HiredMerchant merchant = chr.getHiredMerchant();
                 if (shop != null && shop.isOwner(chr)) {
-                    if (shop.isOpen() || !shop.addItem(shopItem)) { // thanks Vcoc for pointing an exploit with unlimited shop slots    //感谢Vcoc指出了一个具有无限商店插槽的漏洞
+                    if (shop.isOpen() || !shop.addItem(shopItem,ivItem)) { // thanks Vcoc for pointing an exploit with unlimited shop slots    //感谢Vcoc指出了一个具有无限商店插槽的漏洞
                         c.sendPacket(PacketCreator.serverNotice(1, I18nUtil.getMessage("PlayerInteractionHandler.message11")));
                         c.getPlayer().enableActions();
                         return;
                     }
 
-                    if (ItemConstants.isRechargeable(ivItem.getItemId())) {
-                        InventoryManipulator.removeFromSlot(c, ivType, slot, ivItem.getQuantity(), true);
-                    } else {
-                        InventoryManipulator.removeFromSlot(c, ivType, slot, (short) (bundles * perBundle), true);
-                    }
-
+                    short quantity = ItemConstants.isRechargeable(ivItem.getItemId()) ? ivItem.getQuantity() : (short) (bundles * perBundle);
+                    InventoryManipulator.removeFromSlot(c, ivType, slot, quantity, true);
                     c.sendPacket(PacketCreator.getPlayerShopItemUpdate(shop));
                 } else if (merchant != null && merchant.isOwner(chr)) {
                     if (ivType.equals(InventoryType.CASH) && merchant.isPublished()) {
@@ -839,12 +933,14 @@ public final class PlayerInteractionHandler extends AbstractPacketHandler {
                         return;
                     }
 
-                    if (merchant.isOpen() || !merchant.addItem(shopItem)) { // thanks Vcoc for pointing an exploit with unlimited shop slots    //感谢Vcoc指出了一个具有无限商店插槽的漏洞
+                    // 尝试添加到商店（包括数据库操作）
+                    if (merchant.isOpen() || !merchant.addItem(shopItem,ivItem)) {
                         c.sendPacket(PacketCreator.serverNotice(1, I18nUtil.getMessage("PlayerInteractionHandler.message11")));
                         c.getPlayer().enableActions();
                         return;
                     }
 
+                    // 只有在 addItem 成功后，才从背包移除物品
                     if (ItemConstants.isRechargeable(ivItem.getItemId())) {
                         InventoryManipulator.removeFromSlot(c, ivType, slot, ivItem.getQuantity(), true);
                     } else {

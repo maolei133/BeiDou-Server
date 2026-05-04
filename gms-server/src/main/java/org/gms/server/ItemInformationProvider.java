@@ -21,6 +21,7 @@
  */
 package org.gms.server;
 
+import lombok.extern.slf4j.Slf4j;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.Job;
@@ -44,8 +45,7 @@ import org.gms.manager.ServerManager;
 import org.gms.net.server.Server;
 import org.gms.service.ItemInformationService;
 import org.gms.util.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import org.gms.provider.Data;
 import org.gms.provider.DataDirectoryEntry;
 import org.gms.provider.DataFileEntry;
@@ -71,8 +71,8 @@ import java.util.Set;
 /**
  * @author Matze
  */
+@Slf4j
 public class ItemInformationProvider {
-    private static final Logger log = LoggerFactory.getLogger(ItemInformationProvider.class);
     private final static ItemInformationProvider instance = new ItemInformationProvider();
     private static ItemInformationService itemInformationService;
 
@@ -147,12 +147,14 @@ public class ItemInformationProvider {
         equipData = DataProviderFactory.getDataProvider(WZFiles.CHARACTER);
         stringData = DataProviderFactory.getDataProvider(WZFiles.STRING);
         etcData = DataProviderFactory.getDataProvider(WZFiles.ETC);
-        cashStringData = stringData.getData("Cash.img");
-        consumeStringData = stringData.getData("Consume.img");
-        eqpStringData = stringData.getData("Eqp.img");
-        etcStringData = stringData.getData("Etc.img");
-        insStringData = stringData.getData("Ins.img");
-        petStringData = stringData.getData("Pet.img");
+        
+        // 移除了在这里强制解析 String.wz 下各个 img 的代码，改为按需懒加载，以节省超100MB的启动内存
+        // cashStringData = stringData.getData("Cash.img");
+        // consumeStringData = stringData.getData("Consume.img");
+        // eqpStringData = stringData.getData("Eqp.img");
+        // etcStringData = stringData.getData("Etc.img");
+        // insStringData = stringData.getData("Ins.img");
+        // petStringData = stringData.getData("Pet.img");
 
         isQuestItemCache.put(0, false);
         isPartyQuestItemCache.put(0, false);
@@ -224,78 +226,9 @@ public class ItemInformationProvider {
         return itemPairs;
     }
 
-    private Data getStringData_old(int itemId) {
-        String cat = "null";
-        Data theData;
-        if (itemId >= 5010000) {
-            theData = cashStringData;
-        } else if (itemId >= 2000000 && itemId < 3000000) {
-            theData = consumeStringData;
-        } else if ((itemId >= 1010000 && itemId < 1040000) || (itemId >= 1122000 && itemId < 1123000) || (itemId >= 1132000 && itemId < 1133000) || (itemId >= 1142000 && itemId < 1143000)) {
-            theData = eqpStringData;
-            cat = "Eqp/Accessory";
-        } else if (itemId >= 1000000 && itemId < 1010000) {
-            theData = eqpStringData;
-            cat = "Eqp/Cap";
-        } else if (itemId >= 1102000 && itemId < 1103000) {
-            theData = eqpStringData;
-            cat = "Eqp/Cape";
-        } else if (itemId >= 1040000 && itemId < 1050000) {
-            theData = eqpStringData;
-            cat = "Eqp/Coat";
-        } else if (ItemConstants.isFace(itemId)) {
-            theData = eqpStringData;
-            cat = "Eqp/Face";
-        } else if (itemId >= 1080000 && itemId < 1090000) {
-            theData = eqpStringData;
-            cat = "Eqp/Glove";
-        } else if (ItemConstants.isHair(itemId)) {
-            theData = eqpStringData;
-            cat = "Eqp/Hair";
-        } else if (itemId >= 1050000 && itemId < 1060000) {
-            theData = eqpStringData;
-            cat = "Eqp/Longcoat";
-        } else if (itemId >= 1060000 && itemId < 1070000) {
-            theData = eqpStringData;
-            cat = "Eqp/Pants";
-        } else if (itemId >= 1802000 && itemId < 1842000) {
-            theData = eqpStringData;
-            cat = "Eqp/PetEquip";
-        } else if (itemId >= 1112000 && itemId < 1120000) {
-            theData = eqpStringData;
-            cat = "Eqp/Ring";
-        } else if (itemId >= 1092000 && itemId < 1100000) {
-            theData = eqpStringData;
-            cat = "Eqp/Shield";
-        } else if (itemId >= 1070000 && itemId < 1080000) {
-            theData = eqpStringData;
-            cat = "Eqp/Shoes";
-        } else if (itemId >= 1900000 && itemId < 2000000) {
-            theData = eqpStringData;
-            cat = "Eqp/Taming";
-        } else if (itemId >= 1300000 && itemId < 1800000) {
-            theData = eqpStringData;
-            cat = "Eqp/Weapon";
-        } else if (itemId >= 4000000 && itemId < 5000000) {
-            theData = etcStringData;
-            cat = "Etc";
-        } else if (itemId >= 3000000 && itemId < 4000000) {
-            theData = insStringData;
-        } else if (ItemConstants.isPet(itemId)) {
-            theData = petStringData;
-        } else {
-            return null;
-        }
-        if (cat.equalsIgnoreCase("null")) {
-            return theData.getChildByPath(String.valueOf(itemId));
-        } else {
-            return theData.getChildByPath(cat + "/" + itemId);
-        }
-    }
-
     /**
      * 根据物品ID查询String.xml里的名称和描述
-     * 大部分物品不再限制查询范围，便于后续扩展
+     * 采用懒加载模式，避免启动时一次性加载所有字符串数据导致内存暴增
      * @param itemId
      * @return
      */
@@ -303,20 +236,39 @@ public class ItemInformationProvider {
         Data theData = null;
         // 1. 处理非Eqp类别
         if (itemId >= 5010000) {    //现金道具
+            if (cashStringData == null) {
+                cashStringData = stringData.getData("Cash.img");
+            }
             theData = cashStringData;
         } else if (itemId >= 2000000 && itemId < 3000000) {
+            if (consumeStringData == null) {
+                consumeStringData = stringData.getData("Consume.img");
+            }
             theData = consumeStringData;
         } else if (itemId >= 4000000 && itemId < 5000000) {
+            if (etcStringData == null) {
+                etcStringData = stringData.getData("Etc.img");
+            }
             return etcStringData.getChildByPath("Etc/" + itemId);
         } else if (itemId >= 3000000 && itemId < 4000000) {
+            if (insStringData == null) {
+                insStringData = stringData.getData("Ins.img");
+            }
             theData = insStringData;
         } else if (ItemConstants.isPet(itemId)) {
+            if (petStringData == null) {
+                petStringData = stringData.getData("Pet.img");
+            }
             theData = petStringData;
         }
         if (theData != null) {
             return theData.getChildByPath(String.valueOf(itemId));
         }
         // 2. 定义所有可能的Eqp子路径
+        if (eqpStringData == null) {
+            eqpStringData = stringData.getData("Eqp.img");
+        }
+
         final String[] eqpPaths = {
                 "Eqp/Accessory",
                 "Eqp/Cap",
@@ -431,17 +383,25 @@ public class ItemInformationProvider {
     }
 
     public short getSlotMax(Client c, int itemId) {
+        return (short) (getSlotMax(itemId) + getExtraSlotMaxFromPlayer(c, itemId));
+    }
+    
+    public short getSlotMax(int itemId) {
         Short slotMax = slotMaxCache.get(itemId);
         // 原先使用getServerShort() 超过有效范围(-32767 ~ 32767) 会抛异常，改用getServerint() 并限制最大值32767，由于判断>0才生效，所以无需做负数处理
         // 现在可以支持控制台的实时参数
-        short itemSlotMax = (short) Math.min(32767,GameConfig.getServerInt("item_slot_max"));
+        short itemSlotMax = (short) Math.min(32767, GameConfig.getServerInt("item_slot_max"));
+        
         if (slotMax != null) {
-            if (slotMax > 1 && itemSlotMax != slotMax) {
-                slotMax = itemSlotMax;
-                slotMaxCache.put(itemId, slotMax);  //更新缓存值
+            if (slotMax >= 1 && itemSlotMax != slotMax) {
+                slotMax = itemSlotMax > 0 ? itemSlotMax : slotMax;
+                slotMaxCache.put(itemId, slotMax);
+            } else if (slotMax <= 0) {
+                log.error("物品最大可堆叠数量异常： {}，{}，已强制设为100", itemId, slotMax);
             }
-            return (short) (slotMax + getExtraSlotMaxFromPlayer(c, itemId));
+            return slotMax;
         }
+        
         short ret = 0;
         Data item = getItemData(itemId);
         if (item != null) {
@@ -461,7 +421,7 @@ public class ItemInformationProvider {
         }
 
         slotMaxCache.put(itemId, ret);
-        return (short) (ret + getExtraSlotMaxFromPlayer(c, itemId));
+        return ret;
     }
 
     public int getMeso(int itemId) {

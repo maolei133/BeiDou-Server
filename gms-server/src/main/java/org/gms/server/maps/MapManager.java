@@ -142,5 +142,36 @@ public class MapManager {
 
         this.event = null;
     }
+    /**
+     * 判断地图是否满足添加到待清理队列的条件
+     * @param map 地图实例
+     * @return 是否满足添加到待清理队列的条件
+     */
+    public boolean canAddDisposeMap(MapleMap map) {
+        return map.getCharacterCount() == 0 &&  // 没有角色
+                !map.hasHiredMerchants(); // 没有雇佣商店
 
+    }
+    /**
+     * 判断地图是否满足释放条件
+     */
+    private boolean canDisposeMap(MapleMap map) {
+        return map == null ||   // 地图不存在，直接释放
+                map.getCharacterCount() == 0 &&  // 没有角色
+                        !map.hasHiredMerchants() && // 没有雇佣商店
+                        map.getDroppedItemCount() <= 0 && // 没有掉落物
+                        map.countBosses() == 0 && // 没有boss存活
+                        map.getEventInstance() == null && // 不属于某个副本事件实例
+                        !map.isEventMap() && // 不是活动地图
+                        !map.hasClock() && // 没有任何时钟倒计时
+                        !map.hasPendingBossSpawns(); // 没有BOSS刷怪点
+    }
+    public int getMapCount() {
+        mapsRLock.lock();
+        try {
+            return maps.size();
+        } finally {
+            mapsRLock.unlock();
+        }
+    }
 }

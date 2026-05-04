@@ -36,7 +36,6 @@ import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.net.OpcodeConstants;
 import org.gms.constants.net.ServerConstants;
 import org.gms.dao.entity.CharactersDO;
-import org.gms.dao.entity.NxcouponsDO;
 import org.gms.dao.entity.PlayernpcsFieldDO;
 import org.gms.manager.ServerManager;
 import org.gms.model.dto.ServerShutdownDTO;
@@ -44,6 +43,7 @@ import org.gms.model.pojo.NewYearCardRecord;
 import org.gms.net.ChannelDependencies;
 import org.gms.net.PacketProcessor;
 import org.gms.net.netty.LoginServer;
+import org.gms.net.netty.NettyServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.channel.Channel;
 import org.gms.net.server.coordinator.session.IpAddresses;
@@ -54,13 +54,15 @@ import org.gms.net.server.guild.GuildCharacter;
 import org.gms.net.server.task.*;
 import org.gms.net.server.world.World;
 import org.gms.property.ServiceProperty;
-import org.gms.server.CashShop;
 import org.gms.server.CashShop.CashItemFactory;
 import org.gms.server.SkillbookInformationProvider;
 import org.gms.server.ThreadManager;
 import org.gms.server.TimerManager;
 import org.gms.server.expeditions.ExpeditionBossLog;
 import org.gms.server.life.PlayerNPC;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.server.quest.Quest;
 import org.gms.service.*;
 import org.gms.util.*;
@@ -148,6 +150,7 @@ public class Server {
     @Setter
     private boolean shutdown = false;
     private long shutdownTime = 0;
+    private volatile Thread shutdownThread = null;
     public static long uptime = System.currentTimeMillis();
     private long nextTime;
 
@@ -163,6 +166,7 @@ public class Server {
     private static final NoteService noteService = ServerManager.getApplicationContext().getBean(NoteService.class);
     private static final HpMpAlertService hpMpAlertService = ServerManager.getApplicationContext().getBean(HpMpAlertService.class);
     private static final ServiceProperty serviceProperty = ServerManager.getApplicationContext().getBean(ServiceProperty.class);
+    private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
 
     private Server() {
         ReadWriteLock worldLock = new ReentrantReadWriteLock(true);
@@ -662,72 +666,64 @@ public class Server {
         Instant beforeInit = Instant.now();
         log.info(I18nUtil.getLogMessage("Server.init.info1"), ServerConstants.VERSION);
 
-        // 发送信件
-        registerChannelDependencies();
-
-        // 利用虚拟线程，减少开销
-        log.info(I18nUtil.getLogMessage("Server.init.info2"));
+        // 注解：最终生产方案。恢复并发加载，并应用智能缓存策略。
         try (ExecutorService initExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
-            // 加载wz
             final List<Future<?>> futures = new ArrayList<>();
-            futures.add(initExecutor.submit(SkillFactory::loadAllSkills));
-            futures.add(initExecutor.submit(CashItemFactory::loadAllCashItems));
-            futures.add(initExecutor.submit(Quest::loadAllQuests));
-            futures.add(initExecutor.submit(SkillbookInformationProvider::loadAllSkillbookInformation));
-            // Wait on all async tasks to complete
+            
+            // 1. 提交所有可以并发执行的初始化任务
+            log.info("开始并发提交启动任务 (生产模式)...");
+            
+            // WZ加载任务
+
+            // “用完即弃”模式
+            futures.add(initExecutor.submit(() -> SkillFactory.loadAllSkills(true)));
+            futures.add(initExecutor.submit(() -> CashItemFactory.loadAllCashItems(true)));
+            // “长期缓存”模式
+            futures.add(initExecutor.submit(Quest::loadAllQuests)); // 任务：加载所有任务
+            futures.add(initExecutor.submit(SkillbookInformationProvider::loadAllSkillbookInformation));    // 技能书信息加载
+
+            // 其他独立任务
+            futures.add(initExecutor.submit(this::registerChannelDependencies));
+            futures.add(initExecutor.submit(() -> accountService.resetAllLoggedIn()));
+            futures.add(initExecutor.submit(characterService::resetMerchant));
+            futures.add(initExecutor.submit(itemRecoveryService::cleanupExpiredLogs));
+            futures.add(initExecutor.submit(itemRecoveryService::updatePendingDrop));
+            futures.add(initExecutor.submit(nxCodeService::clearExpirations));
+            futures.add(initExecutor.submit(this::updateActiveCoupons));
+            futures.add(initExecutor.submit(CashIdGenerator::loadExistentCashIdsFromDb));
+            futures.add(initExecutor.submit(nameChangeService::applyAllNameChange));
+            futures.add(initExecutor.submit(worldTransferService::applyAllWorldTransfer));
+            futures.add(initExecutor.submit(() -> PlayerNPC.loadRunningRankData(Math.min(GameConstants.WORLD_NAMES.length, GameConfig.getConfig().getJSONObject("world").size()))));
+            futures.add(initExecutor.submit(new BossLogTask()));    // 重置boss日志
+            futures.add(initExecutor.submit(new ExtendValueTask()));    // 清理扩展表类型
+            futures.add(initExecutor.submit(CommandsExecutor.getInstance()::loadCommandsExecutor)); // 加载GM命令
+            futures.add(initExecutor.submit(OpcodeConstants::generateOpcodeNames)); // 生成Opcode名称
+
+            // 2. 等待所有并发任务完成
+            log.info("等待 {} 个启动任务完成...", futures.size());
             for (Future<?> future : futures) {
                 future.get();
             }
-            initExecutor.shutdown();
-            //加载商城自定义数据
-            CashShop.CashItemFactory.processRateCouponItems((GameConfig.getServerBoolean("use_supply_rate_coupons"))); //重载商城是否允许出售倍率卡
-            CashShop.CashItemFactory.processPetEquipItems(GameConfig.getServerBoolean("use_pet_equip_permanent"));  //重载宠物装备有效期
+            log.info("所有并发启动任务已完成。");
+
         } catch (Exception e) {
             log.error(I18nUtil.getLogMessage("Server.init.error1"), e);
             throw new IllegalStateException(e);
         }
-        log.info(I18nUtil.getLogMessage("Server.init.info3"));
 
         TimeZone.setDefault(TimeZone.getTimeZone(GameConfig.getServerString("timezone")));
 
         log.info(I18nUtil.getLogMessage("Server.init.info4"));
         final int worldCount = Math.min(GameConstants.WORLD_NAMES.length, GameConfig.getConfig().getJSONObject("world").size());
 
-        // 重置登录状态和雇佣商店状态
-        accountService.resetAllLoggedIn();
-        characterService.resetMerchant();
-
-        // 清空失效的现金物品
-        nxCodeService.clearExpirations();
-
-        // 重载倍率卡
-        List<NxcouponsDO> nxcouponsDOList = nxCouponService.getNxCoupons(new NxcouponsDO());
-        couponRates.clear();
-        nxcouponsDOList.forEach(nxcouponsDO -> couponRates.put(nxcouponsDO.getCouponid(), nxcouponsDO.getRate()));
-        updateActiveCoupons();
-        CashIdGenerator.loadExistentCashIdsFromDb();
-
-        // 接受未完成的改名
-        nameChangeService.applyAllNameChange();
-
-        // 接受转区
-        worldTransferService.applyAllWorldTransfer();
-
-        // 加载玩家排名
-        PlayerNPC.loadRunningRankData(worldCount);
-
-        // 主动清理每日零点需要清理的数据
-        new BossLogTask().run();
-        new ExtendValueTask().run();
-        log.info(I18nUtil.getLogMessage("Server.init.info5"));
-
+        // 注解：以下为必须在上述任务完成后，顺序执行的逻辑
         ThreadManager.getInstance().start();
         //基于lxconan的实时任务聚合方法 ，需要在newYearCardService.startPendingNewYearCardRequests()方法之前调用，否则存在概率造成TimerManager的ses为null导致无法启动
         initializeTimelyTasks();    // aggregated method for timely tasks thanks to lxconan
         newYearCardService.startPendingNewYearCardRequests();
         try {
             for (int i = 0; i < worldCount; i++) {
-                initWorld();
+                initWorld();    // 初始化世界也会占用内存
             }
             // world初始化后需要加载的
             reloadWorldsPlayerRanking();
@@ -740,21 +736,20 @@ public class Server {
             for (World w : getWorlds()) {
                 w.loadActiveHiredMerchants();
             }
-            
+
         } catch (Exception e) {
-            log.error(I18nUtil.getLogMessage("Server.init.error3"), e); //For those who get errors
+            log.error(I18nUtil.getLogMessage("Server.init.error3"), e);
             System.exit(0);
         }
 
         loginServer = initLoginServer(serviceProperty.getLoginPort());
         log.info(I18nUtil.getLogMessage("Server.init.info6"), serviceProperty.getLoginPort());
 
-        OpcodeConstants.generateOpcodeNames();
-        CommandsExecutor.getInstance().loadCommandsExecutor();
-
-        log.info(I18nUtil.getLogMessage("Server.init.info7"));
+//        OpcodeConstants.generateOpcodeNames();
+//        log.info(I18nUtil.getLogMessage("Server.init.info7"));
+//        CommandsExecutor.getInstance().loadCommandsExecutor();
         for (Channel ch : this.getAllChannels()) {
-            ch.reloadEventScriptManager();
+            ch.reloadEventScriptManager();  // 载入频道事件也会占用内存
         }
         log.info(I18nUtil.getLogMessage("Server.init.info8"));
         online = true;
@@ -1345,8 +1340,7 @@ public class Server {
 
             playerEquips.add(ae.getLeft());
         }
-
-        List<CharactersDO> charactersDOList = characterService.getCharactersByAccountId(accId);
+        List<CharactersDO> charactersDOList = characterService.getCharactersViewByAccountId(-1,accId);
         for (CharactersDO charactersDO : charactersDOList) {
             characterCount++;
 
@@ -1362,10 +1356,8 @@ public class Server {
                 chars = new LinkedList<>();
             }
 
-            Integer cid = charactersDO.getId();
-            chars.add(Character.fromCharactersDO(charactersDO, null));
+            chars.add(Character.fromCharactersViewDO(charactersDO));
         }
-
         wchars.add(curWorld, chars);
 
         return new Pair<>(characterCount, wchars);
@@ -1387,6 +1379,57 @@ public class Server {
         } finally {
             lgnRLock.unlock();
         }
+    }
+
+    /**
+     * 登录时为客户端加载轻量级角色数据。
+     * <p>
+     * 此方法旨在优化登录流程，避免一次性加载所有角色的完整数据。
+     * 它首先检查角色数据是否已在内存中。如果是首次登录或数据未加载，
+     * 它会调用 {@link #loadAccountCharactersView} 方法从数据库加载角色的
+     * 轻量级视图（仅包含角色列表显示和GM等级判断所需的基本信息）。
+     * <p>
+     * 加载后，它会遍历所有角色以确定该账号的最高GM等级，并设置到客户端对象中。
+     *
+     * @param c 客户端对象，需要加载角色数据并设置GM等级。
+     */
+    public void loadAccountCharactersLight(Client c) {
+        Integer accId = c.getAccID();
+        // 如果是首次登录，则从数据库加载轻量级角色视图
+        if (isFirstAccountLogin(accId)) {
+            loadAccountCharactersView(accId, 0, 0);
+        }
+
+        Set<Integer> accWorlds = new HashSet<>();
+        lgnRLock.lock();
+        try {
+            // 获取该账号下所有角色所在的世界ID
+            for (Integer chrid : getAccountCharacterEntries(accId)) {
+                accWorlds.add(worldChars.get(chrid));
+            }
+        } finally {
+            lgnRLock.unlock();
+        }
+
+        int gmLevel = 0;
+        // 遍历角色所在的所有世界
+        for (Integer worldId : accWorlds) {
+            World world = this.getWorld(worldId);
+            if (world != null) {
+                // 从世界缓存中获取该账号的角色视图列表
+                List<Character> characterViews = world.getAccountCharactersView(accId);
+                if (characterViews != null) {
+                    // 遍历角色视图，找到最高的GM等级
+                    for (Character chrView : characterViews) {
+                        if (gmLevel < chrView.gmLevel()) {
+                            gmLevel = chrView.gmLevel();
+                        }
+                    }
+                }
+            }
+        }
+        // 设置客户端的GM等级
+        c.setGMLevel(gmLevel);
     }
 
     public void loadAccountCharacters(Client c) {
@@ -1628,8 +1671,9 @@ public class Server {
 
     public synchronized void shutdownInternal(boolean restart, boolean exit) {
         this.shutdown = true;
-        log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info1"), restart ?
-                I18nUtil.getLogMessage("Server.shutdownInternal.info2") : I18nUtil.getLogMessage("Server.shutdownInternal.info3"));
+        String msg =  I18nUtil.getLogMessage("Server.shutdownInternal.info1", I18nUtil.getLogMessage(restart ? "Server.shutdownInternal.info2" : "Server.shutdownInternal.info3"));
+        log.info(msg);
+        AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_SHUTDOWN, msg);
         if (getWorlds() == null) {
             return;//already shutdown
         }
@@ -1656,14 +1700,17 @@ public class Server {
         TimerManager.getInstance().purge();
         TimerManager.getInstance().stop();
         loginServer.stop();
+        NettyServerManager.getInstance().shutdown();    // 关闭全局 Netty 线程组
         online = false;
         log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info4"));
         if (restart) {
             log.info(I18nUtil.getLogMessage("Server.shutdownInternal.info5"));
+            AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_SHUTDOWN, I18nUtil.getLogMessage("Server.shutdownInternal.info5"));
             instance = null;
             getInstance().init();
         } else if (exit) {
-            log.info("Server shutdown complete. Exiting application.");
+            log.info("服务器关闭完成。正在退出应用程序。");
+            AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_SHUTDOWN, "服务器关闭完成。正在退出应用程序。");
             SpringApplication.exit(ServerManager.getApplicationContext());
             System.exit(0);
         }
@@ -1710,18 +1757,32 @@ public class Server {
      * @param exit              标识关服后是否退出应用程序进程。true表示退出，false表示仅关闭服务（或重启）。
      */
     public synchronized void shutdownWithMsgAndInternal(ServerShutdownDTO serverShutdownDTO, boolean exit) {
+        // Stop existing thread if any
+        if (shutdownThread != null && shutdownThread.isAlive()) {
+            log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.stopping"));
+            shutdownThread.interrupt();
+            setShutdown(false); // Reset shutdown state
+            shutdownThread = null;
+        }
+
         int minutes = serverShutdownDTO.getMinutes();
         long time = minutes * 60000L;
         this.shutdownTime = System.currentTimeMillis() + time;
 
-        log.info("开始执行关服倒计时，预计关服时间: {}, 剩余时间: {} 分钟", new Date(this.shutdownTime), minutes);
+        log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.start"), new Date(this.shutdownTime), minutes);
 
         // 启动一个独立的平台线程来执行关服倒计时，避免死锁
-        new Thread(() -> {
+        shutdownThread = new Thread(() -> {
             long remainingTime = time;
             boolean firstNotice = true;
 
             while (remainingTime > 0) {
+                // Check if interrupted
+                if (Thread.currentThread().isInterrupted()) {
+                    log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.cancelled"));
+                    return;
+                }
+
                 // 剩余时间（毫秒）
                 long timeLeft = remainingTime;
 
@@ -1758,7 +1819,8 @@ public class Server {
                     Thread.sleep(1000); // 每秒检查一次
                     remainingTime -= 1000;
                 } catch (InterruptedException e) {
-                    log.error("Shutdown countdown interrupted", e);
+                    log.info(I18nUtil.getLogMessage("Server.shutdown.countdown.interrupted"));
+                    return;
                 }
             }
 
@@ -1803,7 +1865,9 @@ public class Server {
             log.info(I18nUtil.getLogMessage("Server.shutdown.executing"));
             Server.getInstance().shutdown(false, exit).run();
             log.info(I18nUtil.getLogMessage("Server.shutdown.complete"));
-        }, "Shutdown-Countdown-Thread").start();
+            shutdownThread = null;
+        }, "Shutdown-Countdown-Thread");
+        shutdownThread.start();
     }
 
     private void broadcastShutdownMessage(long timeLeft, ServerShutdownDTO dto, boolean firstNotice, boolean showPopup) {
@@ -1831,7 +1895,7 @@ public class Server {
             msg = I18nUtil.getMessage("ShutdownCommand.message7", strTime);
         }
 
-        log.info("发送关服通知: 剩余时间={}ms, 消息={}", timeLeft, msg);
+        log.info(I18nUtil.getLogMessage("Server.shutdown.notice.msg"), timeLeft, msg);
 
         for (World w : Server.getInstance().getWorlds()) {
             if (dto.getShowServerMsg()) {

@@ -27,6 +27,11 @@ export interface Pagination {
   current: number;
   pageSize: number;
   total?: number;
+  showTotal?: boolean;
+  showJumper?: boolean;
+  showPageSize?: boolean;
+  pageSizeOptions?: number[];
+  [key: string]: any;
 }
 
 export type TimeRanger = [string, string];

@@ -1,12 +1,15 @@
 package org.gms.client.cheatsystem.manager;
 
 import lombok.Getter;
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.cheatsystem.core.CheatManager;
 import org.gms.client.cheatsystem.core.CheatPlugin;
 import org.gms.client.cheatsystem.core.CheatPluginFactory;
 import org.gms.client.Character;
-import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.facade.CheatSystemLoggerFacade;
+import org.gms.server.logging.AuditContext;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,7 +41,7 @@ public class CheatModuleManager {
         
         CheatManager cheatManager = new CheatManager(player);
         cheatManagers.put(player.getId(), cheatManager);
-        CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "为玩家创建辅助管理器", "INFO");
+        logCheatSystemEvent(player, "为玩家创建辅助管理器", "INFO");
         return cheatManager;
     }
     
@@ -86,7 +89,32 @@ public class CheatModuleManager {
         }
         
         if (pluginCount > 0) {
-            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, DynamicCategoryManager.Category.MINOR_PLUGIN_SYSTEM, "为玩家注册了 " + pluginCount + " 个辅助插件", "INFO");
+            logCheatSystemEvent(player, "为玩家注册了 " + pluginCount + " 个辅助插件", "INFO");
+        }
+    }
+
+    private void logCheatSystemEvent(Character player, String message, String level) {
+        // 确保上下文存在
+        boolean contextSet = false;
+        if (AuditContext.get().isEmpty() && player != null && player.getClient() != null) {
+            AuditContext.set(player.getClient());
+            contextSet = true;
+        }
+
+        try {
+            MapMessage data = new MapMessage()
+                .with("msg", message);
+            
+            if ("WARN".equals(level) || "ERROR".equals(level)) {
+                 AuditLogger.error(LogModule.PLUGIN, LogAction.PLUGIN_ERROR, message, null);
+            } else {
+                 AuditLogger.info(LogModule.PLUGIN, LogAction.PLUGIN_USE, data);
+            }
+        } finally {
+            // 如果是我们临时设置的上下文，使用完后清理，避免污染线程
+            if (contextSet) {
+                AuditContext.clear();
+            }
         }
     }
 }

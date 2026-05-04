@@ -13,22 +13,22 @@ import org.gms.constants.id.MapId;
 import org.gms.net.opcodes.SendOpcode;
 import org.gms.net.packet.OutPacket;
 import org.gms.net.packet.Packet;
+import org.gms.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.util.PacketCreator;
-import org.gms.util.StringUtil;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * CField_Wedding, CField_WeddingPhoto, CWeddingMan, OnMarriageResult, and all Wedding/Marriage enum/structs.
+ * WeddingPackets
+ * 处理婚礼相关的数据包构建，包括 CField_Wedding, CField_WeddingPhoto, CWeddingMan, OnMarriageResult 以及所有婚礼/婚姻相关的枚举/结构体。
  *
  * @author Eric
  * <p>
- * Wishlists edited by Drago (Dragohe4rt)
+ * 愿望清单由 Drago (Dragohe4rt) 编辑
  */
-public class WeddingPackets extends PacketCreator {
+public class WeddingPackets {
     private static final Logger log = LoggerFactory.getLogger(WeddingPackets.class);
 
     /*
@@ -204,52 +204,73 @@ public class WeddingPackets extends PacketCreator {
     }
 
     /**
-     * <name> has requested engagement. Will you accept this proposal?
+     * 添加角色外观信息
      *
-     * @param name
-     * @param playerid
+     * @param p    输出数据包
+     * @param chr  角色对象
+     * @param mega 是否为喇叭
+     */
+    public static void addCharLook(OutPacket p, Character chr, boolean mega) {
+        PacketHelper.addCharLook(p, chr, mega);
+    }
+
+    /**
+     * 添加物品信息
+     *
+     * @param p            输出数据包
+     * @param item         物品对象
+     * @param zeroPosition 是否位置为0
+     */
+    public static void addItemInfo(OutPacket p, Item item, boolean zeroPosition) {
+        PacketHelper.addItemInfo(p, item, zeroPosition);
+    }
+
+    /**
+     * <name> 请求订婚。你愿意接受这个提议吗？
+     *
+     * @param name     请求者名字
+     * @param playerid 请求者ID
      * @return mplew
      */
     public static Packet onMarriageRequest(String name, int playerid) {
         OutPacket p = OutPacket.create(SendOpcode.MARRIAGE_REQUEST);
-        p.writeByte(0); //mode, 0 = engage, 1 = cancel, 2 = answer.. etc
-        p.writeString(name); // name
-        p.writeInt(playerid); // playerid
+        p.writeByte(0); //mode, 0 = engage, 1 = cancel, 2 = answer.. etc // 模式，0 = 订婚，1 = 取消，2 = 回答.. 等
+        p.writeString(name); // name // 名字
+        p.writeInt(playerid); // playerid // 玩家ID
         return p;
     }
 
     /**
-     * A quick rundown of how (I think based off of enough BMS searching) WeddingPhoto_OnTakePhoto works:
-     * - We send this packet with (first) the Groom / Bride IGNs
-     * - We then send a fieldId (unsure about this part at the moment, 90% sure it's the id of the map)
-     * - After this, we write an integer of the amount of characters within the current map (which is the Cake Map -- exclude users within Exit Map)
-     * - Once we've retrieved the size of the characters, we begin to write information about them (Encode their name, guild, etc info)
-     * - Now that we've Encoded our character data, we begin to Encode the ScreenShotPacket which requires a TemplateID, IGN, and their positioning
-     * - Finally, after encoding all of our data, we send this packet out to a MapGen application server
-     * - The MapGen server will then retrieve the packet byte array and convert the bytes into a ImageIO 2D JPG output
-     * - The result after converting into a JPG will then be remotely uploaded to /weddings/ with ReservedGroomName_ReservedBrideName to be displayed on the web server.
+     * WeddingPhoto_OnTakePhoto 工作原理简述 (基于 BMS 搜索):
+     * - 我们发送这个包，首先包含新郎/新娘的 IGN
+     * - 然后发送一个 fieldId (目前不确定这部分，90% 确定它是地图 ID)
+     * - 之后，我们写入当前地图中的角色数量 (即蛋糕地图 -- 排除退出地图中的用户)
+     * - 一旦我们获取了角色的大小，我们就开始写入关于他们的信息 (编码他们的名字、公会等信息)
+     * - 现在我们已经编码了角色数据，我们开始编码 ScreenShotPacket，它需要 TemplateID、IGN 和他们的位置
+     * - 最后，在编码完所有数据后，我们将此包发送到 MapGen 应用程序服务器
+     * - MapGen 服务器将检索包字节数组并将字节转换为 ImageIO 2D JPG 输出
+     * - 转换为 JPG 后的结果将被远程上传到 /weddings/ 并以 ReservedGroomName_ReservedBrideName 命名，以便在 Web 服务器上显示。
      * <p>
-     * - Will no longer continue Wedding Photos, needs a WvsMapGen :(
+     * - 将不再继续婚礼照片，需要 WvsMapGen :(
      *
-     * @param ReservedGroomName The groom IGN of the wedding
-     * @param ReservedBrideName The bride IGN of the wedding
-     * @param m_dwField         The current field id (the id of the cake map, ex. 680000300)
-     * @param m_uCount          The current user count (equal to m_dwUsers.size)
-     * @param m_dwUsers         The List of all Character guests within the current cake map to be encoded
-     * @return mplew (MaplePacket) Byte array to be converted and read for byte[]->ImageIO
+     * @param ReservedGroomName 婚礼的新郎 IGN
+     * @param ReservedBrideName 婚礼的新娘 IGN
+     * @param m_dwField         当前字段 ID (蛋糕地图的 ID，例如 680000300)
+     * @param m_dwUsers         当前蛋糕地图内的所有角色宾客列表，用于编码
+     * @return mplew (MaplePacket) 用于 byte[]->ImageIO 转换和读取的字节数组
      */
     public static Packet onTakePhoto(String ReservedGroomName, String ReservedBrideName, int m_dwField, List<Character> m_dwUsers) { // OnIFailedAtWeddingPhotos
-        OutPacket p = OutPacket.create(SendOpcode.WEDDING_PHOTO);// v53 header, convert -> v83
+        OutPacket p = OutPacket.create(SendOpcode.WEDDING_PHOTO);// v53 header, convert -> v83 // v53 头部，转换为 v83
         p.writeString(ReservedGroomName);
         p.writeString(ReservedBrideName);
-        p.writeInt(m_dwField); // field id?
+        p.writeInt(m_dwField); // field id? // 字段 ID？
         p.writeInt(m_dwUsers.size());
 
         for (Character guest : m_dwUsers) {
-            // Begin Avatar Encoding
+            // 开始头像编码
             addCharLook(p, guest, false); // CUser::EncodeAvatar
-            p.writeInt(30000); // v20 = *(_DWORD *)(v13 + 2192) -- new groom marriage ID??
-            p.writeInt(30000); // v20 = *(_DWORD *)(v13 + 2192) -- new bride marriage ID??
+            p.writeInt(30000); // v20 = *(_DWORD *)(v13 + 2192) -- new groom marriage ID?? // 新新郎婚姻 ID？？
+            p.writeInt(30000); // v20 = *(_DWORD *)(v13 + 2192) -- new bride marriage ID?? // 新新娘婚姻 ID？？
             p.writeString(guest.getName());
             p.writeString(guest.getGuildId() > 0 && guest.getGuild() != null ? guest.getGuild().getName() : "");
             p.writeShort(guest.getGuildId() > 0 && guest.getGuild() != null ? guest.getGuild().getLogoBG() : 0);
@@ -258,40 +279,40 @@ public class WeddingPackets extends PacketCreator {
             p.writeByte(guest.getGuildId() > 0 && guest.getGuild() != null ? guest.getGuild().getLogoColor() : 0);
             p.writeShort(guest.getPosition().x); // v18 = *(_DWORD *)(v13 + 3204);
             p.writeShort(guest.getPosition().y); // v20 = *(_DWORD *)(v13 + 3208);
-            // Begin Screenshot Encoding
+            // 开始截图编码
             p.writeByte(1); // // if ( *(_DWORD *)(v13 + 288) ) { COutPacket::Encode1(&thisa, v20);
             // CPet::EncodeScreenShotPacket(*(CPet **)(v13 + 288), &thisa);
-            p.writeInt(1); // dwTemplateID
-            p.writeString(guest.getName()); // m_sName
-            p.writeShort(guest.getPosition().x); // m_ptCurPos.x
-            p.writeShort(guest.getPosition().y); // m_ptCurPos.y
-            p.writeByte(guest.getStance()); // guest.m_bMoveAction
+            p.writeInt(1); // dwTemplateID // 模板 ID
+            p.writeString(guest.getName()); // m_sName // 名字
+            p.writeShort(guest.getPosition().x); // m_ptCurPos.x // 当前位置 X
+            p.writeShort(guest.getPosition().y); // m_ptCurPos.y // 当前位置 Y
+            p.writeByte(guest.getStance()); // guest.m_bMoveAction // 姿态
         }
 
         return p;
     }
 
     /**
-     * Enable spouse chat and their engagement ring without @relog
+     * 启用配偶聊天和他们的订婚戒指，无需 @relog
      *
-     * @param marriageId
-     * @param chr
-     * @param wedding
+     * @param marriageId 婚姻ID
+     * @param chr        角色对象
+     * @param wedding    是否为婚礼
      * @return mplew
      */
-    public static Packet OnMarriageResult(int marriageId, Character chr, boolean wedding) {
+    public static Packet OnMarriageResult(int mode, Character chr, boolean success) {
         OutPacket p = OutPacket.create(SendOpcode.MARRIAGE_RESULT);
         p.writeByte(11);
-        p.writeInt(marriageId);
+        p.writeInt(mode);
         p.writeInt(chr.getGender() == 0 ? chr.getId() : chr.getPartnerId());
         p.writeInt(chr.getGender() == 0 ? chr.getPartnerId() : chr.getId());
-        p.writeShort(wedding ? 3 : 1);
-        if (wedding) {
+        p.writeShort(success ? 3 : 1);
+        if (success) {
             p.writeInt(chr.getMarriageItemId());
             p.writeInt(chr.getMarriageItemId());
         } else {
-            p.writeInt(ItemId.WEDDING_RING_MOONSTONE); // Engagement Ring's Outcome (doesn't matter for engagement)
-            p.writeInt(ItemId.WEDDING_RING_MOONSTONE); // Engagement Ring's Outcome (doesn't matter for engagement)
+            p.writeInt(ItemId.WEDDING_RING_MOONSTONE); // 订婚戒指的结果（对于订婚来说并不重要）
+            p.writeInt(ItemId.WEDDING_RING_MOONSTONE); // 订婚戒指的结果（对于订婚来说并不重要）
         }
         p.writeFixedString(StringUtil.getRightPaddedStr(chr.getGender() == 0 ? chr.getName() : Character.getNameById(chr.getPartnerId()), '\0', 13));
         p.writeFixedString(StringUtil.getRightPaddedStr(chr.getGender() == 0 ? Character.getNameById(chr.getPartnerId()) : chr.getName(), '\0', 13));
@@ -300,9 +321,9 @@ public class WeddingPackets extends PacketCreator {
     }
 
     /**
-     * To exit the Engagement Window (Waiting for her response...), we send a GMS-like pop-up.
+     * 退出订婚窗口（等待她的回应...），我们发送一个类似 GMS 的弹出窗口。
      *
-     * @param msg
+     * @param msg 消息代码
      * @return mplew
      */
     public static Packet OnMarriageResult(final byte msg) {
@@ -316,10 +337,10 @@ public class WeddingPackets extends PacketCreator {
     }
 
     /**
-     * The World Map includes 'loverPos' in which this packet controls
+     * 世界地图包含 'loverPos'，此包控制该位置
      *
-     * @param partner
-     * @param mapid
+     * @param partner 伴侣ID
+     * @param mapid   地图ID
      * @return mplew
      */
     public static Packet OnNotifyWeddingPartnerTransfer(int partner, int mapid) {
@@ -330,19 +351,19 @@ public class WeddingPackets extends PacketCreator {
     }
 
     /**
-     * The wedding packet to display Pelvis Bebop and enable the Wedding Ceremony Effect between two characters
-     * CField_Wedding::OnWeddingProgress - Stages
-     * CField_Wedding::OnWeddingCeremonyEnd - Wedding Ceremony Effect
+     * 婚礼包，用于显示 Pelvis Bebop 并启用两个角色之间的婚礼仪式效果
+     * CField_Wedding::OnWeddingProgress - 阶段
+     * CField_Wedding::OnWeddingCeremonyEnd - 婚礼仪式效果
      *
-     * @param setBlessEffect
-     * @param groom
-     * @param bride
-     * @param step
+     * @param setBlessEffect 是否设置祝福效果
+     * @param groom          新郎ID
+     * @param bride          新娘ID
+     * @param step           步骤
      * @return mplew
      */
     public static Packet OnWeddingProgress(boolean setBlessEffect, int groom, int bride, byte step) {
         OutPacket p = OutPacket.create(setBlessEffect ? SendOpcode.WEDDING_CEREMONY_END : SendOpcode.WEDDING_PROGRESS);
-        if (!setBlessEffect) { // in order for ceremony packet to send, byte step = 2 must be sent first
+        if (!setBlessEffect) { // 为了发送仪式包，必须先发送 byte step = 2
             p.writeByte(step);
         }
         p.writeInt(groom);
@@ -351,10 +372,10 @@ public class WeddingPackets extends PacketCreator {
     }
 
     /**
-     * When we open a Wedding Invitation, we display the Bride & Groom
+     * 当我们打开婚礼请柬时，显示新郎和新娘
      *
-     * @param groom
-     * @param bride
+     * @param groom 新郎名字
+     * @param bride 新娘名字
      * @return mplew
      */
     public static Packet sendWeddingInvitation(String groom, String bride) {
@@ -362,43 +383,43 @@ public class WeddingPackets extends PacketCreator {
         p.writeByte(15);
         p.writeString(groom);
         p.writeString(bride);
-        p.writeShort(1); // 0 = Cathedral Normal?, 1 = Cathedral Premium?, 2 = Chapel Normal?
+        p.writeShort(1); // 0 = Cathedral Normal?, 1 = Cathedral Premium?, 2 = Chapel Normal? // 0 = 大教堂普通？，1 = 大教堂高级？，2 = 教堂普通？
         return p;
     }
 
-    public static Packet sendWishList() { // fuck my life
+    public static Packet sendWishList() { // fuck my life // 操蛋的生活
         OutPacket p = OutPacket.create(SendOpcode.MARRIAGE_REQUEST);
         p.writeByte(9);
         return p;
     }
 
     /**
-     * Handles all of WeddingWishlist packets
+     * 处理所有婚礼愿望清单数据包
      *
-     * @param mode
-     * @param itemnames
-     * @param items
+     * @param mode      模式
+     * @param itemnames 物品名称列表
+     * @param items     物品列表
      * @return mplew
      */
     public static Packet onWeddingGiftResult(byte mode, List<String> itemnames, List<Item> items) {
         OutPacket p = OutPacket.create(SendOpcode.WEDDING_GIFT_RESULT);
         p.writeByte(mode);
         switch (mode) {
-            case 0xC: // 12 : You cannot give more than one present for each wishlist 
-            case 0xE: // 14 : Failed to send the gift.
+            case 0xC: // 12 : 每个愿望清单只能赠送一份礼物
+            case 0xE: // 14 : 发送礼物失败。
                 break;
 
-            case 0x09: { // Load Wedding Registry
+            case 0x09: { // 加载婚礼登记
                 p.writeByte(itemnames.size());
                 for (String names : itemnames) {
                     p.writeString(names);
                 }
                 break;
             }
-            case 0xA: // Load Bride's Wishlist 
+            case 0xA: // 加载新娘的愿望清单
             case 0xF: // 10, 15, 16 = CWishListRecvDlg::OnPacket
-            case 0xB: { // Add Item to Wedding Registry 
-                // 11 : You have sent a gift | | 13 : Failed to send the gift. | 
+            case 0xB: { // 添加物品到婚礼登记
+                // 11 : 您已发送礼物 | | 13 : 发送礼物失败。 |
                 if (mode == 0xB) {
                     p.writeByte(itemnames.size());
                     for (String names : itemnames) {
@@ -419,4 +440,4 @@ public class WeddingPackets extends PacketCreator {
         }
         return p;
     }
-} 
+}

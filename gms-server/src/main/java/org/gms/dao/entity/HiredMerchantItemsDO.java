@@ -32,4 +32,5 @@ public class HiredMerchantItemsDO implements Serializable {
     private String status;
     private String itemData;
     private Long settledTime;
+    private Long uid;
 }

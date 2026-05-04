@@ -198,6 +198,15 @@ export interface BanInfoRtn {
   hwid: string;
 }
 
+export interface UnbanPlayerReq {
+  id: number;
+  unbanIp?: boolean;
+  unbanMac?: boolean;
+  unbanHwid?: boolean;
+  ips?: string[];
+  macs?: string[];
+}
+
 export function getPlayerList(params: PlayerListParams) {
   return axios.post<ResultBody<PageResult<OnlinePlayer>>>(
     '/character/v1/online/list',
@@ -241,6 +250,6 @@ export function getBanInfo(id: number) {
   return axios.post<ResultBody<BanInfoRtn>>('/character/v1/banInfo', { id });
 }
 
-export function unbanPlayer(id: number) {
-  return axios.post<ResultBody<any>>('/character/v1/unban', { id });
+export function unbanPlayer(data: UnbanPlayerReq) {
+  return axios.post<ResultBody<any>>('/character/v1/unban', data);
 }

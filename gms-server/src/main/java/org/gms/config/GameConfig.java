@@ -10,6 +10,7 @@ import org.gms.net.server.world.World;
 import org.gms.server.CashShop;
 import org.gms.server.life.MonsterInformationProvider;
 import org.gms.service.ConfigService;
+import org.gms.service.TraceabilityConfigService;
 import org.gms.util.Pair;
 
 import java.util.List;
@@ -103,6 +104,7 @@ public class GameConfig {
             case "use_supply_rate_coupons" -> CashShop.CashItemFactory.processRateCouponItems(Boolean.parseBoolean(gameConfigDO.getConfigValue())); //重载商城是否允许出售倍率卡
             case "use_pet_equip_permanent" -> CashShop.CashItemFactory.processPetEquipItems(Boolean.parseBoolean(gameConfigDO.getConfigValue()));  //重载宠物装备有效期
             case "hired_merchant_duration" -> Server.getInstance().rescheduleHiredMerchants(); // 重载雇佣商店持续时间
+            case "traceability_rules" -> ServerManager.getApplicationContext().getBean(TraceabilityConfigService.class).reloadConfig(); // 重载溯源系统配置
         }
     }
     public static Object getObject(String key) {
@@ -371,13 +373,16 @@ public class GameConfig {
     }
 
     public static float getServerFloat(String key) {
+        return getServerFloat(key, 0);
+    }
+
+    public static float getServerFloat(String key, float defaultValue) {
         JSONObject valueProp = getValueProp("server", key);
         if (valueProp == null) {
             return 0F;
         }
         return valueProp.getFloatValue("value");
     }
-
     public static double getWorldDouble(int worldId, String key) {
         JSONObject valueProp = getValueProp("world", String.valueOf(worldId), key);
         if (valueProp == null) {

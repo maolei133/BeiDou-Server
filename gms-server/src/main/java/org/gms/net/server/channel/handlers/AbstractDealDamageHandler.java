@@ -21,6 +21,7 @@
  */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Job;
@@ -37,8 +38,9 @@ import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.MapId;
 import org.gms.constants.id.MobId;
 import org.gms.constants.skills.*;
-import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.facade.PlayerLoggerFacade;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.PlayerBuffValueHolder;
@@ -294,9 +296,9 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                         continue;
                     }
                     // 作弊检测：吸怪
-/*                    if (player.getAutoBanManager().detectMonsterVac(monster)) {
+                    if (player.getAutoBanManager().detectMonsterVac(monster)) {
                         continue;
-                    }*/
+                    }
                     /** 对单个怪物的总伤害 */
                     int totDamageToOneMonster = 0;
                     /** 对单个怪物造成的多段伤害列表 */
@@ -310,17 +312,24 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                         handleDojoBossDamageLimit(attack, monster, onedList);
                     }
 
+                    // [新增] 统计有效伤害段数（非0伤害），用于技能效果判定，防止利用非法段数刷技能效果
+                    int validAttackCount = 0;
+
                     /** 遍历怪物的每段伤害 (eachd: 单段伤害值) */
                     for (Integer eachd : onedList) {
                         if (eachd < 0) {
                             eachd += Integer.MAX_VALUE;
                         }
                         totDamageToOneMonster += eachd;
+                        if (eachd != 0) {
+                            validAttackCount++;
+                        }
                     }
                     monster.aggroMonsterDamage(player, totDamageToOneMonster);
 
                     // 应用各种技能效果（偷窃、吸血、元素效果等）
-                    applySkillEffects(player, monster, attack, attackCount, totDamageToOneMonster, theSkill, job, map);
+                    // [修正] 使用 validAttackCount 替代 attackCount，确保只对有效伤害应用技能效果
+                    applySkillEffects(player, monster, attack, validAttackCount, totDamageToOneMonster, theSkill, job, map);
 
                     // 作弊检测：固定伤害
                     if (attack.skill != 0 && attackEffect != null) {
@@ -472,6 +481,8 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
 
         // [修复] 存储原始的伤害段数，确保读取数据包时不会因为作弊检测修改 ret.numDamage 而导致读取错误
         final int numDamageToRead = ret.numDamage;
+        // [新增] 存储合法的伤害段数，用于后续逻辑（如Venom）的正确计算
+        int validNumDamage = numDamageToRead;
 
         /** 遍历所有被攻击的怪物 (i: 循环索引) */
         for (int i = 0; i < ret.numAttacked; i++) {
@@ -500,6 +511,9 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
 
             // [修复] 将所有依赖 monster 对象的逻辑集中到此代码块中
             boolean currentMonsterCheat = false;
+            // 当前怪物的合法段数限制
+            int currentLimit = validNumDamage;
+
             if (monster != null) {
                 // [新增] 应用防御减伤公式到理论最大伤害上限
                 mobDef = ret.magic ? monster.getStats().getMDDamage() : monster.getStats().getPDDamage();
@@ -524,24 +538,6 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                         if (multiplier == 0) {
                             currentCalcDmg = 1;
                         }
-
-                        // 仅在检测到作弊时才生成调试字符串，节省性能
-                        /*
-                        String monsterStatus = monster.getStati().keySet().stream()
-                                .map(MonsterStatus::getChineseName)
-                                .collect(Collectors.joining(", "));
-                        if (monsterStatus.isEmpty()) {
-                            monsterStatus = "无";
-                        }
-                        elementalDebugString = String.format(
-                                "    -> 元素克制: 技能元素[%s], 怪物状态[%s], 原生抗性[%s] -> 最终效果:%s (倍率:%.2fx)\n",
-                                atkSkill.getElement().getChineseName(),
-                                monsterStatus,
-                                monster.getStats().getResistancesString(),
-                                eff.getChineseName(),
-                                multiplier
-                        );
-                        */
                     }
                 }
                 // 应用充能和元素效果对伤害进行修正
@@ -553,7 +549,12 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     if (shadowPartner) {
                         maxattack = maxattack * 2;
                     }
-                    ret.numDamage = chr.getAutoBanManager().checkDamageSegmentsHack(ret.numDamage, maxattack, ret.skill, ret.skilllevel, monster);
+                    // 使用原始段数进行检查，返回合法的段数
+                    currentLimit = chr.getAutoBanManager().checkDamageSegmentsHack(numDamageToRead, maxattack, ret.skill, ret.skilllevel, monster);
+                    // 更新全局合法段数（取最小值，确保安全）
+                    if (currentLimit < validNumDamage) {
+                        validNumDamage = currentLimit;
+                    }
                 }
             }
 
@@ -564,7 +565,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 long damage = Math.max(0, p.readInt());
 
                 // 只有在伤害段数有效时才进行伤害处理和作弊检测
-                if (j < ret.numDamage) {
+                if (j < currentLimit) {
                     /** 单次攻击的最大伤害上限 */
                     long hitDmgMax = currentCalcDmg;
                     // 处理影分身和特殊技能的伤害修正
@@ -586,7 +587,10 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                         // 如果伤害是暴击，则反转伤害值以使其在客户端上正确显示。
                         damage = -Integer.MAX_VALUE + damage - 1;
                     }
+                } else {
+                    damage = 0; // 非法段数强制为0 (Miss)
                 }
+                // 无论是否合法，都加入列表，保持包结构一致
                 allDamageNumbers.add((int) damage);
             }
             // 恢复原始伤害段数，以供下一次循环使用
@@ -673,7 +677,11 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                 finalDebugMessage.append(msg).append("\n");
             }
             // 记录玩家战斗日志
-            if (isCheat) PlayerLoggerFacade.logPlayerEventAuto(chr, DynamicCategoryManager.Category.MINOR_PLAYER_COMBAT, finalDebugMessage.toString(), "INFO");
+            if (isCheat) {
+                MapMessage msg = new MapMessage()
+                    .with("msg", finalDebugMessage.toString());
+                AuditLogger.info(LogModule.AUTOBAN, LogAction.AUTOBAN_CHEAT_DETECTED, msg);
+            }
 //            System.out.println(finalDebugMessage.toString());
         }
 
@@ -840,6 +848,9 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
             final int maxmeso = player.getBuffedValue(BuffStat.PICKPOCKET);
             List<Integer> onedList = attack.allDamage.get(monster.getObjectId());
             for (Integer eachd : onedList) {
+                // [修复] 忽略0伤害(Miss)，防止非法段数触发敛财术
+                if (eachd == 0) continue;
+
                 eachd += Integer.MAX_VALUE;
 
                 if (pickpocket.getEffect(picklv).makeChanceResult()) {

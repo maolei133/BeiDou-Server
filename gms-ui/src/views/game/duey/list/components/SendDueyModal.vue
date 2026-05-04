@@ -2,7 +2,7 @@
   <a-modal
     v-model:visible="visibleModel"
     :title="$t('duey.send.title')"
-    width="400px"
+    width="600px"
     @cancel="handleCancel"
     @before-ok="handleBeforeOk"
   >
@@ -144,58 +144,101 @@
         />
       </a-form-item>
 
-      <!-- 物品选择和数量并列 -->
-      <a-form-item field="itemId" :label="$t('duey.send.itemId')">
-        <a-input-group style="width: 100%">
-          <a-input-search
-            v-model="form.itemId"
-            :placeholder="$t('duey.send.itemId')"
-            search-button
-            style="flex: 1"
-            @search="openItemSelector"
-            @blur="handleIdBlur"
-          >
-            <template #button-icon>
-              <icon-search />
+      <!-- 物品列表 -->
+      <a-form-item :label="$t('duey.send.items')">
+        <div style="width: 100%">
+          <a-button type="outline" size="small" @click="addItem">
+            <template #icon>
+              <icon-plus />
             </template>
-          </a-input-search>
-          <a-input-number
-            v-model="form.quantity"
-            :placeholder="$t('duey.send.quantity')"
-            :min="1"
-            :max="32767"
-            hide-button
-            style="width: 100px; margin-left: 8px"
-          />
-        </a-input-group>
-      </a-form-item>
+            {{ $t('duey.send.addItem') }}
+          </a-button>
 
-      <!-- 物品信息展示 -->
-      <a-row v-if="itemInfo.name" style="margin-bottom: 20px">
-        <a-col :span="18" :offset="6">
-          <div class="item-info-container">
-            <div class="item-icon-wrapper">
-              <img :src="itemIconUrl" alt="Item Icon" class="item-icon" />
-            </div>
-            <div class="item-details">
-              <a-input v-model="itemInfo.name" readonly> </a-input>
-              <a-textarea
-                v-model="itemInfo.desc"
-                readonly
-                auto-size
-                style="margin-top: 8px"
-              />
-            </div>
-            <div v-if="isEquip" class="item-actions">
-              <a-button type="primary" size="small" @click="openEquipEditor">
+          <div
+            v-for="(item, index) in form.items"
+            :key="index"
+            class="item-row"
+          >
+            <div class="item-row-header">
+              <span>{{ $t('duey.send.item') }} {{ index + 1 }}</span>
+              <a-button
+                type="text"
+                status="danger"
+                size="mini"
+                @click="removeItem(index)"
+              >
                 <template #icon>
-                  <icon-edit />
+                  <icon-delete />
                 </template>
               </a-button>
             </div>
+            <a-input-group style="width: 100%">
+              <a-select
+                v-model="item.itemId"
+                :placeholder="$t('duey.send.itemId')"
+                allow-search
+                allow-create
+                allow-clear
+                :loading="loadingItems"
+                style="flex: 1"
+                @search="handleSearchItems"
+                @change="(val) => handleItemChange(val, index)"
+                @clear="() => handleItemClear(index)"
+                @popup-visible-change="
+                  (visible) => handleItemPopupVisibleChange(visible, index)
+                "
+              >
+                <a-option
+                  v-for="opt in itemOptions"
+                  :key="opt.id"
+                  :value="opt.id"
+                >
+                  {{ opt.name }} ({{ opt.id }})
+                </a-option>
+              </a-select>
+              <a-button @click="openItemSelector(index)">
+                <template #icon>
+                  <icon-search />
+                </template>
+              </a-button>
+              <a-input-number
+                v-model="item.qty"
+                :placeholder="$t('duey.send.quantity')"
+                :min="1"
+                :max="32767"
+                hide-button
+                style="width: 100px; margin-left: 8px"
+              />
+            </a-input-group>
+
+            <!-- 物品信息展示 -->
+            <div v-if="item.name" class="item-info-container">
+              <div class="item-icon-wrapper">
+                <img
+                  :src="getIconUrl('item', item.itemId)"
+                  alt="Item Icon"
+                  class="item-icon"
+                />
+              </div>
+              <div class="item-details">
+                <div class="item-name">{{ item.name }}</div>
+                <div v-if="isEquipItem(item.itemId)" class="item-actions">
+                  <a-button
+                    type="primary"
+                    size="mini"
+                    @click="openEquipEditor(index)"
+                  >
+                    <template #icon>
+                      <icon-edit />
+                    </template>
+                    {{ $t('duey.send.editStats') }}
+                  </a-button>
+                </div>
+              </div>
+            </div>
           </div>
-        </a-col>
-      </a-row>
+        </div>
+      </a-form-item>
 
       <a-form-item field="message" :label="$t('duey.send.message')">
         <a-textarea
@@ -209,6 +252,7 @@
 
     <ItemSelector
       v-model:visible="itemSelectorVisible"
+      :initial-id="currentItemId"
       @select="handleItemSelect"
     />
 
@@ -233,13 +277,15 @@
   import { useI18n } from 'vue-i18n';
   import { Message } from '@arco-design/web-vue';
   import useLoading from '@/hooks/loading';
-  import { sendDueyPackage, SendDueyReq } from '@/api/duey';
+  import dayjs from 'dayjs';
+  import { sendDueyPackage, SendDueyReq, DueyPackage } from '@/api/duey';
   import {
     getEquInitialInfo,
     getItemInitialInfo,
     getPlayerList,
     GiveForm,
   } from '@/api/player';
+  import { informationSearch } from '@/api/information';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import ItemSelector from '@/components/ItemSelector/index.vue';
   import PlayerSelector from '@/components/PlayerSelector/index.vue';
@@ -249,11 +295,14 @@
     IconUser,
     IconEdit,
     IconClose,
+    IconPlus,
+    IconDelete,
   } from '@arco-design/web-vue/es/icon';
 
   const props = defineProps<{
     visible: boolean;
     defaultReceiver?: string;
+    initialData?: DueyPackage; // 新增：传入初始数据用于编辑
   }>();
 
   const emit = defineEmits(['update:visible', 'success']);
@@ -268,34 +317,17 @@
 
   const formRef = ref();
   const form = reactive<SendDueyReq>({
+    packageId: undefined, // 新增：用于更新
     isAll: false,
     receiverIds: [],
     mesos: 0,
-    itemId: undefined,
-    quantity: 1,
     message: '',
     quick: true,
     senderName: '',
     expireDays: 30,
     expireTime: undefined,
     deliveryTime: undefined,
-    // 装备属性
-    str: undefined,
-    dex: undefined,
-    int: undefined,
-    luk: undefined,
-    hp: undefined,
-    mp: undefined,
-    watk: undefined,
-    matk: undefined,
-    wdef: undefined,
-    mdef: undefined,
-    acc: undefined,
-    avoid: undefined,
-    hands: undefined,
-    speed: undefined,
-    jump: undefined,
-    upgradeSlots: undefined,
+    items: [], // 物品列表
   });
 
   const expireType = ref('days');
@@ -304,20 +336,18 @@
   const itemSelectorVisible = ref(false);
   const playerSelectorVisible = ref(false);
   const equipEditorVisible = ref(false);
-
-  const itemInfo = reactive({
-    name: '',
-    desc: '',
-  });
-  const itemIconUrl = ref('');
-  const lastFetchedId = ref<number | undefined>(undefined);
-  const isEquip = ref(false);
+  const currentItemIndex = ref<number>(-1);
+  const currentItemId = ref<number | undefined>(undefined);
 
   const loadingPlayers = ref(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerOptions = ref<any[]>([]);
 
   const senderHistory = ref<string[]>([]);
+
+  const loadingItems = ref(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itemOptions = ref<any[]>([]);
 
   const rules = {
     // receiverIds: [{ required: true, message: t('duey.send.receiver.placeholder') }],
@@ -388,59 +418,198 @@
     }
   };
 
-  const resetEquipStats = () => {
-    form.str = undefined;
-    form.dex = undefined;
-    form.int = undefined;
-    form.luk = undefined;
-    form.hp = undefined;
-    form.mp = undefined;
-    form.watk = undefined;
-    form.matk = undefined;
-    form.wdef = undefined;
-    form.mdef = undefined;
-    form.acc = undefined;
-    form.avoid = undefined;
-    form.hands = undefined;
-    form.speed = undefined;
-    form.jump = undefined;
-    form.upgradeSlots = undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getAttr = (data: any, keys: string[]) => {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const key of keys) {
+      if (data[key] !== undefined && data[key] !== null) return data[key];
+    }
+    return 0;
+  };
+
+  const fetchItemInfo = async (itemId: number) => {
+    try {
+      // 尝试作为装备查询
+      try {
+        const { data } = await getEquInitialInfo(itemId);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const equipData = data as any;
+        if (equipData) {
+          return {
+            name: equipData.name,
+            desc: equipData.desc,
+            isEquip: true,
+            data: equipData,
+          };
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // 尝试作为道具查询
+      try {
+        const { data } = await getItemInitialInfo(itemId);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const itemData = data as any;
+        if (itemData) {
+          return {
+            name: itemData.name,
+            desc: itemData.desc,
+            isEquip: false,
+            data: itemData,
+          };
+        }
+      } catch (e) {
+        // ignore
+      }
+    } catch (error) {
+      // ignore
+    }
+    return null;
+  };
+
+  const handleIdBlur = async (index: number) => {
+    if (!form.items || !form.items[index]) return;
+    const item = form.items[index];
+    if (!item.itemId) {
+      item.name = undefined;
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const info = await fetchItemInfo(item.itemId);
+      if (info) {
+        item.name = info.name;
+        if (info.isEquip) {
+          // 填充默认属性
+          const equipData = info.data;
+          item.str = getAttr(equipData, ['str', 'Str']);
+          item.dex = getAttr(equipData, ['dex', 'Dex']);
+          item.int = getAttr(equipData, ['int', 'Int', 'intel', 'Intel']);
+          item.luk = getAttr(equipData, ['luk', 'Luk']);
+          item.hp = getAttr(equipData, ['hp', 'Hp', 'HP']);
+          item.mp = getAttr(equipData, ['mp', 'Mp', 'MP']);
+          item.watk = getAttr(equipData, ['pAtk', 'pad', 'watk', 'Watk']);
+          item.matk = getAttr(equipData, ['mAtk', 'mad', 'matk', 'Matk']);
+          item.wdef = getAttr(equipData, ['pDef', 'pdd', 'wdef', 'Wdef']);
+          item.mdef = getAttr(equipData, ['mDef', 'mdd', 'mdef', 'Mdef']);
+          item.acc = getAttr(equipData, ['acc', 'Acc']);
+          item.avoid = getAttr(equipData, ['avoid', 'eva', 'Avoid']);
+          item.hands = getAttr(equipData, ['hands', 'Hands']);
+          item.speed = getAttr(equipData, ['speed', 'Speed']);
+          item.jump = getAttr(equipData, ['jump', 'Jump']);
+          item.upgradeSlots = getAttr(equipData, [
+            'upgradeSlot',
+            'tuc',
+            'upgradeSlots',
+          ]);
+          item.level = getAttr(equipData, ['level', 'Level']);
+          item.itemLevel = getAttr(equipData, ['itemLevel', 'ItemLevel']) || 1;
+          item.vicious = getAttr(equipData, ['vicious', 'Vicious']);
+          item.flag = getAttr(equipData, ['flag', 'Flag']);
+        }
+      } else {
+        Message.warning(t('duey.send.item.notFound'));
+        item.name = undefined;
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addItem = () => {
+    if (!form.items) form.items = [];
+    form.items.push({
+      itemId: undefined as unknown as number, // 初始为空
+      qty: 1,
+    });
   };
 
   watch(
     () => props.visible,
-    (val) => {
+    async (val) => {
       if (val) {
         // Reset form
         formRef.value?.resetFields();
+        form.packageId = undefined; // 重置 packageId
         form.isAll = false;
         form.receiverIds = [];
         form.mesos = 0;
-        form.itemId = undefined;
-        form.quantity = 1;
         form.message = '';
         form.quick = true;
         form.senderName = '';
         form.expireDays = 30;
         form.expireTime = undefined;
         form.deliveryTime = undefined;
-        // Reset equip stats
-        resetEquipStats();
+        form.items = [];
 
         expireType.value = 'days';
         expireDateStr.value = undefined;
         deliveryDateStr.value = undefined;
-        itemInfo.name = '';
-        itemInfo.desc = '';
-        itemIconUrl.value = '';
-        lastFetchedId.value = undefined;
-        isEquip.value = false;
 
         loadSenderHistory();
+        itemOptions.value = [];
 
         if (props.defaultReceiver) {
           // 如果有默认收件人，尝试搜索并选中
           handleSearchPlayers(props.defaultReceiver);
+        }
+
+        // 如果传入了 initialData，进行回显
+        if (props.initialData) {
+          const data = props.initialData;
+          form.packageId = data.packageId; // 设置 packageId
+          form.receiverIds = [data.receiverId];
+          // 预加载收件人信息以显示名字
+          if (data.receiverName) {
+            playerOptions.value = [
+              { id: data.receiverId, name: data.receiverName },
+            ];
+          }
+
+          form.senderName = data.senderName;
+          form.mesos = data.mesos;
+          form.message = data.message;
+          form.quick = data.type === 1;
+
+          // **关键修复**：从 data.item (单个对象) 中获取物品信息
+          if (data.item) {
+            const itemToEdit = { ...data.item };
+
+            // **关键修复**：将后端返回的 `id` 和 `qty` 字段重命名以匹配表单 v-model
+            itemToEdit.itemId = itemToEdit.id || itemToEdit.itemId;
+            itemToEdit.qty = itemToEdit.qty || itemToEdit.quantity;
+            if ('id' in itemToEdit) delete itemToEdit.id;
+            if ('quantity' in itemToEdit) delete itemToEdit.quantity;
+
+            form.items = [itemToEdit];
+
+            // **关键修复**：主动触发一次物品信息查询，以确保显示完整信息
+            if (itemToEdit.itemId) {
+              await handleIdBlur(0);
+            }
+          }
+
+          // 处理过期时间
+          if (data.expireTime) {
+            expireType.value = 'date';
+            expireDateStr.value = dayjs(data.expireTime).format(
+              'YYYY-MM-DD HH:mm:ss'
+            );
+            form.expireTime = new Date(data.expireTime).getTime();
+          }
+
+          // 处理配送时间
+          if (data.deliveryTime) {
+            deliveryDateStr.value = dayjs(data.deliveryTime).format(
+              'YYYY-MM-DD HH:mm:ss'
+            );
+            form.deliveryTime = new Date(data.deliveryTime).getTime();
+          }
+        } else {
+          // 默认添加一个空物品行
+          addItem();
         }
       }
     }
@@ -477,93 +646,19 @@
     }
   });
 
-  const handleIdBlur = async () => {
-    if (!form.itemId) {
-      itemInfo.name = '';
-      itemInfo.desc = '';
-      itemIconUrl.value = '';
-      lastFetchedId.value = undefined;
-      isEquip.value = false;
-      return;
-    }
-
-    if (form.itemId === lastFetchedId.value) {
-      return;
-    }
-    lastFetchedId.value = form.itemId;
-
-    setLoading(true);
-    try {
-      itemInfo.name = '';
-      itemInfo.desc = '';
-      itemIconUrl.value = '';
-      isEquip.value = false;
-
-      // 尝试作为装备查询
-      try {
-        const { data } = await getEquInitialInfo(form.itemId);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const equipData = data as any;
-        if (equipData) {
-          itemInfo.name = equipData.name;
-          itemInfo.desc = equipData.desc;
-          itemIconUrl.value = getIconUrl('item', form.itemId);
-          isEquip.value = true;
-
-          // 填充默认属性
-          form.str = equipData.str || 0;
-          form.dex = equipData.dex || 0;
-          form.int = equipData.int || 0;
-          form.luk = equipData.luk || 0;
-          form.hp = equipData.hp || 0;
-          form.mp = equipData.mp || 0;
-          form.watk = equipData.pAtk || equipData.pad || 0;
-          form.matk = equipData.mAtk || equipData.mad || 0;
-          form.wdef = equipData.pDef || equipData.pdd || 0;
-          form.mdef = equipData.mDef || equipData.mdd || 0;
-          form.acc = equipData.acc || 0;
-          form.avoid = equipData.avoid || equipData.eva || 0;
-          form.hands = equipData.hands || 0;
-          form.speed = equipData.speed || 0;
-          form.jump = equipData.jump || 0;
-          form.upgradeSlots = equipData.upgradeSlot || equipData.tuc || 0;
-
-          Message.success(t('account.player.equip.success'));
-          return;
-        }
-      } catch (e) {
-        // ignore
-      }
-
-      // 尝试作为道具查询
-      try {
-        const { data } = await getItemInitialInfo(form.itemId);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const itemData = data as any;
-        if (itemData) {
-          itemInfo.name = itemData.name;
-          itemInfo.desc = itemData.desc;
-          itemIconUrl.value = getIconUrl('item', form.itemId);
-          return;
-        }
-      } catch (e) {
-        // ignore
-      }
-
-      Message.warning('未找到该物品信息');
-      // 如果未找到物品信息，重置相关状态
-      itemInfo.name = '';
-      itemInfo.desc = '';
-      itemIconUrl.value = '';
-      isEquip.value = false;
-    } catch (error) {
-      // ignore
-    } finally {
-      setLoading(false);
+  const removeItem = (index: number) => {
+    if (form.items) {
+      form.items.splice(index, 1);
     }
   };
 
-  const openItemSelector = () => {
+  const openItemSelector = (index: number) => {
+    currentItemIndex.value = index;
+    if (form.items && form.items[index]) {
+      currentItemId.value = form.items[index].itemId;
+    } else {
+      currentItemId.value = undefined;
+    }
     itemSelectorVisible.value = true;
   };
 
@@ -573,73 +668,11 @@
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleItemSelect = async (item: any) => {
-    form.itemId = item.id;
-    // 如果是装备，直接使用返回的属性
-    if (item.type === 'Eqp' || item.type === 'eqp') {
-      // 尝试从后端获取详细属性，因为搜索列表可能不包含所有属性
-      try {
-        const { data } = await getEquInitialInfo(item.id);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const equipData = data as any;
-        if (equipData) {
-          form.str = equipData.str || 0;
-          form.dex = equipData.dex || 0;
-          form.int = equipData.int || 0;
-          form.luk = equipData.luk || 0;
-          form.hp = equipData.hp || 0;
-          form.mp = equipData.mp || 0;
-          form.watk = equipData.pAtk || equipData.pad || 0;
-          form.matk = equipData.mAtk || equipData.mad || 0;
-          form.wdef = equipData.pDef || equipData.pdd || 0;
-          form.mdef = equipData.mDef || equipData.mdd || 0;
-          form.acc = equipData.acc || 0;
-          form.avoid = equipData.avoid || equipData.eva || 0;
-          form.hands = equipData.hands || 0;
-          form.speed = equipData.speed || 0;
-          form.jump = equipData.jump || 0;
-          form.upgradeSlots = equipData.upgradeSlot || equipData.tuc || 0;
-
-          itemInfo.name = equipData.name;
-          itemInfo.desc = equipData.desc;
-          itemIconUrl.value = getIconUrl('item', item.id);
-          isEquip.value = true;
-          lastFetchedId.value = item.id;
-          Message.success(t('account.player.equip.success'));
-          itemSelectorVisible.value = false;
-          return;
-        }
-      } catch (e) {
-        // 如果获取失败，尝试使用 item 中的属性（如果有）
-      }
-
-      // Fallback to item properties if API fails or returns empty
-      form.str = item.str || 0;
-      form.dex = item.dex || 0;
-      form.int = item.int || 0;
-      form.luk = item.luk || 0;
-      form.hp = item.hp || 0;
-      form.mp = item.mp || 0;
-      form.watk = item.watk || item.pAtk || item.pad || 0;
-      form.matk = item.matk || item.mAtk || item.mad || 0;
-      form.wdef = item.wdef || item.pDef || item.pdd || 0;
-      form.mdef = item.mdef || item.mDef || item.mdd || 0;
-      form.acc = item.acc || 0;
-      form.avoid = item.avoid || item.eva || 0;
-      form.hands = item.hands || 0;
-      form.speed = item.speed || 0;
-      form.jump = item.jump || 0;
-      form.upgradeSlots =
-        item.upgradeSlots || item.upgradeSlot || item.tuc || 0;
-
-      itemInfo.name = item.name;
-      itemInfo.desc = item.desc;
-      itemIconUrl.value = getIconUrl('item', item.id);
-      isEquip.value = true;
-      lastFetchedId.value = item.id;
-      // 这里不提示成功，因为没有从后端获取到详细属性，可能只是使用了列表中的基本信息
-      // Message.success(t('account.player.equip.success'));
-    } else {
-      handleIdBlur();
+    if (currentItemIndex.value !== -1 && form.items) {
+      const targetItem = form.items[currentItemIndex.value];
+      targetItem.itemId = item.id;
+      // 强制触发 handleIdBlur 的查询逻辑，确保获取完整属性
+      await handleIdBlur(currentItemIndex.value);
     }
     itemSelectorVisible.value = false;
   };
@@ -658,8 +691,7 @@
     // players is array of OnlinePlayer
     const ids = players.map((p) => p.id);
     // Merge with existing ids, avoid duplicates
-    const newIds = [...new Set([...(form.receiverIds || []), ...ids])];
-    form.receiverIds = newIds;
+    form.receiverIds = [...new Set([...(form.receiverIds || []), ...ids])];
 
     // Update options to ensure selected players are visible
     players.forEach((p) => {
@@ -669,55 +701,99 @@
     });
   };
 
-  const openEquipEditor = () => {
-    if (!isEquip.value) return;
+  const bitmaskToArray = (mask: number | undefined): number[] => {
+    if (!mask) return [];
+    const flags = [0x01, 0x02, 0x04, 0x08, 0x10, 0x80, 0x100, 0x200];
+    return flags.filter((f) => (mask & f) === f);
+  };
 
-    // 将当前 form 的属性映射到 equipFormData
+  const isEquipItem = (itemId: number) => {
+    return Math.floor(itemId / 1000000) === 1;
+  };
+
+  const openEquipEditor = (index: number) => {
+    if (!form.items || !form.items[index]) return;
+    const item = form.items[index];
+    if (!isEquipItem(item.itemId)) return;
+
+    currentItemIndex.value = index;
+
+    // 将当前 item 的属性映射到 equipFormData
     equipFormData.value = {
       type: 6,
-      id: form.itemId,
-      str: form.str,
-      dex: form.dex,
-      int: form.int,
-      luk: form.luk,
-      hp: form.hp,
-      mp: form.mp,
-      pAtk: form.watk,
-      mAtk: form.matk,
-      pDef: form.wdef,
-      mDef: form.mdef,
-      acc: form.acc,
-      avoid: form.avoid,
-      hands: form.hands,
-      speed: form.speed,
-      jump: form.jump,
-      upgradeSlot: form.upgradeSlots,
-      expireType: 0, // 默认永久，或者根据需要传递
+      id: item.itemId,
+      str: item.str,
+      dex: item.dex,
+      int: item.int,
+      luk: item.luk,
+      hp: item.hp,
+      mp: item.mp,
+      pAtk: item.watk,
+      mAtk: item.matk,
+      pDef: item.wdef,
+      mDef: item.mdef,
+      acc: item.acc,
+      avoid: item.avoid,
+      hands: item.hands,
+      speed: item.speed,
+      jump: item.jump,
+      upgradeSlot: item.upgradeSlots,
+      level: item.level,
+      itemLevel: item.itemLevel,
+      flag: bitmaskToArray(item.flag),
+      vicious: item.vicious,
+      owner: item.owner,
+      expire: item.expiration,
+      expireType: item.expiration ? 2 : 0, // 默认永久，或者根据需要传递
+      expireDate: item.expiration
+        ? dayjs(item.expiration).format('YYYY-MM-DD HH:mm:ss')
+        : undefined,
     };
     equipEditorVisible.value = true;
   };
 
   const handleEquipEditorSubmit = (data: GiveForm) => {
-    // 将编辑后的属性回填到 form
-    form.str = data.str;
-    form.dex = data.dex;
-    form.int = data.int;
-    form.luk = data.luk;
-    form.hp = data.hp;
-    form.mp = data.mp;
-    form.watk = data.pAtk;
-    form.matk = data.mAtk;
-    form.wdef = data.pDef;
-    form.mdef = data.mDef;
-    form.acc = data.acc;
-    form.avoid = data.avoid;
-    form.hands = data.hands;
-    form.speed = data.speed;
-    form.jump = data.jump;
-    form.upgradeSlots = data.upgradeSlot;
+    if (currentItemIndex.value === -1 || !form.items) return;
+    const item = form.items[currentItemIndex.value];
+
+    // 将编辑后的属性回填到 item
+    item.str = data.str;
+    item.dex = data.dex;
+    item.int = data.int;
+    item.luk = data.luk;
+    item.hp = data.hp;
+    item.mp = data.mp;
+    item.watk = data.pAtk;
+    item.matk = data.mAtk;
+    item.wdef = data.pDef;
+    item.mdef = data.mDef;
+    item.acc = data.acc;
+    item.avoid = data.avoid;
+    item.hands = data.hands;
+    item.speed = data.speed;
+    item.jump = data.jump;
+    item.upgradeSlots = data.upgradeSlot;
+    item.level = data.level;
+    item.itemLevel = data.itemLevel;
+    item.flag = Array.isArray(data.flag)
+      ? data.flag.reduce((acc, cur) => acc | cur, 0)
+      : data.flag;
+    item.vicious = data.vicious;
+    item.owner = data.owner;
+
+    // 处理过期时间
+    if (data.expireType === 0) {
+      item.expiration = undefined;
+    } else if (data.expireType === 1 && data.expire) {
+      // 分钟
+      item.expiration = new Date().getTime() + data.expire * 60 * 1000;
+    } else if (data.expireType === 2 && data.expireDate) {
+      // 日期
+      item.expiration = new Date(data.expireDate).getTime();
+    }
 
     equipEditorVisible.value = false;
-    Message.success('装备属性已更新');
+    Message.success(t('duey.send.equip.updateSuccess'));
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -734,6 +810,11 @@
       return;
     }
 
+    // 过滤掉无效物品
+    if (form.items) {
+      form.items = form.items.filter((item) => item.itemId && item.itemId > 0);
+    }
+
     try {
       await sendDueyPackage(form);
       saveSenderHistory(form.senderName || '');
@@ -748,22 +829,106 @@
   onMounted(() => {
     loadSenderHistory();
   });
+
+  const handleSearchItems = async (value: string) => {
+    if (!value) {
+      itemOptions.value = [];
+      return;
+    }
+
+    loadingItems.value = true;
+    try {
+      const { data } = await informationSearch({
+        filter: value,
+        page: 1,
+        pageSize: 20,
+        types: ['eqp', 'consume', 'ins', 'etc', 'cash'], // 搜索所有类型
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const records = (data as any).records || [];
+      itemOptions.value = records;
+    } finally {
+      loadingItems.value = false;
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleItemChange = (value: any, index: number) => {
+    if (!form.items || !form.items[index]) return;
+    const item = form.items[index];
+
+    if (typeof value === 'string') {
+      const id = Number(value);
+      if (!Number.isNaN(id)) {
+        item.itemId = id;
+      } else if (itemOptions.value.length === 1) {
+        item.itemId = itemOptions.value[0].id;
+        Message.info(
+          t('duey.send.item.autoMatched', { name: itemOptions.value[0].name })
+        );
+      }
+    } else {
+      item.itemId = value;
+    }
+    // 触发详情查询
+    if (typeof item.itemId === 'number') {
+      handleIdBlur(index);
+    }
+  };
+
+  const handleItemClear = (index: number) => {
+    if (!form.items || !form.items[index]) return;
+    const item = form.items[index];
+    item.itemId = undefined as unknown as number;
+    item.name = undefined;
+  };
+
+  const handleItemPopupVisibleChange = (visible: boolean, index: number) => {
+    if (!visible && form.items && form.items[index]) {
+      const item = form.items[index];
+      if (
+        itemOptions.value.length === 1 &&
+        typeof item.itemId !== 'number' &&
+        item.itemId
+      ) {
+        item.itemId = itemOptions.value[0].id;
+        handleIdBlur(index);
+      }
+    }
+  };
 </script>
 
 <style scoped>
-  .item-info-container {
-    display: flex;
+  .item-row {
     border: 1px solid var(--color-neutral-3);
     padding: 10px;
     border-radius: 4px;
-    position: relative;
+    margin-bottom: 10px;
+  }
+  .item-row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: var(--color-text-2);
+  }
+  .item-info-container {
+    display: flex;
+    margin-top: 10px;
+    background-color: var(--color-fill-2);
+    padding: 8px;
+    border-radius: 4px;
   }
   .item-icon-wrapper {
-    margin-right: 16px;
+    margin-right: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 60px;
+    width: 40px;
+    height: 40px;
+    background-color: var(--color-bg-1);
+    border-radius: 4px;
   }
   .item-icon {
     max-width: 100%;
@@ -771,12 +936,13 @@
   }
   .item-details {
     flex: 1;
-    margin-right: 40px; /* 留出按钮空间 */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
-  .item-actions {
-    position: absolute;
-    right: 10px;
-    top: 10px;
+  .item-name {
+    font-weight: bold;
+    margin-bottom: 4px;
   }
   .sender-option-content {
     display: flex;

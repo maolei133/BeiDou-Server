@@ -76,4 +76,9 @@ export default {
   'informationSearch.column.desc': 'Description',
 
   'informationSearch.check.filter': 'Search text can not be empty',
+
+  'itemSelector.title': 'Item Selector',
+  'itemSelector.pagination.total': 'Total {total}',
+  'itemSelector.pagination.page': '{count} / page',
+  'itemSelector.pagination.goto': 'Go to',
 };

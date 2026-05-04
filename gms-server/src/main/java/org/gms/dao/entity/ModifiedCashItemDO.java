@@ -10,6 +10,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.Pet;
@@ -29,6 +30,7 @@ import static java.util.concurrent.TimeUnit.HOURS;
  * @author CN
  * @since 2024-08-08
  */
+@Slf4j
 @Data
 @Builder
 @NoArgsConstructor
@@ -132,6 +134,12 @@ public class ModifiedCashItemDO implements Serializable, Cloneable {
             item = ItemInformationProvider.getInstance().getEquipById(itemId);
         } else {
             item = new Item(itemId, (byte) 0, count, petid);
+        }
+
+        // 增加非空判断，防止因WZ数据缺失导致NPE
+        if (item == null) {
+            log.error("无法为 itemId 创建项目:{}。该物品可能在WZ文件中缺失。", itemId);
+            return null;
         }
 
         if (period == 1) {

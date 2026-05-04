@@ -48,7 +48,7 @@ public final class MoveSummonHandler extends AbstractMovementPacketHandler {
         if (summon != null) {
             try {
                 int movementDataStart = p.getPosition();
-                updatePosition(p, summon, 0);
+                updatePosition(p, summon, 0, c);
                 long movementDataLength = p.getPosition() - movementDataStart; //how many bytes were read by updatePosition
                 p.seek(movementDataStart);
 

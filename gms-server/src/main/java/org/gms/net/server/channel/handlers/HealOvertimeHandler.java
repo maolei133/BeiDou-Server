@@ -40,13 +40,13 @@ public final class HealOvertimeHandler extends AbstractPacketHandler {
         }
 
         AutobanManager abm = chr.getAutoBanManager();
-        int timestamp = Server.getInstance().getCurrentTimestamp();
+        long timestamp = Server.getInstance().getCurrentTime();
         p.skip(8);
 
         short healHP = p.readShort();
         if (healHP != 0) {
-            abm.setTimestamp(8, timestamp, 28);  // thanks Vcoc & Thora for pointing out d/c happening here
-            if ((abm.getLastSpam(0) + 1500) > timestamp) {
+            abm.checkActionFrequency(AutobanManager.ActionType.HEAL_HP, timestamp, 28);
+            if ((abm.getLastActionTime(AutobanManager.ActionType.HEAL_HP) + 1500) > timestamp) {
                 AutobanFactory.FAST_HP_HEALING.addPoint(abm, "HP恢复过快");
             }
 
@@ -59,17 +59,17 @@ public final class HealOvertimeHandler extends AbstractPacketHandler {
 
             chr.addHP(healHP);
             chr.getMap().broadcastMessage(chr, PacketCreator.showHpHealed(chr.getId(), healHP), false);
-            abm.spam(0, timestamp);
+            abm.recordAction(AutobanManager.ActionType.HEAL_HP, timestamp);
         }
         short healMP = p.readShort();
         if (healMP != 0 && healMP < 1000) {
-            abm.setTimestamp(9, timestamp, 28);
-            if ((abm.getLastSpam(1) + 1500) > timestamp) {
+            abm.checkActionFrequency(AutobanManager.ActionType.HEAL_MP, timestamp, 28);
+            if ((abm.getLastActionTime(AutobanManager.ActionType.HEAL_MP) + 1500) > timestamp) {
                 AutobanFactory.FAST_MP_HEALING.addPoint(abm, "MP恢复过快");
                 return;     // thanks resinate for noticing mp being gained even after detection
             }
             chr.addMP(healMP);
-            abm.spam(1, timestamp);
+            abm.recordAction(AutobanManager.ActionType.HEAL_MP, timestamp);
         }
     }
 }

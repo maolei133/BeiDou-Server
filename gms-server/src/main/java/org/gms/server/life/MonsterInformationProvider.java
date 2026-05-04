@@ -25,8 +25,10 @@ import org.gms.config.GameConfig;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.dao.entity.DropDataDO;
 import org.gms.dao.entity.DropDataGlobalDO;
+import org.gms.dao.entity.MonstercarddataDO;
 import org.gms.dao.mapper.DropDataGlobalMapper;
 import org.gms.dao.mapper.DropDataMapper;
+import org.gms.dao.mapper.MonstercarddataMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.provider.Data;
@@ -40,6 +42,8 @@ import org.gms.util.Randomizer;
 import org.gms.util.SpringContextUtil;
 
 import java.util.*;
+
+import static org.gms.dao.entity.table.MonstercarddataDOTableDef.MONSTERCARDDATA_DO;
 
 /**
  * 怪物信息提供者
@@ -69,6 +73,7 @@ public class MonsterInformationProvider {
 
     private final Map<Integer, Boolean> mobBossCache = new HashMap<>();
     private final Map<Integer, String> mobNameCache = new HashMap<>();
+    private final Map<Integer, Integer> cardMobCache = new HashMap<>();
 
     protected MonsterInformationProvider() {
         retrieveGlobal();
@@ -284,6 +289,23 @@ public class MonsterInformationProvider {
         return mobName;
     }
 
+    public Integer getMobByCardId(int cardId) {
+        if (cardMobCache.containsKey(cardId)) {
+            return cardMobCache.get(cardId);
+        }
+        
+        MonstercarddataMapper mapper = SpringContextUtil.getBean(MonstercarddataMapper.class);
+        if (mapper != null) {
+            MonstercarddataDO data = mapper.selectOneByQuery(QueryWrapper.create().where(MONSTERCARDDATA_DO.CARDID.eq(cardId)));
+            if (data != null) {
+                cardMobCache.put(cardId, data.getMobid());
+                return data.getMobid();
+            }
+        }
+        
+        return null;
+    }
+
     public final void clearDrops() {
         drops.clear();
         hasNoMultiEquipDrops.clear();
@@ -291,6 +313,7 @@ public class MonsterInformationProvider {
         dropsChancePool.clear();
         globaldrops.clear();
         continentdrops.clear();
+        cardMobCache.clear();
         retrieveGlobal();
     }
 }

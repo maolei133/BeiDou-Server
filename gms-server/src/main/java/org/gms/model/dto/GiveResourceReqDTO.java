@@ -1,12 +1,16 @@
 package org.gms.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.Setter;
 
 @Setter
 @Getter
+// 忽略在JSON中存在但在Java对象中不存在的属性，防止因前端发送未知字段而导致解析错误
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class GiveResourceReqDTO {
+    // 恢复默认映射，让Jackson自动处理驼峰命名 (e.g., "playerId" -> playerId)
     private Integer worldId;
     private Integer playerId;
     private String player;

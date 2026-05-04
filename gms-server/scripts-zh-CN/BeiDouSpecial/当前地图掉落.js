@@ -13,12 +13,16 @@ var List_Mob_All;				   //所有怪物列表
 var List_Mob_Boss;				  //BOSS列表
 var List_Mob;						   //普通怪物列表
 var namelength = 0;
+let player = null;
+var playerDrop = 0;
 
 function start(){
     if(MapObj == null) {		//首次打开进行初始化。
         MonsterInformationProvider = Java.type('org.gms.server.life.MonsterInformationProvider');//导入 怪物信息 类
         ItemInformationProvider = Java.type('org.gms.server.ItemInformationProvider');//导入 物品信息 类
         QuestInfo = Java.type('org.gms.server.quest.Quest');//导入 任务 类
+        player = cm.getPlayer();
+        playerDrop = player.getTotalDropRate();
         MapObj = cm.getMap();
         List_Mob_All = MapObj.getAllMonsters(); //获取当前地图存活的怪物数量，由于未找到获取当前地图固定怪物列表方法，故用此方法代替。
         //将怪物种类去重并按照Boss和普通怪物区分开
@@ -91,7 +95,6 @@ function levelShowDropList(mobId) {
     let msgtext = `当前查询的怪物ID [ ${mobId} ] 不存在。`;
 
     if(mob != null) {
-        let player = cm.getPlayer();
         let dropall = MonsterInformationProvider.getInstance().retrieveDrop(mobId);										 //根据怪物ID获取掉落物品列表
         let CountItems = dropall.size();																				//取掉落物品总数量
         let mobName = !mob.getName() || mob.getName() == 'MISSINGNO' ? `#o${mobId}#` : mob.getName();
@@ -127,8 +130,8 @@ function levelShowDropList(mobId) {
             Object.keys(table).forEach(key => table[key] = Math.ceil(table[key] / 2) * 2);
             msgtext += '#b' + Object.entries(table).map(([key,val]) => `${key.padEnd(val,'\t')}`).join('\t') + '#k\r\n';
             msgtext += Object.entries(dropitemlist).map(([itemId, { name, chance ,questid}]) => {
-                    let msg = `#L${itemId}##v${itemId}#\r\n#b#e${name.padEnd(table['物品名称'] + countAllSymbols(name), '\t')}#k#n\t`;
-                    msg += `${(chance + '%').padEnd(table['基础掉率'], '\t')}\t#d${(chance * player.getDropRate() * player.getFamilyDrop() + '%').padEnd(table['你的掉率'], '\t')}#k\r\n`;
+                    let msg = `#L${itemId}##v${itemId}:#\r\n#b#e${name.padEnd(table['物品名称'] + countAllSymbols(name), '\t')}#k#n\t`;
+                    msg += `${(chance + '%').padEnd(table['基础掉率'], '\t')}\t#d${(chance * playerDrop + '%').padEnd(table['你的掉率'], '\t')}#k\r\n`;
                     msg += questid > 0 ? '#r[任务道具]#k '+QuestInfo.getInstance(questid).getName()+'\r\n' : '';
                     msg += '#l';
                     return msg;

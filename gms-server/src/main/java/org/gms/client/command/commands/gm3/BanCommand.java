@@ -60,10 +60,10 @@ public class BanCommand extends Command {
             String ip = target.getClient().getRemoteAddress();
 
             // 尝试封禁IP并通知GM结果
-            if (!target.getClient().banIP()) {
-                c.getPlayer().message(I18nUtil.getMessage("BanCommand.message3"));
-                c.getPlayer().message(I18nUtil.getMessage("BanCommand.message4", target.getName(), ip));
-            }
+//            if (!target.getClient().banIP()) {
+//                c.getPlayer().message(I18nUtil.getMessage("BanCommand.message3"));
+//                c.getPlayer().message(I18nUtil.getMessage("BanCommand.message4", target.getName(), ip));
+//            }
             // 向目标玩家发送封禁通知
             target.yellowMessage(I18nUtil.getMessage("BanCommand.message6", c.getPlayer().getName()) + "，" + I18nUtil.getMessage("BanCommand.message7", reason));
             target.dropMessage(1, "您已被GM封禁，5秒后将断开连接\r\n\r\n【原因】\r\n" + reason);

@@ -21,7 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.gms.client;
 
-import com.mybatisflex.core.row.*;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -66,6 +65,10 @@ import org.gms.server.SystemRescue;
 import org.gms.server.ThreadManager;
 import org.gms.server.TimerManager;
 import org.gms.server.life.Monster;
+import org.gms.server.logging.AuditContext;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.server.maps.FieldLimit;
 import org.gms.server.maps.MapleMap;
 import org.gms.server.maps.MiniDungeonInfo;
@@ -154,6 +157,9 @@ public class Client extends ChannelInboundHandlerAdapter {
     @Getter
     @Setter
     private String tempPassword = null;
+    
+    // 缓存已加载的角色列表，用于角色选择时快速获取信息
+    private List<Character> loadedChars = new ArrayList<>();
 
     public enum Type {
         LOGIN,
@@ -223,14 +229,22 @@ public class Client extends ChannelInboundHandlerAdapter {
         if (handler != null && handler.validateState(this)) {
             try {
                 ThreadLocalUtil.setCurrentClient(this);
+                AuditContext.set(this);
                 MonitoredChrLogger.logPacketIfMonitored(this, opcode, packet.getBytes());
                 handler.handlePacket(packet, this);
             } catch (final Throwable t) {
                 final String chrInfo = player != null ? player.getName() + " 地图 [" + player.getMap().getMapName() + "] (" + player.getMapId() + ")" : "?";
-                log.warn("封包处理器 {} 出错. 账号 {}, 玩家 {}. 封包: {}", handler.getClass().getSimpleName(),
+                log.error("封包处理器 {} 出错. 账号 {}, 玩家 {}. 封包: {}", handler.getClass().getSimpleName(),
                         getAccountName(), chrInfo, packet, t);
+                AuditLogger.error(
+                        LogModule.SYSTEM,
+                        LogAction.SYSTEM_ERROR,
+                        "封包处理器 " + handler.getClass().getSimpleName() + " 出错. 账号 " + getAccountName() + ", 玩家 " + chrInfo + ". 封包: " + packet,
+                        t
+                );
                 enableActions();//解除客户端假死
             } finally {
+                AuditContext.clear();
                 ThreadLocalUtil.removeCurrentClient();
             }
         }
@@ -347,13 +361,31 @@ public class Client extends ChannelInboundHandlerAdapter {
     public List<Character> loadCharacters(int serverId) {
         List<Character> chars = new ArrayList<>(15);
         try {
-            for (CharNameAndId cni : loadCharactersInternal(serverId)) {
+/*            for (CharNameAndId cni : loadCharactersInternal(serverId)) {
                 chars.add(Character.loadCharFromDB(cni.id, this, false));
-            }
+            }*/
+            // 只加载当前账号所有角色的外观数据
+            chars.addAll(Character.fromCharactersViewList(serverId,getAccID()));
         } catch (Exception e) {
             e.printStackTrace();
         }
+        // 缓存加载的角色列表
+        this.loadedChars = chars;
         return chars;
+    }
+    
+    /**
+     * 从缓存中获取已加载的角色
+     * @param charId 角色ID
+     * @return 角色对象，如果未找到则返回 null
+     */
+    public Character getLoadedChar(int charId) {
+        for (Character chr : loadedChars) {
+            if (chr.getId() == charId) {
+                return chr;
+            }
+        }
+        return null;
     }
 
     public List<String> loadCharacterNames(int worldId) {
@@ -1041,6 +1073,7 @@ public class Client extends ChannelInboundHandlerAdapter {
         this.birthday = null;
         this.engines = null;
         this.player = null;
+        this.loadedChars.clear();
     }
 
     public void setCharacterOnSessionTransitionState(int cid) {

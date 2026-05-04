@@ -141,6 +141,7 @@
   const formRef = ref();
   const banType = ref('permanent');
   const banUntilDate = ref<string | undefined>(undefined);
+  const submitting = ref(false);
 
   const form = ref({
     reason: '',
@@ -203,6 +204,7 @@
         banType.value = 'permanent';
         banUntilDate.value = undefined;
         banInfo.value = { ips: [], macs: [], hwid: '' };
+        submitting.value = false;
         fetchBanInfo();
       }
     }
@@ -213,8 +215,11 @@
   };
 
   const handleSubmit = async () => {
+    if (submitting.value) return false;
     const res = await formRef.value?.validate();
     if (res) return false;
+
+    submitting.value = true;
 
     // 仅临时封禁时，不能永久封禁账号（这里逻辑有点绕，其实是如果选择了时长或日期，就不是永久封禁）
     // 但需求是“仅临时封禁，则不能永久封禁账号”，这通常意味着如果选择了时长，后端不应该把账号设为永久封禁
@@ -226,12 +231,14 @@
     } else if (banType.value === 'duration') {
       if (!form.value.duration || form.value.duration <= 0) {
         Message.warning(t('account.player.ban.duration.invalid'));
+        submitting.value = false;
         return false;
       }
       form.value.banUntil = undefined;
     } else if (banType.value === 'date') {
       if (!banUntilDate.value) {
         Message.warning(t('account.player.ban.until.required'));
+        submitting.value = false;
         return false;
       }
       form.value.banUntil = new Date(banUntilDate.value).getTime();
@@ -246,9 +253,12 @@
       });
       Message.success(t('message.success'));
       emit('success');
+      emit('update:visible', false);
       return true;
     } catch (error) {
       return false;
+    } finally {
+      submitting.value = false;
     }
   };
 </script>

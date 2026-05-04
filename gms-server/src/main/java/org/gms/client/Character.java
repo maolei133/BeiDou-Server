@@ -499,6 +499,8 @@ public class Character extends AbstractCharacterObject {
     private static final HpMpAlertService hpMpAlertService = ServerManager.getApplicationContext().getBean(HpMpAlertService.class);
     private static final InventoryService inventoryService = ServerManager.getApplicationContext().getBean(InventoryService.class);
     private static final QuestService questService = ServerManager.getApplicationContext().getBean(QuestService.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+    private static final ItemRecoveryService itemRecoveryaservic = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
 
     private Character() {
         super.setListener(new CharacterListener(this));
@@ -1528,6 +1530,8 @@ public class Character extends AbstractCharacterObject {
         } else {
             keymap.remove(key);
         }
+        // [新增] 实时保存按键映射
+        characterService.saveKeymap(id, keymap);
     }
 
     public void changeQuickslotKeybinding(byte[] aQuickslotKeyMapped) {
@@ -2072,6 +2076,12 @@ public class Character extends AbstractCharacterObject {
             sendPacket(PacketCreator.updateSkill(skill.getId(), newLevel, newMasterlevel, -1)); //Shouldn't use expiration anymore :)
             characterService.removeSkill(SkillsDO.builder().skillid(skill.getId()).characterid(getId()).build());
         }
+        // [新增] 实时保存技能 (增量)
+        if (newLevel > -1) {
+            Map<Skill, SkillEntry> singleSkill = new HashMap<>();
+            singleSkill.put(skill, skills.get(skill));
+            characterService.saveSkills(id, singleSkill,false);
+        }
     }
 
     public void changeTab(int tab) {
@@ -2289,10 +2299,12 @@ public class Character extends AbstractCharacterObject {
                                     for (Character partymem : mpcs) {   // 遍历队友
                                         if (partymem.isLoggedInWorld()) { // 检查是否在线
                                             partymem.gainMeso(mesosamm, true, true, false); // 分配金币
-                                        }
+                                            traceabilityService.log(null, partymem, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_PICKUP, mapitem.getMeso(), String.format("[%d] %s 拾取 %d",this.getId(),this.getName(),mapitem.getMeso()), "金币-分配(特殊地图)");
+                                         }
                                     }
                                 } else {
                                     this.gainMeso(mapitem.getMeso(), true, true, false); // 自己获得全部金币
+                                    traceabilityService.log(null, this, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_PICKUP, mapitem.getMeso(), null, "金币(特殊地图)");
                                 }
 
                                 this.getMap().pickItemDrop(pickupPacket, mapitem); // 从地图移除物品
@@ -2307,8 +2319,11 @@ public class Character extends AbstractCharacterObject {
                                 }
 
                                 this.getMap().pickItemDrop(pickupPacket, mapitem); // 从地图移除物品
+                                traceabilityService.log(mItem, this, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_PICKUP, mItem.getQuantity(), null, "NX卡(特殊地图)");
                             } else if (InventoryManipulator.addFromDrop(client, mItem, true)) { // 尝试添加物品到背包
                                 this.getMap().pickItemDrop(pickupPacket, mapitem); // 从地图移除物品
+                                itemRecoveryaservic.processItemPickup(mItem.getUid());
+                                traceabilityService.log(mItem, this, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_PICKUP, mItem.getQuantity(), null, "物品(特殊地图)");
                             } else {
                                 enableActions();                        // 启用玩家动作
                                 return;                                 // 返回
@@ -2334,10 +2349,12 @@ public class Character extends AbstractCharacterObject {
                             for (Character partymem : mpcs) {           // 遍历队友
                                 if (partymem.isLoggedInWorld()) {       // 检查是否在线
                                     partymem.gainMeso(mesosamm, true, true, false); // 分配金币
+                                    traceabilityService.log(null, partymem, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_PICKUP, mapitem.getMeso(), String.format("[%d] %s 拾取 %d",this.getId(),this.getName(),mapitem.getMeso()), "金币-分配");
                                 }
                             }
                         } else {
                             this.gainMeso(mapitem.getMeso(), true, true, false); // 自己获得全部金币
+                            traceabilityService.log(null, this, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_PICKUP, mapitem.getMeso(), null, "金币");
                         }
                     } else if (mItem.getItemId() / 10000 == 243) {      // 处理脚本物品
                         ScriptedItem info = ii.getScriptedItemInfo(mItem.getItemId()); // 获取脚本信息
@@ -2353,13 +2370,15 @@ public class Character extends AbstractCharacterObject {
                         // Add NX to account, show effect and make item disappear
                         int nxGain = (mapitem.getItemId() == ItemId.NX_CARD_100 ? 100 : 250) * mItem.getQuantity(); //计算点券数量
                         this.getCashShop().gainCash(CashShop.NX_CREDIT, nxGain); // 增加点券
-
+                        traceabilityService.log(mItem, this, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_PICKUP, mItem.getQuantity(), null, "NX卡");
                         if (GameConfig.getServerBoolean("use_announce_nx_coupon_loot")) { // 检查是否广播
                             showHint(I18nUtil.getMessage("Character.pickupItem.message1", nxGain, this.getCashShop().getCash(CashShop.NX_CREDIT)), 300); // 显示提示
                             //showHint("捡到 #e#b" + nxGain + " NX#k#n (" + this.getCashShop().getCash(CashShop.NX_CREDIT) + " NX)", 300);
                         }
                     } else if (applyConsumeOnPickup(mItem.getItemId())) {//此段判断为处理捡取治疗道具和怪物卡加入图鉴
                     } else if (InventoryManipulator.addFromDrop(client, mItem, true)) { // 尝试添加普通物品到背包
+                        itemRecoveryaservic.processItemPickup(mItem.getUid());
+                        traceabilityService.log(mItem, this, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_PICKUP, mItem.getQuantity(), null, null);
                         if (mItem.getItemId() == ItemId.ARPQ_SPIRIT_JEWEL) { // 检查是否是特殊物品
                             updateAriantScore();                        // 更新分数
                         }
@@ -2462,6 +2481,8 @@ public class Character extends AbstractCharacterObject {
         }
         bl.remove(otherCid);
         sendPacket(PacketCreator.updateBuddylist(getBuddylist().getBuddies()));
+        // [新增] 实时保存好友列表
+        characterService.saveBuddies(id, buddylist);
         nextPendingRequest(client);
     }
 
@@ -3461,6 +3482,8 @@ public class Character extends AbstractCharacterObject {
 
         if (gain != 0) {
             updateSingleStat(Stat.MESO, (int) nextMeso, enableActions);
+            // [新增] 实时保存金币
+            characterService.update(CharactersDO.builder().id(id).meso((int)nextMeso).build());
             if (show) {
                 sendPacket(PacketCreator.getShowMesoGain(gain, inChat));
             }
@@ -5001,6 +5024,17 @@ public class Character extends AbstractCharacterObject {
         return rate / 100;
     }
 
+    public float getTotalMesoRate() {
+        return getCouponMesoRate() * getCardRate(0);
+    }
+
+    public float getTotalDropRate() {
+        return getDropRate() * getFamilyDrop() * getCardRate(1);
+    }
+
+    public float getTotalBossDropRate() {
+        return getBossDropRate() * getCardRate(1);
+    }
     public Family getFamily() {
         if (familyEntry != null) {
             return familyEntry.getFamily();
@@ -6589,6 +6623,73 @@ public class Character extends AbstractCharacterObject {
         updateRemainingSp(remainingSp, GameConstants.getSkillBook(job.getId()));
     }
 
+    /**
+     * 加载账号所有角色预览数据
+     * @param accountId
+     * @return
+     */
+    public static List<Character> fromCharactersViewList(int worldId,int accountId) {
+        List<Character> CharsList = new ArrayList<>();
+        List<CharactersDO> charactersDOList = characterService.getCharactersViewByAccountId(worldId,accountId);
+        for (CharactersDO charactersDO : charactersDOList) {
+            CharsList.add(fromCharactersViewDO(charactersDO));
+        }
+        return CharsList;
+    }
+    /**
+     * 加载角色预览数据
+     * @param charactersDO
+     * @return
+     */
+    public static Character fromCharactersViewDO(CharactersDO charactersDO) {
+        Character chr = new Character();
+        chr.setId(charactersDO.getId());
+        chr.setName(charactersDO.getName());
+        chr.setLevel(charactersDO.getLevel());
+        chr.setFame(charactersDO.getFame());
+        chr.setQuestFame(charactersDO.getFquest());
+        chr.setStr(charactersDO.getAttrStr());
+        chr.setDex(charactersDO.getAttrDex());
+        chr.setInt(charactersDO.getAttrInt());
+        chr.setLuk(charactersDO.getAttrLuk());
+        chr.setExp(charactersDO.getExp());
+        chr.setGachaExp(charactersDO.getGachaexp());
+        chr.setHp(charactersDO.getHp());
+        chr.setMaxHp(charactersDO.getMaxhp());
+        chr.setMp(charactersDO.getMp());
+        chr.setMaxMp(charactersDO.getMaxmp());
+        chr.setGMLevel(charactersDO.getGm());
+        chr.setSkinColor(SkinColor.getById(charactersDO.getSkincolor()));
+        chr.setGender(charactersDO.getGender());
+        chr.setJob(Job.getById(charactersDO.getJob()));
+        chr.setHair(charactersDO.getHair());
+        chr.setFace(charactersDO.getFace());
+        chr.setAccountId(charactersDO.getAccountid());
+        chr.setMapId(charactersDO.getMap());
+        chr.setWorld(charactersDO.getWorld());
+        chr.setRank(charactersDO.getRank());
+        chr.setRankMove(charactersDO.getRankMove());
+        chr.setJobRank(charactersDO.getJobRank());
+        chr.setJobRankMove(charactersDO.getJobRankMove());
+        chr.setGuildId(charactersDO.getGuildid());
+        chr.setGuildRank(charactersDO.getGuildrank());
+        chr.setAllianceRank(charactersDO.getAllianceRank());
+        chr.setFamilyId(charactersDO.getFamilyId());
+
+        // 加载角色外观数据
+        List<InventorySearchRtnDTO> equippedItems = inventoryService.getInventoryList(
+                InventorySearchReqDTO.builder()
+                        .characterId(charactersDO.getId())
+                        .inventoryType(InventoryType.EQUIPPED.getType())
+                        .build()
+        );
+
+        Inventory equipInventory = chr.getInventory(InventoryType.EQUIPPED);
+        for (InventorySearchRtnDTO itemDTO : equippedItems) {
+            equipInventory.addItemFromDB(itemDTO.toItem());
+        }
+        return chr;
+    }
     public static Character fromCharactersDO(CharactersDO charactersDO, Client client) {
         Character chr = new Character();
         chr.setClient(client);
@@ -6971,7 +7072,7 @@ public class Character extends AbstractCharacterObject {
             synchronized (quests) {
                 for (QuestStatus qs : getQuestValues()) {
                     lastQuestProcessed = qs.getQuest().getId();
-                    if (qs.getStatus() == QuestStatus.Status.COMPLETED || qs.getQuest().canComplete(this, null)) {
+                    if (qs.getStatus() != QuestStatus.Status.STARTED || qs.getQuest().canComplete(this, null)) {
                         continue;
                     }
 
@@ -6980,11 +7081,13 @@ public class Character extends AbstractCharacterObject {
                         if (qs.getInfoNumber() > 0) {
                             announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, true);
                         }
+                        // [修改] 调用单个任务更新方法，实现实时保存
+                        questService.updateQuestStatus(this.id, qs);
                     }
                 }
             }
         } catch (Exception e) {
-            log.warn("Character.mobKilled. chrId {}, last quest processed: {}", this.id, lastQuestProcessed, e);
+            log.warn("角色击杀怪物. 角色ID {}, 最后处理的任务: {}", this.id, lastQuestProcessed, e);
         }
     }
 
@@ -7551,6 +7654,8 @@ public class Character extends AbstractCharacterObject {
     public void saveLocation(String type) {
         Portal closest = map.findClosestPortal(getPosition());
         savedLocations[SavedLocationType.fromString(type).ordinal()] = new SavedLocation(getMapId(), closest != null ? closest.getId() : 0);
+        // [新增] 实时保存地图位置
+        characterService.saveSavedLocations(id, savedLocations);
     }
 
     public final boolean insertNewChar(CharacterFactoryRecipe recipe) {
@@ -8432,6 +8537,8 @@ public class Character extends AbstractCharacterObject {
 
     public void updateMacros(int position, SkillMacro updateMacro) {
         skillMacros[position] = updateMacro;
+        // [新增] 实时保存技能宏
+        characterService.saveSkillMacros(id, skillMacros);
     }
 
     public void updatePartyMemberHP() {
@@ -8461,8 +8568,12 @@ public class Character extends AbstractCharacterObject {
             Quest iq = Quest.getInstance(infoNumber);
             QuestStatus iqs = getQuest(iq);
             iqs.setProgress(0, progress);
+            // [修改] 调用单个任务更新方法，实现实时保存
+            questService.updateQuestStatus(this.id, iqs);
         } else {
             qs.setProgress(infoNumber, progress);   // quest progress is thoroughly a string match, infoNumber is actually another questid
+            // [修改] 调用单个任务更新方法，实现实时保存
+            questService.updateQuestStatus(this.id, qs);
         }
 
         announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, false);
@@ -8532,28 +8643,35 @@ public class Character extends AbstractCharacterObject {
         synchronized (quests) {
             quests.put(qs.getQuestID(), qs);
         }
+
         if (qs.getStatus().equals(QuestStatus.Status.STARTED)) {
             announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, false);
             if (qs.getInfoNumber() > 0) {
                 announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, true);
             }
             announceUpdateQuest(DelayedQuestUpdate.INFO, qs);
+            // [修改] 任务开始或进度更新时，调用updateQuestStatus
+            // 该方法会处理插入或更新逻辑
+            questService.updateQuestStatus(this.id, qs);
         } else if (qs.getStatus().equals(QuestStatus.Status.COMPLETED)) {
             Quest mquest = qs.getQuest();
             short questid = mquest.getId();
             if (!mquest.isSameDayRepeatable() && !Quest.isExploitableQuest(questid)) {
                 awardQuestPoint(GameConfig.getServerInt("quest_point_per_quest_complete"));
             }
-            qs.setCompleted(qs.getCompleted() + 1);   // Jayd's idea - count quest completed
+            qs.setCompleted(qs.getCompleted() + 1);
 
             announceUpdateQuest(DelayedQuestUpdate.COMPLETE, questid, qs.getCompletionTime());
-            //announceUpdateQuest(DelayedQuestUpdate.INFO, qs); // happens after giving rewards, for non-next quests only
+            // [修改] 任务完成时，调用updateQuestStatus
+            questService.updateQuestStatus(this.id, qs);
         } else if (qs.getStatus().equals(QuestStatus.Status.NOT_STARTED)) {
+            // [修改] 任务被放弃（状态变为NOT_STARTED）时，调用deleteQuestStatus
+            // 注意：原有的 announceUpdateQuest 逻辑保持不变，因为客户端需要收到更新通知
             announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, false);
             if (qs.getInfoNumber() > 0) {
                 announceUpdateQuest(DelayedQuestUpdate.UPDATE, qs, true);
             }
-            // reminder: do not reset quest progress of infoNumbers, some quests cannot backtrack
+            questService.deleteQuestStatus(this.id, qs.getQuestID());
         }
     }
 
@@ -9549,7 +9667,9 @@ public class Character extends AbstractCharacterObject {
                 eq.setExpiration(-1);
             }
         });
-        return InventoryManipulator.addFromDrop(getClient(), baseEquip, false);
+        boolean result = InventoryManipulator.addFromDrop(getClient(), baseEquip, true);
+        if (result) traceabilityService.log(baseEquip, this, TraceabilityService.ActionType.ADMIN, TraceabilityService.ActionSourceType.ADMIN_CREATE, 1, "后台发放",null);
+        return result;
     }
 
     public void setFamilyBuff(boolean type, float exp, float drop) {

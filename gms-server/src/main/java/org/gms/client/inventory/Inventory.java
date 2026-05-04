@@ -119,6 +119,16 @@ public class Inventory implements Iterable<Item> {
         }
         return null;
     }
+    
+    public Item findByUid(long uid) {
+        if (uid <= 0) return null;
+        for (Item item : list()) {
+            if (item.getUid() == uid) {
+                return item;
+            }
+        }
+        return null;
+    }
 
     public Item findByName(String name) {
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
@@ -254,13 +264,22 @@ public class Inventory implements Iterable<Item> {
                 inventory.put(dSlot, source);
                 inventory.remove(sSlot);
             } else if (target.getItemId() == source.getItemId() && !ItemConstants.isRechargeable(source.getItemId()) && isSameOwner(source, target)) {
-                if (type.getType() == InventoryType.EQUIP.getType() || type.getType() == InventoryType.CASH.getType()) {
+                if (type.getType() == InventoryType.EQUIP.getType() || (type.getType() == InventoryType.CASH.getType() && (slotMax <= 1 || ItemConstants.isPet(source.getItemId()) || ItemConstants.isRing(source.getItemId())))) {
                     swap(target, source);
                 } else if (source.getQuantity() + target.getQuantity() > slotMax) {
+                    short movedQty = (short) (slotMax - target.getQuantity());
+                    if (source.getExpiration() > 0 && target.getExpiration() > 0) {
+                        double totalExp = (double) target.getExpiration() * target.getQuantity() + (double) source.getExpiration() * movedQty;
+                        target.setExpiration((long) (totalExp / slotMax));
+                    }
                     short rest = (short) ((source.getQuantity() + target.getQuantity()) - slotMax);
                     source.setQuantity(rest);
                     target.setQuantity(slotMax);
                 } else {
+                    if (source.getExpiration() > 0 && target.getExpiration() > 0) {
+                        double totalExp = (double) source.getExpiration() * source.getQuantity() + (double) target.getExpiration() * target.getQuantity();
+                        target.setExpiration((long) (totalExp / (source.getQuantity() + target.getQuantity())));
+                    }
                     target.setQuantity((short) (source.getQuantity() + target.getQuantity()));
                     inventory.remove(sSlot);
                 }
@@ -615,9 +634,9 @@ public class Inventory implements Iterable<Item> {
     }
 
     public Item findByCashId(int cashId) {
-        boolean isRing = false;
-        Equip equip = null;
         for (Item item : list()) {
+            boolean isRing = false;
+            Equip equip = null;
             if (item.getInventoryType().equals(InventoryType.EQUIP)) {
                 equip = (Equip) item;
                 isRing = equip.getRingId() > -1;

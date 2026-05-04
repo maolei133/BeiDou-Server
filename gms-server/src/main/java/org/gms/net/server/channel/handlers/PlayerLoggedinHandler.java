@@ -59,6 +59,7 @@ import org.gms.net.server.guild.GuildPackets;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.PartyOperation;
 import org.gms.net.server.world.World;
+import org.gms.server.logging.AuditContext;
 import org.gms.service.HpMpAlertService;
 import org.gms.util.I18nUtil;
 import org.gms.util.SpringContextUtil;
@@ -179,6 +180,10 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
             }
             c.setPlayer(player);
             c.setAccID(player.getAccountId());
+            
+            // 角色加载完成，刷新日志上下文，确保后续日志包含角色信息
+            AuditContext.set(c);
+
             boolean allowLogin = true;
 
                 /*  is this check really necessary?
@@ -503,6 +508,7 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
             UpdateChain.of(DueypackagesDO.class)
                     .set(DueypackagesDO::getChecked, 0)
                     .where(DueypackagesDO::getReceiverid).eq(player.getId())
+                    .and(DueypackagesDO::getChecked).eq(1) // 增加条件：只更新状态为1的
                     .update();
 
             c.sendPacket(PacketCreator.sendDueyParcelNotification(result.getType() == 1));

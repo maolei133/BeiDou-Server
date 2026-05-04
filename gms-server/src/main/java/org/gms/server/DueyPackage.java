@@ -26,7 +26,7 @@ import org.gms.client.inventory.Item;
 import java.sql.Timestamp;
 import java.util.Calendar;
 
-import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.*;
 
 public class DueyPackage {
     private String sender = null;
@@ -36,6 +36,9 @@ public class DueyPackage {
     private Calendar timestamp;
     private int packageId = 0;
     private Integer receiverId;
+    private long expireTime = 0;
+    private boolean quick = false;
+    private long deliveryTime = 0;
 
     public DueyPackage(int pId, Item item) {
         this.item = item;
@@ -85,18 +88,52 @@ public class DueyPackage {
     public void setReceiverId(Integer receiverId) {
         this.receiverId = receiverId;
     }
+    
+    public boolean isQuick() {
+        return quick;
+    }
+
+    public void setQuick(boolean quick) {
+        this.quick = quick;
+    }
 
     public long sentTimeInMilliseconds() {
-        Calendar ts = timestamp;
-        if (ts != null) {
-            Calendar cal = Calendar.getInstance();
-            cal.setTime(ts.getTime());
-            cal.add(Calendar.MONTH, 1);  // duey representation is in an array of months.
-
-            return cal.getTimeInMillis();
+        long time;
+        if (expireTime > 0) {
+            time = expireTime;
         } else {
-            return 0;
+            Calendar ts = timestamp;
+            if (ts != null) {
+                Calendar cal = Calendar.getInstance();
+                cal.setTime(ts.getTime());
+                cal.add(Calendar.MONTH, 1);  // duey representation is in an array of months.
+                time = cal.getTimeInMillis();
+            } else {
+                return 0;
+            }
         }
+
+        long limit = System.currentTimeMillis() + DAYS.toMillis(29) + HOURS.toMillis(23);
+        if (time > limit) {
+            return limit;
+        }
+        return time;
+    }
+
+    public long getDeliveryTime() {
+        return deliveryTime;
+    }
+    
+    public void setDeliveryTime(long deliveryTime) {
+        this.deliveryTime = deliveryTime;
+    }
+    
+    public long getExpireTime() {
+        return expireTime;
+    }
+
+    public void setExpireTime(long expireTime) {
+        this.expireTime = expireTime;
     }
 
     public boolean isDeliveringTime() {

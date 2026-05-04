@@ -13,16 +13,20 @@ import org.gms.dao.mapper.FamilyEntitlementMapper;
 import org.gms.net.server.Server;
 import org.gms.net.server.world.World;
 import org.gms.util.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.gms.dao.entity.table.FamilyEntitlementDOTableDef.FAMILY_ENTITLEMENT_D_O;
+import static org.gms.dao.entity.table.FamilyEntitlementDOTableDef.FAMILY_ENTITLEMENT_DO;
 
 @Service
 @AllArgsConstructor
 public class FamilyService {
+    private static final Logger log = LoggerFactory.getLogger(FamilyService.class);
+
     private final FamilyCharacterMapper familyCharacterMapper;
     private final FamilyEntitlementMapper familyEntitlementMapper;
     private final CharacterService characterService;
@@ -62,9 +66,9 @@ public class FamilyService {
                 unmatchedJuniors.add(new Pair<>(familyCharacterDO.getSeniorid(), familyEntry));
             }
             List<FamilyEntitlementDO> familyEntitlementDOList = familyEntitlementMapper.selectListByQuery(QueryWrapper.create()
-                    .select(FAMILY_ENTITLEMENT_D_O.ENTITLEMENTID)
-                    .from(FAMILY_ENTITLEMENT_D_O)
-                    .where(FAMILY_ENTITLEMENT_D_O.CHARID.eq(charactersDO.getId())));
+                    .select(FAMILY_ENTITLEMENT_DO.ENTITLEMENTID)
+                    .from(FAMILY_ENTITLEMENT_DO)
+                    .where(FAMILY_ENTITLEMENT_DO.CHARID.eq(charactersDO.getId())));
             familyEntitlementDOList.forEach(familyEntitlementDO -> familyEntry.setEntitlementUsed(familyEntitlementDO.getEntitlementid()));
         }
         for (Pair<Integer, FamilyEntry> unmatchedJunior : unmatchedJuniors) {
@@ -78,7 +82,24 @@ public class FamilyService {
         }
         for (World world : Server.getInstance().getWorlds()) {
             for (Family family : world.getFamilies()) {
-                family.getLeader().doFullCount();
+                // 如果学院没有院长(领袖)，并且学院里有成员
+                if (family.getLeader() == null && !family.getMembers().isEmpty()) {
+                    // 将第一位成员设为新院长
+                    FamilyEntry newLeader = family.getMembers().iterator().next();
+                    family.setLeader(newLeader);
+
+                    // 更新数据库，将新院长的seniorid设为0
+                    FamilyCharacterDO newLeaderDO = new FamilyCharacterDO();
+                    newLeaderDO.setCid(newLeader.getChrId());
+                    newLeaderDO.setSeniorid(0);
+                    familyCharacterMapper.update(newLeaderDO, true);
+                    
+                    log.info("学院 {} 没有院长，已自动指派 {} 为新院长。", family.getID(), newLeader.getName());
+                }
+
+                if (family.getLeader() != null) {
+                    family.getLeader().doFullCount();
+                }
             }
         }
     }

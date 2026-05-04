@@ -156,7 +156,12 @@ public class FootholdTree {
         return findWallR(p1, p2);
     }
 
-    public Foothold findBelow(Point p) {
+    /**
+     * 寻找位于点 p: x, y 下方的平台
+     * @param p  点 p: x, y
+     * @return 找到的 Foothold
+     */
+    public Foothold findBelow_old(Point p) {
         List<Foothold> relevants = getRelevants(p);
         List<Foothold> xMatches = new LinkedList<>();
         for (Foothold fh : relevants) {
@@ -190,6 +195,94 @@ public class FootholdTree {
                 }
             }
         }
+        return null;
+    }
+
+    /**
+     * 寻找位于点 p: x, y 下方的平台或者最近的上方平台
+     * @param p  点 p: x, y
+     * @return 找到的 Foothold
+     */
+    public Foothold findBelow(Point p) {
+        // 优先使用旧的逻辑进行查找,如果找到则直接返回,避免影响原来的逻辑
+        Foothold foothold = findBelow_old(p);
+        if (foothold != null) {
+            return foothold;
+        }
+
+//        System.out.println("======== 正在寻找位于点 p: " + p.x + ", " + p.y + " 下方的平台 ========");
+        List<Foothold> relevants = getRelevants(p);
+
+        Foothold bestBelow = null;
+        double minBelowDistSq = Double.MAX_VALUE;
+        Foothold bestAbove = null;
+        double minAboveDistSq = Double.MAX_VALUE;
+
+        for (Foothold fh : relevants) {
+            if (fh.isWall()) {
+                continue;
+            }
+
+            // 计算点p到线段fh的最近点(closestX, closestY)
+            int x1 = fh.getX1();
+            int y1 = fh.getY1();
+            int x2 = fh.getX2();
+            int y2 = fh.getY2();
+
+            double dx = x2 - x1;
+            double dy = y2 - y1;
+            double closestX, closestY;
+
+            if (dx == 0 && dy == 0) { // fh是一个点
+                closestX = x1;
+                closestY = y1;
+            } else {
+                double t = ((p.x - x1) * dx + (p.y - y1) * dy) / (dx * dx + dy * dy);
+                if (t < 0) {
+                    closestX = x1;
+                    closestY = y1;
+                } else if (t > 1) {
+                    closestX = x2;
+                    closestY = y2;
+                } else {
+                    closestX = x1 + t * dx;
+                    closestY = y1 + t * dy;
+                }
+            }
+
+            double distSq = (p.x - closestX) * (p.x - closestX) + (p.y - closestY) * (p.y - closestY);
+
+            // 根据平台在上方还是下方，分组处理
+            if (closestY >= p.y) { // 平台在下方或同一高度
+//                System.out.println("[下方候选] p.x: " + p.x + ", p.y: " + p.y + ", fh.x1: " + x1 + ", fh.x2: " + x2 + ", fh.y1: " + y1 + ", fh.y2: " + y2 + ", 距离平方: " + distSq);
+                if (distSq < minBelowDistSq) {
+                    minBelowDistSq = distSq;
+                    bestBelow = fh;
+//                    System.out.println("  -> 更新下方最佳平台! ID: " + fh.getId() + ", 距离平方: " + minBelowDistSq);
+                }
+            } else { // 平台在上方
+//                System.out.println("[上方候选] p.x: " + p.x + ", p.y: " + p.y + ", fh.x1: " + x1 + ", fh.x2: " + x2 + ", fh.y1: " + y1 + ", fh.y2: " + y2 + ", 距离平方: " + distSq);
+                if (distSq < minAboveDistSq) {
+                    minAboveDistSq = distSq;
+                    bestAbove = fh;
+//                    System.out.println("  -> 更新上方最佳平台! ID: " + fh.getId() + ", 距离平方: " + minAboveDistSq);
+                }
+            }
+        }
+
+        // 优先返回下方的最近平台
+        if (bestBelow != null) {
+//            System.out.println("======== 最终决策: 优先返回下方最近的平台 ID " + bestBelow.getId() + " [" + bestBelow.getX1() + "," + bestBelow.getY1() + "] to [" + bestBelow.getX2() + "," + bestBelow.getY2() + "] ========");
+            return bestBelow;
+        }
+
+        // 如果没有下方的，再返回上方的最近平台作为备选
+        if (bestAbove != null) {
+//            System.out.println("======== 最终决策: 未找到下方平台, 返回上方最近的平台 ID " + bestAbove.getId() + " [" + bestAbove.getX1() + "," + bestAbove.getY1() + "] to [" + bestAbove.getX2() + "," + bestAbove.getY2() + "] ========");
+            return bestAbove;
+        }
+
+//        System.out.println("======== 最终决策: 未找到任何合适的平台. ========");
         return null;
     }
 

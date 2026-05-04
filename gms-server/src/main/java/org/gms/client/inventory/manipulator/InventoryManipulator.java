@@ -1,58 +1,42 @@
-/*
- This file is part of the OdinMS Maple Story Server
- Copyright (C) 2008 Patrick Huy <patrick.huy@frz.cc>
- Matthias Butz <matze@odinms.de>
- Jan Christian Meyer <vimes@odinms.de>
-
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU Affero General Public License as
- published by the Free Software Foundation version 3 as published by
- the Free Software Foundation. You may not use, modify or distribute
- this program under any other version of the GNU Affero General Public
- License.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU Affero General Public License for more details.
-
- You should have received a copy of the GNU Affero General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+/**
+ * @author Matze
+ * @author Ronan - improved check space feature and removed redundant object calls
  */
 package org.gms.client.inventory.manipulator;
 
 import org.gms.client.BuffStat;
 import org.gms.client.Character;
 import org.gms.client.Client;
-import org.gms.client.inventory.Equip;
-import org.gms.client.inventory.Inventory;
-import org.gms.client.inventory.InventoryType;
-import org.gms.client.inventory.Item;
-import org.gms.client.inventory.ModifyInventory;
-import org.gms.client.inventory.Pet;
-import org.gms.model.pojo.NewYearCardRecord;
+import org.gms.client.inventory.*;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
+import org.gms.model.pojo.NewYearCardRecord;
+import org.gms.model.pojo.TraceabilityRules;
+import org.gms.server.CashShop;
+import org.gms.server.ItemInformationProvider;
+import org.gms.server.StatEffect;
+import org.gms.server.maps.MapleMap;
+import org.gms.service.ItemRecoveryService;
+import org.gms.service.TraceabilityConfigService;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
+import org.gms.util.PacketCreator;
+import org.gms.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.gms.server.ItemInformationProvider;
-import org.gms.server.maps.MapleMap;
-import org.gms.util.PacketCreator;
 
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
+import java.util.*;
+import java.util.function.Consumer;
 
-/**
- * @author Matze
- * @author Ronan - improved check space feature and removed redundant object calls
- */
 public class InventoryManipulator {
     private static final Logger log = LoggerFactory.getLogger(InventoryManipulator.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+    private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
+    private static final TraceabilityConfigService configService = ServerManager.getApplicationContext().getBean(TraceabilityConfigService.class);
 
     public static boolean addById(Client c, int itemId, short quantity) {
         return addById(c, itemId, quantity, null, -1, -1);
@@ -65,25 +49,43 @@ public class InventoryManipulator {
     public static boolean addById(Client c, int itemId, short quantity, String owner, int petid) {
         return addById(c, itemId, quantity, owner, petid, -1);
     }
+    
+    public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, Consumer<Item> tracker) {
+        return addById(c, itemId, quantity, owner, petid, -1, tracker);
+    }
 
     public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, long expiration) {
         return addById(c, itemId, quantity, owner, petid, (byte) 0, expiration);
     }
+    
+    public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, long expiration, Consumer<Item> tracker) {
+        return addById(c, itemId, quantity, owner, petid, (byte) 0, expiration, tracker);
+    }
 
     public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, short flag, long expiration) {
+        return addById(c, itemId, quantity, owner, petid, flag, expiration, null);
+    }
+
+    public static boolean addById(Client c, int itemId, short quantity, String owner, int petid, short flag, long expiration, Consumer<Item> tracker) {
         Character chr = c.getPlayer();
         InventoryType type = ItemConstants.getInventoryType(itemId);
 
         Inventory inv = chr.getInventory(type);
         inv.lockInventory();
         try {
-            return addByIdInternal(c, chr, type, inv, itemId, quantity, owner, petid, flag, expiration);
+            boolean result = addByIdInternal(c, chr, type, inv, itemId, quantity, owner, petid, flag, expiration, tracker);
+            if (result) {
+                // 实时保存
+                final InventoryType finalType = type;
+                ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
+            }
+            return result;
         } finally {
             inv.unlockInventory();
         }
     }
 
-    private static boolean addByIdInternal(Client c, Character chr, InventoryType type, Inventory inv, int itemId, short quantity, String owner, int petid, short flag, long expiration) {
+    private static boolean addByIdInternal(Client c, Character chr, InventoryType type, Inventory inv, int itemId, short quantity, String owner, int petid, short flag, long expiration, Consumer<Item> tracker) {
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
         if (!type.equals(InventoryType.EQUIP)) {
             short slotMax = ii.getSlotMax(c, itemId);
@@ -97,10 +99,23 @@ public class InventoryManipulator {
                             short oldQ = eItem.getQuantity();
                             if (oldQ < slotMax && ((eItem.getOwner().equals(owner) || owner == null) && eItem.getFlag() == flag)) {
                                 short newQ = (short) Math.min(oldQ + quantity, slotMax);
-                                quantity -= (newQ - oldQ);
+                                short addedQty = (short) (newQ - oldQ);
+
+                                if (eItem.getExpiration() > 0) {
+                                    if (expiration > 0) {
+                                        double totalExp = (double) eItem.getExpiration() * oldQ + (double) expiration * addedQty;
+                                        eItem.setExpiration((long) (totalExp / newQ));
+                                    } else {
+                                        eItem.setExpiration(expiration);
+                                    }
+                                }
+
+                                quantity -= addedQty;
                                 eItem.setQuantity(newQ);
-                                eItem.setExpiration(expiration);
                                 c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(1, eItem))));
+                                if (tracker != null) tracker.accept(eItem);
+                                // 溯源日志：记录合并
+                                traceabilityService.log(eItem, chr, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.INVENTORY_MERGE, addedQty, String.format("数量: %d -> %d", oldQ, newQ), String.format("合并到UID: %d", eItem.getUid()));
                             }
                         } else {
                             break;
@@ -128,6 +143,7 @@ public class InventoryManipulator {
                         if (sandboxItem) {
                             chr.setHasSandboxItem();
                         }
+                        if (tracker != null) tracker.accept(nItem);
                     } else {
                         c.sendPacket(PacketCreator.enableActions());
                         return false;
@@ -147,6 +163,7 @@ public class InventoryManipulator {
                 if (InventoryManipulator.isSandboxItem(nItem)) {
                     chr.setHasSandboxItem();
                 }
+                if (tracker != null) tracker.accept(nItem);
             }
         } else if (quantity == 1) {
             Item nEquip = ii.getEquipById(itemId);
@@ -168,6 +185,7 @@ public class InventoryManipulator {
             if (InventoryManipulator.isSandboxItem(nEquip)) {
                 chr.setHasSandboxItem();
             }
+            if (tracker != null) tracker.accept(nEquip);
         } else {
             throw new RuntimeException("试图创建一件数量不为 1 的装备");
         }
@@ -189,7 +207,13 @@ public class InventoryManipulator {
         Inventory inv = chr.getInventory(type);
         inv.lockInventory();
         try {
-            return addFromDropInternal(c, chr, type, inv, item, show, petId);
+            boolean result = addFromDropInternal(c, chr, type, inv, item, show, petId);
+            if (result) {
+                // 实时保存
+                final InventoryType finalType = type;
+                ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
+            }
+            return result;
         } finally {
             inv.unlockInventory();
         }
@@ -197,6 +221,32 @@ public class InventoryManipulator {
 
     private static boolean addFromDropInternal(Client c, Character chr, InventoryType type, Inventory inv, Item item, boolean show, int petId) {
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
+        // ----------------------------------------------------------------
+        // 核心防复制检查：检查背包中是否已存在相同 UID 的物品
+        // ----------------------------------------------------------------
+        if (item.getUid() > 0) {
+            Item existingItem = inv.findByUid(item.getUid());
+            if (existingItem != null) {
+                // 检查是否为可堆叠物品的合法合并操作
+                boolean isStackable = !ItemConstants.isRechargeable(item.getItemId()) && ii.getSlotMax(c, item.getItemId()) > 1;
+                if (existingItem.getItemId() == item.getItemId() && isStackable) {
+                    // 是合法的堆叠物品合并，不应阻止。日志记录为调试信息。
+                    log.debug("允许重复UID的堆叠物品合并。玩家: {}, 物品ID: {}, UID: {}", chr.getName(), item.getItemId(), item.getUid());
+                } else {
+                    // 否则，视为复制风险，拒绝入包
+                    log.warn("拦截到重复UID物品入包请求 (可能是重复包或复制尝试)。玩家: {}, 物品ID: {}, UID: {}, 现有物品ID: {}",
+                            chr.getName(), item.getItemId(), item.getUid(), existingItem.getItemId());
+
+                    // 记录异常日志
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_DELETE, item.getQuantity(), "由于背包中存在重复的UID，阻止了addFromDrop操作", "现有物品ID: " + existingItem.getItemId());
+
+                    c.sendPacket(PacketCreator.serverNotice(1, "操作失败：检测到物品数据异常 (E01)。"));
+                    c.sendPacket(PacketCreator.enableActions());
+                    return false;
+                }
+            }
+        }
+
         int itemid = item.getItemId();
         if (ii.isPickupRestricted(itemid) && chr.haveItemWithId(itemid, true)) {
             c.sendPacket(PacketCreator.getInventoryFull());
@@ -217,10 +267,24 @@ public class InventoryManipulator {
                             short oldQ = eItem.getQuantity();
                             if (oldQ < slotMax && item.getFlag() == eItem.getFlag() && item.getOwner().equals(eItem.getOwner())) {
                                 short newQ = (short) Math.min(oldQ + quantity, slotMax);
-                                quantity -= (newQ - oldQ);
+                                short addedQty = (short) (newQ - oldQ);
+
+                                if (eItem.getExpiration() > 0) {
+                                    if (item.getExpiration() > 0) {
+                                        double totalExp = (double) eItem.getExpiration() * oldQ + (double) item.getExpiration() * addedQty;
+                                        eItem.setExpiration((long) (totalExp / newQ));
+                                    } else {
+                                        eItem.setExpiration(item.getExpiration());
+                                    }
+                                }
+
+                                quantity -= addedQty;
                                 eItem.setQuantity(newQ);
                                 item.setPosition(eItem.getPosition());
                                 c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(1, eItem))));
+
+                                // 溯源日志：记录合并
+                               traceabilityService.log(eItem, chr, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.INVENTORY_MERGE, addedQty, String.format("数量: %d -> %d", oldQ, newQ), String.format("合并到UID: %d", eItem.getUid()));
                             }
                         } else {
                             break;
@@ -234,6 +298,35 @@ public class InventoryManipulator {
                     nItem.setExpiration(item.getExpiration());
                     nItem.setOwner(item.getOwner());
                     nItem.setFlag(item.getFlag());
+                    // 如果是拆分出来的新堆叠，必须生成新 UID
+                    // 如果是完全移动（quantity == 0），则保留原 UID
+                    if (quantity > 0) {
+                         // 拆分情况：新堆叠生成新 UID
+                         // 注意：这里 nItem 是新创建的对象，构造函数里已经生成了新 UID
+                         // 但为了明确逻辑，如果 item 有 UID 且我们正在拆分它，
+                         // 我们应该保留原 UID 给其中一部分（通常是留在原地的，或者这里是新进入背包的）
+                         // 这里情况比较复杂：item 是来源物品。
+                         // 如果 item 是整个放入背包，nItem 应该继承 item 的 UID。
+                         // 如果 item 被拆分成多个 nItem（因为堆叠限制），第一个 nItem 继承 UID，后续的生成新 UID？
+                         // 或者全部生成新 UID？
+                         // 为了安全和简化，对于可堆叠物品的新堆叠，我们总是生成新 UID，除非是完全恢复（如从仓库取出整个堆叠）
+                         // 但 addFromDrop 的 item 参数通常是一个临时对象（copy），它的 UID 可能是原物品的。
+                         // 如果我们在这里生成新 UID，那么原物品的 UID 历史就断了。
+                         // 鉴于我们前面已经检查了 UID 冲突，这里如果能走到这，说明背包里没有这个 UID。
+                         // 所以，第一个 nItem 可以继承 item.getUid()。
+                         if (item.getUid() > 0 && nItem.getUid() != item.getUid()) {
+                             // 只有当这是第一个分堆时才继承，但这里很难判断是第几个。
+                             // 简单策略：总是生成新 UID，除非是装备。
+                             // 这样虽然断了 UID 链，但绝对安全。
+                             // 改进策略：对于可堆叠物品，入包即视为新实例（除非合并）。
+                         }
+                    } else {
+                        // 刚好放完，或者最后一部分
+                        if (item.getUid() > 0) {
+                            nItem.setUid(item.getUid());
+                        }
+                    }
+
                     short newSlot = inv.addItem(nItem);
                     if (newSlot == -1) {
                         c.sendPacket(PacketCreator.getInventoryFull());
@@ -252,6 +345,9 @@ public class InventoryManipulator {
                 Item nItem = new Item(itemid, (short) 0, quantity, petId);
                 nItem.setExpiration(item.getExpiration());
                 nItem.setFlag(item.getFlag());
+                if (item.getUid() > 0) {
+                    nItem.setUid(item.getUid());
+                }
 
                 short newSlot = inv.addItem(nItem);
                 if (newSlot == -1) {
@@ -280,7 +376,7 @@ public class InventoryManipulator {
                 chr.setHasSandboxItem();
             }
         } else {
-            log.warn("Tried to pickup Equip id {} containing more than 1 quantity --> {}", itemid, quantity);
+            log.warn("尝试拾取数量大于 1 的装备 ID {} --> {}", itemid, quantity);
             c.sendPacket(PacketCreator.getInventoryFull());
             c.sendPacket(PacketCreator.showItemUnavailable());
             return false;
@@ -449,6 +545,10 @@ public class InventoryManipulator {
                 }
             }
         }
+
+        // 实时保存
+        final InventoryType finalType = type;
+        ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
     }
 
     private static void announceModifyInventory(Client c, Item item, boolean fromDrop, boolean allowZero) {
@@ -480,7 +580,7 @@ public class InventoryManipulator {
             }
         }
         if (removeQuantity > 0 && type != InventoryType.CANHOLD) {
-            throw new RuntimeException("[Hack] Not enough items available of Item:" + itemId + ", Quantity (After Quantity/Over Current Quantity): " + (quantity - removeQuantity) + "/" + quantity);
+            throw new RuntimeException("[Hack] 物品数量不足 Item:" + itemId + ", 数量 (剩余/总需): " + (quantity - removeQuantity) + "/" + quantity);
         }
     }
 
@@ -511,7 +611,7 @@ public class InventoryManipulator {
         short slotMax = ii.getSlotMax(c, source.getItemId());
         inv.move(src, dst, slotMax);
         final List<ModifyInventory> mods = new ArrayList<>();
-        if (!(type.equals(InventoryType.EQUIP) || type.equals(InventoryType.CASH)) && initialTarget != null && initialTarget.getItemId() == source.getItemId() && !ItemConstants.isRechargeable(source.getItemId()) && isSameOwner(source, initialTarget)) {
+        if (!(type.equals(InventoryType.EQUIP) || (type.equals(InventoryType.CASH) && (slotMax <= 1 || ItemConstants.isPet(source.getItemId()) || ItemConstants.isRing(source.getItemId())))) && initialTarget != null && initialTarget.getItemId() == source.getItemId() && !ItemConstants.isRechargeable(source.getItemId()) && isSameOwner(source, initialTarget)) {
             if ((olddstQ + oldsrcQ) > slotMax) {
                 mods.add(new ModifyInventory(1, source));
                 mods.add(new ModifyInventory(1, initialTarget));
@@ -526,8 +626,12 @@ public class InventoryManipulator {
         // 添加物品代码提示
         if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) { // 假设isGM()是检查玩家是否是管理员的方法
             int itemID = source.getItemId();
-            c.getPlayer().dropMessage(5, I18nUtil.getMessage("InventoryManipulator.handlePacket.message1")  + itemID);
+            c.getPlayer().dropMessage(5, I18nUtil.getMessage("InventoryManipulator.handlePacket.message1") + itemID);
         }
+
+        // 实时保存
+        final InventoryType finalType = type;
+        ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new Pair<>(i, finalType)).toList(), c.getPlayer().getId(), Collections.singleton(finalType));
     }
 
     /*
@@ -669,6 +773,11 @@ public class InventoryManipulator {
         mods.add(new ModifyInventory(2, source, src));
         c.sendPacket(PacketCreator.modifyInventory(true, mods));
         chr.equipChanged();
+
+        // 实时保存
+        ItemFactory.INVENTORY.saveItems(eqpInv.list().stream().map(i -> new Pair<>(i, InventoryType.EQUIP)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIP));
+        ItemFactory.INVENTORY.saveItems(eqpdInv.list().stream().map(i -> new Pair<>(i, InventoryType.EQUIPPED)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIPPED));
+        traceabilityService.log(source, c.getPlayer(), TraceabilityService.ActionType.EQUIPMENT, TraceabilityService.ActionSourceType.EQUIP_WEAR, 0);
     }
 
     public static void unequip(Client c, short src, short dst) {
@@ -711,6 +820,11 @@ public class InventoryManipulator {
         }
         c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(2, source, src))));
         chr.equipChanged();
+
+        // 实时保存
+        ItemFactory.INVENTORY.saveItems(eqpInv.list().stream().map(i -> new Pair<>(i, InventoryType.EQUIP)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIP));
+        ItemFactory.INVENTORY.saveItems(eqpdInv.list().stream().map(i -> new Pair<>(i, InventoryType.EQUIPPED)).toList(), chr.getId(), Collections.singleton(InventoryType.EQUIPPED));
+        traceabilityService.log(source, c.getPlayer(), TraceabilityService.ActionType.EQUIPMENT, TraceabilityService.ActionSourceType.EQUIP_UNEQUIP, 0);
     }
 
     private static boolean isDisappearingItemDrop(Item it) {
@@ -740,8 +854,8 @@ public class InventoryManipulator {
         Item source = inv.getItem(src);
 
         if (chr.isGM() && chr.gmLevel() < GameConfig.getServerInt("minimum_gm_level_to_drop")) {
-            chr.message("You cannot drop items at your GM level.");
-            log.info("GM %s tried to drop item id %d", chr.getName(), source.getItemId());
+            chr.message("您的 GM 等级不足，无法丢弃物品。");
+            log.info("GM %s 尝试丢弃物品 ID %d", chr.getName(), source.getItemId());
             return;
         }
 
@@ -765,10 +879,13 @@ public class InventoryManipulator {
         }
 
         Point dropPos = new Point(chr.getPosition());
+        short oldqty = source.getQuantity();
+        short newqty = (short) (oldqty - quantity);
+
         if (quantity < source.getQuantity() && !ItemConstants.isRechargeable(itemId)) {
             Item target = source.copy();
             target.setQuantity(quantity);
-            source.setQuantity((short) (source.getQuantity() - quantity));
+            source.setQuantity(newqty);
             c.sendPacket(PacketCreator.modifyInventory(true, Collections.singletonList(new ModifyInventory(1, source))));
 
             if (ItemConstants.isNewYearCardEtc(itemId)) {
@@ -780,11 +897,14 @@ public class InventoryManipulator {
                     c.getAbstractPlayerInteraction().removeAll(ItemId.NEW_YEARS_CARD_RECEIVED);
                 }
             }
-
             if (isDisappearingItemDrop(target)) {
                 map.disappearingItemDrop(chr, chr, target, dropPos);
+                itemRecoveryService.logRecovery(target, chr, quantity, ItemRecoveryService.DisposalType.DROP, ItemRecoveryService.RecoveryStatus.RECOVERABLE);
+                traceabilityService.log(source, chr, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_DROP, -quantity, null, "直接销毁", oldqty, newqty);
             } else {
                 map.spawnItemDrop(chr, chr, target, dropPos, true, true);
+                itemRecoveryService.logRecovery(target, chr, quantity, ItemRecoveryService.DisposalType.DROP);
+                traceabilityService.log(source, chr, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_DROP, -quantity, null, null, oldqty, newqty);
             }
         } else {
             if (type == InventoryType.EQUIPPED) {
@@ -811,11 +931,15 @@ public class InventoryManipulator {
                     c.getAbstractPlayerInteraction().removeAll(ItemId.NEW_YEARS_CARD_RECEIVED);
                 }
             }
-
+            quantity = source.getQuantity();
             if (isDisappearingItemDrop(source)) {
                 map.disappearingItemDrop(chr, chr, source, dropPos);
+                itemRecoveryService.logRecovery(source, chr, quantity, ItemRecoveryService.DisposalType.DROP, ItemRecoveryService.RecoveryStatus.RECOVERABLE);
+                traceabilityService.log(source, chr, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_DROP, -quantity, null, "直接销毁");
             } else {
                 map.spawnItemDrop(chr, chr, source, dropPos, true, true);
+                itemRecoveryService.logRecovery(source, chr, quantity, ItemRecoveryService.DisposalType.DROP);
+                traceabilityService.log(source, chr, TraceabilityService.ActionType.INVENTORY, TraceabilityService.ActionSourceType.PLAYER_DROP, -quantity, null, null);
             }
         }
 
@@ -832,6 +956,10 @@ public class InventoryManipulator {
         } else if (itemId == ItemId.ARPQ_SPIRIT_JEWEL) {
             chr.updateAriantScore(quantityNow);
         }
+
+        // 实时保存
+        final InventoryType finalType = type;
+        ItemFactory.INVENTORY.saveItems(inv.list().stream().map(i -> new Pair<>(i, finalType)).toList(), chr.getId(), Collections.singleton(finalType));
     }
 
     private static boolean isDroppedItemRestricted(Item it) {
@@ -840,5 +968,160 @@ public class InventoryManipulator {
 
     public static boolean isSandboxItem(Item it) {
         return (it.getFlag() & ItemConstants.SANDBOX) == ItemConstants.SANDBOX;
+    }
+
+    /**
+     * 计算装备的属性总和（不包括HP/MP），用于价值判断。
+     * @param equip 要计算的装备对象
+     * @return 属性总和
+     */
+    private static long calculateEquipStatsSum(Equip equip) {
+        if (equip == null) {
+            return 0;
+        }
+        long sum = 0;
+        sum += equip.getStr();
+        sum += equip.getDex();
+        sum += equip.getInt();
+        sum += equip.getLuk();
+        sum += equip.getWatk();
+        sum += equip.getMatk();
+        sum += equip.getWdef();
+        sum += equip.getMdef();
+        sum += equip.getAcc();
+        sum += equip.getAvoid();
+        sum += equip.getHands();
+        sum += equip.getSpeed();
+        sum += equip.getJump();
+        return sum;
+    }
+
+    /**
+     * (V2.6) 判断物品是否值得进入找回系统或溯源系统.
+     * <p>
+     * 此方法现在完全由溯源系统的动态配置驱动。
+     * </p>
+     *
+     * @param item 要判断的物品
+     * @return 如果物品被视为“有价值”，则返回true
+     */
+    public static boolean isValuableForRecovery(Item item) {
+        if (item == null) return false;
+
+        TraceabilityRules config = configService.getTraceabilityConfig();
+        TraceabilityRules.ValueConditions conditions = config.getValueConditions();
+        if (conditions == null) {
+            return false; // 如果没有配置规则，则默认所有物品都无价值
+        }
+
+        int itemId = item.getItemId();
+        ItemInformationProvider ii = ItemInformationProvider.getInstance();
+
+        // 0. 现金道具：总是被视为有价值
+        if (ii.isCash(itemId) || CashShop.CashItemFactory.isPackage(itemId)) {
+            return true;
+        }
+
+        // 1. 装备判断 (Equip)
+        if (ItemConstants.isEquipment(itemId) && item instanceof Equip equip) {
+            TraceabilityRules.Equip equipConditions = conditions.getEquip();
+            if (equipConditions != null) {
+                // 检查：穿戴等级
+                if (equipConditions.getMinLevel() > 0 && ii.getEquipLevelReq(itemId) >= equipConditions.getMinLevel()) {
+                    return true;
+                }
+                // 检查：已砸卷次数
+                if (equipConditions.getMinUpgradeSlotsUsed() > 0 && equip.getLevel() >= equipConditions.getMinUpgradeSlotsUsed()) {
+                    return true;
+                }
+                // 检查：成长等级
+                if (equipConditions.getMinGrowthLevel() > 0 && equip.getItemLevel() >= equipConditions.getMinGrowthLevel()) {
+                    return true;
+                }
+                // 检查：金锤子使用次数
+                if (equipConditions.getMinViciousHammerUsed() > 0 && equip.getVicious() >= equipConditions.getMinViciousHammerUsed()) {
+                    return true;
+                }
+                // 检查：属性是否高于白板
+                int minStatsAboveBase = equipConditions.getMinStatsAboveBase();
+                if (minStatsAboveBase > 0) {
+                    Equip baseEquip = (Equip) ii.getEquipById(itemId);
+                    if (baseEquip != null) {
+                        long currentStatsSum = calculateEquipStatsSum(equip);
+                        long baseStatsSum = calculateEquipStatsSum(baseEquip);
+                        if (currentStatsSum - baseStatsSum >= minStatsAboveBase) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. 其他物品判断 (USE, ETC, SETUP)
+        TraceabilityRules.Item itemConditions = conditions.getItem();
+        if (itemConditions != null) {
+            // 检查：特定物品ID列表
+            List<TraceabilityRules.SpecificItemId> specificItemIds = itemConditions.getSpecificItemIds();
+            if (specificItemIds != null && !specificItemIds.isEmpty()) {
+                for (TraceabilityRules.SpecificItemId sid : specificItemIds) {
+                    if (sid.isEnabled() && sid.getId() == itemId) {
+                        return true;
+                    }
+                }
+            }
+
+            // 检查：物品ID前缀
+            List<TraceabilityRules.ItemType> itemTypes = itemConditions.getItemTypes();
+            if (itemTypes != null && !itemTypes.isEmpty()) {
+                int itemPrefix = itemId / 10000;
+                for (TraceabilityRules.ItemType it : itemTypes) {
+                    if (it.isEnabled() && it.getT() == itemPrefix) {
+                        return true;
+                    }
+                }
+            }
+            if (item.getInventoryType() == InventoryType.USE) {  // 消耗品
+                // 过滤弩矢，箭矢
+                if (ItemConstants.isArrow(itemId)) {
+                    return false;
+                }
+                // 检查：投掷武器 (飞镖/子弹)
+                TraceabilityRules.ThrowingWeapons twConditions = itemConditions.getThrowingWeapons();
+                if (twConditions != null && twConditions.isEnabled() && (ItemConstants.isThrowingStar(itemId) || ItemConstants.isBullet(itemId))) {
+                    int watk = ii.getWatkForProjectile(itemId);
+
+                    // 如果是子弹，攻击力 >= 15 默认
+                    if (ItemConstants.isBullet(itemId)) {
+                        return watk >= twConditions.getMinAttackPowerBullet();
+                    }
+
+                    // 飞镖保持 >= 20 默认
+                    return watk >= twConditions.getMinAttackPower();
+                }
+                // 检查：增益道具
+                TraceabilityRules.Potions potionConditions = itemConditions.getPotions();
+                if (potionConditions != null && potionConditions.isEnabled() && ItemConstants.isFood(itemId)) {
+                    StatEffect effect = ii.getItemEffect(itemId);
+                    if (effect != null) {
+                        int totalStats = 0;
+                        List<Pair<BuffStat, Integer>> statups = effect.getStatups();
+                        if (statups != null) {
+                            for (Pair<BuffStat, Integer> stat : statups) {
+                                if (stat.getLeft() == BuffStat.WATK || stat.getLeft() == BuffStat.MATK ||
+                                        stat.getLeft() == BuffStat.WDEF || stat.getLeft() == BuffStat.MDEF ||
+                                        stat.getLeft() == BuffStat.ACC || stat.getLeft() == BuffStat.AVOID ||
+                                        stat.getLeft() == BuffStat.SPEED || stat.getLeft() == BuffStat.JUMP) {
+                                    totalStats += stat.getRight();
+                                }
+                            }
+                        }
+
+                        if (totalStats >= potionConditions.getMinTotalStatBonus()) return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 }

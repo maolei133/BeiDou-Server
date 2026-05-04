@@ -21,6 +21,7 @@
 */
 package org.gms.net.server.channel.handlers;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.Disease;
@@ -30,10 +31,15 @@ import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.StatEffect;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
 import org.gms.util.PacketCreator;
 
@@ -41,6 +47,8 @@ import org.gms.util.PacketCreator;
  * @author Matze
  */
 public final class UseItemHandler extends AbstractPacketHandler {
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+
     @Override
     public final void handlePacket(InPacket p, Client c) {
         Character chr = c.getPlayer();
@@ -57,21 +65,21 @@ public final class UseItemHandler extends AbstractPacketHandler {
         if (toUse != null && toUse.getQuantity() > 0 && toUse.getItemId() == itemId) {
             if (itemId == ItemId.ALL_CURE_POTION) {
                 chr.dispelDebuffs();
-                remove(c, slot);
+                remove(c, slot, toUse);
                 return;
             } else if (itemId == ItemId.EYEDROP) {
                 chr.dispelDebuff(Disease.DARKNESS);
-                remove(c, slot);
+                remove(c, slot, toUse);
                 return;
             } else if (itemId == ItemId.TONIC) {
                 chr.dispelDebuff(Disease.WEAKEN);
                 chr.dispelDebuff(Disease.SLOW);
-                remove(c, slot);
+                remove(c, slot, toUse);
                 return;
             } else if (itemId == ItemId.HOLY_WATER) {
                 chr.dispelDebuff(Disease.SEAL);
                 chr.dispelDebuff(Disease.CURSE);
-                remove(c, slot);
+                remove(c, slot, toUse);
                 return;
             } else if (ItemConstants.isTownScroll(itemId)) {
                 int banMap = chr.getMapId();
@@ -83,19 +91,19 @@ public final class UseItemHandler extends AbstractPacketHandler {
                         chr.setBanishPlayerData(banMap, banSp, banTime);
                     }
 
-                    remove(c, slot);
+                    remove(c, slot, toUse);
                 }
                 return;
             } else if (ItemConstants.isAntibanishScroll(itemId)) {
                 if (ii.getItemEffect(toUse.getItemId()).applyTo(chr)) {
-                    remove(c, slot);
+                    remove(c, slot, toUse);
                 } else {
                     chr.dropMessage(5, I18nUtil.getMessage("UseItemHandler.message1"));
                 }
                 return;
             }
 
-            remove(c, slot);
+            remove(c, slot, toUse);
 
             if (toUse.getItemId() != ItemId.HAPPY_BIRTHDAY) {
                 ii.getItemEffect(toUse.getItemId()).applyTo(chr);
@@ -108,8 +116,10 @@ public final class UseItemHandler extends AbstractPacketHandler {
         }
     }
 
-    private void remove(Client c, short slot) {
+    private void remove(Client c, short slot, Item item) {
         InventoryManipulator.removeFromSlot(c, InventoryType.USE, slot, (short) 1, false);
-        c.sendPacket(PacketCreator.enableActions());
+        c.enableActions();
+        // 记录溯源日志
+        traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_USE, -1, null, String.format("数量: %d -> %d", item.getQuantity() + 1, item.getQuantity()));
     }
 }

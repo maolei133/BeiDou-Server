@@ -29,7 +29,9 @@ import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.packet.InPacket;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.ItemInformationProvider;
@@ -49,6 +51,7 @@ import java.util.Map;
 public class MakerProcessor {
     private static final Logger log = LoggerFactory.getLogger(MakerProcessor.class);
     private static final ItemInformationProvider ii = ItemInformationProvider.getInstance();
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     public static void makerAction(InPacket p, Client c) {
         if (c.tryacquireClient()) {
@@ -66,7 +69,7 @@ public class MakerProcessor {
                     int fromLeftover = toCreate;
                     toCreate = ii.getMakerCrystalFromLeftover(toCreate);
                     if (toCreate == -1) {
-                        c.sendPacket(PacketCreator.serverNotice(1, ii.getName(fromLeftover) + " is unavailable for Monster Crystal conversion."));
+                        c.sendPacket(PacketCreator.serverNotice(1, ii.getName(fromLeftover) + " 无法用于怪物水晶转换。"));
                         c.sendPacket(PacketCreator.makerEnableActions());
                         return;
                     }
@@ -84,12 +87,12 @@ public class MakerProcessor {
                         if (pair != null) {
                             recipe = MakerItemFactory.generateDisassemblyCrystalEntry(toDisassemble, pair.getLeft(), pair.getRight());
                         } else {
-                            c.sendPacket(PacketCreator.serverNotice(1, ii.getName(toCreate) + " is unavailable for Monster Crystal disassembly."));
+                            c.sendPacket(PacketCreator.serverNotice(1, ii.getName(toCreate) + " 无法用于怪物水晶拆解。"));
                             c.sendPacket(PacketCreator.makerEnableActions());
                             return;
                         }
                     } else {
-                        c.sendPacket(PacketCreator.serverNotice(1, "An unknown error occurred when trying to apply that item for disassembly."));
+                        c.sendPacket(PacketCreator.serverNotice(1, "尝试拆解该物品时发生未知错误。"));
                         c.sendPacket(PacketCreator.makerEnableActions());
                         return;
                     }
@@ -137,7 +140,7 @@ public class MakerProcessor {
 
                         if (!reagentids.isEmpty()) {
                             if (!removeOddMakerReagents(toCreate, reagentids)) {
-                                c.sendPacket(PacketCreator.serverNotice(1, "You can only use WATK and MATK Strengthening Gems on weapon items."));
+                                c.sendPacket(PacketCreator.serverNotice(1, "你只能在武器物品上使用物理攻击力和魔法攻击力强化宝石。"));
                                 c.sendPacket(PacketCreator.makerEnableActions());
                                 return;
                             }
@@ -151,41 +154,49 @@ public class MakerProcessor {
 
                 switch (createStatus) {
                     case -1:// non-available for Maker itemid has been tried to forge
-                        log.warn("Chr {} tried to craft itemid {} using the Maker skill.", c.getPlayer().getName(), toCreate);
-                        c.sendPacket(PacketCreator.serverNotice(1, "The requested item could not be crafted on this operation."));
+                        log.warn("角色 {} 尝试使用制作技能合成物品 ID {}。", c.getPlayer().getName(), toCreate);
+                        c.sendPacket(PacketCreator.serverNotice(1, "请求的物品无法通过本次操作进行合成。"));
                         c.sendPacket(PacketCreator.makerEnableActions());
                         break;
 
-                    case 1: // no items
-                        c.sendPacket(PacketCreator.serverNotice(1, "You don't have all required items in your inventory to make " + ii.getName(toCreate) + "."));
+                    case 1: // 缺少物品
+                        c.sendPacket(PacketCreator.serverNotice(1, "你的背包中没有制作 " + ii.getName(toCreate) + " 所需的全部物品。"));
                         c.sendPacket(PacketCreator.makerEnableActions());
                         break;
 
-                    case 2: // no meso
-                        c.sendPacket(PacketCreator.serverNotice(1, "You don't have enough mesos (" + GameConstants.numberWithCommas(recipe.getCost()) + ") to complete this operation."));
+                    case 2: // 缺少金币
+                        c.sendPacket(PacketCreator.serverNotice(1, "你的金币不足（需要 " + GameConstants.numberWithCommas(recipe.getCost()) + "）以完成此操作。"));
                         c.sendPacket(PacketCreator.makerEnableActions());
                         break;
 
-                    case 3: // no req level
-                        c.sendPacket(PacketCreator.serverNotice(1, "You don't have enough level to complete this operation."));
+                    case 3: // 等级不足
+                        c.sendPacket(PacketCreator.serverNotice(1, "你的等级不足以完成此操作。"));
                         c.sendPacket(PacketCreator.makerEnableActions());
                         break;
 
-                    case 4: // no req skill level
-                        c.sendPacket(PacketCreator.serverNotice(1, "You don't have enough Maker level to complete this operation."));
+                    case 4: // 技能等级不足
+                        c.sendPacket(PacketCreator.serverNotice(1, "你的制作技能等级不足以完成此操作。"));
                         c.sendPacket(PacketCreator.makerEnableActions());
                         break;
 
-                    case 5: // inventory full
-                        c.sendPacket(PacketCreator.serverNotice(1, "Your inventory is full."));
+                    case 5: // 背包已满
+                        c.sendPacket(PacketCreator.serverNotice(1, "你的背包已满。"));
                         c.sendPacket(PacketCreator.makerEnableActions());
                         break;
 
                     default:
                         if (toDisassemble != -1) {
+                            Item disassembledItem = c.getPlayer().getInventory(InventoryType.EQUIP).getItem((short) pos);
+                            if (disassembledItem != null) {
+                                traceabilityService.log(disassembledItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CONSUME, -1, String.format("通过制作技能 [%d] %s 消耗", toCreate, ii.getName(toCreate)),String.format("数量: %d -> %d", disassembledItem.getQuantity(), disassembledItem.getQuantity() - 1));
+                            }
                             InventoryManipulator.removeFromSlot(c, InventoryType.EQUIP, (short) pos, (short) 1, false);
                         } else {
                             for (Pair<Integer, Integer> pair : recipe.getReqItems()) {
+                                Item consumedItem = c.getPlayer().getInventory(ItemConstants.getInventoryType(pair.getLeft())).findById(pair.getLeft());
+                                if (consumedItem != null) {
+                                     traceabilityService.log(consumedItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CONSUME, -pair.getRight(), String.format("通过制作技能 [%d] %s 消耗", toCreate, ii.getName(toCreate)),String.format("数量: %d -> %d", consumedItem.getQuantity(), consumedItem.getQuantity() - pair.getRight()));
+                                }
                                 c.getAbstractPlayerInteraction().gainItem(pair.getLeft(), (short) -pair.getRight(), false);
                             }
                         }
@@ -198,17 +209,30 @@ public class MakerProcessor {
 
                             for (Pair<Integer, Integer> pair : recipe.getGainItems()) {
                                 c.getPlayer().setCS(true);
-                                c.getAbstractPlayerInteraction().gainItem(pair.getLeft(), pair.getRight().shortValue(), false);
+                                int gainId = pair.getLeft();
+                                short gainCnt = pair.getRight().shortValue();
+                                int finalToCreate = toCreate;
+                                InventoryManipulator.addById(c, gainId, gainCnt, "", -1, -1, (addedItem) -> {
+                                    traceabilityService.log(addedItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CRAFT, gainCnt, String.format("通过制作技能 [%d] %s 制作", finalToCreate, ii.getName(finalToCreate)), null);
+                                });
                                 c.getPlayer().setCS(false);
                             }
                         } else {
                             toCreate = recipe.getGainItems().get(0).getLeft();
 
                             if (stimulantid != -1) {
+                                Item stimulantItem = c.getPlayer().getInventory(ItemConstants.getInventoryType(stimulantid)).findById(stimulantid);
+                                if (stimulantItem != null) {
+                                     traceabilityService.log(stimulantItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CONSUME, -1, String.format("通过制作技能 [%d] %s 消耗", toCreate, ii.getName(toCreate)),String.format("数量: %d -> %d", stimulantItem.getQuantity(), stimulantItem.getQuantity() - 1));
+                                }
                                 c.getAbstractPlayerInteraction().gainItem(stimulantid, (short) -1, false);
                             }
                             if (!reagentids.isEmpty()) {
                                 for (Map.Entry<Integer, Short> r : reagentids.entrySet()) {
+                                    Item reagentItem = c.getPlayer().getInventory(ItemConstants.getInventoryType(r.getKey())).findById(r.getKey());
+                                    if (reagentItem != null) {
+                                         traceabilityService.log(reagentItem, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CONSUME, -r.getValue(), String.format("通过制作技能 [%d] %s 消耗", toCreate, ii.getName(toCreate)),String.format("数量: %d -> %d", reagentItem.getQuantity(), reagentItem.getQuantity() - r.getValue()));
+                                    }
                                     c.getAbstractPlayerInteraction().gainItem(r.getKey(), (short) (-1 * r.getValue()), false);
                                 }
                             }
@@ -447,6 +471,7 @@ public class MakerProcessor {
             eqp = ii.randomizeUpgradeStats(eqp);
         }
 
+        traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.ITEM_USAGE, TraceabilityService.ActionSourceType.ITEM_CRAFT, 1, String.format("通过制作技能 [%d] %s 制作", item.getItemId(), ii.getName(item.getItemId())), null);
         InventoryManipulator.addFromDrop(c, item, false, -1);
         return true;
     }

@@ -1,6 +1,5 @@
 package org.gms.util;
 
-import org.gms.client.Client;
 import org.gms.constants.string.CharsetConstants;
 import org.gms.manager.ServerManager;
 import org.gms.property.ServiceProperty;
@@ -8,7 +7,6 @@ import org.springframework.context.MessageSource;
 
 import java.util.Arrays;
 import java.util.Locale;
-import java.util.Optional;
 
 /**
  * messageSource.getMessage底层是通过循环遍历文件名去读取的
@@ -42,7 +40,11 @@ public class I18nUtil {
      * @return 组合后的message
      */
     public static String getLogMessage(String code, Object... args) {
-        return logSource.getMessage(code, args, LANGUAGE);
+        // 确保所有参数转为字符串，包括数字类型（避免千分符问题）
+        String[] stringArgs = Arrays.stream(args)
+                .map(String::valueOf)
+                .toArray(String[]::new);
+        return logSource.getMessage(code, stringArgs, LANGUAGE);
     }
 
     /**

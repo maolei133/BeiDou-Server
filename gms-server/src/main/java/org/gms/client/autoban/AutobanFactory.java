@@ -23,10 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package org.gms.client.autoban;
 
 import org.gms.client.Character;
-import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.facade.SecurityLoggerFacade;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.gms.server.logging.LogAction;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -59,9 +56,10 @@ public enum AutobanFactory {
     FAST_ITEM_PICKUP(5, SECONDS.toMillis(30), "快速物品拾取"),
     FAST_ATTACK(8, MILLISECONDS.toMillis(1000), "快速攻击"),
     MISS_HACK(7,SECONDS.toMillis(5), "MISS无敌"),
-    MPCON(25, SECONDS.toMillis(30), "MP消耗");
+    MPCON(25, SECONDS.toMillis(30), "MP消耗"),
+    SPAM(10, SECONDS.toMillis(5), "频繁操作"),
+    MOVE_LIFE_HACK(2, SECONDS.toMillis(10), "封图挂");
 
-    private static final Logger log = LoggerFactory.getLogger(AutobanFactory.class);
     private static final Set<Integer> ignoredChrIds = new HashSet<>();
 
     private final int points;
@@ -120,42 +118,25 @@ public enum AutobanFactory {
     }
 
     public void alert(Character chr, String reason) {
-        if (chr.getAutoBanManager().useAutoBan()) {
-            if (isIgnored(chr.getId())) {
-                return;
-            }
+        if (chr.getAutoBanManager().useAutoBan() && isIgnored(chr.getId())) {
+            return;
         }
-        if (chr.getAutoBanManager().useAutoBanLog()) {
-//            Server.getInstance().broadcastGMMessage(chr.getWorld(), PacketCreator.sendYellowTip("[异常提示] 玩家 " + chr.getName() + " 在地图 " + chr.getMap().getMapName() + "(" + chr.getMapId() + ") 因触发 " + this.getName() + " - " + reason));
-            log.warn("[异常提示] 玩家 {}({}) [Lv {}] 职业:{}({}) 在地图 {}({}) 坐标({},{}) 因触发 {} {}",
-                chr.getName(), 
-                chr.getId(), 
-                chr.getLevel(),
-                chr.getJob().getName(),
-                chr.getJob().getId(),
-                chr.getMap().getMapName(),
-                chr.getMapId(), 
-                chr.getPosition().x,
-                chr.getPosition().y,
-                this.getName(), 
-                reason);
-            
-            // 根据新日志系统规则，添加新的日志记录信息
-            SecurityLoggerFacade.logSecurityEventAuto(chr, DynamicCategoryManager.Category.MINOR_HACK_DETECTION, reason, "WARN");
-        }
+        // 调用新的中央日志记录器
+        AutobanLogger.log(chr, this, LogAction.AUTOBAN_CHEAT_ALERT, reason);
     }
 
 
     /**
      * 自动封禁玩家
-     * 
+     *
      * @param chr 要被封禁的玩家角色对象
      * @param value 封禁的原因或相关信息
      */
     public void autoban(Character chr, String value) {
         if (chr.getAutoBanManager().useAutoBan()) {
+            // 调用新的中央日志记录器
+            AutobanLogger.log(chr, this, LogAction.AUTOBAN_CHEAT_BAN, value);
             chr.autoBan("因 [" + this.getName() + "] 被自动封禁: " + value);
-            //chr.sendPolice("You will be disconnected for (" + this.name() + ": " + value + ")");
         }
     }
 

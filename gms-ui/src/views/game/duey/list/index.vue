@@ -153,12 +153,9 @@
           @page-change="onPageChange"
           @page-size-change="onPageSizeChange"
         >
-          <template #mesos="{ record }">
-            <span v-if="record.mesos > 0">{{ record.mesos }}</span>
-            <span v-else>-</span>
-          </template>
           <template #items="{ record }">
-            <a-space wrap>
+            <div class="items-cell-content">
+              <!-- **关键修复**: 恢复 v-for 循环，以兼容旧的复数物品逻辑 -->
               <div
                 v-for="item in record.items"
                 :key="item.itemId"
@@ -188,11 +185,16 @@
                   </template>
                 </a-popover>
                 <div class="item-info">
-                  <div class="item-name">{{ item.name || item.itemId }}</div>
+                  <div class="item-name">
+                    {{ item.name || item.itemId }}
+                  </div>
                   <div class="item-quantity">x {{ item.quantity }}</div>
                 </div>
               </div>
-            </a-space>
+              <div v-if="record.mesos > 0" class="mesos-info">
+                {{ $t('duey.list.mesos') }}: {{ record.mesos }}
+              </div>
+            </div>
           </template>
           <template #type="{ record }">
             <a-tag :color="record.type === 1 ? 'red' : 'green'">
@@ -221,23 +223,59 @@
             </a-tag>
           </template>
           <template #timestamp="{ record }">
-            {{ formatDate(record.timestamp) }}
+            <div class="time-info-cell">
+              <div class="time-row">
+                <span class="time-label">{{ $t('duey.list.sendTime') }}:</span>
+                <span class="time-value">{{
+                  formatDate(record.timestamp)
+                }}</span>
+              </div>
+              <div class="time-row">
+                <span class="time-label"
+                  >{{ $t('duey.list.deliveryTime') }}:</span
+                >
+                <span class="time-value">{{
+                  formatDate(record.deliveryTime)
+                }}</span>
+              </div>
+            </div>
           </template>
-          <template #deliveryTime="{ record }">
-            {{ formatDate(record.deliveryTime) }}
-          </template>
-          <template #expireTime="{ record }">
-            {{ formatDate(record.expireTime) }}
+          <template #timeInfo="{ record }">
+            <div class="time-info-cell">
+              <div class="time-row">
+                <span class="time-label">{{ $t('duey.list.expire') }}:</span>
+                <span class="time-value">{{
+                  formatDate(record.expireTime)
+                }}</span>
+              </div>
+              <div class="time-row">
+                <span class="time-label"
+                  >{{ $t('duey.list.statusChange') }}:</span
+                >
+                <span class="time-value">{{
+                  formatDate(record.statusTime)
+                }}</span>
+              </div>
+            </div>
           </template>
           <template #operations="{ record }">
-            <a-popconfirm
-              :content="$t('duey.list.delete.confirm')"
-              @ok="handleDelete(record)"
-            >
-              <a-button type="text" status="danger" size="small">
-                {{ $t('button.delete') }}
+            <a-dropdown trigger="click">
+              <a-button type="text" size="small">
+                {{ $t('duey.list.operation') }} <icon-down />
               </a-button>
-            </a-popconfirm>
+              <template #content>
+                <a-doption @click="handleEdit(record)">
+                  <template #icon><icon-edit /></template>
+                  {{ $t('button.edit') }}
+                </a-doption>
+                <a-doption @click="handleDelete(record)">
+                  <template #icon><icon-delete /></template>
+                  <span style="color: rgb(var(--danger-6))">{{
+                    $t('button.delete')
+                  }}</span>
+                </a-doption>
+              </template>
+            </a-dropdown>
           </template>
         </a-table>
       </template>
@@ -250,25 +288,34 @@
               :col-gap="16"
               :row-gap="16"
             >
-              <a-grid-item v-for="item in renderData" :key="item.packageId">
+              <a-grid-item v-for="pkg in renderData" :key="pkg.packageId">
                 <a-card class="duey-card" hoverable>
                   <template #actions>
-                    <a-popconfirm
-                      :content="$t('duey.list.delete.confirm')"
-                      @ok="handleDelete(item)"
-                    >
-                      <span class="action-button delete">
-                        <icon-delete /> {{ $t('button.delete') }}
+                    <a-dropdown trigger="click">
+                      <span class="action-button">
+                        {{ $t('duey.list.operation') }} <icon-down />
                       </span>
-                    </a-popconfirm>
+                      <template #content>
+                        <a-doption @click="handleEdit(pkg)">
+                          <template #icon><icon-edit /></template>
+                          {{ $t('button.edit') }}
+                        </a-doption>
+                        <a-doption @click="handleDelete(pkg)">
+                          <template #icon><icon-delete /></template>
+                          <span style="color: rgb(var(--danger-6))">{{
+                            $t('button.delete')
+                          }}</span>
+                        </a-doption>
+                      </template>
+                    </a-dropdown>
                   </template>
                   <a-card-meta>
                     <template #title>
                       <div class="card-title">
-                        <span class="sender-name">{{ item.senderName }}</span>
+                        <span class="sender-name">{{ pkg.senderName }}</span>
                         <icon-right />
                         <span class="receiver-name">{{
-                          item.receiverName
+                          pkg.receiverName
                         }}</span>
                       </div>
                     </template>
@@ -277,63 +324,63 @@
                         <div class="card-info-row">
                           <a-tag
                             size="small"
-                            :color="item.type === 1 ? 'red' : 'green'"
+                            :color="pkg.type === 1 ? 'red' : 'green'"
                           >
                             {{
-                              item.type === 1
+                              pkg.type === 1
                                 ? $t('duey.list.type.quick')
                                 : $t('duey.list.type.normal')
                             }}
                           </a-tag>
                           <a-tag
-                            v-if="item.checked === 1"
+                            v-if="pkg.checked === 1"
                             size="small"
                             color="orange"
                           >
                             {{ $t('duey.list.status.unread') }}
                           </a-tag>
                           <a-tag
-                            v-else-if="item.checked === 0"
+                            v-else-if="pkg.checked === 0"
                             size="small"
                             color="gray"
                           >
                             {{ $t('duey.list.status.read') }}
                           </a-tag>
                           <a-tag
-                            v-else-if="item.checked === 2"
+                            v-else-if="pkg.checked === 2"
                             size="small"
                             color="blue"
                           >
                             {{ $t('duey.list.status.claimed') }}
                           </a-tag>
                           <a-tag
-                            v-else-if="item.checked === 3"
+                            v-else-if="pkg.checked === 3"
                             size="small"
                             color="red"
                           >
                             {{ $t('duey.list.status.expired') }}
                           </a-tag>
                           <a-tag
-                            v-else-if="item.checked === 4"
+                            v-else-if="pkg.checked === 4"
                             size="small"
                             color="magenta"
                           >
                             {{ $t('duey.list.status.deleted') }}
                           </a-tag>
                         </div>
-                        <div v-if="item.mesos > 0" class="card-info-row">
+                        <div v-if="pkg.mesos > 0" class="card-info-row">
                           <span class="label"
                             >{{ $t('duey.list.mesos') }}:</span
                           >
-                          <span class="value">{{ item.mesos }}</span>
+                          <span class="value">{{ pkg.mesos }}</span>
                         </div>
                         <div
-                          v-if="item.items && item.items.length > 0"
+                          v-if="pkg.items && pkg.items.length > 0"
                           class="card-items"
                         >
                           <div
-                            v-for="i in item.items"
-                            :key="i.itemId"
+                            v-for="item in pkg.items"
+                            :key="item.itemId"
                             class="mini-item"
                           >
                             <a-popover
@@ -347,23 +394,30 @@
                               :arrow-style="{ display: 'none' }"
                             >
                               <img
-                                :src="getIconUrl('item', i.itemId)"
-                                :title="(i.name || i.itemId).toString()"
+                                :src="getIconUrl('item', item.itemId)"
+                                :title="item.name || item.itemId"
                               />
                               <template #content>
                                 <keep-alive>
                                   <component
-                                    :is="getTooltipComponent(i.itemId)"
-                                    :item="i"
+                                    :is="getTooltipComponent(item.itemId)"
+                                    :item="item"
                                   />
                                 </keep-alive>
                               </template>
                             </a-popover>
-                            <span class="qty">x{{ i.quantity }}</span>
+                            <span class="qty">x{{ item.quantity }}</span>
                           </div>
                         </div>
                         <div class="card-time">
-                          {{ formatDate(item.timestamp) }}
+                          <div>
+                            {{ $t('duey.list.sendTime') }}:
+                            {{ formatDate(pkg.timestamp) }}
+                          </div>
+                          <div>
+                            {{ $t('duey.list.expire') }}:
+                            {{ formatDate(pkg.expireTime) }}
+                          </div>
                         </div>
                       </div>
                     </template>
@@ -386,6 +440,11 @@
     </a-card>
 
     <SendDueyModal v-model:visible="sendVisible" @success="search" />
+    <SendDueyModal
+      v-model:visible="editVisible"
+      :initial-data="currentEditPackage"
+      @success="search"
+    />
   </div>
 </template>
 
@@ -416,6 +475,8 @@
     IconApps,
     IconRight,
     IconDelete,
+    IconEdit,
+    IconDown,
   } from '@arco-design/web-vue/es/icon';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import { isEquip } from '@/utils/mapleStoryItem';
@@ -451,6 +512,8 @@
   });
 
   const sendVisible = ref(false);
+  const editVisible = ref(false);
+  const currentEditPackage = ref<DueyPackage | undefined>(undefined);
   const viewMode = ref('list');
 
   const formatDate = (date: string | number | Date) => {
@@ -479,14 +542,9 @@
       width: 120,
     },
     {
-      title: t('duey.list.mesos'),
-      slotName: 'mesos',
-      width: 120,
-    },
-    {
       title: t('duey.list.items'),
       slotName: 'items',
-      width: 180, // 增加宽度
+      width: 250, // 增加宽度以容纳物品和金币
     },
     {
       title: t('duey.list.message'),
@@ -509,22 +567,17 @@
     {
       title: t('duey.list.timeRange'),
       slotName: 'timestamp',
-      width: 170,
+      width: 200,
     },
     {
-      title: t('duey.list.deliveryTime'),
-      slotName: 'deliveryTime',
-      width: 170,
-    },
-    {
-      title: t('duey.list.statusChangeTime'), // 修改标题为状态变更时间
-      slotName: 'expireTime',
-      width: 170,
+      title: t('duey.list.timeInfo'),
+      slotName: 'timeInfo',
+      width: 200,
     },
     {
       title: t('duey.list.operation'),
       slotName: 'operations',
-      width: 80,
+      width: 100,
       fixed: 'right',
     },
   ]);
@@ -535,7 +588,27 @@
     setLoading(true);
     try {
       const { data } = await getDueyList(params);
-      renderData.value = data.records;
+      // **关键修复**: 在将数据赋值给 renderData 之前，进行数据转换以适配模板
+      const processedRecords = data.records.map((record: any) => {
+        // 1. 将单个 item 对象转换为 items 数组
+        if (record.item && !record.items) {
+          record.items = [record.item];
+        }
+
+        // 2. 标准化 items 数组内每个对象的字段名
+        if (record.items && Array.isArray(record.items)) {
+          record.items = record.items.map((item: any) => {
+            return {
+              ...item,
+              itemId: item.id || item.itemId,
+              quantity: item.qty || item.quantity,
+              name: item.nm || item.name,
+            };
+          });
+        }
+        return record;
+      });
+      renderData.value = processedRecords;
       pagination.current = params.pageNo;
       pagination.total = data.totalRow;
     } catch (err) {
@@ -583,6 +656,15 @@
     sendVisible.value = true;
   };
 
+  const handleEdit = (record: DueyPackage) => {
+    if (record.checked === 2) {
+      Message.warning(t('duey.send.error.claimed'));
+      return;
+    }
+    currentEditPackage.value = record;
+    editVisible.value = true;
+  };
+
   const handleDelete = async (record: DueyPackage) => {
     try {
       await deleteDueyPackage(record.packageId);
@@ -627,6 +709,19 @@
     }
   }
 
+  .items-cell-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0px;
+  }
+
+  .mesos-info {
+    font-size: 12px;
+    color: var(--color-text-2);
+    font-weight: bold;
+    margin-top: -8px;
+  }
+
   .item-cell {
     display: flex;
     align-items: center;
@@ -635,8 +730,14 @@
     border-radius: 4px;
     background-color: var(--color-bg-2);
     margin-right: 4px;
-    margin-bottom: 4px;
+    margin-bottom: 0px;
     white-space: nowrap; /* 防止换行 */
+    cursor: pointer; /* 添加手型光标 */
+    transition: background-color 0.2s;
+
+    &:hover {
+      background-color: var(--color-fill-2);
+    }
 
     .item-icon {
       width: 32px;
@@ -661,6 +762,26 @@
       .item-quantity {
         font-size: 10px;
         color: var(--color-text-3);
+      }
+    }
+  }
+
+  /* 时间信息列样式 */
+  .time-info-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    .time-row {
+      display: flex;
+      align-items: center;
+      font-size: 12px;
+      .time-label {
+        color: var(--color-text-3);
+        margin-right: 4px;
+        min-width: 36px; /* 对齐标签 */
+      }
+      .time-value {
+        color: var(--color-text-1);
       }
     }
   }
@@ -725,6 +846,10 @@
       align-items: center;
       justify-content: center;
       background-color: var(--color-bg-2);
+      cursor: pointer;
+      &:hover {
+        background-color: var(--color-fill-2);
+      }
       img {
         max-width: 100%;
         max-height: 100%;

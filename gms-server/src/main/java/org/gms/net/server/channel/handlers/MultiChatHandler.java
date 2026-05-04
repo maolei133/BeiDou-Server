@@ -24,6 +24,7 @@ package org.gms.net.server.channel.handlers;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.autoban.AutobanFactory;
+import org.gms.client.autoban.AutobanManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
@@ -39,7 +40,9 @@ public final class MultiChatHandler extends AbstractPacketHandler {
     @Override
     public void handlePacket(InPacket p, Client c) {
         Character player = c.getPlayer();
-        if (player.getAutoBanManager().getLastSpam(7) + 200 > currentServerTime()) {
+        if (player == null) return;
+        AutobanManager atm = player.getAutoBanManager();
+        if (atm.getLastActionTime(AutobanManager.ActionType.CHAT) + 200 > currentServerTime()) {
             return;
         }
 
@@ -73,6 +76,6 @@ public final class MultiChatHandler extends AbstractPacketHandler {
                 ChatLogger.log(c, "Ally", chattext);
             }
         }
-        player.getAutoBanManager().spam(7);
+        atm.recordAction(AutobanManager.ActionType.CHAT);
     }
 }

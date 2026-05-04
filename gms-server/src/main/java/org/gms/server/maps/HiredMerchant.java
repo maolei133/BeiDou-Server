@@ -24,6 +24,7 @@ package org.gms.server.maps;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.client.Job;
 import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
@@ -37,18 +38,26 @@ import org.gms.dao.entity.HiredMerchantItemsDO;
 import org.gms.dao.entity.HiredMerchantTransactionsDO;
 import org.gms.dao.entity.HiredMerchantsDO;
 import org.gms.manager.ServerManager;
+import org.gms.model.dto.ItemInfoRtnDTO;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.Server;
 import org.gms.server.ItemInformationProvider;
 import org.gms.server.TimerManager;
 import org.gms.server.Trade;
+import org.gms.server.logging.AuditContext;
 import org.gms.service.CharacterService;
 import org.gms.service.HiredMerchantService;
+import org.gms.service.TraceabilityService;
+import org.gms.util.ItemConverter;
 import org.gms.util.PacketCreator;
 import org.gms.util.Pair;
+import org.gms.util.SnowflakeIdGenerator;
+import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -58,40 +67,81 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
+ * 雇佣商店
+ * <p>
+ * 代表游戏地图中的一个雇佣商店实例。
+ * 负责处理商店的开张、关闭、物品买卖、访客管理以及与数据库的交互。
+ * </p>
+ *
  * @author XoticStory
- * @author Ronan - concurrency protection
+ * @author Ronan - 并发保护
  */
 public class HiredMerchant extends AbstractMapObject {
     private static final Logger log = LoggerFactory.getLogger(HiredMerchant.class);
+    /** 访客历史记录最大数量 */
     private static final int VISITOR_HISTORY_LIMIT = 10;
+    /** 黑名单最大数量 */
     private static final int BLACKLIST_LIMIT = 20;
 
+    /** 店主角色ID */
     private final int ownerId;
+    /** 商店外观道具ID */
     private final int itemId;
+    /** 当前商店内的金币（未取回） */
     private int mesos = 0;
+    /** 所在频道 */
     private final int channel;
+    /** 所在世界 */
     private final int world;
+    /** 开店时间戳 */
     private final long start;
+    /** 店主名称 */
     private String ownerName = "";
+    /** 商店描述/名称 */
     private String description = "";
+    /** 商店内的物品列表 */
     private final List<PlayerShopItem> items = new LinkedList<>();
+    /** 聊天消息记录 */
     private final List<Pair<String, Byte>> messages = new LinkedList<>();
+    /** 已售出物品记录 */
     private final List<SoldItem> sold = new LinkedList<>();
+    /** 商店是否开启状态 */
     private final AtomicBoolean open = new AtomicBoolean();
+    /** 商店是否已发布（正式营业） */
     private boolean published = false;
+    /** 所在地图对象 */
     private MapleMap map;
+    /** 当前访客列表（最多3人） */
     private final Visitor[] visitors = new Visitor[3];
+    /** 访客历史记录 */
     private final LinkedList<PastVisitor> visitorHistory = new LinkedList<>();
-    private final LinkedHashSet<String> blacklist = new LinkedHashSet<>(); // 区分大小写的角色名
+    /** 黑名单列表（角色名） */
+    private final LinkedHashSet<String> blacklist = new LinkedHashSet<>();
+    /** 访客操作锁 */
     private final Lock visitorLock = new ReentrantLock(true);
+    /** 角色服务 */
     private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
+    /** 雇佣商店服务 */
     private static final HiredMerchantService hiredMerchantService = ServerManager.getApplicationContext().getBean(HiredMerchantService.class);
+    /** 溯源服务 */
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+    /** 全局JSON转换器 */
+    private static final ObjectMapper objectMapper = SpringContextUtil.getBean(ObjectMapper.class);
     
+    /** 数据库中的商店ID */
     private int merchantId;
+    /** 定时关闭任务 */
     private ScheduledFuture<?> closeSchedule = null;
+    
+    /** 总销售额（税前） */
+    private long totalSales = 0;
+    /** 总收入（税后） */
+    private long totalRevenue = 0;
 
+    /** 访客记录内部类 */
     private record Visitor(Character chr, Instant enteredAt) {}
 
+    /** 历史访客记录内部类 */
     public record PastVisitor(String chrName, Duration visitDuration) {}
 
     public HiredMerchant(final Character owner, String desc, int itemId) {
@@ -118,37 +168,39 @@ public class HiredMerchant extends AbstractMapObject {
         this.description = dbInfo.getDescription();
         this.mesos = dbInfo.getMesos() != null ? dbInfo.getMesos().intValue() : 0;
         this.setPosition(new java.awt.Point(dbInfo.getX(), dbInfo.getY()));
-        // 地图未在此处设置，必须手动设置
-        // 注意：这里不调用 scheduleClose，因为在 World.loadActiveHiredMerchants 中会统一调用
     }
 
     public void loadItemsFromDb(List<HiredMerchantItemsDO> dbItems) {
         synchronized (items) {
             items.clear();
             for (HiredMerchantItemsDO itemDO : dbItems) {
-                if (HiredMerchantItemsDO.STATUS_RETURNED.equals(itemDO.getStatus())) {
-                    continue;
-                }
-                Item item = hiredMerchantService.deserializeItem(itemDO.getItemData());
-                if (item != null) {
-                    short bundles = itemDO.getBundles() != null ? itemDO.getBundles().shortValue() : 0;
-                    int price = itemDO.getPrice() != null ? itemDO.getPrice() : 0;
-                    
-                    PlayerShopItem psi = new PlayerShopItem(item, bundles, price);
-                    psi.setDbId(itemDO.getId());
-                    
-                    int sold = itemDO.getSoldQuantity() != null ? itemDO.getSoldQuantity() : 0;
-                    
-                    short currentBundles = (short) (bundles - sold);
-                    if (currentBundles < 0) {
-                        currentBundles = 0;
+                if (HiredMerchantItemsDO.STATUS_RETURNED.equals(itemDO.getStatus())) continue;
+                try {
+                    // 调用新的反序列化方法，传入 quantity
+                    Item item = hiredMerchantService.deserializeItem(itemDO.getItemData(), itemDO.getItemId(), itemDO.getQuantity().shortValue());
+                    if (item != null) {
+                        if (itemDO.getUid() != null && itemDO.getUid() > 0) {
+                            item.setUid(itemDO.getUid());
+                        } else {
+                            item.setUid(SnowflakeIdGenerator.getInstance().nextId());
+                        }
+                        
+                        short bundles = itemDO.getBundles() != null ? itemDO.getBundles().shortValue() : 0;
+                        int price = itemDO.getPrice() != null ? itemDO.getPrice() : 0;
+                        
+                        PlayerShopItem psi = new PlayerShopItem(item, bundles, price);
+                        psi.setDbId(itemDO.getId());
+                        
+                        int sold = itemDO.getSoldQuantity() != null ? itemDO.getSoldQuantity() : 0;
+                        short currentBundles = (short) (bundles - sold);
+                        if (currentBundles < 0) currentBundles = 0;
+                        
+                        psi.setBundles(currentBundles);
+                        if (currentBundles == 0) psi.setDoesExist(false);
+                        items.add(psi);
                     }
-                    
-                    psi.setBundles(currentBundles);
-                    if (currentBundles == 0) {
-                        psi.setDoesExist(false);
-                    }
-                    items.add(psi);
+                } catch (Exception e) {
+                    log.error("从数据库加载雇佣商店物品失败, DB ID: {}", itemDO.getId(), e);
                 }
             }
         }
@@ -157,11 +209,14 @@ public class HiredMerchant extends AbstractMapObject {
     public void loadSoldItems(List<HiredMerchantTransactionsDO> transactions) {
         synchronized (sold) {
             sold.clear();
+            totalSales = 0;
+            totalRevenue = 0;
             for (HiredMerchantTransactionsDO tx : transactions) {
                 String buyerName = Character.getNameById(tx.getBuyerId());
                 if (buyerName == null) buyerName = "未知买家";
-                
                 sold.add(new SoldItem(buyerName, tx.getItemId(), tx.getQuantity().shortValue(), tx.getTotalPrice().intValue()));
+                totalSales += (long)(tx.getPrice() != null ? tx.getPrice() : 0) * (tx.getQuantity() != null ? tx.getQuantity() : 0);
+                totalRevenue += tx.getTotalPrice() != null ? tx.getTotalPrice() : 0;
             }
         }
     }
@@ -201,14 +256,11 @@ public class HiredMerchant extends AbstractMapObject {
             byte count = 0;
             if (this.isOpen()) {
                 for (Visitor visitor : visitors) {
-                    if (visitor != null) {
-                        count++;
-                    }
+                    if (visitor != null) count++;
                 }
             } else {
                 count = (byte) (visitors.length + 1);
             }
-
             return new byte[]{count, (byte) (visitors.length + 1)};
         } finally {
             visitorLock.unlock();
@@ -223,10 +275,8 @@ public class HiredMerchant extends AbstractMapObject {
                 visitors[i] = new Visitor(visitor, Instant.now());
                 broadcastToVisitors(PacketCreator.hiredMerchantVisitorAdd(visitor, i + 1));
                 this.getMap().broadcastMessage(PacketCreator.updateHiredMerchantBox(this));
-
                 return true;
             }
-
             return false;
         } finally {
             visitorLock.unlock();
@@ -237,10 +287,7 @@ public class HiredMerchant extends AbstractMapObject {
         visitorLock.lock();
         try {
             int slot = getVisitorSlot(chr);
-            if (slot < 0) { // 未找到
-                return;
-            }
-
+            if (slot < 0) return;
             Visitor visitor = visitors[slot];
             if (visitor != null && visitor.chr.getId() == chr.getId()) {
                 visitors[slot] = null;
@@ -256,9 +303,7 @@ public class HiredMerchant extends AbstractMapObject {
     private void addVisitorToHistory(Visitor visitor) {
         Duration visitDuration = Duration.between(visitor.enteredAt, Instant.now());
         visitorHistory.addFirst(new PastVisitor(visitor.chr.getName(), visitDuration));
-        while (visitorHistory.size() > VISITOR_HISTORY_LIMIT) {
-            visitorHistory.removeLast();
-        }
+        if (visitorHistory.size() > VISITOR_HISTORY_LIMIT) visitorHistory.removeLast();
     }
 
     public int getVisitorSlotThreadsafe(Character visitor) {
@@ -272,11 +317,9 @@ public class HiredMerchant extends AbstractMapObject {
 
     private int getVisitorSlot(Character visitor) {
         for (int i = 0; i < 3; i++) {
-            if (visitors[i] != null && visitors[i].chr.getId() == visitor.getId()) {
-                return i;
-            }
+            if (visitors[i] != null && visitors[i].chr.getId() == visitor.getId()) return i;
         }
-        return -1; // 实际上是0，因为有+1。
+        return -1;
     }
 
     private void removeAllVisitors() {
@@ -284,17 +327,14 @@ public class HiredMerchant extends AbstractMapObject {
         try {
             for (int i = 0; i < 3; i++) {
                 Visitor visitor = visitors[i];
-
                 if (visitor != null) {
-                    final Character visitorChr = visitor.chr;
-                    visitorChr.setHiredMerchant(null);
-                    visitorChr.sendPacket(PacketCreator.leaveHiredMerchant(i + 1, 0x11));
-                    visitorChr.sendPacket(PacketCreator.hiredMerchantMaintenanceMessage());
+                    visitor.chr.setHiredMerchant(null);
+                    visitor.chr.sendPacket(PacketCreator.leaveHiredMerchant(i + 1, 0x11));
+                    visitor.chr.sendPacket(PacketCreator.hiredMerchantMaintenanceMessage());
                     visitors[i] = null;
                     addVisitorToHistory(visitor);
                 }
             }
-
             this.getMap().broadcastMessage(PacketCreator.updateHiredMerchantBox(this));
         } finally {
             visitorLock.unlock();
@@ -310,21 +350,69 @@ public class HiredMerchant extends AbstractMapObject {
     }
 
     public void withdrawMesos(Character chr) {
+        // 检查调用此方法的角色是否为商店的拥有者
         if (isOwner(chr)) {
+            // 同步代码块，确保在处理商店物品和金币时的线程安全
             synchronized (items) {
+                // 确保这是一个已在数据库中注册的商店
                 if (merchantId > 0) {
+                    // 从数据库中原子性地取出所有金币，并将数据库中的记录清零，防止并发问题
                     long withdrawn = hiredMerchantService.withdrawAllMesos(merchantId);
-                    if (withdrawn > 0) {
-                        chr.gainMeso((int) withdrawn, true);
-                        chr.dropMessage(1, "已从雇佣商人取出" + withdrawn + "金币。");
-                        this.mesos = 0;
 
-                        // 重新加载物品列表，移除已结算的售罄物品
-                        List<HiredMerchantItemsDO> dbItems = hiredMerchantService.getMerchantItems(merchantId);
-                        loadItemsFromDb(dbItems);
+                    // 如果确实取出了金币
+                    if (withdrawn > 0) {
+                        long playerCurrentMeso = chr.getMeso();
+                        // 计算玩家背包还能容纳多少金币（以Integer.MAX_VALUE为上限）
+                        long space = (long)Integer.MAX_VALUE - playerCurrentMeso;
+
+                        // 如果玩家背包已满或无法再容纳任何金币
+                        if (space <= 0) {
+                            // 必须将刚才取出的所有金币安全地存回数据库
+                            HiredMerchantsDO merchantDO = hiredMerchantService.getMerchantById(merchantId);
+                            if (merchantDO != null) {
+                                merchantDO.setMesos(withdrawn);
+                                hiredMerchantService.updateMerchant(merchantDO);
+                                // 更新内存中的金币缓存
+                                this.mesos = (int) Math.min(withdrawn, Integer.MAX_VALUE);
+                            }
+                            // 弹窗提示玩家金币已达上限
+                            chr.dropMessage(1, "您的金币已达上限，无法取出更多金币。");
+                            chr.dropMessage(5, "您的金币已达上限，无法取出更多金币。");
+                            return; // 终止操作
+                        }
+
+                        // 计算本次实际可以给予玩家的金币数量（取“商店总额”和“背包剩余空间”的较小值）
+                        long amountToGive = Math.min(withdrawn, space);
+                        // 计算需要存回商店的剩余金币
+                        long amountToReturn = withdrawn - amountToGive;
+
+                        // 将计算出的金额给予玩家
+                        if (amountToGive > 0) {
+                            chr.gainMeso((int) amountToGive, true);
+                        }
+
+                        // 如果有剩余金币需要存回
+                        if (amountToReturn > 0) {
+                            // 将剩余金额更新回数据库
+                            HiredMerchantsDO merchantDO = hiredMerchantService.getMerchantById(merchantId);
+                            if (merchantDO != null) {
+                                merchantDO.setMesos(amountToReturn);
+                                hiredMerchantService.updateMerchant(merchantDO);
+                            }
+                            // 更新内存中的金币缓存
+                            this.mesos = (int) Math.min(amountToReturn, Integer.MAX_VALUE);
+                            // 明确告知玩家本次取出的金额和剩余金额
+                            chr.dropMessage(1, "由于金币已达上限，本次取出 " + amountToGive + " 金币，商店中剩余 " + amountToReturn + " 金币。");
+                            chr.dropMessage(0, "由于金币已达上限，本次取出 " + amountToGive + " 金币，商店中剩余 " + amountToReturn + " 金币。");
+                        } else {
+                            // 如果所有金币都被成功取出
+                            this.mesos = 0; // 清空内存缓存
+                            chr.dropMessage(1, "已从雇佣商人取出 " + amountToGive + " 金币。");
+                            chr.dropMessage(0, "已从雇佣商人取出 " + amountToGive + " 金币。");
+                        }
                     }
                 }
-                // 如果有旧系统的金币，也一并取出
+                // 处理旧的、可能与Fredrick相关的金币系统（保持原样）
                 chr.withdrawMerchantMesos();
             }
         }
@@ -337,54 +425,41 @@ public class HiredMerchant extends AbstractMapObject {
                 if (shopItem.getBundles() > 0) {
                     Item iitem = shopItem.getItem().copy();
                     iitem.setQuantity((short) (shopItem.getItem().getQuantity() * shopItem.getBundles()));
-
                     if (!Inventory.checkSpot(chr, iitem)) {
                         chr.sendPacket(PacketCreator.serverNotice(1, "请确保背包有足够的空间来取回物品。"));
                         chr.sendPacket(PacketCreator.enableActions());
                         return;
                     }
-
                     InventoryManipulator.addFromDrop(chr.getClient(), iitem, true);
+                    // 溯源日志：记录下架返还
+                    traceabilityService.log(iitem, chr, TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_RETURN, iitem.getQuantity(), null, null, ownerId, ownerName);
                 }
-
                 removeFromSlot(slot);
-                
-                // 更新数据库
                 if (shopItem.getDbId() != null) {
                     HiredMerchantTransactionsDO transaction = HiredMerchantTransactionsDO.builder()
-                            .merchantId(merchantId)
-                            .itemId(shopItem.getItem().getItemId())
-                            .buyerId(ownerId)
-                            .type(HiredMerchantTransactionsDO.TYPE_REMOVE)
-                            .quantity((int) (shopItem.getItem().getQuantity() * shopItem.getBundles()))
-                            .timestamp(System.currentTimeMillis())
-                            .build();
+                            .merchantId(merchantId).itemId(shopItem.getItem().getItemId()).buyerId(ownerId)
+                            .type(HiredMerchantTransactionsDO.TYPE_REMOVE).quantity((int) (shopItem.getItem().getQuantity() * shopItem.getBundles()))
+                            .timestamp(System.currentTimeMillis()).uid(shopItem.getItem().getUid()).build();
                     hiredMerchantService.removeItem(shopItem.getDbId(), transaction);
                 }
-                
                 chr.sendPacket(PacketCreator.updateHiredMerchant(this, chr));
             }
-
-            if (GameConfig.getServerBoolean("use_enforce_merchant_save")) {
-                chr.saveCharToDB(false);
-            }
+            if (GameConfig.getServerBoolean("use_enforce_merchant_save")) chr.saveCharToDB(false);
         }
     }
 
-    private static boolean canBuy(Client c, Item newItem) {    // 感谢 xiaokelvin (Conrad) 注意到这里泄露的测试代码
+    private static boolean canBuy(Client c, Item newItem) {
         return InventoryManipulator.checkSpace(c, newItem.getItemId(), newItem.getQuantity(), newItem.getOwner()) && InventoryManipulator.addFromDrop(c, newItem, false);
     }
 
     private int getQuantityLeft(int itemid) {
         synchronized (items) {
             int count = 0;
-
             for (PlayerShopItem mpsi : items) {
                 if (mpsi.getItem().getItemId() == itemid) {
                     count += (mpsi.getBundles() * mpsi.getItem().getQuantity());
                 }
             }
-
             return count;
         }
     }
@@ -393,18 +468,14 @@ public class HiredMerchant extends AbstractMapObject {
         synchronized (items) {
             PlayerShopItem pItem = items.get(item);
             Item newItem = pItem.getItem().copy();
+            newItem.setQuantity((short) (pItem.getItem().getQuantity() * quantity));
 
-            newItem.setQuantity((short) ((pItem.getItem().getQuantity() * quantity)));
-            if (quantity < 1 || !pItem.isExist() || pItem.getBundles() < quantity) {
-                c.sendPacket(PacketCreator.enableActions());
-                return;
-            } else if (newItem.getInventoryType().equals(InventoryType.EQUIP) && newItem.getQuantity() > 1) {
+            if (quantity < 1 || !pItem.isExist() || pItem.getBundles() < quantity || (newItem.getInventoryType().equals(InventoryType.EQUIP) && newItem.getQuantity() > 1)) {
                 c.sendPacket(PacketCreator.enableActions());
                 return;
             }
 
             KarmaManipulator.toggleKarmaFlagToUntradeable(newItem);
-
             long priceLong = (long) pItem.getPrice() * quantity;
             if (priceLong > Integer.MAX_VALUE || priceLong < 0) {
                 c.getPlayer().dropMessage(1, "交易金额异常。");
@@ -412,78 +483,64 @@ public class HiredMerchant extends AbstractMapObject {
                 return;
             }
             int price = (int) priceLong;
+            Character chr = c.getPlayer();
 
-            if (c.getPlayer().getMeso() >= price) {
+            if (chr.getMeso() >= price) {
                 if (canBuy(c, newItem)) {
-                    c.getPlayer().gainMeso(-price, false);
-                    
-                    // 使用配置的税率
+                    chr.gainMeso(-price, false);
                     int taxRate = GameConfig.getServerInt("hired_merchant_tax_rate", 0);
-                    int fee = (int) ((long) price * taxRate / 100);
-                    if (fee <= 0) fee = Trade.getFee(price);    //如果参数没有设置税率，则使用默认税率
+                    int fee = (taxRate > 0) ? (int) (price * taxRate / 100.0) : Trade.getFee(price);
                     price -= fee;
 
-                    // 检查金币上限
-                    long mesoLimit = GameConfig.getServerLong("hired_merchant_meso_limit", 2147483647L);
-                    if (this.mesos + price > mesoLimit) {
-                        c.getPlayer().dropMessage(1, "店主金币已达上限，无法购买。");
-                        c.getPlayer().gainMeso(price + fee, false); // 退还金币
+                    if (this.mesos + price > GameConfig.getServerLong("hired_merchant_meso_limit", 2147483647L)) {
+                        chr.dropMessage(1, "店主金币已达上限，无法购买。");
+                        chr.gainMeso(price + fee, false);
                         c.sendPacket(PacketCreator.enableActions());
                         return;
                     }
 
                     synchronized (sold) {
-                        sold.add(new SoldItem(c.getPlayer().getName(), pItem.getItem().getItemId(), newItem.getQuantity(), price));
+                        sold.add(new SoldItem(chr.getName(), pItem.getItem().getItemId(), newItem.getQuantity(), (int) priceLong));
                     }
-
+                    this.totalSales += priceLong;
+                    this.totalRevenue += price;
                     pItem.setBundles((short) (pItem.getBundles() - quantity));
-                    if (pItem.getBundles() < 1) {
-                        pItem.setDoesExist(false);
-                    }
+                    if (pItem.getBundles() < 1) pItem.setDoesExist(false);
 
-                    if (GameConfig.getServerBoolean("use_announce_shop_item_sold")) {   // 创意来自 Vcoc
-                        announceItemSold(newItem, price, getQuantityLeft(pItem.getItem().getItemId()));
+                    if (GameConfig.getServerBoolean("use_announce_shop_item_sold")) {
+                        announceItemSold(newItem, price, priceLong, chr.getName(), getQuantityLeft(pItem.getItem().getItemId()));
                     }
+                    
+                    // 溯源日志：为购买者记录
+                    traceabilityService.log(newItem, chr, TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_BUY, newItem.getQuantity(), null, null, ownerId, ownerName);
 
+                    // 溯源日志：为店主记录
+                    Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
+                    if (owner != null) {
+                        AuditContext.set(owner.getClient());
+                        traceabilityService.log(newItem, owner.getAccountId(), ownerId, map.getId(), TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_SELL, -newItem.getQuantity(), null, null, chr.getId(), chr.getName());
+                        AuditContext.clear();
+                    } else {
+                        // 如果店主离线，使用ID记录
+                        CharactersDO chrDO = characterService.findById(ownerId);
+                        AuditContext.buildAuditData(chrDO.getAccountid().toString(),chrDO.getAccountName(),null,null,null,String.valueOf(ownerId),ownerName,String.valueOf(map.getId()),map.getMapName(),chrDO.getLevel().toString(),chrDO.getJob().toString(), Job.getById(chrDO.getJob()).getName());
+                        traceabilityService.log(newItem, chrDO.getAccountid(), ownerId, map.getId(), TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_SELL, -newItem.getQuantity(), null, null, chr.getId(), chr.getName());
+                        AuditContext.clear();
+                    }
+                    AuditContext.set(chr.getClient());
                     if (merchantId > 0) {
-                        // 使用 processPurchase 方法统一处理事务
-                        hiredMerchantService.processPurchase(
-                                merchantId,
-                                pItem.getDbId(),
-                                pItem.getItem().getItemId(),
-                                quantity,
-                                pItem.getPrice(),
-                                price,
-                                c.getPlayer().getId()
-                        );
-                        
+                        hiredMerchantService.processPurchase(merchantId, pItem.getDbId(), pItem.getItem().getItemId(), quantity, pItem.getPrice(), price, chr.getId());
                         this.mesos += price;
                     } else {
-                        Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterByName(ownerName);
-                        if (owner != null) {
-                            owner.addMerchantMesos(price);
-                        } else {
-                            CharactersDO character = characterService.findById(ownerId);
-                            if (character != null) {
-                                long merchantMesos = character.getMerchantmesos() != null ? character.getMerchantmesos() : 0;
-                                merchantMesos += price;
-                                characterService.update(CharactersDO.builder()
-                                        .id(ownerId)
-                                        .merchantmesos((int) Math.min(merchantMesos, Integer.MAX_VALUE))
-                                        .build());
-                            }
-                        }
+                        // 旧逻辑
                     }
-
                 } else {
-                    c.getPlayer().dropMessage(1, "你的背包已满。请在购买此物品前清理一个空位。");
+                    chr.dropMessage(1, "你的背包已满。");
                     c.sendPacket(PacketCreator.enableActions());
-                    return;
                 }
             } else {
-                c.getPlayer().dropMessage(1, "你没有足够的金币购买此物品。");
+                chr.dropMessage(1, "你没有足够的金币。");
                 c.sendPacket(PacketCreator.enableActions());
-                return;
             }
             try {
                 this.saveItems(false);
@@ -493,12 +550,14 @@ public class HiredMerchant extends AbstractMapObject {
         }
     }
 
-    private void announceItemSold(Item item, int mesos, int inStore) {
-        String qtyStr = (item.getQuantity() > 1) ? " x " + item.getQuantity() : "";
+    private void announceItemSold(Item item, int mesos, long totalSales, String buyerName, int inStore) {
+        String itemName = ItemInformationProvider.getInstance().getName(item.getItemId());
+        String remainStr = (inStore > 0) ? "剩余 " + inStore + " 件" : "已售罄";
+        String merchantItemName = ItemInformationProvider.getInstance().getName(itemId);
 
         Character player = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
         if (player != null && player.isLoggedInWorld()) {
-            player.dropMessage(6, "[雇佣商人] 物品 '" + ItemInformationProvider.getInstance().getName(item.getItemId()) + "'" + qtyStr + " 已以 " + mesos + " 金币售出。 (剩余 " + inStore + ")");
+            player.dropMessage(6, "[雇佣商店] " + merchantItemName + "：您的物品 " + itemName + " 已被 " + buyerName + " 买走了 " + item.getQuantity() + "件 ，售价 " + totalSales + "金币，税后收入 " + mesos + "金币 ，【" + remainStr + "】");
         }
     }
 
@@ -507,30 +566,21 @@ public class HiredMerchant extends AbstractMapObject {
     }
 
     public void forceClose(boolean serverShutdown) {
-        if (Server.getInstance().isShutdown()) {
-            serverShutdown = true;
-        }
-        //Server.getInstance().getChannel(world, channel).removeHiredMerchant(ownerId);
+        if (serverShutdown) Server.getInstance().isShutdown();
         if (map != null) {
             map.broadcastMessage(PacketCreator.removeHiredMerchantBox(getOwnerId()));
             map.removeMapObject(this);
         }
 
         Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
-
-//        log.info("强制关闭雇佣商店: ownerId={}, merchantId={}, ownerName={}, description={}, serverShutdown={}",
-//                ownerId, merchantId, ownerName, description, serverShutdown);
-
         boolean closedByOwner = false;
         visitorLock.lock();
         try {
             setOpen(false);
             removeAllVisitors();
-
             if (owner != null && owner.isLoggedInWorld() && this == owner.getHiredMerchant()) {
-                if (serverShutdown) {
-                    removeOwner(owner);
-                } else {
+                if (serverShutdown) removeOwner(owner);
+                else {
                     closeOwnerMerchant(owner);
                     closedByOwner = true;
                 }
@@ -549,10 +599,15 @@ public class HiredMerchant extends AbstractMapObject {
             return;
         }
 
-        Server.getInstance().getWorld(world).unregisterHiredMerchant(this);
+        try {
+            Server.getInstance().getWorld(world).unregisterHiredMerchant(this);
+            Server.getInstance().getChannel(world, channel).removeHiredMerchant(ownerId);
+        } catch (Exception e) {
+            log.warn("从频道服务器移除雇佣商店失败", e);
+        }
 
         if (serverShutdown && merchantId > 0) {
-            log.info("雇佣商店 {} 因服务器关闭而从内存移除，数据库状态保持 ACTIVE。店主: {}, 店名: {}", merchantId, ownerName, description);
+            log.info("雇佣商店 {} 因服务器关闭而从内存移除，数据库状态保持 ACTIVE。", merchantId);
             map = null;
             return;
         }
@@ -571,26 +626,16 @@ public class HiredMerchant extends AbstractMapObject {
             Character player = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
             if (player != null) {
                 player.setHasMerchant(false);
-                player.dropMessage(5, "您的雇佣商店已关闭，请到弗雷德里克处取回物品。");
+                player.dropMessage(6, "[雇佣商店] 您的商店已到期自动闭店，请前往弗雷德里克处领取物品和金币。");
             } else {
-                characterService.update(CharactersDO.builder()
-                        .id(ownerId)
-                        .hasmerchant(false)
-                        .build());
+                characterService.update(CharactersDO.builder().id(ownerId).hasmerchant(false).build());
             }
         }
         
         if (merchantId > 0 && !serverShutdown) {
-            // 更新数据库中的商店状态
-            HiredMerchantsDO merchantDO = HiredMerchantsDO.builder()
-                    .id(merchantId)
-                    .status(HiredMerchantsDO.STATUS_CLOSED)
-                    .closeTime(System.currentTimeMillis())
-                    .build();
+            HiredMerchantsDO merchantDO = HiredMerchantsDO.builder().id(merchantId).status(HiredMerchantsDO.STATUS_CLOSED).closeTime(System.currentTimeMillis()).build();
             hiredMerchantService.updateMerchant(merchantDO);
-//            log.info("雇佣商店 {} 已在数据库中关闭。店主: {}, 店名: {}", merchantId, ownerName, description);
         }
-
         map = null;
     }
 
@@ -607,10 +652,8 @@ public class HiredMerchant extends AbstractMapObject {
             map.broadcastMessage(PacketCreator.removeHiredMerchantBox(ownerId));
         }
         c.getChannelServer().removeHiredMerchant(ownerId);
-
         this.removeAllVisitors();
         this.removeOwner(c.getPlayer());
-
         if (closeSchedule != null) {
             closeSchedule.cancel(false);
             closeSchedule = null;
@@ -618,91 +661,46 @@ public class HiredMerchant extends AbstractMapObject {
 
         try {
             List<PlayerShopItem> copyItems = getItems();
-            boolean fullInventory = false;
-            if (check(c.getPlayer(), copyItems) && !timeout) {
+            boolean fullInventory = !check(c.getPlayer(), copyItems) || timeout;
+            if (!fullInventory) {
                 for (PlayerShopItem mpsi : copyItems) {
                     if (mpsi.isExist()) {
-                        if (mpsi.getItem().getInventoryType().equals(InventoryType.EQUIP)) {
-                            InventoryManipulator.addFromDrop(c, mpsi.getItem(), false);
-                        } else {
-                            InventoryManipulator.addById(c, mpsi.getItem().getItemId(), (short) (mpsi.getBundles() * mpsi.getItem().getQuantity()), mpsi.getItem().getOwner(), -1, mpsi.getItem().getFlag(), mpsi.getItem().getExpiration());
-                        }
-
+                        Item itemToGive = mpsi.getItem().copy();
+                        itemToGive.setQuantity((short) (mpsi.getItem().getQuantity() * mpsi.getBundles()));
+                        InventoryManipulator.addFromDrop(c, itemToGive, false);
+                        // 溯源日志：记录商店关闭时物品的返还
+                        traceabilityService.log(itemToGive, c.getPlayer(), TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_RETURN, itemToGive.getQuantity(), null, null, ownerId, ownerName);
                         if (merchantId > 0 && mpsi.getDbId() != null) {
                             HiredMerchantTransactionsDO transaction = HiredMerchantTransactionsDO.builder()
-                                    .merchantId(merchantId)
-                                    .itemId(mpsi.getItem().getItemId())
-                                    .buyerId(ownerId)
-                                    .type(HiredMerchantTransactionsDO.TYPE_RETURN)
-                                    .quantity((int) (mpsi.getItem().getQuantity() * mpsi.getBundles()))
-                                    .timestamp(System.currentTimeMillis())
-                                    .build();
+                                    .merchantId(merchantId).itemId(mpsi.getItem().getItemId()).buyerId(ownerId)
+                                    .type(HiredMerchantTransactionsDO.TYPE_RETURN).quantity((int) (mpsi.getItem().getQuantity() * mpsi.getBundles()))
+                                    .timestamp(System.currentTimeMillis()).uid(mpsi.getItem().getUid()).build();
                             hiredMerchantService.removeItem(mpsi.getDbId(), transaction);
                         }
                     }
                 }
-
-                synchronized (items) {
-                    items.clear();
-                }
-            } else if (!timeout) {
-                fullInventory = true;
+                synchronized (items) { items.clear(); }
             }
 
-            try {
-                this.saveItems(timeout);
-            } catch (Exception e) {
-                e.printStackTrace();
-                saveItemsToLocalFile();
-            }
-
-            // 感谢 Rohenn 注意到关闭商店时可能出现的复制漏洞
             Character player = c.getWorldServer().getPlayerStorage().getCharacterById(ownerId);
             if (player != null) {
                 player.setHasMerchant(false);
-                if (fullInventory) {
-                    player.dropMessage(1, "背包空间不足，道具和金币已存入弗雷德里克处，请前往取回。");
-                }
+                if (fullInventory) player.dropMessage(1, "背包空间不足，道具和金币已存入弗雷德里克处，请前往取回。");
             } else {
-                characterService.update(CharactersDO.builder()
-                        .id(ownerId)
-                        .hasmerchant(false)
-                        .build());
+                characterService.update(CharactersDO.builder().id(ownerId).hasmerchant(false).build());
             }
-
-            if (GameConfig.getServerBoolean("use_enforce_merchant_save")) {
-                c.getPlayer().saveCharToDB(false);
-            }
-
-            synchronized (items) {
-                items.clear();
-            }
+            if (GameConfig.getServerBoolean("use_enforce_merchant_save")) c.getPlayer().saveCharToDB(false);
+            synchronized (items) { items.clear(); }
         } catch (Exception e) {
             e.printStackTrace();
         }
         
         if (merchantId > 0) {
-            long durationMillis = getDuration();
-            long remainingMillis = (start + durationMillis) - System.currentTimeMillis();
-            String remainingTimeStr = (remainingMillis > 0) ? (remainingMillis / 1000 / 60) + "分钟" : "已过期";
-
-            // 关键修改：如果是服务器关闭期间，不要将状态设为 CLOSED
-            if (Server.getInstance().isShutdown()) {
-                log.info("服务器正在关闭，保留雇佣商店 {} 的 ACTIVE 状态。店主: {}, 店名: {}, 剩余时间: {}", 
-                        merchantId, ownerName, description, remainingTimeStr);
-            } else {
-                log.info("雇佣商店 {} 已设为 CLOSED 状态。店主: {}, 店名: {}",
-                        merchantId, ownerName, description);
-                // 更新数据库中的商店状态
-                HiredMerchantsDO merchantDO = HiredMerchantsDO.builder()
-                        .id(merchantId)
-                        .status(HiredMerchantsDO.STATUS_CLOSED)
-                        .closeTime(System.currentTimeMillis())
-                        .build();
+            if (!Server.getInstance().isShutdown()) {
+                HiredMerchantsDO merchantDO = HiredMerchantsDO.builder().id(merchantId).status(HiredMerchantsDO.STATUS_CLOSED).closeTime(System.currentTimeMillis()).build();
                 hiredMerchantService.updateMerchant(merchantDO);
             }
         }
-
         Server.getInstance().getWorld(world).unregisterHiredMerchant(this);
     }
 
@@ -712,16 +710,10 @@ public class HiredMerchant extends AbstractMapObject {
             if (this.isOwner(chr)) {
                 this.setOpen(false);
                 this.removeAllVisitors();
-
                 chr.sendPacket(PacketCreator.getHiredMerchant(chr, this, false));
-            } else if (!this.isOpen()) {
-                chr.sendPacket(PacketCreator.getMiniRoomError(18));
-                return;
-            } else if (isBlacklisted(chr.getName())) {
-                chr.sendPacket(PacketCreator.getMiniRoomError(17));
-                return;
-            } else if (!this.addVisitor(chr)) {
-                chr.sendPacket(PacketCreator.getMiniRoomError(2));
+            } else if (!this.isOpen() || isBlacklisted(chr.getName()) || !this.addVisitor(chr)) {
+                int errorCode = !this.isOpen() ? 18 : (isBlacklisted(chr.getName()) ? 17 : 2);
+                chr.sendPacket(PacketCreator.getMiniRoomError(errorCode));
                 return;
             } else {
                 chr.sendPacket(PacketCreator.getHiredMerchant(chr, this, false));
@@ -760,7 +752,6 @@ public class HiredMerchant extends AbstractMapObject {
                     copy[i] = visitor.chr;
                 }
             }
-
             return copy;
         } finally {
             visitorLock.unlock();
@@ -779,43 +770,38 @@ public class HiredMerchant extends AbstractMapObject {
                 return true;
             }
         }
-
         return false;
     }
 
-    public boolean addItem(PlayerShopItem item) {
+    public boolean addItem(PlayerShopItem item,Item sellItem) {
         synchronized (items) {
-            if (items.size() >= getOnSaleSlotMax()) {
-                return false;
-            }
+            if (items.size() >= getOnSaleSlotMax()) return false;
+            if (item.getItem().getUid() <= 0) item.getItem().setUid(SnowflakeIdGenerator.getInstance().nextId());
 
-            items.add(item);
-            
             if (merchantId > 0) {
-                // 添加物品到数据库
-                HiredMerchantItemsDO itemDO = HiredMerchantItemsDO.builder()
-                        .merchantId(merchantId)
-                        .itemId(item.getItem().getItemId())
-                        .quantity((int) item.getItem().getQuantity())
-                        .soldQuantity(0)
-                        .price(item.getPrice())
-                        .bundles((int) item.getBundles())
-                        .status(HiredMerchantItemsDO.STATUS_ON_SALE)
-                        .itemData(hiredMerchantService.serializeItem(item.getItem()))
-                        .build();
-                
-                HiredMerchantTransactionsDO transactionDO = HiredMerchantTransactionsDO.builder()
-                        .merchantId(merchantId)
-                        .buyerId(ownerId)
-                        .type(HiredMerchantTransactionsDO.TYPE_ADD)
-                        .quantity((int) item.getItem().getQuantity())
-                        .timestamp(System.currentTimeMillis())
-                        .build();
-                
-                hiredMerchantService.addItem(itemDO, transactionDO);
-                item.setDbId(itemDO.getId());
+                try {
+                    String itemData = objectMapper.writeValueAsString(item.getItem().toInfoRtnDTO(false));
+                    HiredMerchantItemsDO itemDO = HiredMerchantItemsDO.builder()
+                            .merchantId(merchantId).itemId(item.getItem().getItemId()).quantity((int) item.getItem().getQuantity())
+                            .soldQuantity(0).price(item.getPrice()).bundles((int) item.getBundles())
+                            .status(HiredMerchantItemsDO.STATUS_ON_SALE).itemData(itemData).uid(item.getItem().getUid()).build();
+                    HiredMerchantTransactionsDO transactionDO = HiredMerchantTransactionsDO.builder()
+                            .merchantId(merchantId).buyerId(ownerId).type(HiredMerchantTransactionsDO.TYPE_ADD)
+                            .quantity((int) item.getItem().getQuantity()).timestamp(System.currentTimeMillis()).uid(item.getItem().getUid()).build();
+                    hiredMerchantService.addItem(itemDO, transactionDO);
+                    item.setDbId(itemDO.getId());
+                } catch (Exception e) {
+                    log.error("添加物品到雇佣商店失败: merchantId={}, itemId={}, uid={}", merchantId, item.getItem().getItemId(), item.getItem().getUid(), e);
+                    return false;
+                }
             }
-            
+            items.add(item);
+            Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterById(ownerId);
+            if (owner != null) {
+                short sellQty = (short) (item.getItem().getQuantity() * item.getBundles());
+                // 溯源日志：记录上架操作
+                traceabilityService.log(item.getItem(), owner, TraceabilityService.ActionType.MERCHANT_SHOP, TraceabilityService.ActionSourceType.MERCHANT_ADD, -sellQty, String.format("数量: %d -> %d",sellItem.getQuantity(),sellItem.getQuantity() - sellQty), null, owner.getId(), owner.getName());
+            }
             return true;
         }
     }
@@ -827,7 +813,6 @@ public class HiredMerchant extends AbstractMapObject {
                     items.remove(i);
                 }
             }
-
             try {
                 this.saveItems(false);
             } catch (Exception ex) {
@@ -838,7 +823,6 @@ public class HiredMerchant extends AbstractMapObject {
 
     private void removeFromSlot(int slot) {
         items.remove(slot);
-
         try {
             this.saveItems(false);
         } catch (Exception ex) {
@@ -848,9 +832,7 @@ public class HiredMerchant extends AbstractMapObject {
 
     private int getFreeSlot() {
         for (int i = 0; i < 3; i++) {
-            if (visitors[i] == null) {
-                return i;
-            }
+            if (visitors[i] == null) return i;
         }
         return -1;
     }
@@ -883,7 +865,6 @@ public class HiredMerchant extends AbstractMapObject {
     public void sendMessage(Character chr, String msg) {
         String message = chr.getName() + " : " + msg;
         byte slot = (byte) (getVisitorSlot(chr) + 1);
-
         synchronized (messages) {
             messages.add(new Pair<>(message, slot));
         }
@@ -893,15 +874,10 @@ public class HiredMerchant extends AbstractMapObject {
     public List<PlayerShopItem> sendAvailableBundles(int itemid) {
         List<PlayerShopItem> list = new LinkedList<>();
         List<PlayerShopItem> all = new ArrayList<>();
-
-        if (!open.get()) {
-            return list;
-        }
-
+        if (!open.get()) return list;
         synchronized (items) {
             all.addAll(items);
         }
-
         for (PlayerShopItem mpsi : all) {
             if (mpsi.getItem().getItemId() == itemid && mpsi.getBundles() > 0 && mpsi.isExist()) {
                 list.add(mpsi);
@@ -911,25 +887,19 @@ public class HiredMerchant extends AbstractMapObject {
     }
 
     public void saveItems(boolean shutdown) {
-        if (merchantId > 0) {
-            return; // 新系统通过事务处理持久化
-        }
-
+        if (merchantId > 0) return; // 新系统通过事务处理持久化
         List<Pair<Item, InventoryType>> itemsWithType = new ArrayList<>();
         List<Short> bundles = new ArrayList<>();
-
         synchronized (items) {
             for (PlayerShopItem pItems : items) {
                 Item newItem = pItems.getItem().copy();
                 short newBundle = pItems.getBundles();
-
                 if (newBundle > 0) {
                     itemsWithType.add(new Pair<>(newItem, newItem.getInventoryType()));
                     bundles.add(newBundle);
                 }
             }
         }
-
         try {
             ItemFactory.MERCHANT.saveItems(itemsWithType, bundles, this.ownerId);
             FredrickProcessor.insertFredrickLog(this.ownerId);
@@ -943,10 +913,8 @@ public class HiredMerchant extends AbstractMapObject {
         for (PlayerShopItem item : items) {
             Item it = item.getItem().copy();
             it.setQuantity((short) (it.getQuantity() * item.getBundles()));
-
             li.add(new Pair<>(it, it.getInventoryType()));
         }
-
         return Inventory.checkSpotsAndOwnership(chr, li);
     }
 
@@ -958,20 +926,14 @@ public class HiredMerchant extends AbstractMapObject {
         long now = System.currentTimeMillis();
         long durationMillis = getDuration();
         long remainingMillis = (start + durationMillis) - now;
-
-        if (remainingMillis <= 0) {
-            return 0;
-        }
-
+        if (remainingMillis <= 0) return 0;
         return (int) (remainingMillis / (24 * 60 * 60 * 1000L));
     }
 
     public int getTimeOpen() {
         long now = System.currentTimeMillis();
         long durationMillis = getDuration();
-
         double progress = (double)(now - start) / durationMillis;
-
         return (int) Math.ceil(progress * 1318);
     }
 
@@ -985,7 +947,6 @@ public class HiredMerchant extends AbstractMapObject {
         synchronized (messages) {
             List<Pair<String, Byte>> msgList = new LinkedList<>();
             msgList.addAll(messages);
-
             return msgList;
         }
     }
@@ -997,9 +958,7 @@ public class HiredMerchant extends AbstractMapObject {
     public void addToBlacklist(String chrName) {
         visitorLock.lock();
         try {
-            if (blacklist.size() >= BLACKLIST_LIMIT) {
-                return;
-            }
+            if (blacklist.size() >= BLACKLIST_LIMIT) return;
             blacklist.add(chrName);
         } finally {
             visitorLock.unlock();
@@ -1066,9 +1025,7 @@ public class HiredMerchant extends AbstractMapObject {
     private void saveItemsToLocalFile() {
         try {
             java.io.File dir = new java.io.File("logs/merchant_backup");
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
+            if (!dir.exists()) dir.mkdirs();
             java.io.File file = new java.io.File(dir, "merchant_" + ownerId + "_" + System.currentTimeMillis() + ".json");
             
             Map<String, Object> backupData = new HashMap<>();
@@ -1090,14 +1047,13 @@ public class HiredMerchant extends AbstractMapObject {
                     itemMap.put("quantity", item.getItem().getQuantity());
                     itemMap.put("bundles", item.getBundles());
                     itemMap.put("price", item.getPrice());
-                    itemMap.put("itemData", hiredMerchantService.serializeItem(item.getItem()));
+                    itemMap.put("itemData", objectMapper.writeValueAsString(item.getItem().toInfoRtnDTO(false)));
                     itemList.add(itemMap);
                 }
             }
             backupData.put("items", itemList);
             
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.writeValue(file, backupData);
+            objectMapper.writeValue(file, backupData);
             
             System.err.println("雇佣商店物品已备份至 " + file.getAbsolutePath());
         } catch (Exception e) {
@@ -1107,33 +1063,19 @@ public class HiredMerchant extends AbstractMapObject {
     }
 
     public class SoldItem {
-
         int itemid, mesos;
         short quantity;
         String buyer;
-
         public SoldItem(String buyer, int itemid, short quantity, int mesos) {
             this.buyer = buyer;
             this.itemid = itemid;
             this.quantity = quantity;
             this.mesos = mesos;
         }
-
-        public String getBuyer() {
-            return buyer;
-        }
-
-        public int getItemId() {
-            return itemid;
-        }
-
-        public short getQuantity() {
-            return quantity;
-        }
-
-        public int getMesos() {
-            return mesos;
-        }
+        public String getBuyer() { return buyer; }
+        public int getItemId() { return itemid; }
+        public short getQuantity() { return quantity; }
+        public int getMesos() { return mesos; }
     }
 
     public int getOnSaleSlotMax() {
@@ -1145,26 +1087,24 @@ public class HiredMerchant extends AbstractMapObject {
     }
 
     public void scheduleClose() {
-        if (closeSchedule != null) {
-            closeSchedule.cancel(false);
-        }
-        
-        long durationMillis = getDuration();
-        long timeLeft = (start + durationMillis) - System.currentTimeMillis();
-        
+        if (closeSchedule != null) closeSchedule.cancel(false);
+        long timeLeft = (start + getDuration()) - System.currentTimeMillis();
         if (timeLeft <= 0) {
-            log.info("雇佣商店 {} 已过期，立即关闭。店主: {}, 店名: {}", merchantId, ownerName, description);
-            forceClose();
+            forceClose(false);
             return;
         }
-        
-        closeSchedule = TimerManager.getInstance().schedule(() -> {
-            log.info("雇佣商店 {} 定时关闭任务触发。店主: {}, 店名: {}", merchantId, ownerName, description);
-            forceClose();
-        }, timeLeft);
+        closeSchedule = TimerManager.getInstance().schedule(() -> forceClose(false), timeLeft);
     }
     
     public void rescheduleClose() {
         scheduleClose();
+    }
+    
+    public long getTotalSales() {
+        return totalSales;
+    }
+    
+    public long getTotalRevenue() {
+        return totalRevenue;
     }
 }

@@ -1,25 +1,24 @@
 package org.gms.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.update.UpdateChain;
 import lombok.RequiredArgsConstructor;
-import org.gms.client.inventory.Equip;
 import org.gms.client.inventory.Item;
-import org.gms.client.inventory.InventoryType;
-import org.gms.constants.inventory.ItemConstants;
 import org.gms.dao.entity.HiredMerchantItemsDO;
 import org.gms.dao.entity.HiredMerchantTransactionsDO;
 import org.gms.dao.entity.HiredMerchantsDO;
 import org.gms.dao.mapper.HiredMerchantItemsMapper;
 import org.gms.dao.mapper.HiredMerchantTransactionsMapper;
 import org.gms.dao.mapper.HiredMerchantsMapper;
+import org.gms.model.dto.ItemInfoRtnDTO;
+import org.gms.util.ItemConverter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,31 +26,27 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class HiredMerchantService {
 
+    private static final Logger log = LoggerFactory.getLogger(HiredMerchantService.class);
     private final HiredMerchantsMapper hiredMerchantsMapper;
     private final HiredMerchantItemsMapper hiredMerchantItemsMapper;
     private final HiredMerchantTransactionsMapper hiredMerchantTransactionsMapper;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final TraceabilityService traceabilityService;
+    private final ObjectMapper objectMapper;
 
     public HiredMerchantsDO getActiveMerchantByOwnerId(int ownerId) {
         return hiredMerchantsMapper.selectOneByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
                 .and(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_ACTIVE));
     }
 
     public HiredMerchantsDO getPreparingMerchantByOwnerId(int ownerId) {
         return hiredMerchantsMapper.selectOneByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
                 .and(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_PREPARING));
     }
 
     public List<HiredMerchantsDO> getActiveMerchantsByWorldId(int worldId) {
         return hiredMerchantsMapper.selectListByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getWorldId).eq(worldId)
                 .and(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_ACTIVE));
     }
@@ -72,6 +67,31 @@ public class HiredMerchantService {
 
     @Transactional
     public void addItem(HiredMerchantItemsDO item, HiredMerchantTransactionsDO transaction) {
+        if (item.getUid() != null && item.getUid() > 0) {
+            QueryWrapper checkUidQuery = QueryWrapper.create()
+                    .select(HiredMerchantItemsDO::getId)
+                    .where(HiredMerchantItemsDO::getUid).eq(item.getUid())
+                    .and(HiredMerchantItemsDO::getStatus).eq(HiredMerchantItemsDO.STATUS_ON_SALE);
+            
+            Long existingId = hiredMerchantItemsMapper.selectOneByQueryAs(checkUidQuery, Long.class);
+            if (existingId != null) {
+                log.error("发现重复 UID 物品入库尝试 (雇佣商店)! UID: {}, 物品ID: {}, 商店ID: {}", 
+                        item.getUid(), item.getItemId(), item.getMerchantId());
+                
+                // 获取 HiredMerchantsDO 对象以获取 ownerId 和 mapId
+                HiredMerchantsDO merchant = hiredMerchantsMapper.selectOneById(item.getMerchantId());
+                int ownerId = (merchant != null) ? merchant.getOwnerId() : 0;
+                int mapId = (merchant != null) ? merchant.getMapId() : 0;
+
+                // 创建一个临时的 Item 对象用于日志记录
+                Item tempItem = new Item(item.getItemId(), (short) 0, (short) 0);
+                tempItem.setUid(item.getUid());
+
+                traceabilityService.log(tempItem, 0, ownerId, mapId, TraceabilityService.ActionType.SYSTEM, TraceabilityService.ActionSourceType.SYSTEM_DELETE, 0, "由于重复的UID阻止了雇佣商店添加: " + item.getUid(), "商店ID: " + item.getMerchantId());
+                throw new RuntimeException("检测到重复 UID: " + item.getUid());
+            }
+        }
+
         hiredMerchantItemsMapper.insert(item);
         if (transaction != null) {
             transaction.setItemId(item.getItemId());
@@ -119,7 +139,6 @@ public class HiredMerchantService {
 
     @Transactional
     public void processPurchase(int merchantId, int itemDbId, int itemId, int quantity, int unitPrice, long totalPrice, int buyerId) {
-        // 1. Add Transaction
         HiredMerchantTransactionsDO transaction = HiredMerchantTransactionsDO.builder()
                 .merchantId(merchantId)
                 .itemId(itemId)
@@ -132,15 +151,12 @@ public class HiredMerchantService {
                 .build();
         hiredMerchantTransactionsMapper.insert(transaction);
 
-        // 2. Update Sold Quantity
-        // 如果售罄，更新状态为 SOLD_OUT
         UpdateChain.of(HiredMerchantItemsDO.class)
                 .setRaw(HiredMerchantItemsDO::getSoldQuantity, "sold_quantity + " + quantity)
                 .setRaw(HiredMerchantItemsDO::getStatus, "CASE WHEN sold_quantity + " + quantity + " >= bundles THEN '" + HiredMerchantItemsDO.STATUS_SOLD_OUT + "' ELSE status END")
                 .where(HiredMerchantItemsDO::getId).eq(itemDbId)
                 .update();
 
-        // 3. Update Mesos
         UpdateChain.of(HiredMerchantsDO.class)
                 .setRaw(HiredMerchantsDO::getMesos, "mesos + " + totalPrice)
                 .where(HiredMerchantsDO::getId).eq(merchantId)
@@ -155,7 +171,6 @@ public class HiredMerchantService {
             merchant.setMesos(0L);
             hiredMerchantsMapper.update(merchant);
             
-            // 更新所有已售罄且未结算的物品为已结算
             UpdateChain.of(HiredMerchantItemsDO.class)
                     .set(HiredMerchantItemsDO::getSettledTime, System.currentTimeMillis())
                     .where(HiredMerchantItemsDO::getMerchantId).eq(merchantId)
@@ -169,10 +184,7 @@ public class HiredMerchantService {
     }
 
     public List<HiredMerchantItemsDO> getMerchantItems(int merchantId) {
-        // 销售列表：展示当前待售、售罄（已售未结算）的物品
         return hiredMerchantItemsMapper.selectListByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantItemsDO.class)
                 .where(HiredMerchantItemsDO::getMerchantId).eq(merchantId)
                 .and(HiredMerchantItemsDO::getStatus).ne(HiredMerchantItemsDO.STATUS_RETURNED)
                 .and("(status = '" + HiredMerchantItemsDO.STATUS_ON_SALE + "' OR (status = '" + HiredMerchantItemsDO.STATUS_SOLD_OUT + "' AND settled_time IS NULL))"));
@@ -180,33 +192,25 @@ public class HiredMerchantService {
 
     public List<HiredMerchantsDO> getRetrieveableMerchants(int ownerId) {
         return hiredMerchantsMapper.selectListByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
                 .and(HiredMerchantsDO::getStatus).in(HiredMerchantsDO.STATUS_CLOSED, HiredMerchantsDO.STATUS_EXPIRED));
     }
 
     public List<HiredMerchantsDO> getZombieMerchants(int ownerId) {
         return hiredMerchantsMapper.selectListByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getOwnerId).eq(ownerId)
                 .and(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_ACTIVE));
     }
 
     public List<HiredMerchantItemsDO> getRetrieveableItems(int merchantId) {
         return hiredMerchantItemsMapper.selectListByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantItemsDO.class)
                 .where(HiredMerchantItemsDO::getMerchantId).eq(merchantId)
                 .and(HiredMerchantItemsDO::getStatus).ne(HiredMerchantItemsDO.STATUS_RETURNED)
-                .and("bundles > sold_quantity")); // 使用原生 SQL 片段进行列比较
+                .and("bundles > sold_quantity"));
     }
 
     public List<HiredMerchantsDO> getAllActiveMerchants() {
         return hiredMerchantsMapper.selectListByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getStatus).eq(HiredMerchantsDO.STATUS_ACTIVE));
     }
 
@@ -214,30 +218,21 @@ public class HiredMerchantService {
     public void cleanupOldRecords(int days) {
         long cutoffTime = System.currentTimeMillis() - (days * 24 * 60 * 60 * 1000L);
 
-        // 1. 删除旧的交易记录
         hiredMerchantTransactionsMapper.deleteByQuery(QueryWrapper.create()
                 .where(HiredMerchantTransactionsDO::getTimestamp).lt(cutoffTime));
 
-        // 2. 查找待删除的候选记录（已关闭/已过期，旧记录，无金币）
         List<HiredMerchantsDO> candidates = hiredMerchantsMapper.selectListByQuery(QueryWrapper.create()
                 .select(HiredMerchantsDO::getId)
-                .from(HiredMerchantsDO.class)
                 .where(HiredMerchantsDO::getStatus).in(HiredMerchantsDO.STATUS_CLOSED, HiredMerchantsDO.STATUS_EXPIRED)
                 .and(HiredMerchantsDO::getCloseTime).lt(cutoffTime)
                 .and(HiredMerchantsDO::getMesos).eq(0));
 
         for (HiredMerchantsDO merchant : candidates) {
-            // 检查是否有物品未归还
             long count = hiredMerchantItemsMapper.selectCountByQuery(QueryWrapper.create()
                     .where(HiredMerchantItemsDO::getMerchantId).eq(merchant.getId())
                     .and(HiredMerchantItemsDO::getStatus).ne(HiredMerchantItemsDO.STATUS_RETURNED));
-            
-            // 如果所有物品都已归还或售罄，则可以删除
-            // 这里简化逻辑：只要没有未归还的物品，就认为可以删除（假设售罄的物品不需要保留太久）
-            // 如果需要保留售罄记录，可以增加条件
 
             if (count == 0) {
-                // 安全删除
                 hiredMerchantItemsMapper.deleteByQuery(QueryWrapper.create()
                         .where(HiredMerchantItemsDO::getMerchantId).eq(merchant.getId()));
                 hiredMerchantsMapper.deleteById(merchant.getId());
@@ -245,132 +240,34 @@ public class HiredMerchantService {
         }
     }
 
-    public String serializeItem(Item item) {
+    /**
+     * 从JSON反序列化物品对象
+     * @param json 物品的JSON数据
+     * @param itemId 物品的模板ID
+     * @param quantity 物品的数量
+     * @return 反序列化后的Item对象
+     */
+    public Item deserializeItem(String json, int itemId, short quantity) {
         try {
-            Map<String, Object> map = new HashMap<>();
-            map.put("itemId", item.getItemId());
-            map.put("position", item.getPosition());
-            map.put("quantity", item.getQuantity());
-
-            if (item.getPetId() > -1) {
-                map.put("petId", item.getPetId());
-            }
-            if (item.getOwner() != null && !item.getOwner().isEmpty()) {
-                map.put("owner", item.getOwner());
-            }
-            if (item.getFlag() != 0) {
-                map.put("flag", item.getFlag());
-            }
-            if (item.getExpiration() != -1) {
-                map.put("expiration", item.getExpiration());
-            }
-            if (item.getGiftFrom() != null && !item.getGiftFrom().isEmpty()) {
-                map.put("giftFrom", item.getGiftFrom());
-            }
-            if (item.getSN() > 0) {
-                map.put("sn", item.getSN());
-            }
-
-            if (item instanceof Equip) {
-                Equip equip = (Equip) item;
-                if (equip.getUpgradeSlots() != 0) map.put("upgradeSlots", equip.getUpgradeSlots());
-                if (equip.getLevel() != 0) map.put("level", equip.getLevel());
-                if (equip.getStr() != 0) map.put("str", equip.getStr());
-                if (equip.getDex() != 0) map.put("dex", equip.getDex());
-                if (equip.getInt() != 0) map.put("int", equip.getInt());
-                if (equip.getLuk() != 0) map.put("luk", equip.getLuk());
-                if (equip.getHp() != 0) map.put("hp", equip.getHp());
-                if (equip.getMp() != 0) map.put("mp", equip.getMp());
-                if (equip.getWatk() != 0) map.put("watk", equip.getWatk());
-                if (equip.getMatk() != 0) map.put("matk", equip.getMatk());
-                if (equip.getWdef() != 0) map.put("wdef", equip.getWdef());
-                if (equip.getMdef() != 0) map.put("mdef", equip.getMdef());
-                if (equip.getAcc() != 0) map.put("acc", equip.getAcc());
-                if (equip.getAvoid() != 0) map.put("avoid", equip.getAvoid());
-                if (equip.getHands() != 0) map.put("hands", equip.getHands());
-                if (equip.getSpeed() != 0) map.put("speed", equip.getSpeed());
-                if (equip.getJump() != 0) map.put("jump", equip.getJump());
-                if (equip.getVicious() != 0) map.put("vicious", equip.getVicious());
-                if (equip.getItemLevel() > 1) map.put("itemLevel", equip.getItemLevel());
-                if (equip.getItemExp() > 0) map.put("itemExp", equip.getItemExp());
-                if (equip.getRingId() > -1) map.put("ringId", equip.getRingId());
-            }
-
-            return objectMapper.writeValueAsString(map);
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public Item deserializeItem(String json) {
-        try {
-            Map<String, Object> map = objectMapper.readValue(json, Map.class);
-            int itemId = (int) map.get("itemId");
-            short position = ((Number) map.get("position")).shortValue();
-            short quantity = ((Number) map.get("quantity")).shortValue();
-            int petId = map.containsKey("petId") ? (int) map.get("petId") : -1;
-            
-            Item item;
-            if (ItemConstants.getInventoryType(itemId) == InventoryType.EQUIP) {
-                item = new Equip(itemId, position, 0);
-            } else {
-                item = new Item(itemId, position, quantity, petId);
-            }
-            
-            if (map.containsKey("owner")) item.setOwner((String) map.get("owner"));
-            if (map.containsKey("flag")) item.setFlag(((Number) map.get("flag")).shortValue());
-            if (map.containsKey("expiration")) item.setExpiration(((Number) map.get("expiration")).longValue());
-            if (map.containsKey("giftFrom")) item.setGiftFrom((String) map.get("giftFrom"));
-            if (map.containsKey("sn")) item.setSN(((Number) map.get("sn")).intValue());
-            
-            if (item instanceof Equip equip) {
-                if (map.containsKey("upgradeSlots")) equip.setUpgradeSlots(((Number) map.get("upgradeSlots")).byteValue());
-                if (map.containsKey("level")) equip.setLevel(((Number) map.get("level")).shortValue());
-                if (map.containsKey("str")) equip.setStr(((Number) map.get("str")).shortValue());
-                if (map.containsKey("dex")) equip.setDex(((Number) map.get("dex")).shortValue());
-                if (map.containsKey("int")) equip.setInt(((Number) map.get("int")).shortValue());
-                if (map.containsKey("luk")) equip.setLuk(((Number) map.get("luk")).shortValue());
-                if (map.containsKey("hp")) equip.setHp(((Number) map.get("hp")).shortValue());
-                if (map.containsKey("mp")) equip.setMp(((Number) map.get("mp")).shortValue());
-                if (map.containsKey("watk")) equip.setWatk(((Number) map.get("watk")).shortValue());
-                if (map.containsKey("matk")) equip.setMatk(((Number) map.get("matk")).shortValue());
-                if (map.containsKey("wdef")) equip.setWdef(((Number) map.get("wdef")).shortValue());
-                if (map.containsKey("mdef")) equip.setMdef(((Number) map.get("mdef")).shortValue());
-                if (map.containsKey("acc")) equip.setAcc(((Number) map.get("acc")).shortValue());
-                if (map.containsKey("avoid")) equip.setAvoid(((Number) map.get("avoid")).shortValue());
-                if (map.containsKey("hands")) equip.setHands(((Number) map.get("hands")).shortValue());
-                if (map.containsKey("speed")) equip.setSpeed(((Number) map.get("speed")).shortValue());
-                if (map.containsKey("jump")) equip.setJump(((Number) map.get("jump")).shortValue());
-                if (map.containsKey("vicious")) equip.setVicious(((Number) map.get("vicious")).shortValue());
-                if (map.containsKey("itemLevel")) equip.setItemLevel(((Number) map.get("itemLevel")).shortValue());
-                if (map.containsKey("itemExp")) equip.setItemExp(((Number) map.get("itemExp")).intValue());
-                if (map.containsKey("ringId")) equip.setRingId(((Number) map.get("ringId")).intValue());
-            }
-            
-            return item;
+            ItemInfoRtnDTO itemDTO = objectMapper.readValue(json, ItemInfoRtnDTO.class);
+            return ItemConverter.restoreItemFromDTO(itemId, quantity, itemDTO);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("反序列化雇佣商店物品失败, ItemID: {}, Quantity: {}", itemId, quantity, e);
             return null;
         }
     }
 
     @Transactional
     public void restoreMerchantItems(int merchantId) {
-        // 1. 检查商店是否存在
         HiredMerchantsDO merchant = hiredMerchantsMapper.selectOneById(merchantId);
         if (merchant == null) {
             throw new IllegalArgumentException("未找到商店: " + merchantId);
         }
 
-        // 2. 查找所有未归还的物品
         List<HiredMerchantItemsDO> items = hiredMerchantItemsMapper.selectListByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantItemsDO.class)
                 .where(HiredMerchantItemsDO::getMerchantId).eq(merchantId)
                 .and(HiredMerchantItemsDO::getStatus).ne(HiredMerchantItemsDO.STATUS_RETURNED));
 
-        // 3. 将物品状态重置为 ON_SALE
         if (HiredMerchantsDO.STATUS_ACTIVE.equals(merchant.getStatus())) {
             merchant.setStatus(HiredMerchantsDO.STATUS_CLOSED);
             merchant.setCloseTime(System.currentTimeMillis());
@@ -390,8 +287,6 @@ public class HiredMerchantService {
         Map<String, Object> backupData = objectMapper.readValue(backupFile, Map.class);
         
         int ownerId = (int) backupData.get("ownerId");
-        String ownerName = (String) backupData.get("ownerName");
-        String description = (String) backupData.get("description");
         int itemId = (int) backupData.get("itemId");
         long mesos = ((Number) backupData.get("mesos")).longValue();
         int channel = (int) backupData.get("channel");
@@ -401,7 +296,7 @@ public class HiredMerchantService {
         
         HiredMerchantsDO merchant = HiredMerchantsDO.builder()
                 .ownerId(ownerId)
-                .description(description != null ? description : "从备份恢复")
+                .description((String) backupData.get("description"))
                 .itemId(itemId > 0 ? itemId : 5030000)
                 .status(HiredMerchantsDO.STATUS_CLOSED)
                 .startTime(System.currentTimeMillis())
@@ -430,11 +325,7 @@ public class HiredMerchantService {
     }
     
     public List<HiredMerchantTransactionsDO> getMerchantTransactions(int merchantId) {
-        // 交易记录：查看本次主动闭店前的所有销售数据
-        // 因此返回所有 BUY 类型的记录，无论是否结算
         return hiredMerchantTransactionsMapper.selectListByQuery(QueryWrapper.create()
-                .select()
-                .from(HiredMerchantTransactionsDO.class)
                 .where(HiredMerchantTransactionsDO::getMerchantId).eq(merchantId)
                 .and(HiredMerchantTransactionsDO::getType).eq(HiredMerchantTransactionsDO.TYPE_BUY));
     }

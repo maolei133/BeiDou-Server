@@ -1,8 +1,8 @@
 package org.gms.service;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.gms.client.Character;
-import org.gms.client.Client;
 import org.gms.client.Stat;
 import org.gms.client.inventory.*;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
@@ -19,7 +19,7 @@ import org.gms.exception.BizException;
 import org.gms.net.server.Server;
 import org.gms.server.CashShop;
 import org.gms.server.ItemInformationProvider;
-import org.gms.server.maps.MapleMap;
+import org.gms.server.logging.AuditContext;
 import org.gms.util.I18nUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +37,11 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class GiveService {
+
+    private final TraceabilityService traceabilityService;
+
     @Autowired
     CharacterService characterService;
     @Autowired
@@ -84,7 +88,8 @@ public class GiveService {
     private void giveChr(GiveResourceReqDTO submitData) {
         Integer wId = submitData.getWorldId();
         Integer cId = submitData.getPlayerId();
-        if (wId == null || wId < 0 || cId == null || cId < 1) {
+        if (wId == null) wId = 0;   // 默认为大区0
+        if (wId < 0 || cId == null || cId < 1) {
             throw new BizException(I18nUtil.getExceptionMessage("CHR_OR_WORLD_ID_ERROR"));
         }
         
@@ -241,13 +246,19 @@ public class GiveService {
         }
 
         Server.getInstance().getWorlds().forEach(world -> world.getPlayerStorage().getAllCharacters().forEach(chr -> {
+            AuditContext.set(chr.getClient());
             if (isPet) {
-                InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, petId, flag, finalExpiration);
+                InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, petId, flag, finalExpiration, (Item item) -> {
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.ADMIN, TraceabilityService.ActionSourceType.ADMIN_CREATE, quantity, null, "后台发放");
+                });
                 chr.message(I18nUtil.getMessage("Give.Pet.All", quantity, itemName));
             } else {
-                InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, -1, flag, finalExpiration);
+                InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, -1, flag, finalExpiration, (Item item) -> {
+                    traceabilityService.log(item, chr, TraceabilityService.ActionType.ADMIN, TraceabilityService.ActionSourceType.ADMIN_CREATE, quantity, null, "后台发放");
+                });
                 chr.message(I18nUtil.getMessage("Give.Item.All", quantity, itemName));
             }
+            AuditContext.clear();
         }));
 
         String flagDetail = getFlagDetail(flag);
@@ -293,19 +304,24 @@ public class GiveService {
             }
         }
 
+        AuditContext.set(chr.getClient());
         boolean result;
         if (isPet) {
-            result = InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, petId, flag, finalExpiration);
+            result = InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, petId, flag, finalExpiration,(Item item) -> {
+                traceabilityService.log(item, chr, TraceabilityService.ActionType.ADMIN, TraceabilityService.ActionSourceType.ADMIN_CREATE, quantity, null, "后台发放");
+            });
             if (result) {
                 chr.message(I18nUtil.getMessage("Give.Pet.Chr", quantity, itemName));
             }
         } else {
-            result = InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, -1, flag, finalExpiration);
+            result = InventoryManipulator.addById(chr.getClient(), itemId, quantity, owner, -1, flag, finalExpiration,(Item item) -> {
+                traceabilityService.log(item, chr, TraceabilityService.ActionType.ADMIN, TraceabilityService.ActionSourceType.ADMIN_CREATE, quantity, null, "后台发放");
+            });
             if (result) {
                 chr.message(I18nUtil.getMessage("Give.Item.Chr", quantity, itemName));
             }
         }
-
+        AuditContext.clear();
         if (!result) {
             throw new BizException("发放失败，请检查背包空间或唯一物品限制");
         }
@@ -330,6 +346,7 @@ public class GiveService {
             throw new BizException(I18nUtil.getExceptionMessage("ONLY_SUPPORT_GIVE_EQUIP"));
         }
         Server.getInstance().getWorlds().forEach(world -> world.getPlayerStorage().getAllCharacters().forEach(chr -> {
+            AuditContext.set(chr.getClient());
             chr.gainEquip(
                     submitData.getId(),
                     submitData.getStr(),
@@ -354,6 +371,7 @@ public class GiveService {
                     submitData.getOwner(),
                     submitData.getFlag()
             );
+            AuditContext.clear();
             chr.message(I18nUtil.getMessage("Give.Equip.All", submitData.getId().toString(), itemName));
         }));
         log.info(I18nUtil.getLogMessage("Give.Equip.All.info1",
@@ -375,6 +393,7 @@ public class GiveService {
         if (!ItemConstants.getInventoryType(submitData.getId()).equals(InventoryType.EQUIP)) {
             throw new BizException(I18nUtil.getExceptionMessage("ONLY_SUPPORT_GIVE_EQUIP"));
         }
+        AuditContext.set(chr.getClient());
         boolean result = chr.gainEquip(
                 submitData.getId(),
                 submitData.getStr(),
@@ -399,6 +418,7 @@ public class GiveService {
                 submitData.getOwner(),
                 submitData.getFlag()
             );
+        AuditContext.clear();
 
         if (!result) {
             throw new BizException("发放失败，请检查背包空间或唯一物品限制");

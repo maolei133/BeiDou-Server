@@ -35,8 +35,8 @@ import java.util.List;
 
 import static java.util.concurrent.TimeUnit.DAYS;
 import static java.util.concurrent.TimeUnit.HOURS;
-import static org.gms.dao.entity.table.BosslogDailyDOTableDef.BOSSLOG_DAILY_D_O;
-import static org.gms.dao.entity.table.BosslogWeeklyDOTableDef.BOSSLOG_WEEKLY_D_O;
+import static org.gms.dao.entity.table.BosslogDailyDOTableDef.BOSSLOG_DAILY_DO;
+import static org.gms.dao.entity.table.BosslogWeeklyDOTableDef.BOSSLOG_WEEKLY_DO;
 
 /**
  * @author Conrad
@@ -133,12 +133,12 @@ public class ExpeditionBossLog {
         for (Pair<Timestamp, BossLogEntry> p : resetTimestamps) {
             if (week) {
                 bosslogWeeklyMapper.deleteByQuery(QueryWrapper.create()
-                        .where(BOSSLOG_WEEKLY_D_O.ATTEMPTTIME.le(p.getLeft()))
-                        .and(BOSSLOG_WEEKLY_D_O.BOSSTYPE.like(p.getRight().name())));
+                        .where(BOSSLOG_WEEKLY_DO.ATTEMPTTIME.le(p.getLeft()))
+                        .and(BOSSLOG_WEEKLY_DO.BOSSTYPE.like(p.getRight().name())));
             } else {
                 bosslogDailyMapper.deleteByQuery(QueryWrapper.create()
-                        .where(BOSSLOG_DAILY_D_O.ATTEMPTTIME.le(p.getLeft()))
-                        .and(BOSSLOG_DAILY_D_O.BOSSTYPE.like(p.getRight().name())));
+                        .where(BOSSLOG_DAILY_DO.ATTEMPTTIME.le(p.getLeft()))
+                        .and(BOSSLOG_DAILY_DO.BOSSTYPE.like(p.getRight().name())));
             }
         }
     }
@@ -146,12 +146,12 @@ public class ExpeditionBossLog {
     private static int countPlayerEntries(int cid, BossLogEntry boss) {
         if (boss.week) {
             return (int) bosslogWeeklyMapper.selectCountByQuery(QueryWrapper.create()
-                    .where(BOSSLOG_WEEKLY_D_O.CHARACTERID.eq(cid))
-                    .and(BOSSLOG_WEEKLY_D_O.BOSSTYPE.like(boss.name())));
+                    .where(BOSSLOG_WEEKLY_DO.CHARACTERID.eq(cid))
+                    .and(BOSSLOG_WEEKLY_DO.BOSSTYPE.like(boss.name())));
         } else {
             return (int) bosslogDailyMapper.selectCountByQuery(QueryWrapper.create()
-                    .where(BOSSLOG_DAILY_D_O.CHARACTERID.eq(cid))
-                    .and(BOSSLOG_DAILY_D_O.BOSSTYPE.like(boss.name())));
+                    .where(BOSSLOG_DAILY_DO.CHARACTERID.eq(cid))
+                    .and(BOSSLOG_DAILY_DO.BOSSTYPE.like(boss.name())));
         }
     }
 

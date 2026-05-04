@@ -1,0 +1,64 @@
+# 是否启用多租户认证 (false 表示单租户模式，无需 X-Scope-OrgID 头)
+auth_enabled: false
+
+server:
+  # HTTP 监听端口，用于接收日志推送和查询请求
+  http_listen_port: 3100
+  # GRPC 监听端口，用于集群内部通信
+  grpc_listen_port: 9096
+
+common:
+  # 实例地址，通常为本机 IP
+  instance_addr: 127.0.0.1
+  # 数据存储路径前缀
+  path_prefix: ./loki-data
+  storage:
+    filesystem:
+      # 数据块 (Chunks) 存储目录，存放实际的日志内容
+      chunks_directory: ./loki-data/chunks
+      # 规则 (Rules) 存储目录，存放告警规则等
+      rules_directory: ./loki-data/rules
+  # 副本因子，单机模式下必须为 1
+  replication_factor: 1
+  ring:
+    kvstore:
+      # 键值存储类型，单机模式使用内存即可
+      store: inmemory
+
+schema_config:
+  configs:
+    # 索引配置生效的起始时间
+    - from: 2020-10-24
+      # 索引存储类型，tsdb 是较新的高性能格式
+      store: tsdb
+      # 对象存储类型，使用本地文件系统
+      object_store: filesystem
+      # 架构版本
+      schema: v13
+      index:
+        # 索引文件前缀
+        prefix: index_
+        # 索引周期，每 24 小时生成一个新的索引文件
+        period: 24h
+
+ruler:
+  # Alertmanager 地址，用于发送告警 (可选)
+  alertmanager_url: http://localhost:9093
+
+limits_config:
+  # 单次查询返回的最大行数，防止查询过大导致 OOM
+  max_entries_limit_per_query: 5000
+  # 全局日志保留时长 (例如 168h = 7天)，超过此时间的日志将被删除
+  # 注意：需要配合 compactor.retention_enabled = true 生效
+  retention_period: 168h
+
+compactor:
+  # 压缩器工作目录 (修改为相对路径以适配 Windows)
+  working_directory: ./loki-data/compactor
+  # 压缩间隔，每 10 分钟执行一次压缩和清理检查
+  compaction_interval: 10m
+  # 是否启用日志保留策略 (删除过期日志)
+  retention_enabled: true
+  # 删除请求存储配置 (启用 retention 时必须配置)
+  # 注意：此处应直接指定存储类型字符串，而非对象结构
+  delete_request_store: filesystem

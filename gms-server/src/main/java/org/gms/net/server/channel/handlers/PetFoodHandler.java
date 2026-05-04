@@ -40,13 +40,13 @@ public final class PetFoodHandler extends AbstractPacketHandler {
     public final void handlePacket(InPacket p, Client c) {
         Character chr = c.getPlayer();
         AutobanManager abm = chr.getAutoBanManager();
-        if (abm.getLastSpam(2) + 500 > currentServerTime()) {
+        if (abm.getLastActionTime(AutobanManager.ActionType.PET_FOOD) + 500 > Server.getInstance().getCurrentTime()) {
             c.sendPacket(PacketCreator.enableActions());
             return;
         }
-        abm.spam(2);
+        abm.recordAction(AutobanManager.ActionType.PET_FOOD);
         p.readInt(); // timestamp issue detected thanks to Masterrulax
-        abm.setTimestamp(1, Server.getInstance().getCurrentTimestamp(), 3);
+        abm.checkActionFrequency(AutobanManager.ActionType.PET_FOOD, Server.getInstance().getCurrentTime(), 3);
         if (chr.getNoPets() == 0) {
             c.sendPacket(PacketCreator.enableActions());
             return;

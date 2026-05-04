@@ -2,10 +2,13 @@ package org.gms.client.cheatsystem.core;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.dao.entity.ExtendValueDO;
-import org.gms.logsystem.category.DynamicCategoryManager;
-import org.gms.logsystem.facade.CheatSystemLoggerFacade;
+import org.gms.server.logging.AuditContext;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.util.ExtendUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -251,7 +254,29 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      */
     protected void logPluginEventAuto(String minorCategory, String message, String level) {
         if (loggingEnabled && player != null) {
-            CheatSystemLoggerFacade.logCheatSystemEventAuto(player, minorCategory, message, level);
+            // 确保上下文存在
+            boolean contextSet = false;
+            if (AuditContext.get().isEmpty() && player.getClient() != null) {
+                AuditContext.set(player.getClient());
+                contextSet = true;
+            }
+
+            try {
+                MapMessage data = new MapMessage()
+                    .with("msg", message)
+                    .with("cat", minorCategory); // category -> cat
+                
+                if ("WARN".equals(level) || "ERROR".equals(level)) {
+                     AuditLogger.error(LogModule.PLUGIN, LogAction.PLUGIN_ERROR, message, null);
+                } else {
+                     AuditLogger.info(LogModule.PLUGIN, LogAction.PLUGIN_USE, data);
+                }
+            } finally {
+                // 如果是我们临时设置的上下文，使用完后清理，避免污染线程
+                if (contextSet) {
+                    AuditContext.clear();
+                }
+            }
         }
     }
     
@@ -261,7 +286,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      * @param message 日志消息
      */
     protected void logPluginActivationAuto(String message) {
-        logPluginEventAuto(DynamicCategoryManager.Category.MINOR_PLUGIN_ACTIVATION, message, "INFO");
+        logPluginEventAuto("PLUGIN_ACTIVATION", message, "INFO");
     }
     
     /**
@@ -270,7 +295,7 @@ public abstract class BaseCheatPlugin implements CheatPlugin {
      * @param message 日志消息
      */
     protected void logPluginOperationAuto(String message) {
-        logPluginEventAuto(DynamicCategoryManager.Category.MINOR_PLUGIN_OPERATION, message, "INFO");
+        logPluginEventAuto("PLUGIN_OPERATION", message, "INFO");
     }
     
     /**

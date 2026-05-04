@@ -33,13 +33,18 @@ import org.gms.dao.entity.BuddiesDO;
 import org.gms.dao.entity.CharactersDO;
 import org.gms.dao.mapper.BuddiesMapper;
 import org.gms.dao.mapper.CharactersMapper;
+import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.world.World;
+import org.gms.service.CharacterService;
 import org.gms.util.PacketCreator;
 import org.gms.util.SpringContextUtil;
 
 public class BuddylistModifyHandler extends AbstractPacketHandler {
+    
+    private static final CharacterService characterService = ServerManager.getApplicationContext().getBean(CharacterService.class);
+
     private static class CharacterIdNameBuddyCapacity extends CharacterNameAndId {
         private final int buddyCapacity;
 
@@ -154,6 +159,9 @@ public class BuddylistModifyHandler extends AbstractPacketHandler {
                             }
                             buddylist.put(new BuddylistEntry(charWithId.getName(), group, otherCid, displayChannel, true));
                             c.sendPacket(PacketCreator.updateBuddylist(buddylist.getBuddies()));
+                            
+                            // 实时保存好友列表
+                            characterService.saveBuddies(player.getId(), buddylist);
                         }
                     } else {
                         c.sendPacket(PacketCreator.serverNotice(1, "名为 \"" + addName + "\" 的角色不存在"));
@@ -164,6 +172,9 @@ public class BuddylistModifyHandler extends AbstractPacketHandler {
             } else {
                 ble.changeGroup(group);
                 c.sendPacket(PacketCreator.updateBuddylist(buddylist.getBuddies()));
+                
+                // 实时保存好友列表
+                characterService.saveBuddies(player.getId(), buddylist);
             }
         } else if (mode == 2) { // 接受好友
             int otherCid = p.readInt();
@@ -187,6 +198,9 @@ public class BuddylistModifyHandler extends AbstractPacketHandler {
                         buddylist.put(new BuddylistEntry(otherName, "默认分组", otherCid, channel, true));
                         c.sendPacket(PacketCreator.updateBuddylist(buddylist.getBuddies()));
                         notifyRemoteChannel(c, channel, otherCid, BuddyOperation.ADDED);
+                        
+                        // 实时保存好友列表
+                        characterService.saveBuddies(player.getId(), buddylist);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();

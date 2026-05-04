@@ -51,6 +51,12 @@ gms:
   service:
     # zh-CN en-US
     language: zh-CN
+    # WZ数据加载策略
+    startup:
+      # 是否在启动时全量预加载所有WZ数据（如Skill, Quest, CashShop等）
+      # true: 预加载模式，启动稍慢，运行时响应快，适合高配置服务器。
+      # false: 懒加载模式，启动极快，仅在首次使用时加载数据，适合低配置或开发环境。
+      all-wz: true
     rate-limit:
       # 是否开启限流
       enabled: false

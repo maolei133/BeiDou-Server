@@ -36,30 +36,31 @@
         <mainClass>org.gms.ServerApplication</mainClass>
 
         <!-- Maven plugins -->
-        <spring-boot-maven-plugin>3.3.1</spring-boot-maven-plugin> <!-- Disabled. (for building thin jar) -->
+        <!-- 注解：修正为Spring Boot最新的稳定版本 3.5.9 -->
+        <spring-boot.version>3.5.9</spring-boot.version>
 
         <!-- Dependencies -->
-        <graalvm-js.version>23.0.4</graalvm-js.version>
-        <graalvm-js-scriptengine.version>24.0.1</graalvm-js-scriptengine.version> <!-- ScriptEngine implementation -->
-        <netty.version>4.1.109.Final</netty.version> <!-- Networking -->
+        <!-- >= 24.2.1 版本修复 解构赋值（如 const { a, b } = obj） 内存泄露问题-->
+        <graalvm-js.version>24.2.1</graalvm-js.version>
+        <graalvm-js-scriptengine.version>24.2.1</graalvm-js-scriptengine.version> <!-- ScriptEngine implementation -->
         <jcip-annotations.version>1.0</jcip-annotations.version> <!-- Annotations for concurrency documentation -->
         <druid.version>1.2.22</druid.version> <!-- Database connection pool -->
         <mysql-connector-j.version>8.4.0</mysql-connector-j.version> <!-- MySQL JDBC driver -->
-        <junit.version>5.10.2</junit.version> <!-- Unit test -->
-        <mockito.version>5.11.0</mockito.version> <!-- Unit test -->
-        <flyway-mysql.version>9.15.2</flyway-mysql.version>
         <lombok.version>1.18.30</lombok.version>
         <fastjson2.version>2.0.47</fastjson2.version>
-        <mybatis-flex.version>1.8.9</mybatis-flex.version>
-        <swagger.version>2.5.0</swagger.version>
+        <mybatis-flex.version>1.11.6</mybatis-flex.version>
+        <!-- 注解：升级 springdoc-openapi 到 2.6.0 以修复潜在漏洞 -->
+        <swagger.version>2.8.14</swagger.version>
+        <jjwt.version>0.13.0</jjwt.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- 统一管理 Spring Boot 依赖版本 -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
-                <version>3.2.3</version>
+                <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -90,15 +91,30 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
+
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt</artifactId>
-            <version>0.9.1</version>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
         </dependency>
         <dependency>
-            <groupId>javax.xml.bind</groupId>
-            <artifactId>jaxb-api</artifactId>
-            <version>2.3.1</version>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- JAXB API, 使用 jakarta 命名空间以兼容 Java 11+ -->
+        <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+            <version>4.0.0</version>
         </dependency>
 
         <!-- Tool -->
@@ -110,7 +126,6 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-mysql</artifactId>
-            <version>${flyway-mysql.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -127,13 +142,11 @@
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
-            <version>3.1.8</version>
         </dependency>
         <!-- Jakarta (Java 21 annotations) -->
         <dependency>
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
-            <version>2.1.1</version>
         </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>
@@ -157,6 +170,7 @@
             <groupId>com.alibaba</groupId>
             <artifactId>druid-spring-boot-starter</artifactId>
             <version>${druid.version}</version>
+            <!-- 注解：恢复版本号。Druid不是由Spring Boot BOM管理的，需要明确指定版本。 -->
         </dependency>
         <dependency>
             <groupId>com.mybatis-flex</groupId>
@@ -166,25 +180,22 @@
 
 
         <!-- Networking -->
+        <!-- 注解：移除Netty版本，让Spring Boot BOM来管理，以使用更安全的版本 -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-transport</artifactId>
-            <version>${netty.version}</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec</artifactId>
-            <version>${netty.version}</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-buffer</artifactId>
-            <version>${netty.version}</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-handler</artifactId>
-            <version>${netty.version}</version>
         </dependency>
 
         <!-- Logging -->
@@ -212,6 +223,7 @@
             <groupId>org.graalvm.js</groupId>
             <artifactId>js</artifactId>
             <version>${graalvm-js.version}</version>
+            <type>pom</type>
         </dependency>
         <dependency>
             <groupId>org.graalvm.js</groupId>
@@ -223,25 +235,21 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -251,7 +259,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
     <build>
 <!--        <finalName>BeiDou</finalName>-->
         <plugins>
@@ -264,7 +271,6 @@
                     <target>${java.version}</target>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <compilerArgs>
-                        <arg>--enable-preview</arg>
                         <arg>-parameters</arg>
                     </compilerArgs>
                 </configuration>
@@ -272,7 +278,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>${spring-boot-maven-plugin}</version>
+                <version>${spring-boot.version}</version>
                 <configuration>
                     <outputDirectory>${outputDirectory}</outputDirectory>
                     <finalName>${finalName}</finalName>

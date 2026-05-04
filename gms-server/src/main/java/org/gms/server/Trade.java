@@ -29,11 +29,16 @@ import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.server.coordinator.world.InviteCoordinator;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResult;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteResultType;
 import org.gms.net.server.coordinator.world.InviteCoordinator.InviteType;
+import org.gms.server.logging.AuditContext;
+import org.gms.service.TraceabilityService;
 import org.gms.util.I18nUtil;
+import org.gms.util.SnowflakeIdGenerator;
+import org.gms.util.SpringContextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.util.PacketCreator;
@@ -52,6 +57,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class Trade {
     private static final Logger log = LoggerFactory.getLogger(Trade.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     public enum TradeResult {
         NO_RESPONSE(1),
@@ -121,13 +127,30 @@ public class Trade {
     private void completeTrade() {
         byte result;
         boolean show = GameConfig.getServerBoolean("use_debug");
+
+        // 对方玩家信息
+        Character partnerChr = partner.getChr();
+
+        // 记录我方【失去】的物品
+        for (Item item : items) {
+            // 溯源日志：记录我方失去物品，交易给对方
+            traceabilityService.log(item, chr, TraceabilityService.ActionType.TRADE, TraceabilityService.ActionSourceType.TRADE_SENDER, -item.getQuantity(), partnerChr.getId(), partnerChr.getName());
+        }
+
         items.clear();
         meso = 0;
 
+        // 记录我方【获得】的物品
+        AuditContext.set(partnerChr.getClient());
         for (Item item : exchangeItems) {
             KarmaManipulator.toggleKarmaFlagToUntradeable(item);
             InventoryManipulator.addFromDrop(chr.getClient(), item, show);
+
+            // 溯源日志：记录我方获得物品，从对方处获得
+            traceabilityService.log(item, partnerChr, TraceabilityService.ActionType.TRADE, TraceabilityService.ActionSourceType.TRADE_RECEIVER, item.getQuantity(),  chr.getId(), chr.getName());
         }
+        AuditContext.clear();
+        AuditContext.set(chr.getClient());
 
         if (exchangeMeso > 0) {//此处对金币交易进行扣税处理
             int fee = getFee(exchangeMeso);
@@ -209,6 +232,11 @@ public class Trade {
                 if (it.getPosition() == item.getPosition()) {
                     return false;
                 }
+            }
+            
+            // 确保 UID 存在
+            if (item.getUid() == 0) {
+                item.setUid(SnowflakeIdGenerator.getInstance().nextId());
             }
 
             items.add(item);

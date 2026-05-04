@@ -373,6 +373,9 @@
           </a-row>
         </a-form>
       </a-tab-pane>
+      <a-tab-pane key="8" :title="$t('account.player.edit.tab.monsterbook')">
+        <MonsterBookTab :char-id="form.id" />
+      </a-tab-pane>
     </a-tabs>
 
     <ImageSelector
@@ -417,6 +420,7 @@
   import { useI18n } from 'vue-i18n';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import ImageSelector from '@/components/ImageSelector/index.vue';
+  import MonsterBookTab from '@/views/account/player/components/MonsterBookTab.vue';
   import WarpModal from './WarpModal.vue';
 
   const props = defineProps({
@@ -625,13 +629,13 @@
 
           // 初始化加载当前脸型和发型信息，以便显示
           if (detail.face) {
-            loadItemName('face', detail.face);
+            await loadItemName('face', detail.face);
           }
           if (detail.hair) {
-            loadItemName('hair', detail.hair);
+            await loadItemName('hair', detail.hair);
           }
           if (detail.map) {
-            loadItemName('map', detail.map);
+            await loadItemName('map', detail.map);
           }
         } catch (error) {
           Message.error('获取角色详情失败');

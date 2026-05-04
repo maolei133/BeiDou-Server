@@ -12,7 +12,7 @@ import org.gms.server.ItemInformationProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import static org.gms.dao.entity.table.PetignoresDOTableDef.PETIGNORES_D_O;
+import static org.gms.dao.entity.table.PetignoresDOTableDef.PETIGNORES_DO;
 
 @Service
 @AllArgsConstructor
@@ -40,7 +40,7 @@ public class PetService {
     @Transactional
     public void deleteFromDb(Character owner, int petid) {
         petsMapper.deleteById(petid);
-        petignoresMapper.deleteByQuery(QueryWrapper.create().where(PETIGNORES_D_O.PETID.eq(petid)));
+        petignoresMapper.deleteByQuery(QueryWrapper.create().where(PETIGNORES_DO.PETID.eq(petid)));
         owner.resetExcluded(petid);
         CashIdGenerator.freeCashId(petid);
     }

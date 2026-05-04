@@ -45,7 +45,7 @@ public final class UseCatchItemHandler extends AbstractPacketHandler {
         Character chr = c.getPlayer();
         AutobanManager abm = chr.getAutoBanManager();
         p.readInt();
-        abm.setTimestamp(5, Server.getInstance().getCurrentTimestamp(), 4);
+        abm.checkActionFrequency(AutobanManager.ActionType.USE_CATCH_ITEM, Server.getInstance().getCurrentTime(), 4);
         p.readShort();
         int itemId = p.readInt();
         int monsterid = p.readInt();
@@ -69,14 +69,14 @@ public final class UseCatchItemHandler extends AbstractPacketHandler {
                 break;
             case ItemId.POUCH:
                 if (mob.getId() == MobId.GHOST) {
-                    if ((abm.getLastSpam(10) + 1000) < currentServerTime()) {
+                    if ((abm.getLastActionTime(AutobanManager.ActionType.HEAL_HP) + 1000) < Server.getInstance().getCurrentTime()) {
                         if (mob.getHp() < ((mob.getMaxHp() / 10) * 4)) {
                             chr.getMap().broadcastMessage(PacketCreator.catchMonster(monsterid, itemId, (byte) 1));
                             mob.getMap().killMonster(mob, null, false);
                             InventoryManipulator.removeById(c, InventoryType.USE, itemId, 1, true, true);
                             InventoryManipulator.addById(c, ItemId.GHOST_SACK, (short) 1, "", -1);
                         } else {
-                            abm.spam(10);
+                            abm.recordAction(AutobanManager.ActionType.HEAL_HP);
                             c.sendPacket(PacketCreator.catchMessage(0));
                         }
                     }
@@ -85,7 +85,7 @@ public final class UseCatchItemHandler extends AbstractPacketHandler {
                 break;
             case ItemId.ARPQ_ELEMENT_ROCK:
                 if (mob.getId() == MobId.ARPQ_SCORPION) {
-                    if ((abm.getLastSpam(10) + 800) < currentServerTime()) {
+                    if ((abm.getLastActionTime(AutobanManager.ActionType.HEAL_HP) + 800) < Server.getInstance().getCurrentTime()) {
                         if (mob.getHp() < ((mob.getMaxHp() / 10) * 4)) {
                             if (chr.canHold(ItemId.ARPQ_SPIRIT_JEWEL, 1)) {
                                 if (Math.random() < 0.5) { // 50% chance
@@ -98,10 +98,10 @@ public final class UseCatchItemHandler extends AbstractPacketHandler {
                                     chr.getMap().broadcastMessage(PacketCreator.catchMonster(monsterid, itemId, (byte) 0));
                                 }
                             } else {
-                                chr.dropMessage(5, "Make a ETC slot available before using this item.");
+                                chr.dropMessage(5, "在使用此物品之前，请确保“其它”栏位有空位。");
                             }
 
-                            abm.spam(10);
+                            abm.recordAction(AutobanManager.ActionType.HEAL_HP);
                         } else {
                             c.sendPacket(PacketCreator.catchMessage(0));
                         }
@@ -176,14 +176,14 @@ public final class UseCatchItemHandler extends AbstractPacketHandler {
                 break;
             case ItemId.FISH_NET:
                 if (mob.getId() == MobId.P_JUNIOR) {
-                    if ((abm.getLastSpam(10) + 3000) < currentServerTime()) {
-                        abm.spam(10);
+                    if ((abm.getLastActionTime(AutobanManager.ActionType.HEAL_HP) + 3000) < Server.getInstance().getCurrentTime()) {
+                        abm.recordAction(AutobanManager.ActionType.HEAL_HP);
                         chr.getMap().broadcastMessage(PacketCreator.catchMonster(monsterid, itemId, (byte) 1));
                         mob.getMap().killMonster(mob, null, false);
                         InventoryManipulator.removeById(c, InventoryType.USE, itemId, 1, true, true);
                         InventoryManipulator.addById(c, ItemId.FISH_NET_WITH_A_CATCH, (short) 1, "", -1);
                     } else {
-                        chr.message("You cannot use the Fishing Net yet.");
+                        chr.message("你暂时还不能使用渔网。");
                     }
                     c.sendPacket(PacketCreator.enableActions());
                 }
@@ -199,7 +199,7 @@ public final class UseCatchItemHandler extends AbstractPacketHandler {
                     int timeCatch = ii.getUseDelay(itemId);
                     int mobHp = ii.getMobHP(itemId);
 
-                    if (timeCatch != 0 && (abm.getLastSpam(10) + timeCatch) < currentServerTime()) {
+                    if (timeCatch != 0 && (abm.getLastActionTime(AutobanManager.ActionType.HEAL_HP) + timeCatch) < Server.getInstance().getCurrentTime()) {
                         if (mobHp != 0 && mob.getHp() < ((mob.getMaxHp() / 100) * mobHp)) {
                             chr.getMap().broadcastMessage(PacketCreator.catchMonster(monsterid, itemId, (byte) 1));
                             mob.getMap().killMonster(mob, null, false);
@@ -207,11 +207,11 @@ public final class UseCatchItemHandler extends AbstractPacketHandler {
                             InventoryManipulator.addById(c, itemGanho, (short) 1, "", -1);
                         } else if (mob.getId() != MobId.P_JUNIOR) {
                             if (mobHp != 0) {
-                                abm.spam(10);
+                                abm.recordAction(AutobanManager.ActionType.HEAL_HP);
                                 c.sendPacket(PacketCreator.catchMessage(0));
                             }
                         } else {
-                            chr.message("You cannot use the Fishing Net yet.");
+                            chr.message("你暂时还不能使用渔网。");
                         }
                     }
                 }

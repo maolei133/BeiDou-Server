@@ -1,8 +1,11 @@
 package org.gms.server;
 
 import com.mybatisflex.core.paginate.Page;
+import com.mybatisflex.core.query.QueryWrapper;
 import org.gms.constants.api.InformationType;
 import org.gms.constants.inventory.EquipType;
+import org.gms.dao.entity.MonstercarddataDO;
+import org.gms.dao.mapper.MonstercarddataMapper;
 import org.gms.exception.BizException;
 import org.gms.model.pojo.InformationSearch;
 import org.gms.model.pojo.InformationResult;
@@ -11,8 +14,10 @@ import org.gms.provider.DataProvider;
 import org.gms.provider.DataProviderFactory;
 import org.gms.provider.DataTool;
 import org.gms.provider.wz.WZFiles;
+import org.gms.server.life.MonsterInformationProvider;
 import org.gms.util.I18nUtil;
 import org.gms.util.RequireUtil;
+import org.gms.util.SpringContextUtil;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,6 +29,7 @@ public class CommonInformation {
     private final DataProvider stringData;
     private List<InformationResult> cachedMaps;
     private List<String> cachedEquipCategories;
+    private List<InformationResult> cachedMonsterCards;
 
     private CommonInformation() {
         stringData = DataProviderFactory.getDataProvider(WZFiles.STRING);
@@ -230,8 +236,72 @@ public class CommonInformation {
                 data = stringData.getData("Eqp.img").getChildByPath("Eqp/Face");
                 count = addResult(results, infType, data, filter, filterType, fullMatch, page, pageSize, gender, color, null);
             }
+            case MONSTER_CARD -> {
+                count = searchMonsterCards(results, condition);
+            }
         }
         return count;
+    }
+
+    private long searchMonsterCards(List<InformationResult> results, InformationSearch condition) {
+        List<InformationResult> allCards = getAllMonsterCards();
+        
+        String filter = condition.getFilter();
+        int filterType = condition.getFilterType();
+        boolean fullMatch = condition.isFullMatch();
+        
+        // 内存过滤
+        List<InformationResult> filtered = allCards.stream()
+            .filter(card -> isMatch(String.valueOf(card.getId()), card.getName(), card.getDesc(), filter, filterType, fullMatch))
+            .collect(Collectors.toList());
+            
+        long matchCount = filtered.size();
+        
+        int page = condition.getPage() != null ? condition.getPage() : 1;
+        int pageSize = condition.getPageSize() != null ? condition.getPageSize() : 20;
+        
+        int start = (page - 1) * pageSize;
+        int end = Math.min(start + pageSize, filtered.size());
+        
+        if (start < filtered.size()) {
+            results.addAll(filtered.subList(start, end));
+        }
+        
+        return matchCount;
+    }
+    
+    private List<InformationResult> getAllMonsterCards() {
+        if (cachedMonsterCards != null) {
+            return cachedMonsterCards;
+        }
+        synchronized (this) {
+            if (cachedMonsterCards != null) {
+                return cachedMonsterCards;
+            }
+            
+            MonstercarddataMapper mapper = SpringContextUtil.getBean(MonstercarddataMapper.class);
+            if (mapper == null) return new ArrayList<>();
+            
+            List<MonstercarddataDO> list = mapper.selectListByQuery(QueryWrapper.create());
+            List<InformationResult> results = new ArrayList<>();
+            
+            for (MonstercarddataDO data : list) {
+                String name = "Unknown";
+                if (data.getMobid() != null) {
+                    name = MonsterInformationProvider.getInstance().getMobNameFromId(data.getMobid());
+                }
+                
+                results.add(InformationResult.builder()
+                        .type(InformationType.MONSTER_CARD.getType())
+                        .id(data.getCardid())
+                        .name(name)
+                        .desc("Mob ID: " + data.getMobid())
+                        .build());
+            }
+            
+            cachedMonsterCards = results;
+            return cachedMonsterCards;
+        }
     }
 
     private long addResult(List<InformationResult> results, InformationType infType, Data data, String filter, int filterType, boolean fullMatch, Integer page, Integer pageSize, Integer gender, Integer color, String subCategory) {

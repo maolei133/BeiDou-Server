@@ -1,5 +1,6 @@
 package org.gms.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.mybatisflex.annotation.Column;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -52,6 +53,7 @@ public class InventorySearchRtnDTO {
     /**
      * 宠物id，对应petid
      */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private Integer petId;
     /**
      * 物品标记，对应flag
@@ -84,6 +86,13 @@ public class InventorySearchRtnDTO {
      */
     private String itemName;
 
+    public Integer getPetId() {
+        if (petId != null && petId == -1) {
+            return null;
+        }
+        return petId;
+    }
+
     public Item toItem() {
         Item item;
         if (isEquipment()) {
@@ -111,7 +120,8 @@ public class InventorySearchRtnDTO {
             equip.setRingId(Optional.ofNullable(getInventoryEquipment().getRingId()).orElse(0));
             item = equip;
         } else {
-            item = new Item(getItemId(), getPosition(), getQuantity(), getPetId());
+            Integer pId = getPetId();
+            item = new Item(getItemId(), getPosition(), getQuantity(), pId == null ? -1 : pId);
         }
         item.setOwner(getOwner());
         item.setExpiration(getExpiration());

@@ -21,6 +21,7 @@
  */
 package org.gms.client.processor.npc;
 
+import org.apache.logging.log4j.message.MapMessage;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.autoban.AutobanFactory;
@@ -32,7 +33,12 @@ import org.gms.client.inventory.manipulator.KarmaManipulator;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.packet.InPacket;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.server.ItemInformationProvider;
@@ -45,6 +51,45 @@ import org.gms.util.PacketCreator;
  */
 public class StorageProcessor {
     private static final Logger log = LoggerFactory.getLogger(StorageProcessor.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+
+    /**
+     * 仓库操作错误码枚举
+     * 用于规范化错误处理，避免硬编码。
+     */
+    public enum StorageError {
+        /** 未知错误 (0x00) */
+        UNKNOWN(0x00),
+        /** 解除UI锁 (0x09) */
+        ENABLE_ACTIONS(0x09),
+        /** 背包已满 (0x0A) */
+        INVENTORY_FULL(0x0A),
+        /** 金币不足 (0x0B) */
+        NOT_ENOUGH_MESOS(0x0B),
+        /** 只能持有一个 (0x0C) */
+        ONE_OF_A_KIND(0x0C),
+        /** 仓库已满 (0x11) */
+        STORAGE_FULL(0x11);
+
+        private final byte code;
+
+        StorageError(int code) {
+            this.code = (byte) code;
+        }
+
+        public byte getCode() {
+            return code;
+        }
+    }
+
+    /**
+     * 发送仓库错误包
+     * @param c 客户端
+     * @param error 错误类型
+     */
+    private static void sendStorageError(Client c, StorageError error) {
+        c.sendPacket(PacketCreator.getStorageError(error.getCode()));
+    }
 
     public static void storageAction(InPacket p, Client c) {
         ItemInformationProvider ii = ItemInformationProvider.getInstance();
@@ -55,111 +100,171 @@ public class StorageProcessor {
         byte mode = p.readByte();
 
         if (chr.getLevel() < 15) {
+            sendStorageError(c, StorageError.UNKNOWN);
             chr.dropMessage(1, "15级以后才可以使用仓库服务");
-            c.sendPacket(PacketCreator.enableActions());
             return;
         }
 
         if (c.tryacquireClient()) {
             try {
                 switch (mode) {
-                case 4: { // Take out
+                case 4: { // 取出物品
                     byte type = p.readByte();
                     byte slot = p.readByte();
-                    if (slot < 0 || slot > storage.getSlots()) { // removal starts at zero
-                        AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " tried to packet edit with storage.");
-                        log.warn("Chr {} tried to work with storage slot {}", c.getPlayer().getName(), slot);
+                    
+                    if (slot < 0 || slot > storage.getSlots()) { // 索引从0开始
+                        AutobanFactory.PACKET_EDIT.alert(c.getPlayer(), c.getPlayer().getName() + " 尝试通过仓库进行封包编辑。");
+                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT,
+                                new MapMessage().with("msg", "检测到封包编辑").with("slot", slot));
                         c.disconnect(true, false);
                         return;
                     }
 
-                    slot = storage.getSlot(InventoryType.getByType(type), slot);
-                    Item item = storage.getItem(slot);
+                    // 1. 获取目标物品在全局列表中的索引
+                    byte globalSlot = storage.getSlot(InventoryType.getByType(type), slot);
+                    
+                    // 2. 获取物品对象
+                    Item item = storage.getItem(globalSlot);
 
                     if (hasGMRestrictions(chr)) {
+                        sendStorageError(c, StorageError.UNKNOWN);
                         chr.dropMessage(1, gmBlockedStorageMessage);
-                        log.info(String.format("GM %s blocked from using storage", chr.getName()));
-                        chr.sendPacket(PacketCreator.enableActions());
                         return;
                     }
 
                     if (item != null) {
                         if (ii.isPickupRestricted(item.getItemId()) && chr.haveItemWithId(item.getItemId(), true)) {
-                            c.sendPacket(PacketCreator.getStorageError((byte) 0x0C));
+                            sendStorageError(c, StorageError.ONE_OF_A_KIND);
                             return;
                         }
 
                         int takeoutFee = storage.getTakeOutFee();
                         if (chr.getMeso() < takeoutFee) {
-                            c.sendPacket(PacketCreator.getStorageError((byte) 0x0B));
+                            sendStorageError(c, StorageError.NOT_ENOUGH_MESOS);
                             return;
                         } else {
                             chr.gainMeso(-takeoutFee, false);
                         }
 
                         if (InventoryManipulator.checkSpace(c, item.getItemId(), item.getQuantity(), item.getOwner())) {
-                            if (storage.takeOut(item)) {
+                            if (storage.takeOut(c, item)) {
                                 chr.setUsedStorage();
 
                                 KarmaManipulator.toggleKarmaFlagToUntradeable(item);
                                 InventoryManipulator.addFromDrop(c, item, false);
 
+                                traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE, TraceabilityService.ActionSourceType.STORAGE_TAKE_OUT, item.getQuantity());
+
                                 String itemName = ii.getName(item.getItemId());
-                                log.debug("Chr {} took out {}x {} ({})", c.getPlayer().getName(), item.getQuantity(), itemName, item.getItemId());
+                                // 发送提示消息
+                                String feeMsg = takeoutFee > 0 ? " (手续费: " + takeoutFee + " 金币)" : "";
+                                chr.dropMessage(5, "[仓库] 取出 " + itemName + " × " + item.getQuantity() + feeMsg);
 
                                 storage.sendTakenOut(c, item.getInventoryType());
                             } else {
-                                c.sendPacket(PacketCreator.enableActions());
+                                AuditLogger.error(LogModule.STORAGE, LogAction.STORAGE_OUT, "storage.takeOut 返回 false", null);
+                                sendStorageError(c, StorageError.UNKNOWN);
                                 return;
                             }
                         } else {
-                            c.sendPacket(PacketCreator.getStorageError((byte) 0x0A));
+                            sendStorageError(c, StorageError.INVENTORY_FULL);
                         }
+                    } else {
+                        AuditLogger.info(LogModule.STORAGE, LogAction.STORAGE_OUT,
+                                new MapMessage().with("msg", "未找到物品").with("slot", globalSlot));
+                        sendStorageError(c, StorageError.UNKNOWN);
+                        chr.dropMessage(1, "仓库中没有该物品");
                     }
                     break;
                 }
-                case 5: { // Store
+                case 5: { // 存入物品
                     short slot = p.readShort();
                     int itemId = p.readInt();
                     short quantity = p.readShort();
+                    short oldqty;
+                    
                     InventoryType invType = ItemConstants.getInventoryType(itemId);
                     Inventory inv = chr.getInventory(invType);
-                    if (slot < 1 || slot > inv.getSlotLimit()) { // player inv starts at one
-                        AutobanFactory.PACKET_EDIT.alert(c.getPlayer(),
-                                c.getPlayer().getName() + " tried to packet edit with storage.");
-                        log.warn("Chr {} tried to store item at slot {}", c.getPlayer().getName(), slot);
+                    if (slot < 1 || slot > inv.getSlotLimit()) { // 玩家背包从1开始
+                        AutobanFactory.PACKET_EDIT.alert(c.getPlayer(),c.getPlayer().getName() + " 尝试通过仓库进行封包编辑。");
                         c.disconnect(true, false);
                         return;
                     }
 
                     if (hasGMRestrictions(chr)) {
+                        sendStorageError(c, StorageError.UNKNOWN);
                         chr.dropMessage(1, gmBlockedStorageMessage);
-                        log.info(String.format("GM %s blocked from using storage", chr.getName()));
-                        chr.sendPacket(PacketCreator.enableActions());
                         return;
                     }
 
                     if (quantity < 1) {
-                        c.sendPacket(PacketCreator.enableActions());
+                        sendStorageError(c, StorageError.UNKNOWN);
                         return;
                     }
                     if (storage.isFull()) {
-                        c.sendPacket(PacketCreator.getStorageError((byte) 0x11));
+                        sendStorageError(c, StorageError.STORAGE_FULL);
                         return;
                     }
                     int storeFee = storage.getStoreFee();
                     if (chr.getMeso() < storeFee) {
-                        c.sendPacket(PacketCreator.getStorageError((byte) 0x0B));
+                        sendStorageError(c, StorageError.NOT_ENOUGH_MESOS);
                     } else {
                         Item item;
 
-                        inv.lockInventory(); // thanks imbee for pointing a dupe within storage
+                        inv.lockInventory(); // 感谢 imbee 指出仓库内的复制漏洞
                         try {
                             item = inv.getItem(slot);
                             if (item != null && item.getItemId() == itemId
                                     && (item.getQuantity() >= quantity || ItemConstants.isRechargeable(itemId))) {
                                 if (ItemId.isWeddingRing(itemId) || ItemId.isWeddingToken(itemId)) {
-                                    c.sendPacket(PacketCreator.enableActions());
+                                    sendStorageError(c, StorageError.UNKNOWN);
+                                    return;
+                                }
+                                
+                                // 检查：现金道具
+                                if (ii.isCash(itemId)) {
+                                    sendStorageError(c, StorageError.UNKNOWN); // 使用未知错误
+                                    c.getPlayer().dropMessage(1, "现金道具无法存入仓库。");
+                                    return;
+                                }
+                                
+                                // 检查：不可存入的物品
+                                // 规则：
+                                // 1. 固有道具 (One-of-a-kind)
+                                // 2. 不可交易 (Untradeable)
+                                // 3. 合并不可交易 (Merge Untradeable)
+                                // 满足任意一种即不可存入，除非：
+                                // a. 有宿命剪刀 (Karma Scissors)
+                                // b. 有账号共享标记 (Account Sharing)
+                                boolean isOneOfAKind = ii.isPickupRestricted(itemId);
+                                boolean isUntradeable = ItemConstants.isUntradeable(item.getFlag());
+                                boolean isMergeUntradeable = (item.getFlag() & ItemConstants.MERGE_UNTRADEABLE) == ItemConstants.MERGE_UNTRADEABLE; // 假设有这个标记
+                                boolean isDropRestricted = ii.isDropRestricted(itemId); // 通常也意味着不可交易
+
+                                if (isOneOfAKind || isUntradeable || isMergeUntradeable || isDropRestricted) {
+                                    boolean hasKarma = KarmaManipulator.hasKarmaFlag(item);
+                                    boolean isAccountSharing = (item.getFlag() & ItemConstants.ACCOUNT_SHARING) == ItemConstants.ACCOUNT_SHARING;
+                                    
+                                    // 修正：如果不可丢弃物品标记为0，也可以存入
+                                    // 注意：isDropRestricted 已经包含了不可丢弃的判断，但这里我们需要更细致的区分
+                                    // 如果 isDropRestricted 为 true，但 flag 为 0，是否允许存入？
+                                    // 原始需求：不可丢弃物品，如果标记为0，也是可以存入到仓库里的。
+                                    // 这里的“标记为0”指的是 item.getFlag() == 0
+                                    
+                                    boolean isFlagZero = item.getFlag() == 0;
+
+                                    if (!hasKarma && !isAccountSharing && !isFlagZero) {
+                                        // 这里可以预留配置开关，例如 if (!GameConfig.getServerBoolean("allow_storage_untradeable"))
+                                        sendStorageError(c, StorageError.UNKNOWN); // 使用未知错误
+                                        c.getPlayer().dropMessage(1, "不可交易或固有道具无法存入仓库。");
+                                        return;
+                                    }
+                                }
+                                
+                                // 检查：任务道具
+                                if (ii.isQuestItem(itemId)) {
+                                    sendStorageError(c, StorageError.UNKNOWN); // 使用未知错误
+                                    c.getPlayer().dropMessage(1, "任务道具无法存入仓库。");
                                     return;
                                 }
 
@@ -169,11 +274,11 @@ public class StorageProcessor {
 
                                 InventoryManipulator.removeFromSlot(c, invType, slot, quantity, false);
                             } else {
-                                c.sendPacket(PacketCreator.enableActions());
+                                sendStorageError(c, StorageError.UNKNOWN);
                                 return;
                             }
-
-                            item = item.copy(); // thanks Robin Schulz & BHB88 for noticing a inventory glitch when storing items
+                            oldqty = (short) (item.getQuantity() + quantity);
+                            item = item.copy(); // 感谢 Robin Schulz & BHB88 注意到存入物品时的背包故障
                         } finally {
                             inv.unlockInventory();
                         }
@@ -183,30 +288,40 @@ public class StorageProcessor {
                         KarmaManipulator.toggleKarmaFlagToUntradeable(item);
                         item.setQuantity(quantity);
 
-                        storage.store(item); // inside a critical section, "!(storage.isFull())" is still in effect...
-                        chr.setUsedStorage();
+                        if (storage.store(c, item)) { // 在临界区内，"!(storage.isFull())" 仍然有效...
+                            chr.setUsedStorage();
 
-                        String itemName = ii.getName(item.getItemId());
-                        log.debug("Chr {} stored {}x {} ({})", c.getPlayer().getName(), item.getQuantity(), itemName, item.getItemId());
-                        storage.sendStored(c, ItemConstants.getInventoryType(itemId));
+                            traceabilityService.log(item, chr, TraceabilityService.ActionType.STORAGE, TraceabilityService.ActionSourceType.STORAGE_PUT_IN, -quantity,null,String.format("数量: %d -> %d",oldqty, oldqty - quantity));
+
+                            String itemName = ii.getName(item.getItemId());
+                            // 发送提示消息
+                            String feeMsg = storeFee > 0 ? " (手续费: " + storeFee + " 金币)" : "";
+                            chr.dropMessage(6, "[仓库] 存入 " + itemName + " × " + item.getQuantity() + feeMsg);
+                            
+                            storage.sendStored(c, ItemConstants.getInventoryType(itemId));
+                        } else {
+                            // 存入失败（如仓库已满），退还费用并提示
+                            chr.gainMeso(storeFee, false, true, false);
+                            InventoryManipulator.addFromDrop(c, item, false); // 退还物品
+                            sendStorageError(c, StorageError.STORAGE_FULL); // 仓库已满
+                        }
                     }
                     break;
                 }
-                case 6: // Arrange items
+                case 6: // 整理物品
                     if (GameConfig.getServerBoolean("use_storage_item_sort")) {
                         storage.arrangeItems(c);
                     }
-                    c.sendPacket(PacketCreator.enableActions());
+                    c.enableActions();
                     break;
-                case 7: { // Mesos
+                case 7: { // 金币操作
                     int meso = p.readInt();
                     int storageMesos = storage.getMeso();
                     int playerMesos = chr.getMeso();
 
                     if (hasGMRestrictions(chr)) {
+                        sendStorageError(c, StorageError.UNKNOWN);
                         chr.dropMessage(1, gmBlockedStorageMessage);
-                        log.info(String.format("GM %s blocked from using storage", chr.getName()));
-                        chr.sendPacket(PacketCreator.enableActions());
                         return;
                     }
 
@@ -214,31 +329,49 @@ public class StorageProcessor {
                         if (meso < 0 && (storageMesos - meso) < 0) {
                             meso = Integer.MIN_VALUE + storageMesos;
                             if (meso < playerMesos) {
-                                c.sendPacket(PacketCreator.enableActions());
+                                sendStorageError(c, StorageError.UNKNOWN);
                                 return;
                             }
                         } else if (meso > 0 && (playerMesos + meso) < 0) {
                             meso = Integer.MAX_VALUE - playerMesos;
                             if (meso > storageMesos) {
-                                c.sendPacket(PacketCreator.enableActions());
+                                sendStorageError(c, StorageError.UNKNOWN);
                                 return;
                             }
                         }
                         storage.setMeso(storageMesos - meso);
                         chr.gainMeso(meso, false, true, false);
                         chr.setUsedStorage();
-                        log.debug("Chr {} {} {} mesos", c.getPlayer().getName(), meso > 0 ? "took out" : "stored", Math.abs(meso));
+
+                        AuditLogger.info(LogModule.STORAGE, meso > 0 ? LogAction.STORAGE_OUT : LogAction.STORAGE_IN,
+                                new MapMessage().with("meso", Math.abs(meso)));
+
+                        // 发送提示消息
+                        String action = meso > 0 ? "取出" : "存入";
+                        int msgType = meso > 0 ? 5 : 6;
+                        chr.dropMessage(msgType, "[仓库] " + action + " 金币 × " + Math.abs(meso));
+
                         storage.sendMeso(c);
                     } else {
-                        c.sendPacket(PacketCreator.enableActions());
+                        sendStorageError(c, StorageError.UNKNOWN);
                         return;
                     }
                     break;
                 }
-                case 8: // Close (unless the player decides to enter cash shop)
+                case 8: // 关闭 (除非玩家决定进入商城)
                     storage.close();
                     break;
                 }
+            } catch (Exception e) {
+                sendStorageError(c, StorageError.UNKNOWN);
+                chr.dropMessage(1, "仓库操作失败");
+                // 异常日志：记录详细堆栈
+                log.error("[Storage] 仓库操作异常: Char={}, Mode={}", chr.getName(), mode, e);
+                AuditLogger.error(LogModule.STORAGE, LogAction.SYSTEM_ERROR,
+                        new MapMessage()
+                                .with("msg", "仓库操作异常")
+                                .with("mode", mode)
+                                , e);
             } finally {
                 c.releaseClient();
             }

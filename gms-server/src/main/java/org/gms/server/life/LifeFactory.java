@@ -65,7 +65,7 @@ public class LifeFactory {
     public static AbstractLoadedLife getLife(int id, String type) {
         if (type.equalsIgnoreCase("n")) {
             return getNPC(id);
-        } else if (type.equalsIgnoreCase("m")) {
+        } else if (type.equalsIgnoreCase("m") || type.equalsIgnoreCase("b")) { //b表示plife数据表里需要持久化刷新时间到数据库的boss对象
             return getMonster(id);
         } else {
             log.warn("不支持的生物类型: {}", type);
@@ -276,7 +276,7 @@ public class LifeFactory {
             }
             return new Monster(mid, stats);
         } catch (NullPointerException npe) {
-            log.error("[SEVERE] MOB {} failed to load.", mid, npe);
+            log.error("[严重] 怪物 {} 加载失败。", mid, npe);
             return null;
         }
     }

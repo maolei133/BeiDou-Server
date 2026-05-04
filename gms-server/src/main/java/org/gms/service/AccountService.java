@@ -26,18 +26,16 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.gms.client.Client.LOGIN_LOGGEDIN;
 import static org.gms.client.Client.LOGIN_NOTLOGGEDIN;
-import static org.gms.dao.entity.table.AccountsDOTableDef.ACCOUNTS_D_O;
-import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_D_O;
-import static org.gms.dao.entity.table.HwidbansDOTableDef.HWIDBANS_D_O;
-import static org.gms.dao.entity.table.IpbansDOTableDef.IPBANS_D_O;
-import static org.gms.dao.entity.table.MacbansDOTableDef.MACBANS_D_O;
+import static org.gms.dao.entity.table.AccountsDOTableDef.ACCOUNTS_DO;
+import static org.gms.dao.entity.table.CharactersDOTableDef.CHARACTERS_DO;
+import static org.gms.dao.entity.table.HwidbansDOTableDef.HWIDBANS_DO;
+import static org.gms.dao.entity.table.IpbansDOTableDef.IPBANS_DO;
+import static org.gms.dao.entity.table.MacbansDOTableDef.MACBANS_DO;
 
 @Service
 @AllArgsConstructor
@@ -214,14 +212,17 @@ public class AccountService {
             // c.banHWID(); // 封禁客户端 操作不可逆？
             // 封禁IP
             String ip = c.getRemoteAddress();
-            IpbansDO ipban = IpbansDO.builder().ip(ip).aid(String.valueOf(accountId)).build();
-            ipbansMapper.insertSelective(ipban);
+            banIp(ip, accountId);
             // 强制离线，这个方法只是中断了连接不会造成客户端退出，但是实际跟掉线没什么区别
             c.disconnect(false, false);
         }
     }
 
     public void unbanAccount(int accountId) {
+        unbanAccount(accountId, false, false, false, null, null);
+    }
+
+    public void unbanAccount(int accountId, boolean unbanIp, boolean unbanMac, boolean unbanHwid, List<String> ips, List<String> macs) {
         RequireUtil.requireNotNull(findById(accountId), I18nUtil.getExceptionMessage("AccountService.id.NotExist"));
 
         // 解封账号
@@ -230,10 +231,46 @@ public class AccountService {
         account.setBanned(false);
         account.setTempban(Timestamp.valueOf(DefaultDates.getTempban())); // Reset tempban
         accountsMapper.update(account);
+        
+        String aidStr = String.valueOf(accountId);
+
         // 解封Mac
-        macbansMapper.deleteByQuery(new QueryWrapper().eq(MacbansDO::getAid, accountId));
+        if (unbanMac) {
+            // 1. 如果提供了具体的 MAC 列表，则只删除这些 MAC
+            if (macs != null && !macs.isEmpty()) {
+                for (String mac : macs) {
+                    if (mac != null && !mac.trim().isEmpty()) {
+                        macbansMapper.deleteByQuery(QueryWrapper.create().where(MACBANS_DO.MAC.eq(mac.trim())));
+                    }
+                }
+            } else {
+                // 2. 如果没有提供列表（兼容旧逻辑），则删除该账号关联的所有 MAC
+                macbansMapper.deleteByQuery(QueryWrapper.create().where(MACBANS_DO.AID.eq(aidStr)));
+            }
+        }
+        
         // 解封Ip
-        ipbansMapper.deleteByQuery(new QueryWrapper().eq(IpbansDO::getAid, accountId));
+        if (unbanIp) {
+            // 1. 如果提供了具体的 IP 列表，则只删除这些 IP
+            if (ips != null && !ips.isEmpty()) {
+                for (String ip : ips) {
+                    if (ip != null && !ip.trim().isEmpty()) {
+                        ipbansMapper.deleteByQuery(QueryWrapper.create().where(IPBANS_DO.IP.eq(ip.trim())));
+                    }
+                }
+            } else {
+                // 2. 如果没有提供列表（兼容旧逻辑），则删除该账号关联的所有 IP
+                ipbansMapper.deleteByQuery(QueryWrapper.create().where(IPBANS_DO.AID.eq(aidStr)));
+            }
+        }
+
+        // 解封Hwid
+        if (unbanHwid) {
+            AccountsDO acc = accountsMapper.selectOneById(accountId);
+            if (acc != null && acc.getHwid() != null) {
+                hwidbansMapper.deleteByQuery(QueryWrapper.create().where(HWIDBANS_DO.HWID.eq(acc.getHwid())));
+            }
+        }
     }
 
     public void resetAllLoggedIn() {
@@ -251,6 +288,10 @@ public class AccountService {
             if (isBanned(str)) {
                 return;
             }
+            // 白名单：本地回环地址不进行封禁
+            if ("127.0.0.1".equals(str) || "0:0:0:0:0:0:0:1".equals(str)) {
+                return;
+            }
             ipbansMapper.insertSelective(IpbansDO.builder().ip(str).build());
             return;
         }
@@ -261,7 +302,7 @@ public class AccountService {
                 accountId = accountsDO.getId();
             }
         } else {
-            List<CharactersDO> charactersDOS = charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_D_O.NAME.eq(str)));
+            List<CharactersDO> charactersDOS = charactersMapper.selectListByQuery(QueryWrapper.create().where(CHARACTERS_DO.NAME.eq(str)));
             if (!charactersDOS.isEmpty()) {
                 accountId = charactersDOS.getFirst().getAccountid();
             }
@@ -277,7 +318,11 @@ public class AccountService {
     }
 
     public boolean isBanned(String ip) {
-        return ipbansMapper.selectCountByQuery(QueryWrapper.create().where(IPBANS_D_O.IP.eq(ip))) > 0;
+        // 白名单：本地回环地址不视为封禁
+        if ("127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip)) {
+            return false;
+        }
+        return ipbansMapper.selectCountByQuery(QueryWrapper.create().where(IPBANS_DO.IP.eq(ip))) > 0;
     }
 
     public QuickslotkeymappedDO getQuickSlotKeyMap(int accountId) {
@@ -285,27 +330,27 @@ public class AccountService {
     }
 
     public List<Integer> getAllAccountIds() {
-        return accountsMapper.selectListByQuery(QueryWrapper.create().select(ACCOUNTS_D_O.ID)).stream().map(AccountsDO::getId).toList();
+        return accountsMapper.selectListByQuery(QueryWrapper.create().select(ACCOUNTS_DO.ID)).stream().map(AccountsDO::getId).toList();
     }
 
     public boolean hasBannedIP(String remoteAddress) {
-        return ipbansMapper.selectCountByQuery(QueryWrapper.create().where(IPBANS_D_O.IP.like(remoteAddress))) > 0;
+        return ipbansMapper.selectCountByQuery(QueryWrapper.create().where(IPBANS_DO.IP.like(remoteAddress))) > 0;
     }
 
     public boolean hasBannedHWID(String hwid) {
-        return hwidbansMapper.selectCountByQuery(QueryWrapper.create().where(HWIDBANS_D_O.HWID.like(hwid))) > 0;
+        return hwidbansMapper.selectCountByQuery(QueryWrapper.create().where(HWIDBANS_DO.HWID.like(hwid))) > 0;
     }
 
     public boolean hasBannedMac(Set<String> macs) {
         if (macs.isEmpty()) {
             return false;
         }
-        return macbansMapper.selectCountByQuery(QueryWrapper.create().where(MACBANS_D_O.MAC.in(macs))) > 0;
+        return macbansMapper.selectCountByQuery(QueryWrapper.create().where(MACBANS_DO.MAC.in(macs))) > 0;
     }
 
     public List<CharNameAndId> loadCharactersInternal(int accountId, int worldId) {
         List<CharactersDO> charsDO = charactersMapper.selectListByQuery(
-                QueryWrapper.create().where(CHARACTERS_D_O.ACCOUNTID.eq(accountId)).and(CHARACTERS_D_O.WORLD.eq(worldId)));
+                QueryWrapper.create().where(CHARACTERS_DO.ACCOUNTID.eq(accountId)).and(CHARACTERS_DO.WORLD.eq(worldId)));
         List<CharNameAndId> chars = new ArrayList<>();
         for (CharactersDO c : charsDO) {
             chars.add(new CharNameAndId(c.getName(), c.getId()));
@@ -333,36 +378,42 @@ public class AccountService {
     }
 
     public void banHwid(String hwid) {
-        hwidbansMapper.insert(HwidbansDO.builder().hwid(hwid).build());
+        if (hwidbansMapper.selectCountByQuery(QueryWrapper.create().where(HWIDBANS_DO.HWID.eq(hwid))) == 0) {
+            hwidbansMapper.insert(HwidbansDO.builder().hwid(hwid).build());
+        }
     }
 
     public void banIp(String ip, int accountId) {
-        ipbansMapper.insert(IpbansDO.builder().ip(ip).aid(String.valueOf(accountId)).build());
+        if (ipbansMapper.selectCountByQuery(QueryWrapper.create().where(IPBANS_DO.IP.eq(ip))) == 0) {
+            ipbansMapper.insert(IpbansDO.builder().ip(ip).aid(String.valueOf(accountId)).build());
+        }
     }
 
     public void banMacs(Set<String> macs, int accountId) {
         for (String mac : macs) {
-            macbansMapper.insert(MacbansDO.builder().mac(mac).aid(String.valueOf(accountId)).build());
+            if (macbansMapper.selectCountByQuery(QueryWrapper.create().where(MACBANS_DO.MAC.eq(mac))) == 0) {
+                macbansMapper.insert(MacbansDO.builder().mac(mac).aid(String.valueOf(accountId)).build());
+            }
         }
     }
 
     public int getActiveRecordCount(String searchValue) {
         String searchPattern = "%" + searchValue + "%";
         return (int) accountsMapper.selectCountByQuery(QueryWrapper.create()
-                .where(ACCOUNTS_D_O.LOGGEDIN.gt(0))
-                .and(ACCOUNTS_D_O.IP.like(searchPattern)
-                        .or(ACCOUNTS_D_O.MACS.like(searchPattern))
-                        .or(ACCOUNTS_D_O.HWID.like(searchPattern))));
+                .where(ACCOUNTS_DO.LOGGEDIN.gt(0))
+                .and(ACCOUNTS_DO.IP.like(searchPattern)
+                        .or(ACCOUNTS_DO.MACS.like(searchPattern))
+                        .or(ACCOUNTS_DO.HWID.like(searchPattern))));
     }
 
     public int getTodayLoginCount(String searchValue) {
         String searchPattern = "%" + searchValue + "%";
         return (int) accountsMapper.selectCountByQuery(QueryWrapper.create()
-                .where(ACCOUNTS_D_O.LOGGEDIN.gt(0))
-                .and(ACCOUNTS_D_O.IP.like(searchPattern)
-                        .or(ACCOUNTS_D_O.MACS.like(searchPattern))
-                        .or(ACCOUNTS_D_O.HWID.like(searchPattern)))
-                .and(ACCOUNTS_D_O.LASTLOGIN.isNotNull())
+                .where(ACCOUNTS_DO.LOGGEDIN.gt(0))
+                .and(ACCOUNTS_DO.IP.like(searchPattern)
+                        .or(ACCOUNTS_DO.MACS.like(searchPattern))
+                        .or(ACCOUNTS_DO.HWID.like(searchPattern)))
+                .and(ACCOUNTS_DO.LASTLOGIN.isNotNull())
                 .and("DATE(lastlogin) = CURDATE()"));
     }
 
@@ -431,5 +482,83 @@ public class AccountService {
 
     public void setGender(int accountId, byte gender) {
         accountsMapper.update(AccountsDO.builder().id(accountId).gender((int) gender).build());
+    }
+
+    public List<Map<String, Object>> searchAccounts(String keyword) {
+        QueryWrapper query = QueryWrapper.create();
+        try {
+            int id = Integer.parseInt(keyword);
+            query.where(ACCOUNTS_DO.ID.eq(id)).or(ACCOUNTS_DO.NAME.like(keyword));
+        } catch (NumberFormatException e) {
+            query.where(ACCOUNTS_DO.NAME.like(keyword));
+        }
+        query.limit(20);
+        return accountsMapper.selectListByQuery(query).stream().map(a -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", a.getId());
+            map.put("name", a.getName());
+            return map;
+        }).collect(Collectors.toList());
+    }
+
+    public List<Map<String, Object>> searchCharacters(String keyword) {
+        QueryWrapper query = QueryWrapper.create();
+        try {
+            int id = Integer.parseInt(keyword);
+            query.where(CHARACTERS_DO.ID.eq(id)).or(CHARACTERS_DO.NAME.like(keyword));
+        } catch (NumberFormatException e) {
+            query.where(CHARACTERS_DO.NAME.like(keyword));
+        }
+        query.limit(20);
+        return charactersMapper.selectListByQuery(query).stream().map(c -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", c.getId());
+            map.put("name", c.getName());
+            return map;
+        }).collect(Collectors.toList());
+    }
+
+    public List<String> searchIps(String keyword) {
+        return accountsMapper.selectListByQuery(QueryWrapper.create()
+                .select(ACCOUNTS_DO.IP)
+                .where(ACCOUNTS_DO.IP.like(keyword))
+                .limit(50))
+                .stream()
+                .map(AccountsDO::getIp)
+                .filter(s -> s != null && !s.isEmpty())
+                .flatMap(s -> Arrays.stream(s.split(",")))
+                .map(String::trim)
+                .filter(s -> s.contains(keyword))
+                .distinct()
+                .limit(20)
+                .collect(Collectors.toList());
+    }
+
+    public List<String> searchMacs(String keyword) {
+        return accountsMapper.selectListByQuery(QueryWrapper.create()
+                .select(ACCOUNTS_DO.MACS)
+                .where(ACCOUNTS_DO.MACS.like(keyword))
+                .limit(50))
+                .stream()
+                .map(AccountsDO::getMacs)
+                .filter(s -> s != null && !s.isEmpty())
+                .flatMap(s -> Arrays.stream(s.split(",")))
+                .map(String::trim)
+                .filter(s -> s.contains(keyword))
+                .distinct()
+                .limit(20)
+                .collect(Collectors.toList());
+    }
+
+    public List<String> searchHwids(String keyword) {
+        return accountsMapper.selectListByQuery(QueryWrapper.create()
+                .select(ACCOUNTS_DO.HWID)
+                .where(ACCOUNTS_DO.HWID.like(keyword))
+                .limit(20))
+                .stream()
+                .map(AccountsDO::getHwid)
+                .filter(s -> s != null && !s.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
     }
 }

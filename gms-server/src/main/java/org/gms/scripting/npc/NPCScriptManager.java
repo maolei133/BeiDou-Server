@@ -34,7 +34,6 @@ import org.gms.util.PacketCreator;
 
 import javax.script.Invocable;
 import javax.script.ScriptEngine;
-import javax.script.ScriptException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -104,7 +103,8 @@ public class NPCScriptManager extends AbstractScriptManager {
             try {
                 invocable.invokeFunction("start", chrs);
             } catch (final NoSuchMethodException nsme) {
-                nsme.printStackTrace();
+                log.warn("NPC脚本 {} (npc id: {}) 缺少 'start(List<PartyCharacter>)' 入口函数。", filename, npc);
+                dispose(c, true);
             }
 
         } catch (final Exception e) {
@@ -135,6 +135,7 @@ public class NPCScriptManager extends AbstractScriptManager {
                     }
                 }
                 if (engine == null) {
+                    if (fileName != null) log.info("NpcID: {} 调用{} {} 不存在，无法执行脚本。", npc,itemScript ? " item/" : "", fileName);
                     engine = getInvocableScriptEngine("npc/" + npc + ".js", c);
                     cm.resetItemScript();
                 }
@@ -148,14 +149,25 @@ public class NPCScriptManager extends AbstractScriptManager {
                 Invocable iv = (Invocable) engine;
                 scripts.put(c, iv);
                 c.setClickedNPC();
+                
+                boolean started = false;
                 try {
                     iv.invokeFunction("start");
+                    started = true;
                 } catch (final NoSuchMethodException nsme) {
                     try {
                         iv.invokeFunction("start", chr);
+                        started = true;
                     } catch (final NoSuchMethodException nsma) {
-                        nsma.printStackTrace();
+                        // 两个 start 方法都没有找到，这是一个需要记录的错误，并且需要 dispose
+                        log.warn("NPC脚本 {} (npc id: {}) 缺少 'start' 或 'start(Character)' 入口函数。", fileName != null ? fileName : String.valueOf(npc), npc);
                     }
+                }
+
+                if (!started) {
+                    // 如果脚本没有成功启动，则清理资源并解锁UI
+                    dispose(c, true);
+                    return false;
                 }
             } else {
                 c.sendPacket(PacketCreator.enableActions());

@@ -224,6 +224,7 @@ export default {
   'account.player.edit.tab.inventory': 'Inventory',
   'account.player.edit.tab.location': 'Location',
   'account.player.edit.tab.mount': 'Mount',
+  'account.player.edit.tab.monsterbook': 'Monster Book',
   'account.player.ap': 'AP',
   'account.player.sp': 'SP',
   'account.player.face': 'Face',
@@ -306,6 +307,10 @@ export default {
   'account.player.unban.confirm.title': 'Unban',
   'account.player.unban.confirm.content':
     'Are you sure to unban player {name}?',
+  'account.player.unban.options': 'Unban Options',
+  'account.player.unban.options.ip': 'Unban IP',
+  'account.player.unban.options.mac': 'Unban MAC',
+  'account.player.unban.options.hwid': 'Unban HWID',
   'account.player.give.title': 'Give Resource',
   'account.player.give.title.global': 'Global Give Resource',
   'account.player.equip.success': 'Equip info loaded successfully',
@@ -317,4 +322,34 @@ export default {
   'account.player.detail.error': 'Failed to fetch character detail',
   'account.player.tempBanTime': 'Unblocking time',
   'account.player.button.confirm': 'Confirm',
+
+  'account.monsterbook.charid': 'Character ID',
+  'account.monsterbook.cardid': 'Card ID',
+  'account.monsterbook.cardName': 'Card Name',
+  'account.monsterbook.level': 'Level',
+  'account.monsterbook.batchDelete': 'Batch Delete',
+  'account.monsterbook.batchAdd': 'Batch Add',
+  'account.monsterbook.batchUpdate': 'Batch Update',
+  'account.monsterbook.transfer': 'Transfer',
+  'account.monsterbook.transfer.newCharId': 'New Character ID',
+  'account.monsterbook.transfer.confirm':
+    'Are you sure to transfer selected cards to new character?',
+  'account.monsterbook.delete.confirm':
+    'Are you sure to delete selected cards?',
+  'account.monsterbook.search.placeholder': 'Enter Card ID or Name',
+  'account.monsterbook.add.mode.select': 'Select Mode',
+  'account.monsterbook.add.mode.range': 'Range Mode',
+  'account.monsterbook.add.mode.paste': 'Paste Mode',
+  'account.monsterbook.add.range.start': 'Start ID',
+  'account.monsterbook.add.range.end': 'End ID',
+  'account.monsterbook.add.range.error':
+    'Start ID cannot be greater than End ID',
+  'account.monsterbook.add.paste.label': 'Paste Content',
+  'account.monsterbook.add.paste.placeholder':
+    'Format: ID,Level (Support comma, space, tab, etc.)',
+  'account.monsterbook.add.preview': 'Preview',
+  'account.monsterbook.add.preview.title': 'Preview List',
+  'account.monsterbook.add.preview.limit':
+    'Too many items, only show first {max}',
+  'account.monsterbook.add.noData': 'No data to add',
 };

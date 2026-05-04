@@ -76,6 +76,7 @@ import org.gms.util.PacketCreator;
 
 import java.awt.*;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.*;
 
@@ -235,7 +236,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
         if (styles.length > 0) {
             nextLevelContext.clear();
             getClient().sendPacket(PacketCreator.getNPCTalkStyle(npc, text, styles));
-        } else {    // thanks Conrad for noticing empty styles crashing players
+        } else {    // 感谢 Conrad 注意到空样式会导致玩家崩溃
             sendOk("抱歉，目前这里没有适合您的装饰选项。");
             dispose();
         }
@@ -426,7 +427,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
 
         if (shop != null) {
             shop.sendShop(c);
-        } else {    // check for missing shopids thanks to resinate
+        } else {    // 检查丢失的 shopid，感谢 resinate
             log.warn("Shop ID: {} is missing from database.", id);
             ShopFactory.getInstance().getShop(11000).sendShop(c);
         }
@@ -477,7 +478,7 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
         Server.getInstance().allianceMessage(alliance.getId(), GuildPackets.getGuildAlliances(alliance, c.getWorld()), -1, -1);
         Server.getInstance().allianceMessage(alliance.getId(), GuildPackets.allianceNotice(alliance.getId(), alliance.getNotice()), -1, -1);
 
-        c.sendPacket(GuildPackets.updateAllianceInfo(alliance, c.getWorld()));  // thanks Vcoc for finding an alliance update to leader issue
+        c.sendPacket(GuildPackets.updateAllianceInfo(alliance, c.getWorld()));  // 感谢 Vcoc 发现联盟更新给盟主的问题
     }
 
     public void disbandAlliance(Client c, int allianceId) {

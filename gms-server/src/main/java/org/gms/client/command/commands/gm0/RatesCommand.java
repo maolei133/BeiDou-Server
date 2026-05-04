@@ -65,11 +65,11 @@ public class RatesCommand extends Command {
 
         // 直接追加其他倍率信息
         showMsg.append(I18nUtil.getMessage("ShowRatesCommand.message12"))
-                .append("#e#b").append(player.getMesoRate()).append("x#k#n\r\n")
+                .append("#e#b").append(player.getTotalMesoRate()).append("x#k#n\r\n")
                 .append(I18nUtil.getMessage("ShowRatesCommand.message17"))
-                .append("#e#b").append(player.getDropRate() * player.getFamilyDrop()).append("x#k#n\r\n")
+                .append("#e#b").append(player.getTotalDropRate()).append("x#k#n\r\n")
                 .append(I18nUtil.getMessage("ShowRatesCommand.message22"))
-                .append("#e#b").append(player.getBossDropRate()).append("x#k#n\r\n");
+                .append("#e#b").append(player.getTotalBossDropRate()).append("x#k#n\r\n");
 
         // 任务倍率（条件显示）
         if (useQuestRate) {

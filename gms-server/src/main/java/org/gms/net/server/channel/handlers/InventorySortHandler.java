@@ -23,6 +23,7 @@ package org.gms.net.server.channel.handlers;
 
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.client.autoban.AutobanManager;
 import org.gms.client.inventory.Equip;
 import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
@@ -293,7 +294,7 @@ public final class InventorySortHandler extends AbstractPacketHandler {
     public final void handlePacket(InPacket p, Client c) {
         Character chr = c.getPlayer();
         p.readInt();
-        chr.getAutoBanManager().setTimestamp(3, Server.getInstance().getCurrentTimestamp(), 4);
+        chr.getAutoBanManager().checkActionFrequency(AutobanManager.ActionType.ITEM_SORT, Server.getInstance().getCurrentTime(), 4);
 
         if (!GameConfig.getServerBoolean("use_item_sort")) {
             c.sendPacket(PacketCreator.enableActions());

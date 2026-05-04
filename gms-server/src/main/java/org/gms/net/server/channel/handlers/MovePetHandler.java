@@ -39,7 +39,7 @@ public final class MovePetHandler extends AbstractMovementPacketHandler {
         List<LifeMovementFragment> res;
 
         try {
-            res = parseMovement(p);
+            res = parseMovement(p, c);
         } catch (EmptyMovementException e) {
             return;
         }

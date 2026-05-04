@@ -23,10 +23,12 @@ package org.gms.client.inventory;
 
 import com.alibaba.fastjson2.JSONObject;
 import lombok.Getter;
+import lombok.Setter;
 import org.gms.client.Client;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.ExpTable;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.model.dto.ItemInfoRtnDTO;
 import org.gms.util.I18nUtil;
 import org.gms.util.PacketCreator;
 import org.gms.util.Randomizer;
@@ -40,6 +42,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+@Getter
+@Setter
 public class Equip extends Item {
     private static final Logger log = LoggerFactory.getLogger(Equip.class);
 
@@ -70,15 +74,56 @@ public class Equip extends Item {
         }
     }
 
+    /** 可升级次数 */
     private byte upgradeSlots;
-    @Getter
-    private short level, itemLevel;
+    /** 装备等级 */
+    private short level;
+    /** 物品等级 */
+    private short itemLevel;
+    /** 标志位 */
     private short flag;
-    private short str, dex, _int, luk, hp, mp, watk, matk, wdef, mdef, acc, avoid, hands, speed, jump, vicious;
+    /** 力量 */
+    private short str;
+    /** 敏捷 */
+    private short dex;
+    /** 智力 */
+    private short _int;
+    /** 运气 */
+    private short luk;
+    /** HP */
+    private short hp;
+    /** MP */
+    private short mp;
+    /** 物理攻击力 */
+    private short watk;
+    /** 魔法攻击力 */
+    private short matk;
+    /** 物理防御力 */
+    private short wdef;
+    /** 魔法防御力 */
+    private short mdef;
+    /** 命中率 */
+    private short acc;
+    /** 回避率 */
+    private short avoid;
+    /** 手技 */
+    private short hands;
+    /** 移动速度 */
+    private short speed;
+    /** 跳跃力 */
+    private short jump;
+    /** 金锤子次数 */
+    private short vicious;
+    /** 物品经验值 */
     private float itemExp;
+    /** 戒指ID */
     private int ringid = -1;
+    /** 是否穿戴中 */
     private boolean wear = false;
-    private boolean isUpgradeable, isElemental = false;    // timeless or reverse, or any equip that could levelup on GMS for all effects
+    /** 是否可升级 */
+    private boolean isUpgradeable;
+    /** 是否为元素装备 */
+    private boolean isElemental = false;    // 永恒或逆转，或任何可以在 GMS 上升级所有效果的装备
     private static ItemInformationProvider ii = ItemInformationProvider.getInstance();
 
     public Equip(int id, short position) {
@@ -118,17 +163,23 @@ public class Equip extends Item {
         ret.itemLevel = itemLevel;
         ret.itemExp = itemExp;
         ret.level = level;
+        ret.ringid = ringid;
         ret.itemLog = new LinkedList<>(itemLog);
         ret.setOwner(getOwner());
         ret.setQuantity(getQuantity());
         ret.setExpiration(getExpiration());
         ret.setGiftFrom(getGiftFrom());
+        ret.setUid(getUid()); // 复制 uid
+        ret.setInventoryItemId(getInventoryItemId());
+        ret.setDirty(isDirty());
         return ret;
     }
 
-    @Override
-    public short getFlag() {
-        return flag;
+    public void setFlag(short b) {
+        if (this.flag != b) {
+            this.flag = b;
+            setDirty(true);
+        }
     }
 
     @Override
@@ -136,181 +187,178 @@ public class Equip extends Item {
         return 1;
     }
 
-    public byte getUpgradeSlots() {
-        return upgradeSlots;
-    }
-
-    public short getStr() {
-        return str;
-    }
-
-    public short getDex() {
-        return dex;
+    public void setInt(short _int) {
+        if (this._int != _int) {
+            this._int = _int;
+            setDirty(true);
+        }
     }
 
     public short getInt() {
         return _int;
     }
 
-    public short getLuk() {
-        return luk;
-    }
-
-    public short getHp() {
-        return hp;
-    }
-
-    public short getMp() {
-        return mp;
-    }
-
-    public short getWatk() {
-        return watk;
-    }
-
-    public short getMatk() {
-        return matk;
-    }
-
-    public short getWdef() {
-        return wdef;
-    }
-
-    public short getMdef() {
-        return mdef;
-    }
-
-    public short getAcc() {
-        return acc;
-    }
-
-    public short getAvoid() {
-        return avoid;
-    }
-
-    public short getHands() {
-        return hands;
-    }
-
-    public short getSpeed() {
-        return speed;
-    }
-
-    public short getJump() {
-        return jump;
-    }
-
-    public short getVicious() {
-        return vicious;
-    }
-
-    @Override
-    public void setFlag(short flag) {
-        this.flag = flag;
-    }
-
-    public void setStr(short str) {
-        this.str = str;
-    }
-
-    public void setDex(short dex) {
-        this.dex = dex;
-    }
-
-    public void setInt(short _int) {
-        this._int = _int;
-    }
-
-    public void setLuk(short luk) {
-        this.luk = luk;
-    }
-
-    public void setHp(short hp) {
-        this.hp = hp;
-    }
-
-    public void setMp(short mp) {
-        this.mp = mp;
-    }
-
-    public void setWatk(short watk) {
-        this.watk = watk;
-    }
-
-    public void setMatk(short matk) {
-        this.matk = matk;
-    }
-
-    public void setWdef(short wdef) {
-        this.wdef = wdef;
-    }
-
-    public void setMdef(short mdef) {
-        this.mdef = mdef;
-    }
-
-    public void setAcc(short acc) {
-        this.acc = acc;
-    }
-
-    public void setAvoid(short avoid) {
-        this.avoid = avoid;
-    }
-
-    public void setHands(short hands) {
-        this.hands = hands;
-    }
-
-    public void setSpeed(short speed) {
-        this.speed = speed;
-    }
-
-    public void setJump(short jump) {
-        this.jump = jump;
-    }
-
-    public void setVicious(short vicious) {
-        this.vicious = vicious;
-    }
-
     public void setUpgradeSlots(byte upgradeSlots) {
-        this.upgradeSlots = upgradeSlots;
+        if (this.upgradeSlots != upgradeSlots) {
+            this.upgradeSlots = upgradeSlots;
+            setDirty(true);
+        }
     }
 
     public void setLevel(short level) {
-        this.level = level;
+        if (this.level != level) {
+            this.level = level;
+            setDirty(true);
+        }
     }
 
-    private static int getStatModifier(boolean isAttribute) {
-        // each set of stat points grants a chance for a bonus stat point upgrade at equip level up.
+    public void setItemLevel(short itemLevel) {
+        if (this.itemLevel != itemLevel) {
+            this.itemLevel = itemLevel;
+            setDirty(true);
+        }
+    }
 
+    public void setStr(short str) {
+        if (this.str != str) {
+            this.str = str;
+            setDirty(true);
+        }
+    }
+
+    public void setDex(short dex) {
+        if (this.dex != dex) {
+            this.dex = dex;
+            setDirty(true);
+        }
+    }
+
+    public void setLuk(short luk) {
+        if (this.luk != luk) {
+            this.luk = luk;
+            setDirty(true);
+        }
+    }
+
+    public void setHp(short hp) {
+        if (this.hp != hp) {
+            this.hp = hp;
+            setDirty(true);
+        }
+    }
+
+    public void setMp(short mp) {
+        if (this.mp != mp) {
+            this.mp = mp;
+            setDirty(true);
+        }
+    }
+
+    public void setWatk(short watk) {
+        if (this.watk != watk) {
+            this.watk = watk;
+            setDirty(true);
+        }
+    }
+
+    public void setMatk(short matk) {
+        if (this.matk != matk) {
+            this.matk = matk;
+            setDirty(true);
+        }
+    }
+
+    public void setWdef(short wdef) {
+        if (this.wdef != wdef) {
+            this.wdef = wdef;
+            setDirty(true);
+        }
+    }
+
+    public void setMdef(short mdef) {
+        if (this.mdef != mdef) {
+            this.mdef = mdef;
+            setDirty(true);
+        }
+    }
+
+    public void setAcc(short acc) {
+        if (this.acc != acc) {
+            this.acc = acc;
+            setDirty(true);
+        }
+    }
+
+    public void setAvoid(short avoid) {
+        if (this.avoid != avoid) {
+            this.avoid = avoid;
+            setDirty(true);
+        }
+    }
+
+    public void setHands(short hands) {
+        if (this.hands != hands) {
+            this.hands = hands;
+            setDirty(true);
+        }
+    }
+
+    public void setSpeed(short speed) {
+        if (this.speed != speed) {
+            this.speed = speed;
+            setDirty(true);
+        }
+    }
+
+    public void setJump(short jump) {
+        if (this.jump != jump) {
+            this.jump = jump;
+            setDirty(true);
+        }
+    }
+
+    public void setVicious(short vicious) {
+        if (this.vicious != vicious) {
+            this.vicious = vicious;
+            setDirty(true);
+        }
+    }
+
+    public void setItemExp(float itemExp) {
+        if (this.itemExp != itemExp) {
+            this.itemExp = itemExp;
+            setDirty(true);
+        }
+    }
+
+    public void setRingId(int ringid) {
+        if (this.ringid != ringid) {
+            this.ringid = ringid;
+            setDirty(true);
+        }
+    }
+
+    public void wear(boolean wear) {
+        this.wear = wear;
+    }
+    
+    private static int getStatModifier(boolean isAttribute) {
         if (GameConfig.getServerBoolean("use_equipment_level_up_power")) {
-            if (isAttribute) {
-                return 2;
-            } else {
-                return 4;
-            }
+            return isAttribute ? 2 : 4;
         } else {
-            if (isAttribute) {
-                return 4;
-            } else {
-                return 16;
-            }
+            return isAttribute ? 4 : 16;
         }
     }
 
     private static int randomizeStatUpgrade(int top) {
         int limit = Math.min(top, GameConfig.getServerInt("max_equipment_level_up_stat_up"));
-
         int poolCount = (limit * (limit + 1) / 2) + limit;
         int rnd = Randomizer.rand(0, poolCount);
-
         int stat = 0;
         if (rnd >= limit) {
             rnd -= limit;
-            stat = 1 + (int) Math.floor((-1 + Math.sqrt((8 * rnd) + 1)) / 2);    // optimized randomizeStatUpgrade author: David A.
+            stat = 1 + (int) Math.floor((-1 + Math.sqrt((8 * rnd) + 1)) / 2);    // 优化的 randomizeStatUpgrade 作者：David A.
         }
-
         return stat;
     }
 
@@ -320,7 +368,7 @@ public class Equip extends Item {
     }
 
     private boolean isNotWeaponAffinity(StatUpgrade name) {
-        // Vcoc's idea - WATK/MATK expected gains lessens outside of weapon affinity (physical/magic)
+        // Vcoc 的想法 - WATK/MATK 的预期收益在武器亲和度（物理/魔法）之外会减少
 
         if (ItemConstants.isWeapon(this.getItemId())) {
             if (name.equals(StatUpgrade.incPAD)) {
@@ -329,19 +377,15 @@ public class Equip extends Item {
                 return isPhysicalWeapon(this.getItemId());
             }
         }
-
         return false;
     }
 
     private void getUnitStatUpgrade(List<Pair<StatUpgrade, Integer>> stats, StatUpgrade name, int curStat, boolean isAttribute) {
         isUpgradeable = true;
-
         int maxUpgrade = randomizeStatUpgrade((int) (1 + (curStat / (getStatModifier(isAttribute) * (isNotWeaponAffinity(name) ? 2.7 : 1)))));
-        if (maxUpgrade == 0) {
-            return;
+        if (maxUpgrade > 0) {
+            stats.add(new Pair<>(name, maxUpgrade));
         }
-
-        stats.add(new Pair<>(name, maxUpgrade));
     }
 
     /**
@@ -387,105 +431,47 @@ public class Equip extends Item {
                 }
             }
             for(double[] obj : chanceList) {
-                double minLevel = obj[0],maxLevel = obj[1], chance = obj[2];
-                if(equipLevel >= minLevel && equipLevel <= maxLevel) {
-                    getUnitSlotUpgrade(stats, StatUpgrade.incVicious,chance); // 减少金锤子
+                if(equipLevel >= obj[0] && equipLevel <= obj[1]) {
+                    getUnitSlotUpgrade(stats, StatUpgrade.incVicious, obj[2]);  // 减少金锤子
                     break;
                 }
             }
         }
     }
+
     private void improveDefaultStats(List<Pair<StatUpgrade, Integer>> stats) {
-        if (dex > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incDEX, dex, true);
-        }
-        if (str > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incSTR, str, true);
-        }
-        if (_int > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incINT, _int, true);
-        }
-        if (luk > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incLUK, luk, true);
-        }
-        if (hp > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incMHP, hp, false);
-        }
-        if (mp > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incMMP, mp, false);
-        }
-        if (watk > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incPAD, watk, false);
-        }
-        if (matk > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incMAD, matk, false);
-        }
-        if (wdef > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incPDD, wdef, false);
-        }
-        if (mdef > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incMDD, mdef, false);
-        }
-        if (avoid > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incEVA, avoid, false);
-        }
-        if (acc > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incACC, acc, false);
-        }
-        if (speed > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incSpeed, speed, false);
-        }
-        if (jump > 0) {
-            getUnitStatUpgrade(stats, StatUpgrade.incJump, jump, false);
-        }
+        if (dex > 0) getUnitStatUpgrade(stats, StatUpgrade.incDEX, dex, true);
+        if (str > 0) getUnitStatUpgrade(stats, StatUpgrade.incSTR, str, true);
+        if (_int > 0) getUnitStatUpgrade(stats, StatUpgrade.incINT, _int, true);
+        if (luk > 0) getUnitStatUpgrade(stats, StatUpgrade.incLUK, luk, true);
+        if (hp > 0) getUnitStatUpgrade(stats, StatUpgrade.incMHP, hp, false);
+        if (mp > 0) getUnitStatUpgrade(stats, StatUpgrade.incMMP, mp, false);
+        if (watk > 0) getUnitStatUpgrade(stats, StatUpgrade.incPAD, watk, false);
+        if (matk > 0) getUnitStatUpgrade(stats, StatUpgrade.incMAD, matk, false);
+        if (wdef > 0) getUnitStatUpgrade(stats, StatUpgrade.incPDD, wdef, false);
+        if (mdef > 0) getUnitStatUpgrade(stats, StatUpgrade.incMDD, mdef, false);
+        if (avoid > 0) getUnitStatUpgrade(stats, StatUpgrade.incEVA, avoid, false);
+        if (acc > 0) getUnitStatUpgrade(stats, StatUpgrade.incACC, acc, false);
+        if (speed > 0) getUnitStatUpgrade(stats, StatUpgrade.incSpeed, speed, false);
+        if (jump > 0) getUnitStatUpgrade(stats, StatUpgrade.incJump, jump, false);
     }
 
     public Map<StatUpgrade, Short> getStats() {
         Map<StatUpgrade, Short> stats = new HashMap<>(5);
-
-        if (dex > 0) {
-            stats.put(StatUpgrade.incDEX, dex);
-        }
-        if (str > 0) {
-            stats.put(StatUpgrade.incSTR, str);
-        }
-        if (_int > 0) {
-            stats.put(StatUpgrade.incINT, _int);
-        }
-        if (luk > 0) {
-            stats.put(StatUpgrade.incLUK, luk);
-        }
-        if (hp > 0) {
-            stats.put(StatUpgrade.incMHP, hp);
-        }
-        if (mp > 0) {
-            stats.put(StatUpgrade.incMMP, mp);
-        }
-        if (watk > 0) {
-            stats.put(StatUpgrade.incPAD, watk);
-        }
-        if (matk > 0) {
-            stats.put(StatUpgrade.incMAD, matk);
-        }
-        if (wdef > 0) {
-            stats.put(StatUpgrade.incPDD, wdef);
-        }
-        if (mdef > 0) {
-            stats.put(StatUpgrade.incMDD, mdef);
-        }
-        if (avoid > 0) {
-            stats.put(StatUpgrade.incEVA, avoid);
-        }
-        if (acc > 0) {
-            stats.put(StatUpgrade.incACC, acc);
-        }
-        if (speed > 0) {
-            stats.put(StatUpgrade.incSpeed, speed);
-        }
-        if (jump > 0) {
-            stats.put(StatUpgrade.incJump, jump);
-        }
-
+        if (dex > 0) stats.put(StatUpgrade.incDEX, dex);
+        if (str > 0) stats.put(StatUpgrade.incSTR, str);
+        if (_int > 0) stats.put(StatUpgrade.incINT, _int);
+        if (luk > 0) stats.put(StatUpgrade.incLUK, luk);
+        if (hp > 0) stats.put(StatUpgrade.incMHP, hp);
+        if (mp > 0) stats.put(StatUpgrade.incMMP, mp);
+        if (watk > 0) stats.put(StatUpgrade.incPAD, watk);
+        if (matk > 0) stats.put(StatUpgrade.incMAD, matk);
+        if (wdef > 0) stats.put(StatUpgrade.incPDD, wdef);
+        if (mdef > 0) stats.put(StatUpgrade.incMDD, mdef);
+        if (avoid > 0) stats.put(StatUpgrade.incEVA, avoid);
+        if (acc > 0) stats.put(StatUpgrade.incACC, acc);
+        if (speed > 0) stats.put(StatUpgrade.incSpeed, speed);
+        if (jump > 0) stats.put(StatUpgrade.incJump, jump);
         return stats;
     }
 
@@ -506,22 +492,19 @@ public class Equip extends Item {
 
             switch (type) {
                 case incVicious: // 减少金锤子
-                    vicious -= value;
+                    setVicious((short) (vicious - value));
                     gotVicious = true;
                     break;
                 case incSlot: // 增加升级槽
-                    upgradeSlots += value;
+                    setUpgradeSlots((byte) (upgradeSlots + value));
                     gotSlot = true;
                     break;
                 default: // 处理普通属性
                     int statUp = handleStatUpgrade(type, value, maxStat);
-                    if (statUp > 0) {
-                        lvupStr.append(getStatMessage(type, statUp)).append("; ");
-                    }
+                    if (statUp > 0) lvupStr.append(getStatMessage(type, statUp)).append("; ");
                     break;
             }
         }
-
         return new Pair<>(lvupStr.toString(), new Pair<>(gotSlot, gotVicious));
     }
 
@@ -573,20 +556,20 @@ public class Equip extends Item {
      */
     private void setCurrentStat(StatUpgrade type, int value) {
         switch (type) {
-            case incDEX: dex = (short) value; break;
-            case incSTR: str = (short) value; break;
-            case incINT: _int = (short) value; break;
-            case incLUK: luk = (short) value; break;
-            case incMHP: hp = (short) value; break;
-            case incMMP: mp = (short) value; break;
-            case incPAD: watk = (short) value; break;
-            case incMAD: matk = (short) value; break;
-            case incPDD: wdef = (short) value; break;
-            case incMDD: mdef = (short) value; break;
-            case incEVA: avoid = (short) value; break;
-            case incACC: acc = (short) value; break;
-            case incSpeed: speed = (short) value; break;
-            case incJump: jump = (short) value; break;
+            case incDEX: setDex((short) value); break;
+            case incSTR: setStr((short) value); break;
+            case incINT: setInt((short) value); break;
+            case incLUK: setLuk((short) value); break;
+            case incMHP: setHp((short) value); break;
+            case incMMP: setMp((short) value); break;
+            case incPAD: setWatk((short) value); break;
+            case incMAD: setMatk((short) value); break;
+            case incPDD: setWdef((short) value); break;
+            case incMDD: setMdef((short) value); break;
+            case incEVA: setAvoid((short) value); break;
+            case incACC: setAcc((short) value); break;
+            case incSpeed: setSpeed((short) value); break;
+            case incJump: setJump((short) value); break;
             default: break;
         }
     }
@@ -631,7 +614,7 @@ public class Equip extends Item {
             }
         }
 
-        itemLevel++; // 提升装备等级
+        setItemLevel((short) (itemLevel + 1)); // 提升装备等级
 
         String lvupStr = I18nUtil.getMessage("Equip.gainStats.lvupStr", ii.getName(this.getItemId()), itemLevel) + "; ";  // 生成等级提升的提示消息
 
@@ -664,8 +647,7 @@ public class Equip extends Item {
     }
 
     private static double normalizedMasteryExp(int reqLevel) {
-        // Conversion factor between mob exp and equip exp gain. Through many calculations, the expected for equipment levelup
-        // from level 1 to 2 is killing about 100~200 mobs of the same level range, on a 1x EXP rate scenario.
+        // 怪物经验与装备经验增益之间的转换因子。经过多次计算，在 1 倍经验率的情况下，装备从 1 级升到 2 级的预期是击杀约 100~200 只同等级范围的怪物。
 
         if (reqLevel < 5) {
             return 42;
@@ -703,7 +685,7 @@ public class Equip extends Item {
 
         float baseExpGain = gain * elementModifier * masteryModifier;// 计算实际获得的经验值
 
-        itemExp += baseExpGain;// 更新装备经验值
+        setItemExp(itemExp + baseExpGain);// 更新装备经验值
         int expNeeded = ExpTable.getEquipExpNeededForLevel(itemLevel);
 
         // 调试信息：显示经验值获取详情
@@ -715,11 +697,11 @@ public class Equip extends Item {
 
         if (itemExp >= expNeeded) {// 判断是否需要升级
             while (itemExp >= expNeeded) {
-                itemExp -= expNeeded;
+                setItemExp(itemExp - expNeeded);
                 gainLevel(c); // 升级装备
 
                 if (itemLevel >= equipMaxLevel || !GameConfig.getServerBoolean("use_equipment_level_up_continuous")) {// 如果达到最大等级或者不允许连续升级，重置经验值并退出循环
-                    itemExp = 0.0f;
+                    setItemExp(0.0f);
                     break;
                 }
 
@@ -747,49 +729,66 @@ public class Equip extends Item {
         }
 
         String eqpName = ii.getName(getItemId());
-        String eqpInfo = reachedMaxLevel() ? " #e#rMAX LEVEL#k#n" : (" EXP: #e#b" + (int) itemExp + "#k#n / " + ExpTable.getEquipExpNeededForLevel(itemLevel));
+        String eqpInfo = reachedMaxLevel() ? " #e#r最高等级#k#n" : (" 经验: #e#b" + (int) itemExp + "#k#n / " + ExpTable.getEquipExpNeededForLevel(itemLevel));
 
-        return "'" + eqpName + "' -> LV: #e#b" + itemLevel + "#k#n    " + eqpInfo + "\r\n";
+        return "'" + eqpName + "' -> 等级: #e#b" + itemLevel + "#k#n    " + eqpInfo + "\r\n";
     }
 
     public void setItemExp(int exp) {
-        this.itemExp = exp;
-    }
-
-    public void setItemLevel(short level) {
-        this.itemLevel = level;
+        if (this.itemExp != exp) {
+            this.itemExp = exp;
+            setDirty(true);
+        }
     }
 
     @Override
     public void setQuantity(short quantity) {
         if (quantity < 0 || quantity > 1) {
-            throw new RuntimeException("Setting the quantity to " + quantity + " on an equip (itemid: " + getItemId() + ")");
+            throw new RuntimeException("在装备（物品ID：" + getItemId() + "）上设置数量为 " + quantity);
         }
         super.setQuantity(quantity);
     }
 
     public void setUpgradeSlots(int i) {
-        this.upgradeSlots = (byte) i;
+        if (this.upgradeSlots != (byte) i) {
+            this.upgradeSlots = (byte) i;
+            setDirty(true);
+        }
     }
 
     public void setVicious(int i) {
-        this.vicious = (short) i;
+        if (this.vicious != (short) i) {
+            this.vicious = (short) i;
+            setDirty(true);
+        }
     }
 
     public int getRingId() {
         return ringid;
     }
 
-    public void setRingId(int id) {
-        this.ringid = id;
+    @Override
+    public ItemInfoRtnDTO toInfoRtnDTO(boolean includeQuantity) {
+        ItemInfoRtnDTO dto = super.toInfoRtnDTO(includeQuantity);
+        if (getUpgradeSlots() > 0) dto.setUpgradeSlots(getUpgradeSlots() & 0xFF);
+        if (getLevel() > 0) dto.setLevel(getLevel());
+        if (getItemLevel() > 1) dto.setItemLevel(getItemLevel());
+        if (getStr() > 0) dto.setStr(getStr());
+        if (getDex() > 0) dto.setDex(getDex());
+        if (getInt() > 0) dto.setInt_(getInt());
+        if (getLuk() > 0) dto.setLuk(getLuk());
+        if (getHp() > 0) dto.setHp(getHp());
+        if (getMp() > 0) dto.setMp(getMp());
+        if (getWatk() > 0) dto.setWatk(getWatk());
+        if (getMatk() > 0) dto.setMatk(getMatk());
+        if (getWdef() > 0) dto.setWdef(getWdef());
+        if (getMdef() > 0) dto.setMdef(getMdef());
+        if (getAcc() > 0) dto.setAcc(getAcc());
+        if (getAvoid() > 0) dto.setAvoid(getAvoid());
+        if (getHands() > 0) dto.setHands(getHands());
+        if (getSpeed() > 0) dto.setSpeed(getSpeed());
+        if (getJump() > 0) dto.setJump(getJump());
+        if (getVicious() > 0) dto.setVicious(getVicious());
+        return dto;
     }
-
-    public boolean isWearing() {
-        return wear;
-    }
-
-    public void wear(boolean yes) {
-        wear = yes;
-    }
-
 }

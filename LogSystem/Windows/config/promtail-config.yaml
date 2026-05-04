@@ -1,0 +1,113 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: ./config/promtail-positions.yaml
+
+clients:
+  - url: http://127.0.0.1:3100/loki/api/v1/push
+
+scrape_configs:
+  # 1. 业务审计日志 (核心)
+  - job_name: gms-audit
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: gms-audit
+          __path__: ../../{logs,gms-server/logs}/audit/*.json
+    pipeline_stages:
+      - json:
+          expressions:
+            ts: ts
+            mod: mod
+            act: act
+            msg: msg
+            chr: chr
+            cid: cid
+            acc: acc
+            aid: aid
+            map: map
+            mapName: mapName
+            jobName: jobName
+            ip: ip
+            hwid: hwid
+            macs: macs
+            cnt: cnt
+            cost: cost
+            meso: meso
+            exp: exp
+      - labels:
+          mod:
+          act:
+          jobName:
+          mapName:
+      - timestamp:
+          source: ts
+          format: UnixMs
+
+  # 2. 服务端运行日志
+  - job_name: gms-server
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: gms-server
+          __path__: ../../{logs,gms-server/logs}/*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(?P<level>\w+)\s*\] ==> (?P<msg>.*)$'
+      - labels:
+          level:
+      - timestamp:
+          source: time
+          format: '2006-01-02 15:04:05.000'
+
+  # 3. 错误日志
+  - job_name: gms-error
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: gms-error
+          __path__: ../../{logs,gms-server/logs}/error/*.log
+    pipeline_stages:
+      - multiline:
+          firstline: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}'
+          max_wait_time: 3s
+      - regex:
+          expression: '^(?P<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(?P<thread>.*?)\] (?P<level>\w+)\s+(?P<logger>.*?) - (?P<msg>.*)$'
+      - labels:
+          level:
+          logger:
+      - timestamp:
+          source: time
+          format: '2006-01-02 15:04:05.000'
+
+  # 4. 聊天日志 (预留)
+  - job_name: gms-chat
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: gms-chat
+          __path__: ../../{logs,gms-server/logs}/chat/*.log
+    pipeline_stages:
+      # 假设聊天日志格式: [时间] [类型] 角色名: 内容
+      - regex:
+          expression: '^\[(?P<time>.*?)\] \[(?P<type>.*?)\] (?P<chr>.*?): (?P<msg>.*)$'
+      - labels:
+          type:
+      - timestamp:
+          source: time
+          format: '2006-01-02 15:04:05' # 需根据实际格式调整
+
+  # 5. 数据包日志 (预留 - 仅开发环境建议开启)
+  - job_name: gms-packet
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: gms-packet
+          __path__: ../../{logs,gms-server/logs}/packet/*.log

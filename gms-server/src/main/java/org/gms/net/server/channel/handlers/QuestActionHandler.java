@@ -73,11 +73,11 @@ public final class QuestActionHandler extends AbstractPacketHandler {
         byte action = p.readByte();
         short questid = p.readShort();
         Character player = c.getPlayer();
-        Quest quest = Quest.getInstance(questid);
         if (player.getMapId() == MapId.JAIL) {   //监狱地图不可使用任务脚本
             player.dropMessage(1,I18nUtil.getMessage("ActionHandler.map.message1"));
             return;
         }
+        Quest quest = Quest.getInstance(questid);
         switch (action) {
             case 0: // Restore lost item, Credits Darter ( Rajan )
                 p.readInt();

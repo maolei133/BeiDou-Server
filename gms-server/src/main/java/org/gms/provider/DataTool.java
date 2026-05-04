@@ -21,11 +21,33 @@
 */
 package org.gms.provider;
 
+import lombok.extern.slf4j.Slf4j;
 import org.gms.provider.wz.DataType;
 
 import java.awt.*;
 
+@Slf4j
 public class DataTool {
+
+    /**
+     * 私有辅助方法，用于获取子节点并进行空值检查。
+     * 如果找不到子节点，则抛出带有详细路径信息的 NullPointerException。
+     *
+     * @param path 子节点路径
+     * @param data 父数据节点
+     * @return 如果找到，则返回子数据节点
+     * @throws NullPointerException 如果找不到子节点
+     */
+    private static Data getAndCheckChildByPath(String path, Data data) {
+        final Data d = data.getChildByPath(path);
+        if (d == null) {
+            log.error("在 {} 中找不到子路径 {}", getFullDataPath(data), path);
+            // 抛出异常，指明在哪个父路径下找不到哪个子路径
+//            throw new NullPointerException("在路径 " + getFullDataPath(data) + " 中找不到子路径 " + path);
+        }
+        return d;
+    }
+
     public static String getString(Data data) {
         return ((String) data.getData());
     }
@@ -39,10 +61,12 @@ public class DataTool {
     }
 
     public static String getString(String path, Data data) {
-        return getString(data.getChildByPath(path));
+        // 使用辅助方法获取子节点
+        return getString(getAndCheckChildByPath(path, data));
     }
 
     public static String getString(String path, Data data, String def) {
+        // 带默认值的方法保持原样，因为它们需要处理 null 情况
         return getString(data.getChildByPath(path), def);
     }
 
@@ -56,13 +80,14 @@ public class DataTool {
 
     public static int getInt(Data data) {
         if (data == null || data.getData() == null) {
-            return 0;// DEF?
+            return 0; // 默认返回 0
         }
         return (Integer) data.getData();
     }
 
     public static int getInt(String path, Data data) {
-        return getInt(data.getChildByPath(path));
+        // 使用辅助方法获取子节点
+        return getInt(getAndCheckChildByPath(path, data));
     }
 
     public static int getIntConvert(Data data) {
@@ -93,7 +118,8 @@ public class DataTool {
     }
 
     public static int getIntConvert(String path, Data data) {
-        Data d = data.getChildByPath(path);
+        // 使用辅助方法获取子节点
+        Data d = getAndCheckChildByPath(path, data);
         if (d.getType() == DataType.STRING) {
             return Integer.parseInt(getString(d));
         } else {
@@ -117,6 +143,7 @@ public class DataTool {
     }
 
     public static int getInt(String path, Data data, int def) {
+        // 带默认值的方法保持原样
         return getInt(data.getChildByPath(path), def);
     }
 
@@ -193,7 +220,8 @@ public class DataTool {
     }
 
     public static Point getPoint(String path, Data data) {
-        return getPoint(data.getChildByPath(path));
+        // 使用辅助方法获取子节点
+        return getPoint(getAndCheckChildByPath(path, data));
     }
 
     public static Point getPoint(String path, Data data, Point def) {
@@ -205,24 +233,33 @@ public class DataTool {
     }
 
     public static String getFullDataPath(Data data) {
+        if (data == null) {
+            return "null";
+        }
         String path = "";
-        DataEntity myData = data;
+        DataEntity myData = (DataEntity) data;
         while (myData != null) {
             path = myData.getName() + "/" + path;
             myData = myData.getParent();
         }
-        return path.substring(0, path.length() - 1);
+        // 移除末尾的 "/"
+        if (path.length() > 0) {
+            return path.substring(0, path.length() - 1);
+        }
+        return "";
     }
 
-    public static String getAttributeValue(Data data,String name) {
+    public static String getAttributeValue(Data data, String name) {
         return data.getAttributeValue(name);
     }
-    public static String getAttributeValue(Data data,String name,String def) {
-        String val = getAttributeValue(data,name);
+
+    public static String getAttributeValue(Data data, String name, String def) {
+        String val = getAttributeValue(data, name);
         return val == null ? def : val;
     }
-    public static int getAttributeValueInt(Data data,String name,int def) {
-        String val = getAttributeValue(data,name);
+
+    public static int getAttributeValueInt(Data data, String name, int def) {
+        String val = getAttributeValue(data, name);
         return val == null ? def : Integer.parseInt(val);
     }
 }

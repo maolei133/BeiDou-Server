@@ -32,10 +32,12 @@ import java.util.List;
 public abstract class AbstractQuestAction {
     private final QuestActionType type;
     protected int questID;
+    protected Quest quest;
 
     public AbstractQuestAction(QuestActionType action, Quest quest) {
         this.type = action;
         this.questID = quest.getId();
+        this.quest = quest;
     }
 
     public abstract void run(Character chr, Integer extSelection);

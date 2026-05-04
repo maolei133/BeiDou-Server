@@ -35,6 +35,10 @@ import org.gms.dao.entity.ShopitemsDO;
 import org.gms.dao.entity.ShopsDO;
 import org.gms.dao.mapper.ShopitemsMapper;
 import org.gms.dao.mapper.ShopsMapper;
+import org.gms.manager.ServerManager;
+import org.gms.server.life.LifeFactory;
+import org.gms.service.ItemRecoveryService;
+import org.gms.service.TraceabilityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.util.PacketCreator;
@@ -51,6 +55,8 @@ import java.util.Set;
  */
 public class Shop {
     private static final Logger log = LoggerFactory.getLogger(Shop.class);
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
+    private static final ItemRecoveryService itemRecoveryService = ServerManager.getApplicationContext().getBean(ItemRecoveryService.class);
     private static final Set<Integer> rechargeableItems = new LinkedHashSet<>();
 
     private final int id;
@@ -101,6 +107,14 @@ public class Shop {
         InventoryType type = ItemConstants.getInventoryType(itemId);
         Character chr = c.getPlayer();
         Inventory inv = chr.getInventory(type);
+        
+        // 获取NPC名称用于日志记录
+        String npcName = LifeFactory.getNPCName(npcId);
+        if (npcName == null || npcName.isEmpty()) {
+            npcName = String.valueOf(npcId);
+        }
+        final String finalNpcName = npcName;
+
         inv.lockInventory();
         try {
             if (item.getPrice() > 0) {
@@ -108,14 +122,24 @@ public class Shop {
                 if (c.getPlayer().getMeso() >= amount) {
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
                         if (!ItemConstants.isRechargeable(itemId)) { //宠物无法从商店购买
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1);
+                            short finalQuantity = quantity;
+                            int finalAmount = amount;
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
+                                // 溯源日志：商店购买
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null,String.format("花费: %d 金币", finalAmount), npcId, finalNpcName);
+                            });
                             c.getPlayer().gainMeso(-amount, false);
                         } else {
                             quantity = ii.getSlotMax(c, item.getItemId());
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1);
+                            short finalQuantity = quantity;
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
+                                // 溯源日志：商店购买 (充值类)
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity,null, String.format("花费: %d 金币", item.getPrice()), npcId, finalNpcName);
+                            });
                             c.getPlayer().gainMeso(-item.getPrice(), false);
                         }
                         c.sendPacket(PacketCreator.shopTransaction((byte) 0));
+                        //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", amount));
                     } else {
                         c.sendPacket(PacketCreator.shopTransaction((byte) 3));
                     }
@@ -130,15 +154,24 @@ public class Shop {
                 if (c.getPlayer().getInventory(InventoryType.ETC).countById(ItemId.PERFECT_PITCH) >= amount) {
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
                         if (!ItemConstants.isRechargeable(itemId)) {
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1);
+                            short finalQuantity = quantity;
+                            int finalAmount = amount;
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null, String.format("花费: %d %s", finalAmount,ii.getName(ItemId.PERFECT_PITCH)), npcId, finalNpcName);
+                            });
                             InventoryManipulator.removeById(c, InventoryType.ETC, ItemId.PERFECT_PITCH, amount, false, false);
                         } else {
                             short slotMax = ii.getSlotMax(c, item.getItemId());
                             quantity = slotMax;
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1);
+                            short finalQuantity = quantity;
+                            int finalAmount = amount;
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, (addedItem) -> {
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null, String.format("花费: %d %s", finalAmount, ii.getName(ItemId.PERFECT_PITCH)), npcId, finalNpcName);
+                            });
                             InventoryManipulator.removeById(c, InventoryType.ETC, ItemId.PERFECT_PITCH, amount, false, false);
                         }
                         c.sendPacket(PacketCreator.shopTransaction((byte) 0));
+                        //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", amount).with("currency", "PITCH"));
                     } else {
                         c.sendPacket(PacketCreator.shopTransaction((byte) 3));
                     }
@@ -152,17 +185,24 @@ public class Shop {
                     int cardreduce = value - cost;
                     int diff = cardreduce + c.getPlayer().getMeso();
                     if (InventoryManipulator.checkSpace(c, itemId, quantity, "")) {
+                        short finalQuantity = quantity;
+                        int finalCost = cost;
                         if (ItemConstants.isPet(itemId)) {
                             int petid = Pet.createPet(itemId);
-                            InventoryManipulator.addById(c, itemId, quantity, "", petid, -1);
+                            InventoryManipulator.addById(c, itemId, quantity, "", petid, -1, (addedItem) -> {
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null, String.format("花费: %d %s", finalCost, ii.getName(token)), npcId, finalNpcName);
+                            });
                         } else {
-                            InventoryManipulator.addById(c, itemId, quantity, "", -1, -1);
+                            InventoryManipulator.addById(c, itemId, quantity, "", -1, -1, (addedItem) -> {
+                                traceabilityService.log(addedItem, chr, TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_BUY, finalQuantity, null, String.format("花费: %d %s", finalCost, ii.getName(token)), npcId, finalNpcName);
+                            });
                         }
                         c.getPlayer().gainMeso(diff, false);
                     } else {
                         c.sendPacket(PacketCreator.shopTransaction((byte) 3));
                     }
                     c.sendPacket(PacketCreator.shopTransaction((byte) 0));
+                    //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_BUY, new MapMessage().with("itm", itemId).with("cnt", quantity).with("cost", cost).with("currency", "TOKEN"));
                 } else {
                     c.sendPacket(PacketCreator.shopTransaction((byte) 2));
                 }
@@ -212,6 +252,13 @@ public class Shop {
 
         Inventory inventory = c.getPlayer().getInventory(type);
         Item item = inventory.getItem(slot);
+        
+        // 获取NPC名称用于日志记录
+        String npcName = LifeFactory.getNPCName(npcId);
+        if (npcName == null || npcName.isEmpty()) {
+            npcName = String.valueOf(npcId);
+        }
+
         inventory.lockInventory();
         try {
             if (canSell(item, quantity)) {
@@ -224,6 +271,18 @@ public class Shop {
                     c.getPlayer().gainMeso(recvMesos, false);
                 }
                 c.sendPacket(PacketCreator.shopTransaction((byte) 0x8));
+
+                // 物品找回系统拦截点
+                if (InventoryManipulator.isValuableForRecovery(item)) {
+                    // 创建副本并设置实际卖出的数量，确保找回时数量正确
+                    Item recoveryItem = item.copy();
+                    recoveryItem.setQuantity(quantity);
+                    itemRecoveryService.logRecovery(item, c.getPlayer(), quantity, ItemRecoveryService.DisposalType.SELL);
+                    // 溯源日志：商店出售
+                    traceabilityService.log(item, c.getPlayer(), TraceabilityService.ActionType.NPC_SHOP, TraceabilityService.ActionSourceType.NPC_SHOP_SELL, -quantity, null,String.format("获得 %d 金币", recvMesos), npcId, npcName);
+                }
+
+                //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_SELL, new MapMessage().with("itm", item.getItemId()).with("cnt", quantity).with("gain", recvMesos));
             } else {
                 c.sendPacket(PacketCreator.shopTransaction((byte) 0x5));
             }
@@ -252,6 +311,7 @@ public class Shop {
                     c.getPlayer().forceUpdateItem(item);
                     c.getPlayer().gainMeso(-price, false, true, false);
                     c.sendPacket(PacketCreator.shopTransaction((byte) 0x8));
+                    //AuditLogger.info(LogModule.SHOP, LogAction.SHOP_RECHARGE, new MapMessage().with("itm", item.getItemId()).with("cost", price));
                 } else {
                     c.sendPacket(PacketCreator.shopTransaction((byte) 0x2));
                 }

@@ -10,9 +10,22 @@
 
         <!-- 名称居左 -->
         <div class="item-name-row">
-          <span class="item-name">
-            {{ item.name || $t('tooltip.unknownItem') }}
+          <span
+            class="item-name clickable-text"
+            :title="$t('common.copy')"
+            @click="copyText(itemName)"
+          >
+            {{ itemName || $t('tooltip.unknownItem') }}
           </span>
+        </div>
+
+        <!-- ID 显示 -->
+        <div
+          class="item-id-row clickable-text"
+          :title="$t('common.copy')"
+          @click="copyText(String(item.itemId))"
+        >
+          ID: {{ item.itemId }}
         </div>
 
         <!-- Flag 居中显示 -->
@@ -52,6 +65,7 @@
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { Message } from '@arco-design/web-vue';
   import dayjs from 'dayjs';
   import { getIconUrl } from '@/utils/mapleStoryAPI';
   import { parseMapleText, ItemFlags, hasFlag } from '@/utils/mapleStoryItem';
@@ -70,6 +84,10 @@
       flag?: number;
     };
   }>();
+
+  // **关键优化**: 使用 ref 存储动态获取的名称和描述
+  const itemName = ref(props.item.name || '');
+  const itemDesc = ref(props.item.desc || '');
 
   // 图标 URL
   const iconUrl = computed(() => getIconUrl('item', props.item.itemId));
@@ -106,71 +124,106 @@
   });
 
   // 描述解析
-  const itemDesc = ref(props.item.desc || '');
   const parsedDesc = computed(() => parseMapleText(itemDesc.value));
 
-  const fetchItemDesc = async () => {
-    // 如果 props 中已经有描述，直接使用
-    if (props.item.desc) {
-      itemDesc.value = props.item.desc;
-      return;
-    }
+  /**
+   * @zh-CN 获取物品的名称和描述信息
+   * @description 优先使用 props 传入的值。如果 props 中缺少，则通过网络请求获取并使用 Promise 缓存。
+   */
+  const fetchItemInfo = async () => {
+    const { itemId, name, desc } = props.item;
 
-    // 检查缓存
-    if (itemDescCache.has(props.item.itemId)) {
-      itemDesc.value = itemDescCache.get(props.item.itemId) || '';
-      return;
-    }
+    // 1. **立即响应**: 立即使用 props 传入的数据
+    itemName.value = name || '';
+    itemDesc.value = desc || '';
 
-    // 否则尝试异步获取
-    try {
-      const { data } = await informationSearch({
-        types: ['eqp', 'consume', 'ins', 'etc', 'cash', 'pet'],
-        filter: props.item.itemId.toString(),
-        page: 1,
-        pageSize: 1,
-        fullMatch: true,
-      });
-      if (data && data.records && data.records.length > 0) {
-        const record = data.records[0];
-        if (record.desc) {
-          itemDescCache.set(props.item.itemId, record.desc);
-          itemDesc.value = record.desc;
-        } else {
-          // 如果没有描述，也缓存空字符串，避免重复请求
-          itemDescCache.set(props.item.itemId, '');
-          itemDesc.value = '';
-        }
-      } else {
-        // 如果没有找到记录，也缓存空字符串
-        itemDescCache.set(props.item.itemId, '');
-        itemDesc.value = '';
+    // 2. **异步补充**: 如果数据不完整，则发起请求
+    if (!name || !desc) {
+      if (!itemId) return;
+
+      let fetchPromise = itemInfoPromiseCache.get(itemId);
+      if (!fetchPromise) {
+        fetchPromise = informationSearch({
+          types: ['eqp', 'consume', 'ins', 'etc', 'cash', 'pet'],
+          filter: itemId.toString(),
+          page: 1,
+          pageSize: 1,
+          fullMatch: true,
+        })
+          .then(({ data }) => {
+            const record = data?.records?.[0];
+            if (!record) {
+              throw new Error(`找不到 ID 为 ${itemId} 的物品信息`);
+            }
+            // 返回一个包含名称和描述的对象
+            return {
+              name: record.name || '',
+              desc: record.desc || '',
+            };
+          })
+          .catch((err) => {
+            itemInfoPromiseCache.delete(itemId);
+            throw err;
+          });
+        itemInfoPromiseCache.set(itemId, fetchPromise);
       }
-    } catch (e) {
-      // ignore
+
+      try {
+        const info = await fetchPromise;
+        // 只有在 props 没有提供相应值时才更新
+        if (!name) {
+          itemName.value = info.name;
+        }
+        if (!desc) {
+          itemDesc.value = info.desc;
+        }
+      } catch (e) {
+        // 忽略错误
+      }
     }
   };
 
+  const copyText = async (text: string | undefined) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      Message.success(`${t('common.copy')} ${t('common.success')}: ${text}`);
+    } catch (err) {
+      Message.error(t('common.copy') + t('common.fail'));
+    }
+  };
+
+  // **关键优化**: 只在 itemId 变化时触发数据获取
   watch(
-    () => props.item,
-    () => {
-      fetchItemDesc();
+    () => props.item.itemId,
+    (newItemId) => {
+      if (newItemId) {
+        fetchItemInfo();
+      }
     },
-    { immediate: true, deep: true }
+    { immediate: true }
   );
 </script>
 
 <script lang="ts">
-  // 模块级缓存，所有组件实例共享
-  const itemDescCache = new Map<number, string>();
+  /**
+   * @zh-CN 模块级缓存
+   * @description 存储物品信息获取的 Promise，确保对同一个 itemId 的请求只发送一次。
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itemInfoPromiseCache = new Map<
+    number,
+    Promise<{ name: string; desc: string }>
+  >();
 </script>
 
 <style scoped lang="less">
   .tooltip-container {
-    width: 250px;
+    min-width: 260px;
+    max-width: 320px;
     background-color: rgba(0, 0, 0, 0.85);
     border-radius: 6px;
-    padding: 10px;
+    padding: 10px 10px 20px 10px;
     color: #fff;
     font-family: 'Arial', sans-serif;
     font-size: 12px;
@@ -205,6 +258,12 @@
         }
       }
 
+      .item-id-row {
+        text-align: left;
+        margin-bottom: 4px;
+        font-size: 12px;
+      }
+
       .item-flag {
         color: #ff9900;
         font-size: 12px;
@@ -235,7 +294,7 @@
       .item-icon {
         max-width: 64px;
         max-height: 64px;
-        transform: scale(1.1); /* 放大图标 */
+        transform: scale(1.5); /* 放大图标 */
         transform-origin: center top; /* 调整放大基点 */
       }
     }
@@ -269,5 +328,16 @@
         color: #ff9900;
       }
     }
+  }
+
+  /* 可点击文本的样式 */
+  .clickable-text {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .clickable-text:hover {
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+    color: #e6f7ff;
   }
 </style>

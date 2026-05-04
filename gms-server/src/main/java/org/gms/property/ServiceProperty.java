@@ -15,11 +15,20 @@ public class ServiceProperty {
     private String localhost;
     private int loginPort;
 
+    /**
+     * 启动参数
+     */
+
+    /** 速率限制 */
     @Data
     public static class RateLimitProperty {
+        /** 是否启用 */
         private boolean enabled;
+        /** 速率限制阈值 */
         private int limit;
+        /** 速率限制时间窗口（秒） */
         private long duration;
+        /** 是否自动封禁 */
         private boolean autoBan;
     }
 }

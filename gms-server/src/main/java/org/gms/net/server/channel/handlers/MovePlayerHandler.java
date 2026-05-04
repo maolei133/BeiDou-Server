@@ -35,7 +35,7 @@ public final class MovePlayerHandler extends AbstractMovementPacketHandler {
         p.skip(9);
         try {   // thanks Sa for noticing empty movement sequences crashing players
             int movementDataStart = p.getPosition();
-            updatePosition(p, c.getPlayer(), 0);
+            updatePosition(p, c.getPlayer(), 0, c);
             long movementDataLength = p.getPosition() - movementDataStart; //how many bytes were read by updatePosition
             p.seek(movementDataStart);
 

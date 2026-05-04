@@ -34,9 +34,11 @@ import org.gms.client.inventory.ModifyInventory;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.constants.id.ItemId;
 import org.gms.constants.inventory.ItemConstants;
+import org.gms.manager.ServerManager;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.server.ItemInformationProvider;
+import org.gms.service.TraceabilityService;
 import org.gms.util.PacketCreator;
 
 import java.util.ArrayList;
@@ -47,6 +49,7 @@ import java.util.List;
  * @author Frz
  */
 public final class ScrollHandler extends AbstractPacketHandler {
+    private static final TraceabilityService traceabilityService = ServerManager.getApplicationContext().getBean(TraceabilityService.class);
 
     @Override
     public final void handlePacket(InPacket p, Client c) {
@@ -56,7 +59,7 @@ public final class ScrollHandler extends AbstractPacketHandler {
                 short scrollSlot = p.readShort(); // 读取卷轴所在的槽位
                 short equipSlot = p.readShort(); // 读取装备所在的槽位
                 byte ws = (byte) p.readShort(); // 读取一些标志位
-                boolean whiteScroll = false; // 是否使用白色卷轴
+                boolean whiteScroll = false; // 是否使用祝福卷轴
                 boolean legendarySpirit = false; // 是否使用传奇精神技能
 
                 if ((ws & 2) == 2) {
@@ -73,7 +76,7 @@ public final class ScrollHandler extends AbstractPacketHandler {
                 }
 
                 short oldLevel = toScroll.getLevel(); // 记录装备的原始等级
-                byte oldSlots = toScroll.getUpgradeSlots(); // 记录装备的原始升级插槽数量
+                short oldSlots = toScroll.getUpgradeSlots(); // 记录装备的原始升级插槽数量
                 Inventory useInventory = chr.getInventory(InventoryType.USE); // 获取玩家的使用栏库存
                 Item scroll = useInventory.getItem(scrollSlot); // 获取使用的卷轴
                 Item wscroll = null;
@@ -92,9 +95,9 @@ public final class ScrollHandler extends AbstractPacketHandler {
                     return;
                 }
                 if (whiteScroll) {
-                    wscroll = useInventory.findById(ItemId.WHITE_SCROLL); // 查找白色卷轴
+                    wscroll = useInventory.findById(ItemId.WHITE_SCROLL); // 查找祝福卷轴
                     if (wscroll == null) {
-                        whiteScroll = false; // 如果找不到白色卷轴，则不使用白色卷轴
+                        whiteScroll = false; // 如果找不到祝福卷轴，则不使用祝福卷轴
                     }
                 }
 
@@ -122,14 +125,18 @@ public final class ScrollHandler extends AbstractPacketHandler {
 
                     if (whiteScroll && !ItemConstants.isCleanSlate(scroll.getItemId())) {
                         if (wscroll.getQuantity() < 1) {
-                            announceCannotScroll(c, legendarySpirit); // 如果白色卷轴数量不足，通知客户端无法使用
+                            announceCannotScroll(c, legendarySpirit); // 如果祝福卷轴数量不足，通知客户端无法使用
                             return;
                         }
 
-                        InventoryManipulator.removeFromSlot(c, InventoryType.USE, wscroll.getPosition(), (short) 1, false, false); // 移除一个白色卷轴
+                        InventoryManipulator.removeFromSlot(c, InventoryType.USE, wscroll.getPosition(), (short) 1, false, false); // 移除一个祝福卷轴
+                        // 记录溯源日志：祝福卷轴消耗
+                        traceabilityService.log(wscroll, chr, TraceabilityService.ActionType.EQUIPMENT, TraceabilityService.ActionSourceType.ITEM_CONSUME, -1,  String.format("目标装备: [%d] %s", toScroll.getItemId(), ii.getName(toScroll.getItemId())),"装备UID：" + toScroll.getUid());
                     }
 
                     InventoryManipulator.removeFromSlot(c, InventoryType.USE, scroll.getPosition(), (short) 1, false); // 移除一个卷轴
+                    // 记录溯源日志：卷轴消耗
+                    traceabilityService.log(scroll, chr, TraceabilityService.ActionType.EQUIPMENT, TraceabilityService.ActionSourceType.EQUIP_SCROLL,  -1,  String.format("目标装备: [%d] %s", toScroll.getItemId(), ii.getName(toScroll.getItemId())),"装备UID：" + toScroll.getUid());
                 } finally {
                     useInventory.unlockInventory(); // 解锁使用栏库存
                 }
@@ -158,6 +165,8 @@ public final class ScrollHandler extends AbstractPacketHandler {
                                 inv.unlockInventory();
                             }
                         }
+                        // 记录溯源日志：装备损毁
+                        traceabilityService.log(toScroll, chr, TraceabilityService.ActionType.EQUIPMENT, TraceabilityService.ActionSourceType.SYSTEM_DELETE, -1, "卷轴失败导致损毁", null);
                     } else {
                         scrolled = toScroll;
                         scrollSuccess = Equip.ScrollResult.FAIL;
@@ -168,6 +177,8 @@ public final class ScrollHandler extends AbstractPacketHandler {
                 } else {
                     mods.add(new ModifyInventory(3, scrolled)); // 标记装备被移除
                     mods.add(new ModifyInventory(0, scrolled)); // 标记装备被添加回库存
+                    // 记录溯源日志：装备属性变更
+                    traceabilityService.log(scrolled, chr, TraceabilityService.ActionType.EQUIPMENT, TraceabilityService.ActionSourceType.EQUIP_UPGRADE, 0, String.format("使用卷轴: [%d] %s", scroll.getItemId(), ii.getName(scroll.getItemId())), String.format("结果: %s", scrollSuccess));
                 }
                 c.sendPacket(PacketCreator.modifyInventory(true, mods)); // 发送修改库存的封包
                 chr.getMap().broadcastMessage(PacketCreator.getScrollEffect(chr.getId(), scrollSuccess, legendarySpirit, whiteScroll)); // 广播卷轴效果

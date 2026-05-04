@@ -90,7 +90,7 @@ public class CharacterController {
     @Operation(summary = "解封玩家")
     @PostMapping("/" + ApiConstant.LATEST + "/unban")
     public ResultBody<Object> unban(@RequestBody SubmitBody<ChrIdDTO> submitBody) {
-        characterService.unban(submitBody.getData().getId());
+        characterService.unban(submitBody.getData());
         return ResultBody.success();
     }
 }

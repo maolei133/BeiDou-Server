@@ -20,14 +20,21 @@
 package org.gms.net.server.task;
 
 import org.gms.net.server.coordinator.world.InviteCoordinator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Ronan
  */
 public class InvitationTask implements Runnable {
+    private static final Logger log = LoggerFactory.getLogger(InvitationTask.class);
 
     @Override
     public void run() {
-        InviteCoordinator.runTimeoutSchedule();
+        try {
+            InviteCoordinator.runTimeoutSchedule();
+        } catch (Throwable t) {
+            log.error("Error running InvitationTask", t);
+        }
     }
 }

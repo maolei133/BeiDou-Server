@@ -23,11 +23,13 @@ package org.gms.net.server.channel.handlers;
 
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.client.autoban.AutobanManager;
 import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.config.GameConfig;
+import org.gms.constants.inventory.ItemConstants;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.gms.net.server.Server;
@@ -40,7 +42,7 @@ public final class InventoryMergeHandler extends AbstractPacketHandler {
     public final void handlePacket(InPacket p, Client c) {
         Character chr = c.getPlayer();
         p.readInt();
-        chr.getAutoBanManager().setTimestamp(2, Server.getInstance().getCurrentTimestamp(), 4);
+        chr.getAutoBanManager().checkActionFrequency(AutobanManager.ActionType.ITEM_MERGE, Server.getInstance().getCurrentTime(), 4);
 
         if (!GameConfig.getServerBoolean("use_item_sort")) {
             c.sendPacket(PacketCreator.enableActions());
@@ -77,6 +79,28 @@ public final class InventoryMergeHandler extends AbstractPacketHandler {
                     if (dstItem.getItemId() != srcItem.getItemId()) {
                         continue;
                     }
+
+                    // 检查是否为现金物品，如果是，则检查是否可堆叠
+                    if (inventoryType == InventoryType.CASH) {
+                        // 宠物绝对不可堆叠
+                        if (ItemConstants.isPet(dstItem.getItemId())) {
+                            continue;
+                        }
+                        // 戒指不可堆叠
+                        if (ItemConstants.isRing(dstItem.getItemId())) {
+                            continue;
+                        }
+
+                        if (!ItemConstants.isRechargeable(dstItem.getItemId()) && ii.getSlotMax(c, dstItem.getItemId()) <= 1) {
+                            continue;
+                        }
+                    }
+
+                    // 检查拥有者是否一致，防止交换位置而不是合并
+                    if (!dstItem.getOwner().equals(srcItem.getOwner())) {
+                        continue;
+                    }
+
                     if (dstItem.getQuantity() == ii.getSlotMax(c, inventory.getItem(dst).getItemId())) {
                         break;
                     }
@@ -86,28 +110,22 @@ public final class InventoryMergeHandler extends AbstractPacketHandler {
             }
 
             //------------------------------------------------------------
-
-            inventory = c.getPlayer().getInventory(inventoryType);
-            boolean sorted = false;
-
-            while (!sorted) {
-                short freeSlot = inventory.getNextFreeSlot();
-
-                if (freeSlot != -1) {
-                    short itemSlot = -1;
-                    for (short i = (short) (freeSlot + 1); i <= inventory.getSlotLimit(); i = (short) (i + 1)) {
-                        if (inventory.getItem(i) != null) {
-                            itemSlot = i;
+            // 优化后的排序（填补空位）逻辑
+            short nextFreeSlot = inventory.getNextFreeSlot();
+            if (nextFreeSlot != -1) {
+                for (short src = (short) (nextFreeSlot + 1); src <= inventory.getSlotLimit(); src++) {
+                    if (inventory.getItem(src) != null) {
+                        InventoryManipulator.move(c, inventoryType, src, nextFreeSlot);
+                        
+                        // 重新计算下一个空闲槽位，避免每次都从头扫描
+                        while (nextFreeSlot <= inventory.getSlotLimit() && inventory.getItem(nextFreeSlot) != null) {
+                            nextFreeSlot++;
+                        }
+                        
+                        if (nextFreeSlot > inventory.getSlotLimit()) {
                             break;
                         }
                     }
-                    if (itemSlot > 0) {
-                        InventoryManipulator.move(c, inventoryType, itemSlot, freeSlot);
-                    } else {
-                        sorted = true;
-                    }
-                } else {
-                    sorted = true;
                 }
             }
         } finally {
