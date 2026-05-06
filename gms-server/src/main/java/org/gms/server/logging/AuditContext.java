@@ -87,6 +87,26 @@ public class AuditContext {
     }
 
     /**
+     * 移除当前线程中的单个上下文字段。
+     */
+    public static void remove(String key) {
+        if (key != null) {
+            context.get().remove(key);
+        }
+    }
+
+    /**
+     * 用快照替换当前线程中的审计上下文。
+     */
+    public static void replace(Map<String, String> snapshot) {
+        Map<String, String> data = context.get();
+        data.clear();
+        if (snapshot != null && !snapshot.isEmpty()) {
+            data.putAll(snapshot);
+        }
+    }
+
+    /**
      * 获取当前上下文数据
      * @return 上下文数据副本
      */
