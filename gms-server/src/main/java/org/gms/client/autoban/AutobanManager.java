@@ -538,6 +538,16 @@ public class AutobanManager {
             return false; // 地图无效或已启用合法聚集功能，跳过检测
         }
 
+        // 优化1: 如果地图怪物数量低于等于5只，则无需检测
+        if (map.getSpawnedMonstersOnMap() <= 5) {
+            return false;
+        }
+
+        // 优化2: 如果处于副本事件且有BOSS，无需检测
+        if (map.isEventMap() && map.getSpawnedBossesOnMap() > 0) {
+            return false;
+        }
+
         // 获取怪物移动类型
         int movetype = monster.getStats().getMovetype(); // 获取怪物移动类型
 

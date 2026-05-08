@@ -127,6 +127,7 @@ public class MapleMap {
     private final Collection<SpawnPoint> allMonsterSpawn = Collections.synchronizedList(new LinkedList<>());
     private final Collection<SpawnPoint> monsterSpawnBoss = Collections.synchronizedList(new LinkedList<>());
     private final AtomicInteger spawnedMonstersOnMap = new AtomicInteger(0);
+    private final AtomicInteger spawnedBossesOnMap = new AtomicInteger(0);
     private final AtomicInteger droppedItemCount = new AtomicInteger(0);
     private final Collection<Character> characters = new LinkedHashSet<>();
     private final Map<Integer, Set<Integer>> mapParty = new LinkedHashMap<>();
@@ -1463,6 +1464,9 @@ public class MapleMap {
             }
 
             spawnedMonstersOnMap.decrementAndGet();
+            if (monster.isBoss()) {
+                spawnedBossesOnMap.decrementAndGet();
+            }
             removeMapObject(monster);
             monster.disposeMapObject();
             if (monster.hasBossHPBar()) {   // thanks resinate for noticing boss HPbar not clearing after mob defeat in certain scenarios   //感谢resinate注意到在某些情况下暴徒失败后老板HPbar没有清除
@@ -1996,6 +2000,9 @@ public class MapleMap {
         updateBossSpawn(monster);
 
         spawnedMonstersOnMap.incrementAndGet();
+        if (monster.isBoss()) {
+            spawnedBossesOnMap.incrementAndGet();
+        }
         addSelfDestructive(monster);
         applyRemoveAfter(monster);
     }
@@ -2125,6 +2132,9 @@ public class MapleMap {
         }
 
         spawnedMonstersOnMap.incrementAndGet();
+        if (monster.isBoss()) {
+            spawnedBossesOnMap.incrementAndGet();
+        }
         addSelfDestructive(monster);
         applyRemoveAfter(monster);  // thanks LightRyuzaki for pointing issues with spawned CWKPQ mobs not applying this
     }
@@ -2156,6 +2166,9 @@ public class MapleMap {
         updateBossSpawn(monster);
 
         spawnedMonstersOnMap.incrementAndGet();
+        if (monster.isBoss()) {
+            spawnedBossesOnMap.incrementAndGet();
+        }
         addSelfDestructive(monster);
         applyRemoveAfter(monster);
     }
@@ -2166,6 +2179,9 @@ public class MapleMap {
         spawnAndAddRangedMapObject(monster, c -> c.sendPacket(PacketCreator.spawnFakeMonster(monster, 0)));
 
         spawnedMonstersOnMap.incrementAndGet();
+        if (monster.isBoss()) {
+            spawnedBossesOnMap.incrementAndGet();
+        }
         addSelfDestructive(monster);
     }
 
@@ -3571,6 +3587,10 @@ public class MapleMap {
 
     public int getSpawnedMonstersOnMap() {
         return spawnedMonstersOnMap.get();
+    }
+
+    public int getSpawnedBossesOnMap() {
+        return spawnedBossesOnMap.get();
     }
 
     public void setMobCapacity(int capacity) {
