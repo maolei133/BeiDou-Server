@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <a-card class="general-card" :bordered="false">
       <!-- 标题区 -->
       <a-row>

@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <div class="content">
       <div class="content-inner">
         <LoginForm />

@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <Breadcrumb />
     <a-card class="general-card" :title="$t('menu.game.drop.global')">
       <a-row>

@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <a-card class="general-card" title="快递配置">
       <template #extra>
         <a-tag v-if="configLoaded" color="green">配置已加载</a-tag>

@@ -1,5 +1,5 @@
 <template>
-  <div class="container" :loading="true">
+  <div class="container gms-page" :loading="true">
     <Breadcrumb />
     <a-card class="general-card" :title="$t('menu.account.player')">
       <!-- 搜索表单 -->

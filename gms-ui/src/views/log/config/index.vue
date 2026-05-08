@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <Breadcrumb :items="['menu.log', 'menu.log.config']" />
 
     <a-tabs default-active-key="business" type="rounded">

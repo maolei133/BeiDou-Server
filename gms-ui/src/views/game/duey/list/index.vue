@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <a-card class="general-card" :title="$t('duey.list.title')">
       <a-row>
         <a-col :flex="1">

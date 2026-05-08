@@ -62,12 +62,12 @@
 <style scoped lang="less">
   .tab-bar-container {
     position: relative;
-    background-color: var(--color-bg-2);
+    background-color: var(--gms-surface);
     .tab-bar-box {
       display: flex;
       padding: 0 0 0 20px;
-      background-color: var(--color-bg-2);
-      border-bottom: 1px solid var(--color-border);
+      background-color: var(--gms-surface);
+      border-bottom: 1px solid var(--gms-border);
       .tab-bar-scroll {
         height: 32px;
         flex: 1;
@@ -81,6 +81,7 @@
           :deep(.arco-tag) {
             display: inline-flex;
             align-items: center;
+            border-radius: 999px;
             margin-right: 6px;
             cursor: pointer;
             &:first-child {
