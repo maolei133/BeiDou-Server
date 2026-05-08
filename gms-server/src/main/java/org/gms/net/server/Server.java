@@ -683,7 +683,7 @@ public class Server {
             futures.add(initExecutor.submit(SkillbookInformationProvider::loadAllSkillbookInformation));    // 技能书信息加载
 
             // 其他独立任务
-            futures.add(initExecutor.submit(this::registerChannelDependencies));
+            futures.add(initExecutor.submit(this::registerChannelDependencies)); // 注解：移至并发任务后，确保Java处理器优先注册
             futures.add(initExecutor.submit(() -> accountService.resetAllLoggedIn()));
             futures.add(initExecutor.submit(characterService::resetMerchant));
             futures.add(initExecutor.submit(itemRecoveryService::cleanupExpiredLogs));
@@ -697,7 +697,7 @@ public class Server {
             futures.add(initExecutor.submit(new BossLogTask()));    // 重置boss日志
             futures.add(initExecutor.submit(new ExtendValueTask()));    // 清理扩展表类型
             futures.add(initExecutor.submit(CommandsExecutor.getInstance()::loadCommandsExecutor)); // 加载GM命令
-            futures.add(initExecutor.submit(OpcodeConstants::generateOpcodeNames)); // 生成Opcode名称
+            futures.add(initExecutor.submit(OpcodeConstants::generateOpcodeNames)); // 注解：移至Java处理器注册后，确保操作码动态修改在后
 
             // 2. 等待所有并发任务完成
             log.info("等待 {} 个启动任务完成...", futures.size());

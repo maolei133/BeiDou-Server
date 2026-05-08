@@ -75,9 +75,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * PacketCreator
- * 统一入口类，负责转发调用到各个分类的 Packet 类
- * 采用外观模式 (Facade Pattern) 重构
+ * 封包创建器的外观类 (Facade)。
+ * <p>
+ * 这个类统一了所有封包创建的入口，将具体的创建逻辑委托给内部的各个 {@code XxxPackets} 子类。
+ * 注意：这个类的字节码在启动时会被 {@link org.gms.agent.ByteBuddyClassLoader} 动态增强，
+ * 以实现对JS脚本方法的优先调用。
+ * </p>
  */
 public class PacketCreator {
 

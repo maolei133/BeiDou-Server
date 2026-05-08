@@ -21,7 +21,18 @@
  */
 package org.gms.net.opcodes;
 
-public enum SendOpcode {
+import org.gms.net.OpcodeManager;
+
+/**
+ * 发送操作码枚举。
+ * <p>
+ * 该枚举现在支持通过外部脚本进行动态值设定。
+ * 在系统启动时，会优先加载并应用来自 {@code scripts/packet/OpcodeManager.js} 的值。
+ * 如果脚本中未定义某个操作码，则会使用此类中定义的硬编码默认值。
+ *
+ * @see OpcodeManager
+ */
+public enum SendOpcode implements Opcode {
 
     LOGIN_STATUS(0x00), // 登录状态
     GUEST_ID_LOGIN(0x01), // 游客ID登录
@@ -361,13 +372,19 @@ public enum SendOpcode {
 
     UPDATE_HPMPAALERT(0x1000), // 更新HP/MP/EXP警报
     ;
-    private int code = -2;
+    private int code;
 
     SendOpcode(int code) {
         this.code = code;
     }
 
+    @Override
     public int getValue() {
         return code;
+    }
+
+    @Override
+    public void setValue(int code) {
+        this.code = code;
     }
 }

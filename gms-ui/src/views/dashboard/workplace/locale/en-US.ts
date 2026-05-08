@@ -34,6 +34,9 @@ export default {
   'workplace.button.dataReloadSkills': 'Reload Skills',
   'workplace.button.dataReloadMonsters': 'Reload Monsters',
   'workplace.button.dataReloadReactors': 'Reload Reactors',
+  'workplace.button.dataReloadOpcodes': 'Reload Opcodes',
+  'workplace.button.dataReloadPackets': 'Reload Handlers',
+  'workplace.button.dataReloadPacketCreator': 'Reload Packet Scripts',
   'workplace.stop.shutdownInProgress':
     'Initiating server shutdown, please wait...',
   'common.operationSuccess': 'Operation successful',

@@ -192,6 +192,9 @@
     reloadEventsByGMCommand,
     reloadMapsByGMCommand,
     reloadMonstersByGMCommand,
+    reloadOpcodesByGMCommand,
+    reloadPacketCreatorScript,
+    reloadPacketsByGMCommand,
     reloadPortalsByGMCommand,
     reloadQuestsByGMCommand,
     reloadReactorsByGMCommand,
@@ -299,6 +302,21 @@
       action: 'reloadReactors',
       icon: 'icon-interaction',
     },
+    {
+      label: 'dataReloadOpcodes',
+      action: 'reloadOpcodes',
+      icon: 'icon-code',
+    },
+    {
+      label: 'dataReloadPackets',
+      action: 'reloadPackets',
+      icon: 'icon-code-block',
+    },
+    {
+      label: 'dataReloadPacketCreator',
+      action: 'reloadPacketCreator',
+      icon: 'icon-sync',
+    },
   ];
 
   const loadSeverStatus = async () => {
@@ -363,6 +381,15 @@
           break;
         case 'reloadReactors':
           await reloadReactorsByGMCommand();
+          break;
+        case 'reloadOpcodes':
+          await reloadOpcodesByGMCommand();
+          break;
+        case 'reloadPackets':
+          await reloadPacketsByGMCommand();
+          break;
+        case 'reloadPacketCreator':
+          await reloadPacketCreatorScript();
           break;
         default:
           break;

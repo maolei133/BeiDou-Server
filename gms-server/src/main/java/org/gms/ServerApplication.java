@@ -2,6 +2,7 @@ package org.gms;
 
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
+import org.gms.agent.ByteBuddyClassLoader;
 import org.gms.service.TraceabilityService;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
@@ -12,21 +13,55 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.yaml.snakeyaml.Yaml;
 
+import java.io.File;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 
 @SpringBootApplication
 @MapperScan("org.gms.dao.mapper")
 @EnableScheduling
 @Slf4j
 public class ServerApplication {
-    public static void main(String[] args) {
+
+    public static void main(String[] args) throws Exception {
+        // 1. 获取 "java.class.path" 系统属性，这是在现代Java版本中获取类路径的正确方式
+        String classPath = System.getProperty("java.class.path");
+        String pathSeparator = System.getProperty("path.separator");
+
+        String[] pathElements = classPath.split(pathSeparator);
+        List<URL> urlList = new ArrayList<>();
+        for (String element : pathElements) {
+            urlList.add(new File(element).toURI().toURL());
+        }
+        URL[] urls = urlList.toArray(new URL[0]);
+
+        // 2. 获取当前类加载器（在 fat JAR 环境下，这是 Spring Boot 的 LaunchedURLClassLoader）
+        ClassLoader springClassLoader = ServerApplication.class.getClassLoader();
+
+        // 3. 创建我们的自定义类加载器，并将 Spring 的加载器作为其父加载器
+        ByteBuddyClassLoader buddyClassLoader = new ByteBuddyClassLoader(urls, springClassLoader);
+
+        // 4. 将主线程的上下文类加载器设置为我们的自定义版本
+        Thread.currentThread().setContextClassLoader(buddyClassLoader);
+
+        // 5. 使用我们的加载器重新加载主应用程序类，并调用其 runSpring 方法
+        Class<?> mainClass = buddyClassLoader.loadClass(ServerApplication.class.getName());
+        mainClass.getMethod("runSpring", String[].class).invoke(null, (Object) args);
+    }
+
+    /**
+     * 真正的 Spring Boot 启动逻辑
+     */
+    public static void runSpring(String[] args) {
         try {
             initDb(args);
         } catch (Exception e) {
@@ -49,6 +84,7 @@ public class ServerApplication {
         // 记录服务器启动完成日志
         AuditLogger.info(LogModule.SYSTEM, LogAction.SYSTEM_SERVER_START, "服务端启动完成，耗时：" + (System.currentTimeMillis() - startTime) / 1000.0 + " 秒");
     }
+
 
     /**
      * 修复PreDataSourceConfig优先级不够，导致在创建数据库之前获取连接，进而无法正常启动

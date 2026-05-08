@@ -111,5 +111,29 @@ public class CommandController {
         return ResultBody.success();
     }
 
+    //重载操作码
+    @Tag(name = "/command/" + ApiConstant.LATEST)
+    @Operation(summary = "复用GM命令代码进行重载操作码")
+    @GetMapping("/" + ApiConstant.LATEST + "/reloadOpcodesByGMCommand")
+    public ResultBody reloadOpcodesByGMCommand() {
+        commandService.reloadOpcodesByGMCommand();
+        return ResultBody.success();
+    }
 
+    //重载封包处理器
+    @Tag(name = "/command/" + ApiConstant.LATEST)
+    @Operation(summary = "复用GM命令代码进行重载封包处理器")
+    @GetMapping("/" + ApiConstant.LATEST + "/reloadPacketsByGMCommand")
+    public ResultBody reloadPacketsByGMCommand() {
+        commandService.reloadPacketsByGMCommand();
+        return ResultBody.success();
+    }
+
+    @Tag(name = "/command/" + ApiConstant.LATEST)
+    @Operation(summary = "动态重载 PacketCreator.js 脚本")
+    @GetMapping("/" + ApiConstant.LATEST + "/reload-packet-creator")
+    public ResultBody<String> reloadPacketCreatorScript() {
+        String result = commandService.reloadPacketCreatorScript();
+        return ResultBody.success(result);
+    }
 }

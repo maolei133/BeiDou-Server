@@ -55,3 +55,18 @@ export function reloadMonstersByGMCommand() {
 export function reloadReactorsByGMCommand() {
   return axios.get('/command/v1/reloadReactorsByGMCommand');
 }
+
+export function reloadOpcodesByGMCommand() {
+  return axios.get('/command/v1/reloadOpcodesByGMCommand');
+}
+
+export function reloadPacketsByGMCommand() {
+  return axios.get('/command/v1/reloadPacketsByGMCommand');
+}
+
+/**
+ * 请求后端动态重载 PacketCreator.js 脚本。
+ */
+export function reloadPacketCreatorScript() {
+  return axios.get('/command/v1/reload-packet-creator');
+}

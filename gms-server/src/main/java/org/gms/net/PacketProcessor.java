@@ -49,9 +49,11 @@ import org.gms.net.server.handlers.login.ViewAllCharSelectedHandler;
 import org.gms.net.server.handlers.login.ViewAllCharSelectedWithPicHandler;
 import org.gms.net.server.handlers.login.LoginInitHandler;
 import org.gms.net.client.handlers.*;
+import org.gms.scripting.AbstractScriptManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -62,14 +64,24 @@ public final class PacketProcessor {
     private static ChannelDependencies channelDeps;
 
     private PacketHandler[] handlers;
+    private int channel = -1; // 存储当前处理器的频道ID
 
     private PacketProcessor() {
+        // 使用 OpcodeManager 来获取最大操作码值，以支持动态新增的操作码
+        OpcodeManager.getInstance().ensureLoaded();
         int maxRecvOp = 0;
+        // 检查Java枚举中的最大值
         for (RecvOpcode op : RecvOpcode.values()) {
             if (op.getValue() > maxRecvOp) {
                 maxRecvOp = op.getValue();
             }
         }
+        // 检查JS新增的操作码中的最大值
+        Integer maxJsOp = OpcodeManager.getInstance().getRecvOpcodes().values().stream().max(Integer::compareTo).orElse(0);
+        if (maxJsOp > maxRecvOp) {
+            maxRecvOp = maxJsOp;
+        }
+
         handlers = new PacketHandler[maxRecvOp + 1];
     }
 
@@ -90,18 +102,56 @@ public final class PacketProcessor {
     }
 
     public PacketHandler getHandler(short packetId) {
-        if (packetId > handlers.length) {
+        if (packetId >= handlers.length || packetId < 0) {
+            log.warn("请求的操作码 0x{} 超出处理器范围 (0-{})。", Integer.toHexString(packetId).toUpperCase(), handlers.length - 1);
             return null;
         }
-        return handlers[packetId];
+        PacketHandler handler = handlers[packetId];
+        if (handler == null) {
+            log.warn("未找到操作码 0x{} 的处理器", Integer.toHexString(packetId).toUpperCase());
+        }
+        return handler;
     }
 
     public void registerHandler(RecvOpcode code, PacketHandler handler) {
+        registerHandler(code.getValue(), handler, code.name());
+    }
+
+    /**
+     * 核心处理器注册方法，使用整数操作码。
+     * @param code 操作码的整数值
+     * @param handler 处理器实例
+     * @param name 操作码的名称（用于日志）
+     */
+    public void registerHandler(int code, PacketHandler handler, String name) {
         try {
-            handlers[code.getValue()] = handler;
+            // [诊断日志] 打印处理器注册的详细信息
+//            log.info("正在注册处理器: 名称 = {}, 操作码 = 0x{} ({}), 处理器类 = {}",
+//                name, Integer.toHexString(code).toUpperCase(), code, handler.getClass().getSimpleName());
+            handlers[code] = handler;
         } catch (ArrayIndexOutOfBoundsException e) {
-            log.error("注册处理程序 {} 时出错", code.name(), e);
+            log.error("注册处理器 {} (值: {}) 时出错，操作码超出现有处理器数组范围。", name, code, e);
         }
+    }
+
+    /**
+     * 注册一个由外部脚本处理的数据包处理器（通过枚举）。
+     * @param code 操作码枚举实例
+     * @param scriptPath 脚本的相对路径
+     */
+    public void registerScriptedHandler(RecvOpcode code, String scriptPath) {
+        registerHandler(code.getValue(), new ScriptedPacketHandler(scriptPath), code.name());
+    }
+
+    /**
+     * [重载] 注册一个由外部脚本处理的数据包处理器（通过整数操作码）。
+     * 这个方法专门用于处理从JS脚本中新增的、不存在于Java枚举中的操作码。
+     * @param code 操作码的整数值
+     * @param scriptPath 脚本的相对路径
+     */
+    public void registerScriptedHandler(int code, String scriptPath) {
+        String opcodeName = OpcodeManager.getInstance().getRecvOpcodeName(code);
+        registerHandler(code, new ScriptedPacketHandler(scriptPath), opcodeName);
     }
 
     public synchronized static PacketProcessor getProcessor(int world, int channel) {
@@ -109,22 +159,74 @@ public final class PacketProcessor {
         PacketProcessor processor = instances.get(processorId);
         if (processor == null) {
             processor = new PacketProcessor();
-            processor.reset(channel);
+            processor.channel = channel; // 存储频道ID
+            processor.reset();
             instances.put(processorId, processor);
         }
         return processor;
     }
 
-    public void reset(int channel) {
-        handlers = new PacketHandler[handlers.length];
+    /**
+     * 重新加载所有已注册的数据包处理器，并重新执行外部脚本。
+     * 此方法用于热更新，例如通过GM命令调用。
+     */
+    public static synchronized void reloadScripts() {
+//        log.info("开始重载所有数据包处理器脚本...");
+        // 热重载操作码
+        OpcodeManager.getInstance().reloadOpcodes();
+        // 重置处理器实例
+        for (PacketProcessor processor : instances.values()) {
+            processor.reset();
+        }
+        log.info("所有数据包处理器脚本重载完毕。");
+    }
 
+    public void reset() {
+//        log.info("正在重置频道 {} 的数据包处理器...", this.channel);
+        // 重新计算处理器数组大小
+        OpcodeManager.getInstance().ensureLoaded();
+        int maxRecvOp = 0;
+        for (RecvOpcode op : RecvOpcode.values()) {
+            if (op.getValue() > maxRecvOp) {
+                maxRecvOp = op.getValue();
+            }
+        }
+        Integer maxJsOp = OpcodeManager.getInstance().getRecvOpcodes().values().stream().max(Integer::compareTo).orElse(0);
+        if (maxJsOp > maxRecvOp) {
+            maxRecvOp = maxJsOp;
+        }
+        handlers = new PacketHandler[maxRecvOp + 1];
+
+        // 修复：为所有处理器实例注册所有处理器，以提高健壮性
         registerCommonHandlers();
-
         if (channel < 0) {
             registerLoginHandlers();
         } else {
             registerChannelHandlers();
         }
+
+        // 加载并执行脚本化的处理器注册表
+        loadAndExecuteScriptedHandlerRegistry();
+    }
+
+    // 旧的 reset(int channel) 方法为了兼容性保留，但内部调用新的 reset()
+    @Deprecated
+    public void reset(int channel) {
+        this.channel = channel;
+        this.reset();
+    }
+
+    /**
+     * 加载并执行外部的 PacketProcessor.js 脚本，
+     * 该脚本负责注册所有由脚本处理的数据包路由。
+     */
+    private void loadAndExecuteScriptedHandlerRegistry() {
+        String scriptPath = "packet/PacketProcessor.js";
+
+        Map<String, Object> bindings = new HashMap<>();
+        bindings.put("processor", this);
+
+        AbstractScriptManager.executeScript(scriptPath, bindings);
     }
 
     private void registerCommonHandlers() {
@@ -274,7 +376,7 @@ public final class PacketProcessor {
         registerHandler(RecvOpcode.ADMIN_LOG, new AdminLogHandler()); // 管理员日志处理
         registerHandler(RecvOpcode.ALLIANCE_OPERATION, new AllianceOperationHandler()); // 联盟操作处理
         registerHandler(RecvOpcode.DENY_ALLIANCE_REQUEST, new DenyAllianceRequestHandler()); // 拒绝联盟请求处理
-        registerHandler(RecvOpcode.USE_SOLOMON_ITEM, new UseSolomonHandler()); // 使用所罗门物品处理（既孙子兵法等经验卷轴）
+        registerHandler(RecvOpcode.USE_SOLOMON_ITEM, new UseSolomonHandler()); // 使用所罗门物品（既孙子兵法等经验卷轴）
         registerHandler(RecvOpcode.USE_GACHA_EXP, new UseGachaExpHandler()); // 使用转蛋经验处理
         registerHandler(RecvOpcode.NEW_YEAR_CARD_REQUEST, new NewYearCardHandler()); // 新年贺卡请求处理
         registerHandler(RecvOpcode.CASHSHOP_SURPRISE, new CashShopSurpriseHandler()); // 商城惊喜处理

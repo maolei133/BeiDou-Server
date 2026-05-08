@@ -13,10 +13,13 @@ import org.gms.client.command.CommandsExecutor;
 import org.gms.dao.entity.CommandInfoDO;
 import org.gms.dao.mapper.CommandInfoMapper;
 import org.gms.model.dto.CommandReqDTO;
+import org.gms.net.OpcodeManager;
+import org.gms.net.PacketProcessor;
 import org.gms.net.server.PlayerStorage;
 import org.gms.net.server.Server;
 import org.gms.net.server.channel.Channel;
 import org.gms.net.server.world.World;
+import org.gms.scripting.AbstractScriptManager;
 import org.gms.scripting.portal.PortalScriptManager;
 import org.gms.server.ShopFactory;
 import org.gms.server.life.LifeFactory;
@@ -25,6 +28,7 @@ import org.gms.server.maps.MapleMap;
 import org.gms.server.maps.ReactorFactory;
 import org.gms.server.quest.Quest;
 import org.gms.util.I18nUtil;
+import org.gms.util.PacketCreatorManager;
 import org.gms.util.Pair;
 import org.gms.util.RequireUtil;
 import org.springframework.stereotype.Service;
@@ -287,4 +291,31 @@ public class CommandService {
         log.info(I18nUtil.getMessage("ReloadReactorsCommand.message2"));
     }
 
+    public void reloadOpcodesByGMCommand() {
+        OpcodeManager.getInstance().reloadOpcodes();
+//        log.info("操作码（Opcodes）已通过API成功热重载。");
+    }
+
+    public void reloadPacketsByGMCommand() {
+        PacketProcessor.reloadScripts();
+//        log.info("所有数据包处理器已通过API成功热重载。");
+    }
+
+    /**
+     * 通过API动态重载 PacketCreator.js 脚本。
+     * @return 重载结果的消息。
+     */
+    public String reloadPacketCreatorScript() {
+        String scriptPath = "packet/PacketCreator.js";
+        boolean success = AbstractScriptManager.reloadScript(scriptPath);
+        if (success) {
+            String message = String.format("脚本 [%s] 已成功通过API热重载。", scriptPath);
+//            log.info(message);
+            return message;
+        } else {
+            String message = String.format("脚本 [%s] 重载失败，请检查服务端日志获取详细信息。", scriptPath);
+            log.warn(message);
+            return message;
+        }
+    }
 }
