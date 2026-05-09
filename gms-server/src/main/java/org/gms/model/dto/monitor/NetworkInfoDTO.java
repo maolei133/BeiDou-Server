@@ -12,6 +12,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class NetworkInfoDTO {
+    private Double hostRxBytesPerSecond;
+    private Double hostTxBytesPerSecond;
     private String hostName;
     private String selectedInterfaceName;
     private String defaultInterfaceName;

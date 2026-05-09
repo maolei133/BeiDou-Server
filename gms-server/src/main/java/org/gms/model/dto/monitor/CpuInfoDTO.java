@@ -10,6 +10,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CpuInfoDTO {
+    private Double hostCpuLoad;
+    private Double gameServerCpuLoad;
     private String osName;
     private String osVersion;
     private String osArch;

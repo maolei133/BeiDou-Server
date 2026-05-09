@@ -74,7 +74,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class ServerMonitorService {
     private static final Logger monitorEventLog = LogManager.getLogger("monitor-event");
-    private static final String DISK_IO_NOTE = "Disk IO rate counters are not available on this platform.";
+    private static final String DISK_IO_NOTE = "当前平台无法采集磁盘 IO 速率。";
     private static final int DEFAULT_HISTORY_MINUTES = 5;
     private static final int MAX_HISTORY_MINUTES = 7 * 24 * 60;
     private static final int SNAPSHOT_INTERVAL_SECONDS = 10;
@@ -166,7 +166,6 @@ public class ServerMonitorService {
 
     @Scheduled(fixedDelay = 10_000L, initialDelay = 2_000L)
     public void emitScheduledSnapshotEvent() {
-        long startedAt = System.currentTimeMillis();
         try {
             ServerMonitorSnapshotDTO snapshot = collectSnapshot();
             CpuMonitorConfigDTO cpuConfig = getCpuMonitorConfig();
@@ -179,21 +178,24 @@ public class ServerMonitorService {
                 emitMonitorEvent("CPU_ANOMALY", point);
             }
             latestSnapshot = snapshot;
-            long costMs = System.currentTimeMillis() - startedAt;
-            if (costMs > 200L) {
-                log.warn("Server monitor snapshot collection took {}ms", costMs);
-            }
         } catch (Exception e) {
-            log.warn("Failed to emit server monitor snapshot event", e);
+            log.warn("服务监控快照事件写入失败", e);
         }
     }
 
     private DiskIoInfoDTO enrichDiskIoWithProcessRate(DiskIoInfoDTO diskIo, SystemMetricsSample.ProcessIoRate processIoRate) {
-        if (diskIo == null || processIoRate == null) {
+        if (diskIo == null) {
+            return null;
+        }
+        diskIo.setHostReadBytesPerSecond(diskIo.getReadBytesPerSecond());
+        diskIo.setHostWriteBytesPerSecond(diskIo.getWriteBytesPerSecond());
+        if (processIoRate == null) {
             return diskIo;
         }
         diskIo.setProcessReadBytesPerSecond(processIoRate.getReadBytesPerSecond());
         diskIo.setProcessWriteBytesPerSecond(processIoRate.getWriteBytesPerSecond());
+        diskIo.setGameServerReadBytesPerSecond(processIoRate.getReadBytesPerSecond());
+        diskIo.setGameServerWriteBytesPerSecond(processIoRate.getWriteBytesPerSecond());
         return diskIo;
     }
 
@@ -325,7 +327,7 @@ public class ServerMonitorService {
             }
             return parseLokiHistoryPoints(response.body());
         } catch (Exception e) {
-            log.warn("Failed to query monitor history from Loki, fallback to memory window: {}", e.getMessage());
+            log.warn("从 Loki 查询监控历史失败，回退到服务端内存窗口：{}", e.getMessage());
             return List.of();
         }
     }
@@ -527,6 +529,8 @@ public class ServerMonitorService {
                 .with("msg", eventType)
                 .with("sampledAt", String.valueOf(point.getSampledAt()))
                 .with("sampledAtIso", String.valueOf(point.getSampledAtIso()))
+                .with("hostCpuLoad", stringValue(point.getSystemCpuLoad()))
+                .with("gameServerCpuLoad", stringValue(point.getProcessCpuLoad()))
                 .with("systemCpuLoad", stringValue(point.getSystemCpuLoad()))
                 .with("processCpuLoad", stringValue(point.getProcessCpuLoad()))
                 .with("systemLoadAverage", stringValue(point.getSystemLoadAverage()))
@@ -537,8 +541,12 @@ public class ServerMonitorService {
                 .with("gcCount", stringValue(point.getGcCount()))
                 .with("gcTimeMs", stringValue(point.getGcTimeMs()))
                 .with("diskUsageMax", stringValue(point.getDiskUsageMax()))
+                .with("hostNetworkRxBytesPerSecond", stringValue(point.getNetworkRxBytesPerSecond()))
+                .with("hostNetworkTxBytesPerSecond", stringValue(point.getNetworkTxBytesPerSecond()))
                 .with("networkRxBytesPerSecond", stringValue(point.getNetworkRxBytesPerSecond()))
                 .with("networkTxBytesPerSecond", stringValue(point.getNetworkTxBytesPerSecond()))
+                .with("hostDiskReadBytesPerSecond", stringValue(point.getDiskReadBytesPerSecond()))
+                .with("hostDiskWriteBytesPerSecond", stringValue(point.getDiskWriteBytesPerSecond()))
                 .with("diskReadBytesPerSecond", stringValue(point.getDiskReadBytesPerSecond()))
                 .with("diskWriteBytesPerSecond", stringValue(point.getDiskWriteBytesPerSecond()))
                 .with("cpuAnomaly", stringValue(point.getCpuAnomaly()))
@@ -634,11 +642,15 @@ public class ServerMonitorService {
                 .systemLoadAverage(normalizeLoad(osBean.getSystemLoadAverage()));
 
         if (osBean instanceof OperatingSystemMXBean extendedOsBean) {
-            builder.processCpuLoad(resolveProcessCpuLoad(extendedOsBean))
-                    .systemCpuLoad(normalizeLoad(extendedOsBean.getCpuLoad()));
+            Double gameServerCpuLoad = resolveProcessCpuLoad(extendedOsBean);
+            builder.processCpuLoad(gameServerCpuLoad)
+                    .gameServerCpuLoad(gameServerCpuLoad)
+                    .systemCpuLoad(normalizeLoad(extendedOsBean.getCpuLoad()))
+                    .hostCpuLoad(normalizeLoad(extendedOsBean.getCpuLoad()));
         }
         if (systemSample.getSystemCpuLoad() != null) {
-            builder.systemCpuLoad(systemSample.getSystemCpuLoad());
+            builder.systemCpuLoad(systemSample.getSystemCpuLoad())
+                    .hostCpuLoad(systemSample.getSystemCpuLoad());
         }
         if (systemSample.getSystemMemory() != null) {
             builder.systemMemory(systemSample.getSystemMemory());
@@ -760,6 +772,8 @@ public class ServerMonitorService {
                 .selectedInterfaceName(resolvedSelectedInterfaceName)
                 .defaultInterfaceName(defaultInterfaceName)
                 .interfaces(interfaces)
+                .hostRxBytesPerSecond(selectedRate != null ? selectedRate.getRxBytesPerSecond() : systemSample.getNetworkRxBytesPerSecond())
+                .hostTxBytesPerSecond(selectedRate != null ? selectedRate.getTxBytesPerSecond() : systemSample.getNetworkTxBytesPerSecond())
                 .rxBytesPerSecond(selectedRate != null ? selectedRate.getRxBytesPerSecond() : systemSample.getNetworkRxBytesPerSecond())
                 .txBytesPerSecond(selectedRate != null ? selectedRate.getTxBytesPerSecond() : systemSample.getNetworkTxBytesPerSecond())
                 .build();

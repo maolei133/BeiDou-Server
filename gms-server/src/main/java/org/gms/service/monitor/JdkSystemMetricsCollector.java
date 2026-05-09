@@ -8,10 +8,10 @@ import java.lang.management.ManagementFactory;
 import java.util.List;
 
 /**
- * Cross-platform JVM-backed metrics collector used on Windows and other non-Linux systems.
+ * 基于 JVM 的跨平台指标采集器，用于 Windows 与其他非 Linux 系统。
  */
 public class JdkSystemMetricsCollector implements SystemMetricsCollector {
-    private static final String DISK_IO_UNAVAILABLE_NOTE = "Disk IO rate counters are not available on this platform.";
+    private static final String DISK_IO_UNAVAILABLE_NOTE = "当前平台无法采集磁盘 IO 速率。";
 
     @Override
     public SystemMetricsSample collect() {
