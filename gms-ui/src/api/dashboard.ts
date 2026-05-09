@@ -73,6 +73,8 @@ export interface MonitorDiskIoInfo {
   writeBytesPerSecond?: number | null;
   readOpsPerSecond?: number | null;
   writeOpsPerSecond?: number | null;
+  processReadBytesPerSecond?: number | null;
+  processWriteBytesPerSecond?: number | null;
 }
 
 export interface MonitorNetworkInterfaceInfo {

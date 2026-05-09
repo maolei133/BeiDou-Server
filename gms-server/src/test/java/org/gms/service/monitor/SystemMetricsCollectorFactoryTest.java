@@ -3,35 +3,23 @@ package org.gms.service.monitor;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class SystemMetricsCollectorFactoryTest {
 
     @Test
     void selectsLinuxProcCollectorOnLinux() {
-        withOsName("Linux", () -> assertInstanceOf(LinuxProcMonitorCollector.class, SystemMetricsCollectorFactory.create()));
+        assertInstanceOf(LinuxProcMonitorCollector.class, SystemMetricsCollectorFactory.create());
+        assertSame(LinuxProcMonitorCollector.class, SystemMetricsCollectorFactory.collectorTypeForOsName("Linux"));
     }
 
     @Test
-    void selectsJdkCollectorOnWindows() {
-        withOsName("Windows Server 2022", () -> assertInstanceOf(JdkSystemMetricsCollector.class, SystemMetricsCollectorFactory.create()));
+    void selectsOshiCollectorOnWindows() {
+        assertSame(OshiSystemMetricsCollector.class, SystemMetricsCollectorFactory.collectorTypeForOsName("Windows Server 2022"));
     }
 
     @Test
-    void selectsJdkCollectorOnOtherSystems() {
-        withOsName("Mac OS X", () -> assertInstanceOf(JdkSystemMetricsCollector.class, SystemMetricsCollectorFactory.create()));
-    }
-
-    private void withOsName(String osName, Runnable assertion) {
-        String previous = System.getProperty("os.name");
-        try {
-            System.setProperty("os.name", osName);
-            assertion.run();
-        } finally {
-            if (previous == null) {
-                System.clearProperty("os.name");
-            } else {
-                System.setProperty("os.name", previous);
-            }
-        }
+    void selectsOshiCollectorOnOtherSystems() {
+        assertSame(OshiSystemMetricsCollector.class, SystemMetricsCollectorFactory.collectorTypeForOsName("Mac OS X"));
     }
 }

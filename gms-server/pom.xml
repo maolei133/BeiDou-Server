@@ -52,6 +52,7 @@
         <!-- 注解：升级 springdoc-openapi 到 2.6.0 以修复潜在漏洞 -->
         <swagger.version>2.8.14</swagger.version>
         <jjwt.version>0.13.0</jjwt.version>
+        <oshi.version>6.6.5</oshi.version>
     </properties>
 
     <dependencyManagement>
@@ -118,6 +119,11 @@
         </dependency>
 
         <!-- Tool -->
+        <dependency>
+            <groupId>com.github.oshi</groupId>
+            <artifactId>oshi-core</artifactId>
+            <version>${oshi.version}</version>
+        </dependency>
         <dependency>
             <groupId>net.jcip</groupId>
             <artifactId>jcip-annotations</artifactId>
