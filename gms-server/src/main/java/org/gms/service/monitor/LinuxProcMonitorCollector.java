@@ -26,6 +26,11 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
 
     @Override
     public synchronized SystemMetricsSample collect() {
+        return collect(null);
+    }
+
+    @Override
+    public synchronized SystemMetricsSample collect(String networkInterfaceName) {
         List<String> warnings = new ArrayList<>();
         SystemMetricsSample sample = new SystemMetricsSample();
 
@@ -63,7 +68,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
                     sample.setSystemCpuLoad(clamp01((double) (totalDelta - idleDelta) / totalDelta));
                 }
             }
-            applyNetworkRates(sample, current.net, previous.net, seconds);
+            applyNetworkRates(sample, current.net, previous.net, seconds, networkInterfaceName);
             applyDiskRates(sample, current.disk, previous.disk, seconds);
         } else {
             warnings.add("Linux /proc rate metrics require two samples; rates will be available on the next request.");
@@ -145,8 +150,10 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
                 }
                 String[] fields = nameAndData[1].trim().split("\\s+");
                 if (fields.length >= 16) {
-                    counters.rxBytes += Long.parseLong(fields[0]);
-                    counters.txBytes += Long.parseLong(fields[8]);
+                    counters.interfaces.put(name, new InterfaceNetCounters(
+                            Long.parseLong(fields[0]),
+                            Long.parseLong(fields[8])
+                    ));
                 }
             }
             return counters;
@@ -184,12 +191,31 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
         return name.startsWith("loop") || name.startsWith("ram") || name.startsWith("fd");
     }
 
-    private void applyNetworkRates(SystemMetricsSample sample, NetCounters current, NetCounters previous, double seconds) {
+    private void applyNetworkRates(SystemMetricsSample sample, NetCounters current, NetCounters previous, double seconds, String networkInterfaceName) {
         if (current == null || previous == null) {
             return;
         }
-        sample.setNetworkRxBytesPerSecond(rate(current.rxBytes, previous.rxBytes, seconds));
-        sample.setNetworkTxBytesPerSecond(rate(current.txBytes, previous.txBytes, seconds));
+        Map<String, SystemMetricsSample.NetworkRate> rates = new HashMap<>();
+        current.interfaces.forEach((name, currentCounters) -> {
+            InterfaceNetCounters previousCounters = previous.interfaces.get(name);
+            if (previousCounters != null) {
+                rates.put(name, new SystemMetricsSample.NetworkRate(
+                        rate(currentCounters.rxBytes, previousCounters.rxBytes, seconds),
+                        rate(currentCounters.txBytes, previousCounters.txBytes, seconds)
+                ));
+            }
+        });
+        sample.setNetworkRates(rates);
+
+        String selectedName = firstNonBlank(networkInterfaceName, rates.keySet().stream().findFirst().orElse(null));
+        SystemMetricsSample.NetworkRate selectedRate = selectedName == null ? null : rates.get(selectedName);
+        if (selectedRate == null && !rates.isEmpty()) {
+            selectedRate = rates.values().iterator().next();
+        }
+        if (selectedRate != null) {
+            sample.setNetworkRxBytesPerSecond(selectedRate.getRxBytesPerSecond());
+            sample.setNetworkTxBytesPerSecond(selectedRate.getTxBytesPerSecond());
+        }
     }
 
     private void applyDiskRates(SystemMetricsSample sample, DiskCounters current, DiskCounters previous, double seconds) {
@@ -215,6 +241,15 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
             return null;
         }
         return delta / seconds;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private long parseLong(String[] parts, int index) {
@@ -246,10 +281,21 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
 
     private record CpuCounters(long total, long idle) {}
 
-    private static class NetCounters {
-        private long rxBytes;
-        private long txBytes;
+    SystemMetricsSample applyNetworkRatesForTest(NetCounters current, NetCounters previous, String networkInterfaceName, double seconds) {
+        SystemMetricsSample sample = new SystemMetricsSample();
+        applyNetworkRates(sample, current, previous, seconds, networkInterfaceName);
+        return sample;
     }
+
+    static class NetCounters {
+        private final Map<String, InterfaceNetCounters> interfaces = new HashMap<>();
+
+        void put(String name, long rxBytes, long txBytes) {
+            interfaces.put(name, new InterfaceNetCounters(rxBytes, txBytes));
+        }
+    }
+
+    private record InterfaceNetCounters(long rxBytes, long txBytes) {}
 
     private static class DiskCounters {
         private long readBytes;

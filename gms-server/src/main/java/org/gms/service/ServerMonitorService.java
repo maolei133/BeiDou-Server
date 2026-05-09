@@ -43,9 +43,13 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryUsage;
 import java.lang.management.RuntimeMXBean;
 import java.lang.management.ThreadMXBean;
+import java.net.DatagramSocket;
 import java.net.HttpURLConnection;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.net.Socket;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -61,7 +65,9 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -76,6 +82,12 @@ public class ServerMonitorService {
     private static final String CPU_MON_CONFIG_SUB_TYPE = "monitor";
     private static final String CPU_MON_CONFIG_CODE = "cpu_mon";
     private static final String CPU_MON_CONFIG_DESC = "CPU 监控阈值配置";
+    private static final List<InetSocketAddress> INTERNET_PROBES = List.of(
+            new InetSocketAddress("8.8.8.8", 53),
+            new InetSocketAddress("1.1.1.1", 53),
+            new InetSocketAddress("223.5.5.5", 53)
+    );
+    private static final long NETWORK_REACHABLE_CACHE_MS = 60_000L;
 
     private final Environment environment;
     private final ObjectMapper objectMapper;
@@ -88,6 +100,7 @@ public class ServerMonitorService {
             .connectTimeout(Duration.ofSeconds(5))
             .build();
     private final List<ServerMonitorHistoryPointDTO> recentHistory = new ArrayList<>();
+    private final Map<String, ReachabilityCacheEntry> networkReachabilityCache = new ConcurrentHashMap<>();
     private volatile ServerMonitorSnapshotDTO latestSnapshot;
 
     public ServerMonitorService(Environment environment, ObjectMapper objectMapper, ConfigService configService) {
@@ -97,6 +110,13 @@ public class ServerMonitorService {
     }
 
     public ServerMonitorSnapshotDTO getSnapshot() {
+        return getSnapshot(null);
+    }
+
+    public ServerMonitorSnapshotDTO getSnapshot(String networkInterfaceName) {
+        if (networkInterfaceName != null && !networkInterfaceName.isBlank()) {
+            return collectSnapshot(networkInterfaceName);
+        }
         ServerMonitorSnapshotDTO snapshot = latestSnapshot;
         if (snapshot != null) {
             return snapshot;
@@ -107,10 +127,16 @@ public class ServerMonitorService {
     }
 
     public synchronized ServerMonitorSnapshotDTO collectSnapshot() {
+        return collectSnapshot(null);
+    }
+
+    public synchronized ServerMonitorSnapshotDTO collectSnapshot(String networkInterfaceName) {
         long sampledAt = System.currentTimeMillis();
         RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
         List<String> warnings = new ArrayList<>();
-        SystemMetricsSample systemSample = systemMetricsCollector.collect();
+        String defaultInterfaceName = resolveDefaultNetworkInterfaceName();
+        String selectedInterfaceName = firstNonBlank(networkInterfaceName, defaultInterfaceName);
+        SystemMetricsSample systemSample = systemMetricsCollector.collect(selectedInterfaceName);
         warnings.addAll(systemSample.getWarnings());
         ContainerInfoDTO containerInfo = containerInfoCollector.detect(warnings);
 
@@ -130,7 +156,7 @@ public class ServerMonitorService {
                         .available(false)
                         .note(DISK_IO_NOTE)
                         .build())
-                .network(buildNetworkInfo(systemSample))
+                .network(buildNetworkInfo(systemSample, selectedInterfaceName, defaultInterfaceName))
                 .container(containerInfo)
                 .build();
     }
@@ -698,13 +724,51 @@ public class ServerMonitorService {
         return disks;
     }
 
-    private NetworkInfoDTO buildNetworkInfo(SystemMetricsSample systemSample) {
+    private NetworkInfoDTO buildNetworkInfo(SystemMetricsSample systemSample, String selectedInterfaceName, String defaultInterfaceName) {
+        List<NetworkInterfaceInfoDTO> interfaces = resolveNetworkInterfaces(defaultInterfaceName);
+        String resolvedSelectedInterfaceName = resolveSelectedNetworkInterfaceName(interfaces, selectedInterfaceName, defaultInterfaceName);
+        SystemMetricsSample.NetworkRate selectedRate = findNetworkRate(systemSample.getNetworkRates(), resolvedSelectedInterfaceName);
         return NetworkInfoDTO.builder()
                 .hostName(resolveHostName())
-                .interfaces(resolveNetworkInterfaces())
-                .rxBytesPerSecond(systemSample.getNetworkRxBytesPerSecond())
-                .txBytesPerSecond(systemSample.getNetworkTxBytesPerSecond())
+                .selectedInterfaceName(resolvedSelectedInterfaceName)
+                .defaultInterfaceName(defaultInterfaceName)
+                .interfaces(interfaces)
+                .rxBytesPerSecond(selectedRate != null ? selectedRate.getRxBytesPerSecond() : systemSample.getNetworkRxBytesPerSecond())
+                .txBytesPerSecond(selectedRate != null ? selectedRate.getTxBytesPerSecond() : systemSample.getNetworkTxBytesPerSecond())
                 .build();
+    }
+
+    private String resolveSelectedNetworkInterfaceName(List<NetworkInterfaceInfoDTO> interfaces, String requestedInterfaceName, String defaultInterfaceName) {
+        if (interfaces == null || interfaces.isEmpty()) {
+            return null;
+        }
+        if (requestedInterfaceName != null && !requestedInterfaceName.isBlank()
+                && interfaces.stream().anyMatch(item -> Objects.equals(item.getName(), requestedInterfaceName))) {
+            return requestedInterfaceName;
+        }
+        if (defaultInterfaceName != null && interfaces.stream().anyMatch(item -> Objects.equals(item.getName(), defaultInterfaceName))) {
+            return defaultInterfaceName;
+        }
+        return interfaces.stream()
+                .filter(item -> Boolean.TRUE.equals(item.getDefaultInterface()))
+                .map(NetworkInterfaceInfoDTO::getName)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElseGet(() -> interfaces.stream()
+                        .map(NetworkInterfaceInfoDTO::getName)
+                        .filter(Objects::nonNull)
+                        .findFirst()
+                        .orElse(null));
+    }
+
+    private SystemMetricsSample.NetworkRate findNetworkRate(Map<String, SystemMetricsSample.NetworkRate> rates, String interfaceName) {
+        if (rates == null || rates.isEmpty()) {
+            return null;
+        }
+        if (interfaceName != null) {
+            return rates.get(interfaceName);
+        }
+        return rates.values().iterator().next();
     }
 
     private String resolveHostName() {
@@ -715,7 +779,7 @@ public class ServerMonitorService {
         }
     }
 
-    private List<NetworkInterfaceInfoDTO> resolveNetworkInterfaces() {
+    private List<NetworkInterfaceInfoDTO> resolveNetworkInterfaces(String defaultInterfaceName) {
         List<NetworkInterfaceInfoDTO> result = new ArrayList<>();
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
@@ -724,22 +788,130 @@ public class ServerMonitorService {
             }
             while (interfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = interfaces.nextElement();
+                if (!isInternetCandidate(networkInterface)) {
+                    continue;
+                }
+                List<String> addresses = networkInterface.inetAddresses()
+                        .map(InetAddress::getHostAddress)
+                        .toList();
+                String primaryAddress = addresses.stream().findFirst().orElse(null);
                 result.add(NetworkInterfaceInfoDTO.builder()
                         .name(networkInterface.getName())
                         .displayName(networkInterface.getDisplayName())
                         .up(networkInterface.isUp())
                         .loopback(networkInterface.isLoopback())
                         .virtual(networkInterface.isVirtual())
+                        .internetReachable(true)
+                        .defaultInterface(Objects.equals(networkInterface.getName(), defaultInterfaceName))
                         .mtu(networkInterface.getMTU())
-                        .addresses(networkInterface.inetAddresses()
-                                .map(InetAddress::getHostAddress)
-                                .toList())
+                        .primaryAddress(primaryAddress)
+                        .addresses(addresses)
                         .build());
             }
         } catch (Exception e) {
             return result;
         }
         return result;
+    }
+
+    private boolean isInternetCandidate(NetworkInterface networkInterface) {
+        try {
+            if (!networkInterface.isUp() || networkInterface.isLoopback() || networkInterface.isVirtual()) {
+                return false;
+            }
+            String name = networkInterface.getName();
+            if (name != null) {
+                String lowerName = name.toLowerCase(Locale.ROOT);
+                if (lowerName.equals("lo") || lowerName.startsWith("docker") || lowerName.startsWith("br-")
+                        || lowerName.startsWith("veth") || lowerName.startsWith("virbr")
+                        || lowerName.startsWith("tun") || lowerName.startsWith("tap")) {
+                    return false;
+                }
+            }
+            if (!hasUsableIpv4(networkInterface)) {
+                return false;
+            }
+            return canReachInternet(networkInterface);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean hasUsableIpv4(NetworkInterface networkInterface) {
+        return networkInterface.inetAddresses()
+                .anyMatch(address -> address instanceof Inet4Address
+                        && !address.isAnyLocalAddress()
+                        && !address.isLoopbackAddress()
+                        && !address.isLinkLocalAddress()
+                        && !address.isMulticastAddress());
+    }
+
+    private boolean canReachInternet(NetworkInterface networkInterface) {
+        String cacheKey = networkInterface.getName();
+        long now = System.currentTimeMillis();
+        ReachabilityCacheEntry cached = networkReachabilityCache.get(cacheKey);
+        if (cached != null && now - cached.checkedAtMs() < NETWORK_REACHABLE_CACHE_MS) {
+            return cached.reachable();
+        }
+        boolean reachable = networkInterface.inetAddresses()
+                .filter(address -> address instanceof Inet4Address
+                        && !address.isAnyLocalAddress()
+                        && !address.isLoopbackAddress()
+                        && !address.isLinkLocalAddress()
+                        && !address.isMulticastAddress())
+                .anyMatch(this::canReachInternetFromAddress);
+        networkReachabilityCache.put(cacheKey, new ReachabilityCacheEntry(reachable, now));
+        return reachable;
+    }
+
+    private boolean canReachInternetFromAddress(InetAddress localAddress) {
+        for (InetSocketAddress target : INTERNET_PROBES) {
+            try (Socket socket = new Socket()) {
+                socket.bind(new InetSocketAddress(localAddress, 0));
+                socket.connect(target, 300);
+                return true;
+            } catch (Exception ignored) {
+                // Try next public probe target.
+            }
+        }
+        return false;
+    }
+
+    private String resolveDefaultNetworkInterfaceName() {
+        for (InetSocketAddress target : INTERNET_PROBES) {
+            try (DatagramSocket socket = new DatagramSocket()) {
+                socket.connect(target);
+                InetAddress localAddress = socket.getLocalAddress();
+                if (localAddress == null || localAddress.isAnyLocalAddress()) {
+                    continue;
+                }
+                NetworkInterface networkInterface = NetworkInterface.getByInetAddress(localAddress);
+                if (networkInterface != null && isInternetCandidate(networkInterface)) {
+                    return networkInterface.getName();
+                }
+            } catch (Exception ignored) {
+                // Try next probe target.
+            }
+        }
+        return firstInternetCandidateName();
+    }
+
+    private String firstInternetCandidateName() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            if (interfaces == null) {
+                return null;
+            }
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = interfaces.nextElement();
+                if (isInternetCandidate(networkInterface)) {
+                    return networkInterface.getName();
+                }
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
     }
 
     private String resolveEnvironment() {
@@ -783,6 +955,8 @@ public class ServerMonitorService {
     private Double normalizeLoad(double value) {
         return value >= 0 ? value : null;
     }
+
+    private record ReachabilityCacheEntry(boolean reachable, long checkedAtMs) {}
 }
 
 

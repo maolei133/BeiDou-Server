@@ -25,8 +25,9 @@ public class ServerMonitorController {
     @Tag(name = "/server/" + ApiConstant.LATEST + "/monitor")
     @Operation(summary = "获取服务器监控快照")
     @GetMapping("/" + ApiConstant.LATEST + "/monitor/snapshot")
-    public ResultBody<ServerMonitorSnapshotDTO> getSnapshot() {
-        return ResultBody.success(serverMonitorService.getSnapshot());
+    public ResultBody<ServerMonitorSnapshotDTO> getSnapshot(
+            @RequestParam(value = "interfaceName", required = false) String interfaceName) {
+        return ResultBody.success(serverMonitorService.getSnapshot(interfaceName));
     }
 
     @Tag(name = "/server/" + ApiConstant.LATEST + "/monitor")
