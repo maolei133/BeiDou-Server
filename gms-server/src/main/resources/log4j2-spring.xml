@@ -16,6 +16,14 @@
         <Console name="Console" target="SYSTEM_OUT" follow="true">
             <PatternLayout pattern="${CONSOLE_LOG_PATTERN}"/>
         </Console>
+        <!-- Monitor events: JSON lines intended for Loki/Promtail; file-only to keep periodic samples out of the console. -->
+        <RollingFile name="MonitorEventLog" fileName="logs/audit/monitor.json"
+                     filePattern="logs/audit/monitor-%d{yyyy-MM-dd}.json.gz">
+            <PatternLayout pattern="%m%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+            </Policies>
+        </RollingFile>
     </Appenders>
     
     <Loggers>
@@ -25,8 +33,10 @@
         <!-- 关闭 flyway 日志输出 -->
         <Logger name="org.flywaydb" level="ERROR"/>
 
-        <!-- Monitor events: JSON lines intended for Loki/Promtail. Keep additivity=true so Docker/Linux stdout collectors can ingest it before dedicated log-query support lands. -->
-        <Logger name="monitor-event" level="INFO" additivity="true"/>
+        <!-- Monitor events: JSON lines intended for Loki/Promtail; file-only to keep periodic samples out of the console. -->
+        <Logger name="monitor-event" level="INFO" additivity="false">
+            <AppenderRef ref="MonitorEventLog"/>
+        </Logger>
 
         <Root level="INFO">
             <AppenderRef ref="Console"/>

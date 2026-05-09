@@ -15,7 +15,7 @@ import java.util.Map;
  * Lightweight Linux /proc collector. It never throws to callers: unsupported platforms,
  * missing procfs files and parse/read failures are reported as warnings on the sample.
  */
-public class LinuxProcMonitorCollector {
+public class LinuxProcMonitorCollector implements SystemMetricsCollector {
     private static final Path PROC_STAT = Path.of("/proc/stat");
     private static final Path PROC_MEMINFO = Path.of("/proc/meminfo");
     private static final Path PROC_NET_DEV = Path.of("/proc/net/dev");
@@ -24,9 +24,10 @@ public class LinuxProcMonitorCollector {
 
     private ProcCounters previous;
 
-    public synchronized ProcSample collect() {
+    @Override
+    public synchronized SystemMetricsSample collect() {
         List<String> warnings = new ArrayList<>();
-        ProcSample sample = new ProcSample();
+        SystemMetricsSample sample = new SystemMetricsSample();
 
         if (!isLinux()) {
             warnings.add("Linux /proc metrics are unavailable on this operating system.");
@@ -183,7 +184,7 @@ public class LinuxProcMonitorCollector {
         return name.startsWith("loop") || name.startsWith("ram") || name.startsWith("fd");
     }
 
-    private void applyNetworkRates(ProcSample sample, NetCounters current, NetCounters previous, double seconds) {
+    private void applyNetworkRates(SystemMetricsSample sample, NetCounters current, NetCounters previous, double seconds) {
         if (current == null || previous == null) {
             return;
         }
@@ -191,11 +192,11 @@ public class LinuxProcMonitorCollector {
         sample.setNetworkTxBytesPerSecond(rate(current.txBytes, previous.txBytes, seconds));
     }
 
-    private void applyDiskRates(ProcSample sample, DiskCounters current, DiskCounters previous, double seconds) {
+    private void applyDiskRates(SystemMetricsSample sample, DiskCounters current, DiskCounters previous, double seconds) {
         if (current == null || previous == null) {
             sample.setDiskIo(DiskIoInfoDTO.builder()
                     .available(false)
-                    .note("Linux /proc diskstats are unavailable.")
+                    .note("Disk IO rate counters require two samples; rates will be available on the next request.")
                     .build());
             return;
         }
@@ -229,31 +230,6 @@ public class LinuxProcMonitorCollector {
 
     private double clamp01(double value) {
         return Math.max(0D, Math.min(1D, value));
-    }
-
-    public static class ProcSample {
-        private boolean partial;
-        private List<String> warnings = List.of();
-        private Double systemCpuLoad;
-        private MemoryInfoDTO systemMemory;
-        private Double networkRxBytesPerSecond;
-        private Double networkTxBytesPerSecond;
-        private DiskIoInfoDTO diskIo;
-
-        public boolean isPartial() { return partial; }
-        public void setPartial(boolean partial) { this.partial = partial; }
-        public List<String> getWarnings() { return warnings; }
-        public void setWarnings(List<String> warnings) { this.warnings = warnings; }
-        public Double getSystemCpuLoad() { return systemCpuLoad; }
-        public void setSystemCpuLoad(Double systemCpuLoad) { this.systemCpuLoad = systemCpuLoad; }
-        public MemoryInfoDTO getSystemMemory() { return systemMemory; }
-        public void setSystemMemory(MemoryInfoDTO systemMemory) { this.systemMemory = systemMemory; }
-        public Double getNetworkRxBytesPerSecond() { return networkRxBytesPerSecond; }
-        public void setNetworkRxBytesPerSecond(Double networkRxBytesPerSecond) { this.networkRxBytesPerSecond = networkRxBytesPerSecond; }
-        public Double getNetworkTxBytesPerSecond() { return networkTxBytesPerSecond; }
-        public void setNetworkTxBytesPerSecond(Double networkTxBytesPerSecond) { this.networkTxBytesPerSecond = networkTxBytesPerSecond; }
-        public DiskIoInfoDTO getDiskIo() { return diskIo; }
-        public void setDiskIo(DiskIoInfoDTO diskIo) { this.diskIo = diskIo; }
     }
 
     private static class ProcCounters {

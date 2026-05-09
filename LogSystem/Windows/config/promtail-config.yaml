@@ -24,6 +24,19 @@ scrape_configs:
             mod: mod
             act: act
             msg: msg
+            eventType: eventType
+            sampledAt: sampledAt
+            sampledAtIso: sampledAtIso
+            systemCpuLoad: systemCpuLoad
+            processCpuLoad: processCpuLoad
+            systemMemoryUsage: systemMemoryUsage
+            jvmHeapUsage: jvmHeapUsage
+            networkRxBytesPerSecond: networkRxBytesPerSecond
+            networkTxBytesPerSecond: networkTxBytesPerSecond
+            diskReadBytesPerSecond: diskReadBytesPerSecond
+            diskWriteBytesPerSecond: diskWriteBytesPerSecond
+            cpuAnomaly: cpuAnomaly
+            cpuAnomalyLevel: cpuAnomalyLevel
             chr: chr
             cid: cid
             acc: acc
@@ -41,6 +54,9 @@ scrape_configs:
       - labels:
           mod:
           act:
+          eventType:
+          cpuAnomaly:
+          cpuAnomalyLevel:
           jobName:
           mapName:
       - timestamp:

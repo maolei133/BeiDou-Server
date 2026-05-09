@@ -26,10 +26,12 @@ import org.gms.model.dto.monitor.ServerMonitorHistoryDTO;
 import org.gms.model.dto.monitor.ServerMonitorHistoryPointDTO;
 import org.gms.model.dto.monitor.ServerMonitorSnapshotDTO;
 import org.gms.net.server.Server;
-import org.gms.server.logging.AuditLogger;
-import org.gms.service.monitor.ContainerRuntimeDetector;
+import org.gms.service.monitor.ContainerInfoCollector;
+import org.gms.service.monitor.ContainerInfoCollectorFactory;
 import org.gms.service.monitor.CpuAnomalyDetector;
-import org.gms.service.monitor.LinuxProcMonitorCollector;
+import org.gms.service.monitor.SystemMetricsCollector;
+import org.gms.service.monitor.SystemMetricsCollectorFactory;
+import org.gms.service.monitor.SystemMetricsSample;
 import org.apache.logging.log4j.message.MapMessage;
 import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -65,7 +67,7 @@ import java.util.Objects;
 @Service
 public class ServerMonitorService {
     private static final Logger monitorEventLog = LogManager.getLogger("monitor-event");
-    private static final String DISK_IO_NOTE = "Disk IO rate counters require Linux /proc/diskstats and two samples.";
+    private static final String DISK_IO_NOTE = "Disk IO rate counters are not available on this platform.";
     private static final int DEFAULT_HISTORY_MINUTES = 5;
     private static final int MAX_HISTORY_MINUTES = 7 * 24 * 60;
     private static final int SNAPSHOT_INTERVAL_SECONDS = 10;
@@ -78,8 +80,8 @@ public class ServerMonitorService {
     private final Environment environment;
     private final ObjectMapper objectMapper;
     private final ConfigService configService;
-    private final LinuxProcMonitorCollector procCollector = new LinuxProcMonitorCollector();
-    private final ContainerRuntimeDetector containerRuntimeDetector = new ContainerRuntimeDetector();
+    private final SystemMetricsCollector systemMetricsCollector = SystemMetricsCollectorFactory.create();
+    private final ContainerInfoCollector containerInfoCollector = ContainerInfoCollectorFactory.create();
     private final CpuAnomalyDetector cpuAnomalyDetector = new CpuAnomalyDetector();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
@@ -108,27 +110,27 @@ public class ServerMonitorService {
         long sampledAt = System.currentTimeMillis();
         RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
         List<String> warnings = new ArrayList<>();
-        LinuxProcMonitorCollector.ProcSample procSample = procCollector.collect();
-        warnings.addAll(procSample.getWarnings());
-        ContainerInfoDTO containerInfo = containerRuntimeDetector.detect(warnings);
+        SystemMetricsSample systemSample = systemMetricsCollector.collect();
+        warnings.addAll(systemSample.getWarnings());
+        ContainerInfoDTO containerInfo = containerInfoCollector.detect(warnings);
 
         return ServerMonitorSnapshotDTO.builder()
                 .sample(SampleInfoDTO.builder()
                         .sampledAt(sampledAt)
                         .sampledAtIso(Instant.ofEpochMilli(sampledAt).toString())
-                        .partial(procSample.isPartial() || !warnings.isEmpty())
+                        .partial(systemSample.isPartial() || !warnings.isEmpty())
                         .warnings(warnings)
                         .build())
                 .server(buildServerInfo())
                 .runtime(buildRuntimeInfo(runtimeMXBean))
-                .cpu(buildCpuInfo(procSample))
+                .cpu(buildCpuInfo(systemSample))
                 .jvm(buildJvmInfo())
                 .disks(buildDiskInfo())
-                .diskIo(procSample.getDiskIo() != null ? procSample.getDiskIo() : DiskIoInfoDTO.builder()
+                .diskIo(systemSample.getDiskIo() != null ? systemSample.getDiskIo() : DiskIoInfoDTO.builder()
                         .available(false)
                         .note(DISK_IO_NOTE)
                         .build())
-                .network(buildNetworkInfo(procSample))
+                .network(buildNetworkInfo(systemSample))
                 .container(containerInfo)
                 .build();
     }
@@ -481,6 +483,9 @@ public class ServerMonitorService {
 
     private void emitMonitorEvent(String eventType, ServerMonitorHistoryPointDTO point) {
         MapMessage data = new MapMessage()
+                .with("ts", stringValue(System.currentTimeMillis()))
+                .with("mod", "MONITOR")
+                .with("act", eventType)
                 .with("eventType", eventType)
                 .with("msg", eventType)
                 .with("sampledAt", String.valueOf(point.getSampledAt()))
@@ -507,25 +512,12 @@ public class ServerMonitorService {
         if (point.getCpuAnomalyBaseline() != null) data.with("cpuAnomalyBaseline", stringValue(point.getCpuAnomalyBaseline()));
         String json = writeJson(data.getData());
         if (json != null) {
-            writeMonitorEventLog(eventType, point.getCpuAnomalyLevel(), json);
-        }
-        if ("CPU_ANOMALY".equals(eventType) && "ERROR".equalsIgnoreCase(point.getCpuAnomalyLevel())) {
-            AuditLogger.error("MONITOR", eventType, data, null);
-        } else {
-            AuditLogger.info("MONITOR", eventType, data);
+            writeMonitorEventLog(json);
         }
     }
 
-    private void writeMonitorEventLog(String eventType, String level, String json) {
-        if (!"CPU_ANOMALY".equals(eventType)) {
-            monitorEventLog.info(json);
-            return;
-        }
-        if ("ERROR".equalsIgnoreCase(level)) {
-            monitorEventLog.error(json);
-            return;
-        }
-        monitorEventLog.warn(json);
+    private void writeMonitorEventLog(String json) {
+        monitorEventLog.info(json);
     }
 
     private String stringValue(Object value) {
@@ -594,7 +586,7 @@ public class ServerMonitorService {
                 .build();
     }
 
-    private CpuInfoDTO buildCpuInfo(LinuxProcMonitorCollector.ProcSample procSample) {
+    private CpuInfoDTO buildCpuInfo(SystemMetricsSample systemSample) {
         java.lang.management.OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
         CpuInfoDTO.CpuInfoDTOBuilder builder = CpuInfoDTO.builder()
                 .osName(System.getProperty("os.name"))
@@ -608,11 +600,11 @@ public class ServerMonitorService {
             builder.processCpuLoad(normalizeLoad(extendedOsBean.getProcessCpuLoad()))
                     .systemCpuLoad(normalizeLoad(extendedOsBean.getCpuLoad()));
         }
-        if (procSample.getSystemCpuLoad() != null) {
-            builder.systemCpuLoad(procSample.getSystemCpuLoad());
+        if (systemSample.getSystemCpuLoad() != null) {
+            builder.systemCpuLoad(systemSample.getSystemCpuLoad());
         }
-        if (procSample.getSystemMemory() != null) {
-            builder.systemMemory(procSample.getSystemMemory());
+        if (systemSample.getSystemMemory() != null) {
+            builder.systemMemory(systemSample.getSystemMemory());
         }
         return builder.build();
     }
@@ -706,12 +698,12 @@ public class ServerMonitorService {
         return disks;
     }
 
-    private NetworkInfoDTO buildNetworkInfo(LinuxProcMonitorCollector.ProcSample procSample) {
+    private NetworkInfoDTO buildNetworkInfo(SystemMetricsSample systemSample) {
         return NetworkInfoDTO.builder()
                 .hostName(resolveHostName())
                 .interfaces(resolveNetworkInterfaces())
-                .rxBytesPerSecond(procSample.getNetworkRxBytesPerSecond())
-                .txBytesPerSecond(procSample.getNetworkTxBytesPerSecond())
+                .rxBytesPerSecond(systemSample.getNetworkRxBytesPerSecond())
+                .txBytesPerSecond(systemSample.getNetworkTxBytesPerSecond())
                 .build();
     }
 
