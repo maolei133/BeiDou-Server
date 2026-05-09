@@ -29,6 +29,7 @@ import org.gms.net.server.Server;
 import org.gms.service.monitor.ContainerInfoCollector;
 import org.gms.service.monitor.ContainerInfoCollectorFactory;
 import org.gms.service.monitor.CpuAnomalyDetector;
+import org.gms.service.monitor.OshiSystemMetricsCollector;
 import org.gms.service.monitor.SystemMetricsCollector;
 import org.gms.service.monitor.SystemMetricsCollectorFactory;
 import org.gms.service.monitor.SystemMetricsSample;
@@ -138,7 +139,11 @@ public class ServerMonitorService {
         String selectedInterfaceName = firstNonBlank(networkInterfaceName, defaultInterfaceName);
         SystemMetricsSample systemSample = systemMetricsCollector.collect(selectedInterfaceName);
         warnings.addAll(systemSample.getWarnings());
-        ContainerInfoDTO containerInfo = containerInfoCollector.detect(warnings);
+        SystemMetricsSample.ProcessIoRate processIoRate = systemSample.getProcessIoRate();
+        DiskIoInfoDTO diskIo = systemSample.getDiskIo() != null ? systemSample.getDiskIo() : DiskIoInfoDTO.builder()
+                .available(false)
+                .note(DISK_IO_NOTE)
+                .build();
 
         return ServerMonitorSnapshotDTO.builder()
                 .sample(SampleInfoDTO.builder()
@@ -152,12 +157,9 @@ public class ServerMonitorService {
                 .cpu(buildCpuInfo(systemSample))
                 .jvm(buildJvmInfo())
                 .disks(buildDiskInfo())
-                .diskIo(systemSample.getDiskIo() != null ? systemSample.getDiskIo() : DiskIoInfoDTO.builder()
-                        .available(false)
-                        .note(DISK_IO_NOTE)
-                        .build())
+                .diskIo(enrichDiskIoWithProcessRate(diskIo, processIoRate))
                 .network(buildNetworkInfo(systemSample, selectedInterfaceName, defaultInterfaceName))
-                .container(containerInfo)
+                .container(containerInfoCollector.detect(warnings))
                 .build();
     }
 
@@ -184,6 +186,15 @@ public class ServerMonitorService {
         } catch (Exception e) {
             log.warn("Failed to emit server monitor snapshot event", e);
         }
+    }
+
+    private DiskIoInfoDTO enrichDiskIoWithProcessRate(DiskIoInfoDTO diskIo, SystemMetricsSample.ProcessIoRate processIoRate) {
+        if (diskIo == null || processIoRate == null) {
+            return diskIo;
+        }
+        diskIo.setProcessReadBytesPerSecond(processIoRate.getReadBytesPerSecond());
+        diskIo.setProcessWriteBytesPerSecond(processIoRate.getWriteBytesPerSecond());
+        return diskIo;
     }
 
     public CpuMonitorConfigDTO getCpuMonitorConfig() {
@@ -623,7 +634,7 @@ public class ServerMonitorService {
                 .systemLoadAverage(normalizeLoad(osBean.getSystemLoadAverage()));
 
         if (osBean instanceof OperatingSystemMXBean extendedOsBean) {
-            builder.processCpuLoad(normalizeLoad(extendedOsBean.getProcessCpuLoad()))
+            builder.processCpuLoad(resolveProcessCpuLoad(extendedOsBean))
                     .systemCpuLoad(normalizeLoad(extendedOsBean.getCpuLoad()));
         }
         if (systemSample.getSystemCpuLoad() != null) {
@@ -636,7 +647,23 @@ public class ServerMonitorService {
     }
 
 
+    private Double resolveProcessCpuLoad(OperatingSystemMXBean osBean) {
+        if (systemMetricsCollector instanceof OshiSystemMetricsCollector oshiCollector) {
+            Double processCpuLoad = oshiCollector.getProcessCpuLoad();
+            if (processCpuLoad != null) {
+                return processCpuLoad;
+            }
+        }
+        return normalizeLoad(osBean.getProcessCpuLoad());
+    }
+
     private String resolveProcessorModel() {
+        if (systemMetricsCollector instanceof OshiSystemMetricsCollector oshiCollector) {
+            String model = oshiCollector.getProcessorModel();
+            if (model != null) {
+                return model;
+            }
+        }
         String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         if (!osName.contains("linux")) {
             return null;

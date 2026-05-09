@@ -15,6 +15,7 @@ public class SystemMetricsSample {
     private Double networkTxBytesPerSecond;
     private Map<String, NetworkRate> networkRates;
     private DiskIoInfoDTO diskIo;
+    private ProcessIoRate processIoRate;
 
     public boolean isPartial() { return partial; }
     public void setPartial(boolean partial) { this.partial = partial; }
@@ -32,6 +33,8 @@ public class SystemMetricsSample {
     public void setNetworkRates(Map<String, NetworkRate> networkRates) { this.networkRates = networkRates; }
     public DiskIoInfoDTO getDiskIo() { return diskIo; }
     public void setDiskIo(DiskIoInfoDTO diskIo) { this.diskIo = diskIo; }
+    public ProcessIoRate getProcessIoRate() { return processIoRate; }
+    public void setProcessIoRate(ProcessIoRate processIoRate) { this.processIoRate = processIoRate; }
 
     public static class NetworkRate {
         private final Double rxBytesPerSecond;
@@ -44,5 +47,18 @@ public class SystemMetricsSample {
 
         public Double getRxBytesPerSecond() { return rxBytesPerSecond; }
         public Double getTxBytesPerSecond() { return txBytesPerSecond; }
+    }
+
+    public static class ProcessIoRate {
+        private final Double readBytesPerSecond;
+        private final Double writeBytesPerSecond;
+
+        public ProcessIoRate(Double readBytesPerSecond, Double writeBytesPerSecond) {
+            this.readBytesPerSecond = readBytesPerSecond;
+            this.writeBytesPerSecond = writeBytesPerSecond;
+        }
+
+        public Double getReadBytesPerSecond() { return readBytesPerSecond; }
+        public Double getWriteBytesPerSecond() { return writeBytesPerSecond; }
     }
 }

@@ -16,4 +16,6 @@ public class DiskIoInfoDTO {
     private Double writeBytesPerSecond;
     private Double readOpsPerSecond;
     private Double writeOpsPerSecond;
+    private Double processReadBytesPerSecond;
+    private Double processWriteBytesPerSecond;
 }
