@@ -272,8 +272,7 @@
                   :options="networkInterfaceOptions"
                   :disabled="!networkInterfaceOptions.length"
                   style="width: 168px"
-                /></div
-              >
+              /></div>
               <div class="io-groups">
                 <div class="io-group">
                   <div class="io-group-title">{{
@@ -944,16 +943,18 @@
     () => monitorSnapshot.value?.network?.interfaces || []
   );
   const networkInterfaceOptions = computed(() =>
-    networkInterfaces.value.map((item) => {
-      const name = item.name || item.displayName || '-';
-      const address = item.primaryAddress || item.addresses?.[0];
-      return {
-        label: `${name}${item.defaultInterface ? '（默认）' : ''}${
-          address ? ` · ${address}` : ''
-        }`,
-        value: item.name || '',
-      };
-    }).filter((item) => item.value)
+    networkInterfaces.value
+      .map((item) => {
+        const name = item.name || item.displayName || '-';
+        const address = item.primaryAddress || item.addresses?.[0];
+        return {
+          label: `${name}${item.defaultInterface ? '（默认）' : ''}${
+            address ? ` · ${address}` : ''
+          }`,
+          value: item.name || '',
+        };
+      })
+      .filter((item) => item.value)
   );
   const networkInterfacesText = computed(() => {
     const names = networkInterfaces.value
@@ -1272,7 +1273,8 @@
       const defaultInterfaceName =
         data?.network?.selectedInterfaceName ||
         data?.network?.defaultInterfaceName ||
-        data?.network?.interfaces?.find((item) => item.defaultInterface)?.name ||
+        data?.network?.interfaces?.find((item) => item.defaultInterface)
+          ?.name ||
         data?.network?.interfaces?.[0]?.name;
       if (!selectedNetworkInterface.value && defaultInterfaceName) {
         selectedNetworkInterface.value = defaultInterfaceName;
