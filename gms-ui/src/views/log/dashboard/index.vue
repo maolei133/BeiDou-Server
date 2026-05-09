@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <Breadcrumb :items="['menu.log', 'menu.log.dashboard']" />
 
     <!-- 1. 系统状态区域 -->

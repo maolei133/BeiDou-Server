@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <a-card :bordered="false">
       <a-row>
         <a-col :span="24">

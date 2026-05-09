@@ -207,8 +207,9 @@
     display: flex;
     justify-content: space-between;
     height: 100%;
-    background-color: var(--color-bg-2);
-    border-bottom: 1px solid var(--color-border);
+    background-color: var(--gms-surface);
+    border-bottom: 1px solid var(--gms-border);
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
   }
 
   .left-side {
@@ -239,8 +240,9 @@
       text-decoration: none;
     }
     .nav-btn {
-      border-color: rgb(var(--gray-2));
-      color: rgb(var(--gray-8));
+      border-color: var(--gms-border);
+      border-radius: 9px;
+      color: var(--gms-muted);
       font-size: 16px;
     }
     .trigger-btn,

@@ -41,10 +41,11 @@
 <style scoped lang="less">
   .container-breadcrumb {
     margin: 16px 0;
+    font-size: 13px;
     :deep(.arco-breadcrumb-item) {
-      color: rgb(var(--gray-6));
+      color: var(--gms-muted);
       &:last-child {
-        color: rgb(var(--gray-8));
+        color: var(--gms-text);
       }
     }
   }

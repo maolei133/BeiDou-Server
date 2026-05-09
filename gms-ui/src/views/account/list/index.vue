@@ -1,5 +1,5 @@
 <template>
-  <div class="container" :loading="true">
+  <div class="container gms-page" :loading="true">
     <Breadcrumb />
     <a-card class="general-card" :title="$t('menu.account.list')">
       <a-form :model="filterForm" class="a-from-keyword">

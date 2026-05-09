@@ -27,3 +27,9 @@ database/docker-pg-db-data
 
 # macOS files
 .DS_Store
+
+# Hermes 协作过程文件（不进入产品仓库）
+.hermes/
+
+# 前端构建产物，由 gms-ui 构建生成，不提交
+gms-server/src/main/resources/static/

@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <Breadcrumb :items="['menu.log', 'menu.log.query']" />
 
     <!-- 1. 查询表单区域 -->

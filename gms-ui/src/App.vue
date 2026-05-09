@@ -26,10 +26,6 @@
 </script>
 
 <style lang="less">
-  .container {
-    padding: 0 20px 20px 20px;
-  }
-
   :deep(.arco-table-th) {
     &:last-child {
       .arco-table-th-item-title {
@@ -38,7 +34,7 @@
     }
   }
 
-  .arco-row {
+  .container > .arco-row {
     margin-bottom: 10px;
   }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container gms-page">
     <a-card :bordered="false" :title="$t('menu.traceability.config')">
       <!-- 加载骨架 -->
       <a-skeleton v-if="loading" :animation="true">

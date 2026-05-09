@@ -4,6 +4,7 @@
     :option="options"
     :autoresize="autoResize"
     :style="{ width, height }"
+    @legendselectchanged="handleLegendSelectChanged"
   />
 </template>
 
@@ -32,6 +33,18 @@
       default: '100%',
     },
   });
+  const emit = defineEmits<{
+    (
+      event: 'legendselectchanged',
+      params: { selected?: Record<string, boolean> }
+    ): void;
+  }>();
+
+  const handleLegendSelectChanged = (params: {
+    selected?: Record<string, boolean>;
+  }) => {
+    emit('legendselectchanged', params);
+  };
   // const appStore = useAppStore();
   // const theme = computed(() => {
   //   if (appStore.theme === 'dark') return 'dark';

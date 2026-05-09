@@ -24,7 +24,10 @@
         
         <!-- 关闭 flyway 日志输出 -->
         <Logger name="org.flywaydb" level="ERROR"/>
-        
+
+        <!-- Monitor events: JSON lines intended for Loki/Promtail. Keep additivity=true so Docker/Linux stdout collectors can ingest it before dedicated log-query support lands. -->
+        <Logger name="monitor-event" level="INFO" additivity="true"/>
+
         <Root level="INFO">
             <AppenderRef ref="Console"/>
         </Root>
