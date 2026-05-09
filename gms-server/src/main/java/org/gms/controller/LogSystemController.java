@@ -15,6 +15,7 @@ import org.gms.server.logging.LogModule;
 import org.gms.service.AccountService;
 import org.gms.service.TraceabilityService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.*;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -29,6 +30,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -41,11 +43,13 @@ public class LogSystemController {
 
     private final ObjectMapper objectMapper;
     private final AccountService accountService;
+    private final Environment environment;
 
     @Autowired
-    public LogSystemController(ObjectMapper objectMapper, AccountService accountService) {
+    public LogSystemController(ObjectMapper objectMapper, AccountService accountService, Environment environment) {
         this.objectMapper = objectMapper;
         this.accountService = accountService;
+        this.environment = environment;
     }
 
     // --- 1. 进程管理 ---
@@ -57,31 +61,44 @@ public class LogSystemController {
         Map<String, String> config = readRuntimeConfig();
 
         // 分别获取 Loki 和 Promtail 的状态
-        status.put("loki", checkProcess(config.get("LokiPID")));
-        status.put("promtail", checkProcess(config.get("PromtailPID")));
+        status.put("loki", checkProcessWithCrossPlatformFallback(config.get("LokiPID"), "loki", "gms-loki", getLokiUrl() + "/ready"));
+        status.put("promtail", checkProcessWithCrossPlatformFallback(config.get("PromtailPID"), "promtail", "gms-promtail", resolvePromtailUrl() + "/ready"));
         
         return ResultBody.success(status);
     }
 
-    @Operation(summary = "启动日志系统", description = "异步执行 start-logging.bat 脚本")
+    @Operation(summary = "启动日志系统", description = "按当前平台异步执行 Windows bat 或 Linux/Docker sh 启动脚本")
     @PostMapping("/process/start")
     public ResultBody<String> startLogSystem() {
+        if (!isWindows()) {
+            String dockerResult = startLinuxDockerLogSystem();
+            if (dockerResult != null) {
+                return ResultBody.success(dockerResult);
+            }
+        }
+
         File scriptFile = getScriptFile();
 
         if (!scriptFile.exists()) {
-            throw new RuntimeException("错误: 找不到启动脚本 start-logging.bat (路径: " + scriptFile.getAbsolutePath() + ")");
+            throw new RuntimeException("错误: 找不到启动脚本 " + scriptFile.getName() + " (路径: " + scriptFile.getAbsolutePath() + ")");
         }
 
         try {
-            // 使用 ProcessBuilder 替代 Runtime.exec
-            // 关键修改：直接在 CMD 命令中切换目录，确保环境正确
-            // cmd /c "cd /d 目录 && start 标题 脚本"
-            String cmd = String.format("cd /d \"%s\" && start \"LogSystem\" \"%s\"", 
-                scriptFile.getParentFile().getAbsolutePath(), 
-                scriptFile.getName());
-            
-            new ProcessBuilder("cmd", "/c", cmd).start();
-            
+            if (isWindows()) {
+                // 使用 ProcessBuilder 替代 Runtime.exec
+                // 关键修改：直接在 CMD 命令中切换目录，确保环境正确
+                // cmd /c "cd /d 目录 && start 标题 脚本"
+                String cmd = String.format("cd /d \"%s\" && start \"LogSystem\" \"%s\"",
+                    scriptFile.getParentFile().getAbsolutePath(),
+                    scriptFile.getName());
+
+                new ProcessBuilder("cmd", "/c", cmd).start();
+            } else {
+                ProcessBuilder builder = new ProcessBuilder("bash", scriptFile.getAbsolutePath());
+                builder.directory(resolveLinuxDockerWorkDir(scriptFile));
+                builder.start();
+            }
+
             return ResultBody.success("已触发启动脚本");
         } catch (IOException e) {
             throw new RuntimeException("启动失败: " + e.getMessage());
@@ -91,6 +108,10 @@ public class LogSystemController {
     @Operation(summary = "停止日志系统", description = "强制终止相关进程和窗口")
     @PostMapping("/process/stop")
     public ResultBody<String> stopLogSystem() {
+        if (!isWindows()) {
+            return ResultBody.success(stopLinuxDockerLogSystem());
+        }
+
         Map<String, String> config = readRuntimeConfig();
         StringBuilder result = new StringBuilder();
 
@@ -124,13 +145,13 @@ public class LogSystemController {
                 // ignore
             }
         }
-        
+
         // 清理配置文件，避免下次误读
         File configFile = new File(getBinDir().getParentFile(), "config/runtime.ini");
         if (configFile.exists()) {
             configFile.delete();
         }
-        
+
         return ResultBody.success(result.toString());
     }
 
@@ -139,35 +160,45 @@ public class LogSystemController {
     public ResultBody<String> restartLogSystem() {
         stopLogSystem();
         // 等待几秒确保进程结束
-        try { Thread.sleep(2000); } catch (InterruptedException e) {}
+        try { Thread.sleep(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         return startLogSystem();
     }
-    
+
     @Operation(summary = "重置日志系统 (重新采集)", description = "停止系统，删除 positions 文件，然后启动")
     @PostMapping("/process/reset")
     public ResultBody<String> resetLogSystem() {
         // 1. 停止
         stopLogSystem();
-        try { Thread.sleep(2000); } catch (InterruptedException e) {}
-        
-        // 2. 删除 positions 文件
-        File positionsFile = new File(getBinDir().getParentFile(), "config/promtail-positions.yaml");
-        if (positionsFile.exists()) {
-            positionsFile.delete();
+        try { Thread.sleep(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+
+        if (isWindows()) {
+            // 2. 删除 positions 文件
+            File positionsFile = new File(getBinDir().getParentFile(), "config/promtail-positions.yaml");
+            if (positionsFile.exists()) {
+                positionsFile.delete();
+            }
+        } else {
+            resetLinuxDockerPositions();
         }
-        
+
         // 3. 启动
         return startLogSystem();
     }
 
     private File getScriptFile() {
         // 优先查找 LogSystem 目录
-        String[] candidates = {
-            "LogSystem/Windows/start-logging.bat",
-            "../LogSystem/Windows/start-logging.bat",
-            "../../LogSystem/Windows/start-logging.bat" // 应对更深层级的部署结构
-        };
-        
+        String[] candidates = isWindows()
+                ? new String[] {
+                    "LogSystem/Windows/start-logging.bat",
+                    "../LogSystem/Windows/start-logging.bat",
+                    "../../LogSystem/Windows/start-logging.bat" // 应对更深层级的部署结构
+                }
+                : new String[] {
+                    "LogSystem/Docker/start-logging.sh",
+                    "../LogSystem/Docker/start-logging.sh",
+                    "../../LogSystem/Docker/start-logging.sh" // 应对更深层级的部署结构
+                };
+
         for (String path : candidates) {
             File file = new File(path);
             if (file.exists()) {
@@ -181,7 +212,7 @@ public class LogSystemController {
     private File getBinDir() {
         // 优先查找包含核心可执行文件的目录，确保路径正确
         String[] candidates = {"LogSystem/Windows/bin/", "../LogSystem/Windows/bin/", "../../LogSystem/Windows/bin/"};
-        
+
         for (String path : candidates) {
             File dir = new File(path);
             // 检查目录是否存在，且包含 loki 可执行文件，防止误判空目录
@@ -189,14 +220,17 @@ public class LogSystemController {
                 return dir;
             }
         }
-        
+
         // 默认返回第一个，即使不存在 (避免空指针，后续逻辑会处理 exists 检查)
         return new File(candidates[0]);
     }
 
     private Map<String, String> readRuntimeConfig() {
-        File configFile = new File(getBinDir().getParentFile(), "config/runtime.ini");
         Map<String, String> config = new HashMap<>();
+        if (!isWindows()) {
+            return config;
+        }
+        File configFile = new File(getBinDir().getParentFile(), "config/runtime.ini");
         if (configFile.exists()) {
             try {
                 List<String> lines = Files.readAllLines(configFile.toPath(), StandardCharsets.UTF_8);
@@ -217,6 +251,7 @@ public class LogSystemController {
 
     private Long checkProcess(String pidStr) {
         if (pidStr == null || pidStr.isEmpty()) return null;
+        if (!isWindows()) return null;
         try {
             // 验证是否为数字
             Long.parseLong(pidStr);
@@ -230,7 +265,7 @@ public class LogSystemController {
                     break;
                 }
             }
-            
+
             if (isRunning) {
                 // 如果进程在运行，返回 runtime.ini 的最后修改时间作为启动时间
                 File configFile = new File(getBinDir().getParentFile(), "config/runtime.ini");
@@ -240,6 +275,132 @@ public class LogSystemController {
             e.printStackTrace();
         }
         return null;
+    }
+
+    private Long checkProcessWithCrossPlatformFallback(String pidStr, String processName, String dockerContainerName, String healthUrl) {
+        Long windowsStartTime = checkProcess(pidStr);
+        if (windowsStartTime != null) {
+            return windowsStartTime;
+        }
+        if (isWindows()) {
+            return null;
+        }
+        Long dockerStartTime = checkDockerContainer(dockerContainerName);
+        if (dockerStartTime != null) {
+            return dockerStartTime;
+        }
+        Long linuxStartTime = checkLinuxProcess(processName);
+        if (linuxStartTime != null) {
+            return linuxStartTime;
+        }
+        Long httpStartTime = checkHttpStartTime(healthUrl.replaceAll("/ready$", "/metrics"));
+        if (httpStartTime != null) {
+            return httpStartTime;
+        }
+        return checkHttpHealth(healthUrl);
+    }
+
+    private boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+    }
+
+    private Long checkDockerContainer(String containerName) {
+        try {
+            Process p = new ProcessBuilder("docker", "inspect", "-f", "{{.State.Running}} {{.State.StartedAt}}", containerName).start();
+            String output = readProcessOutput(p);
+            if (!p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS) || p.exitValue() != 0) {
+                return null;
+            }
+            String[] parts = output.trim().split("\\s+", 2);
+            if (parts.length == 2 && "true".equalsIgnoreCase(parts[0])) {
+                return java.time.Instant.parse(parts[1]).toEpochMilli();
+            }
+        } catch (Exception ignored) {
+            // Docker 不可用或当前部署不是 Docker 模式时，继续尝试 Linux 进程和 HTTP 健康检查。
+        }
+        return null;
+    }
+
+    private Long checkLinuxProcess(String processName) {
+        try {
+            Process p = new ProcessBuilder("pgrep", "-xo", processName).start();
+            String pid = readProcessOutput(p).trim();
+            if (!p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS) || p.exitValue() != 0 || pid.isBlank()) {
+                return null;
+            }
+            Process started = new ProcessBuilder("ps", "-o", "lstart=", "-p", pid).start();
+            String startedAt = readProcessOutput(started).trim();
+            if (!started.waitFor(3, java.util.concurrent.TimeUnit.SECONDS) || started.exitValue() != 0 || startedAt.isBlank()) {
+                return null;
+            }
+            return java.time.ZonedDateTime.parse(startedAt, java.time.format.DateTimeFormatter.ofPattern("EEE MMM d HH:mm:ss yyyy", Locale.ENGLISH).withZone(java.time.ZoneId.systemDefault())).toInstant().toEpochMilli();
+        } catch (Exception ignored) {
+            // 进程名不可见或 ps 时间格式无法解析时，继续尝试 HTTP 健康检查。
+        }
+        return null;
+    }
+
+    private Long checkHttpHealth(String url) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+            return response.statusCode() >= 200 && response.statusCode() < 300 ? System.currentTimeMillis() : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Long checkHttpStartTime(String url) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return null;
+            }
+            for (String line : response.body().split("\\R")) {
+                if (line.startsWith("process_start_time_seconds ")) {
+                    double seconds = Double.parseDouble(line.substring("process_start_time_seconds ".length()).trim());
+                    return (long) (seconds * 1000L);
+                }
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    private String readProcessOutput(Process process) throws IOException {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            return reader.lines().collect(Collectors.joining("\n"));
+        }
+    }
+
+    private String readProcessError(Process process) throws IOException {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+            return reader.lines().collect(Collectors.joining("\n"));
+        }
+    }
+
+    private String resolvePromtailUrl() {
+        String configuredUrl = environment.getProperty("gms.log.promtail-url");
+        if (configuredUrl == null || configuredUrl.isBlank()) {
+            configuredUrl = environment.getProperty("GMS_LOG_PROMTAIL_URL");
+        }
+        if (configuredUrl == null || configuredUrl.isBlank()) {
+            configuredUrl = System.getenv("GMS_LOG_PROMTAIL_URL");
+        }
+        if (configuredUrl == null || configuredUrl.isBlank()) {
+            configuredUrl = "http://127.0.0.1:9080";
+        }
+        return configuredUrl.trim().replaceAll("/+$", "");
     }
 
     private String killProcess(String pidStr, String name) {
@@ -252,6 +413,190 @@ public class LogSystemController {
         } catch (Exception e) {
             return "停止 " + name + " 失败: " + e.getMessage();
         }
+    }
+
+    private File resolveLinuxDockerWorkDir(File scriptFile) {
+        File composeDir = findComposeDirFrom(new File(System.getProperty("user.dir", ".")));
+        if (composeDir != null) {
+            return composeDir;
+        }
+        File scriptDir = scriptFile.getParentFile();
+        return scriptDir != null ? scriptDir : new File(System.getProperty("user.dir", "."));
+    }
+
+    private File findComposeDirFrom(File startDir) {
+        File current = startDir.getAbsoluteFile();
+        while (current != null) {
+            if (new File(current, "docker-compose.yml").exists() || new File(current, "compose.yml").exists()) {
+                return current;
+            }
+            current = current.getParentFile();
+        }
+        return null;
+    }
+
+    private String startLinuxDockerLogSystem() {
+        if (canAccessDockerSocket()) {
+            String loki = callDockerContainerAction("gms-loki", "start", "Loki");
+            String promtail = callDockerContainerAction("gms-promtail", "start", "Promtail");
+            if (!loki.contains("失败") && !promtail.contains("失败")) {
+                return loki + "; " + promtail;
+            }
+            throw new RuntimeException("启动失败: " + loki + "; " + promtail);
+        }
+        File scriptFile = getScriptFile();
+        if (!scriptFile.exists()) {
+            return null;
+        }
+        return null;
+    }
+
+    private String stopLinuxDockerLogSystem() {
+        if (canAccessDockerSocket()) {
+            String loki = callDockerContainerAction("gms-loki", "stop", "Loki");
+            String promtail = callDockerContainerAction("gms-promtail", "stop", "Promtail");
+            if (!loki.contains("失败") && !promtail.contains("失败")) {
+                return loki + "; " + promtail;
+            }
+            throw new RuntimeException("停止失败: " + loki + "; " + promtail);
+        }
+
+        StringBuilder result = new StringBuilder();
+        boolean stoppedByCompose = stopDockerComposeServices(result);
+        if (!stoppedByCompose) {
+            result.append(stopDockerContainer("gms-loki", "Loki"));
+            result.append("; ");
+            result.append(stopDockerContainer("gms-promtail", "Promtail"));
+        }
+        if (!stoppedByCompose && result.toString().contains("Docker 不可用")) {
+            result.append("; ").append(killLinuxProcessByName("loki", "Loki"));
+            result.append("; ").append(killLinuxProcessByName("promtail", "Promtail"));
+        }
+        if (result.toString().contains("Docker 不可用") && result.toString().contains("未运行")) {
+            throw new RuntimeException("停止失败: 当前容器没有 Docker 控制能力。请挂载 /var/run/docker.sock，或在宿主机执行 LogSystem/Docker/start-logging.sh patch compose 后重建 gms-server。");
+        }
+        return result.toString();
+    }
+
+    private boolean canAccessDockerSocket() {
+        return new File("/var/run/docker.sock").exists();
+    }
+
+    private String callDockerContainerAction(String containerName, String action, String name) {
+        try {
+            Process p = new ProcessBuilder(
+                    "curl", "-sS", "--unix-socket", "/var/run/docker.sock",
+                    "-X", "POST",
+                    "-o", "-",
+                    "-w", "\n%{http_code}",
+                    "http://localhost/containers/" + containerName + "/" + action)
+                    .start();
+            String output = readProcessOutput(p);
+            String error = readProcessError(p);
+            if (!p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                return name + " " + action + " 失败: Docker API 超时";
+            }
+            int exitCode = p.exitValue();
+            if (exitCode != 0) {
+                return name + " " + action + " 失败: " + (error.isBlank() ? output : error);
+            }
+            String[] lines = output.strip().split("\\R");
+            String httpCode = lines.length == 0 ? "000" : lines[lines.length - 1].trim();
+            if ("204".equals(httpCode)) {
+                return "已" + ("start".equals(action) ? "启动" : "停止") + " " + name + " 容器(" + containerName + ")";
+            }
+            if ("304".equals(httpCode)) {
+                return name + " 容器(" + containerName + ")" + ("start".equals(action) ? "已在运行" : "已停止");
+            }
+            return name + " " + action + " 失败: Docker API HTTP " + httpCode;
+        } catch (Exception e) {
+            return name + " " + action + " 失败: " + e.getMessage();
+        }
+    }
+
+    private boolean stopDockerComposeServices(StringBuilder result) {
+        File composeDir = findComposeDirFrom(new File(System.getProperty("user.dir", ".")));
+        if (composeDir == null) {
+            return false;
+        }
+        try {
+            Process p = new ProcessBuilder("docker", "compose", "stop", "loki", "promtail")
+                    .directory(composeDir)
+                    .start();
+            String output = readProcessOutput(p);
+            String error = readProcessError(p);
+            if (p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0) {
+                result.append("已停止 Docker Compose 日志服务");
+                if (!output.isBlank()) {
+                    result.append(": ").append(output.replaceAll("\\s+", " ").trim());
+                }
+                return true;
+            }
+            if (!error.isBlank()) {
+                result.append("Docker Compose 停止失败: ").append(error.replaceAll("\\s+", " ").trim());
+            }
+        } catch (Exception ignored) {
+            // Docker Compose 不可用时，继续尝试固定容器名或 Linux 进程方式。
+        }
+        return false;
+    }
+
+    private String stopDockerContainer(String containerName, String name) {
+        try {
+            Process p = new ProcessBuilder("docker", "stop", containerName).start();
+            String output = readProcessOutput(p);
+            String error = readProcessError(p);
+            if (p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0) {
+                return "已停止 " + name + " 容器(" + containerName + ")";
+            }
+            return name + " 容器停止失败: " + (error.isBlank() ? output : error);
+        } catch (Exception e) {
+            return "Docker 不可用，无法停止 " + name + " 容器: " + e.getMessage();
+        }
+    }
+
+    private String killLinuxProcessByName(String processName, String name) {
+        try {
+            Process find = new ProcessBuilder("pgrep", "-xo", processName).start();
+            String pid = readProcessOutput(find).trim();
+            if (!find.waitFor(3, java.util.concurrent.TimeUnit.SECONDS) || find.exitValue() != 0 || pid.isBlank()) {
+                return name + " 未运行";
+            }
+            Optional<ProcessHandle> handle = ProcessHandle.of(Long.parseLong(pid));
+            if (handle.isPresent()) {
+                handle.get().destroy();
+                return "已停止 " + name + "(PID: " + pid + ")";
+            }
+        } catch (Exception e) {
+            return "停止 " + name + " 失败: " + e.getMessage();
+        }
+        return name + " 未运行";
+    }
+
+    private void resetLinuxDockerPositions() {
+        File positionsFile = getPromtailPositionsFile();
+        if (positionsFile.exists()) {
+            try {
+                Files.delete(positionsFile.toPath());
+            } catch (IOException e) {
+                throw new RuntimeException("删除 Promtail positions 文件失败: " + e.getMessage());
+            }
+        }
+    }
+
+    private File getPromtailPositionsFile() {
+        String configured = environment.getProperty("gms.log.promtail-positions-file");
+        if (configured == null || configured.isBlank()) {
+            configured = environment.getProperty("GMS_LOG_PROMTAIL_POSITIONS_FILE");
+        }
+        if (configured == null || configured.isBlank()) {
+            configured = System.getenv("GMS_LOG_PROMTAIL_POSITIONS_FILE");
+        }
+        if (configured != null && !configured.isBlank()) {
+            return new File(configured.trim());
+        }
+        File configDir = resolveConfigDir();
+        return new File(configDir, "promtail-positions.yaml");
     }
 
     // --- 2. 动态配置管理 ---
@@ -476,6 +821,17 @@ public class LogSystemController {
 
     // 动态获取 Loki URL
     private String getLokiUrl() {
+        String configuredUrl = environment.getProperty("gms.log.loki-url");
+        if (configuredUrl == null || configuredUrl.isBlank()) {
+            configuredUrl = environment.getProperty("GMS_LOG_LOKI_URL");
+        }
+        if (configuredUrl == null || configuredUrl.isBlank()) {
+            configuredUrl = System.getenv("GMS_LOG_LOKI_URL");
+        }
+        if (configuredUrl != null && !configuredUrl.isBlank()) {
+            return configuredUrl.trim().replaceAll("/+$", "");
+        }
+
         String defaultUrl = "http://127.0.0.1:3100";
         File configFile = getConfigFile("loki-config.yaml");
         if (configFile == null || !configFile.exists()) {
@@ -622,24 +978,13 @@ public class LogSystemController {
     }
 
     private File getConfigFile(String fileName) {
-        String basePath = "LogSystem/Windows/config/";
-        // 尝试在上级目录查找
-        if (!new File(basePath).exists()) {
-            basePath = "../LogSystem/Windows/config/";
-        }
-        
-        // 再次尝试更深层级 (兼容部署环境)
-        if (!new File(basePath).exists()) {
-            basePath = "../../LogSystem/Windows/config/";
-        }
-
         switch (fileName) {
             case "loki-config.yaml":
-                return new File(basePath + "loki-config.yaml");
+                return new File(resolveConfigDir(), "loki-config.yaml");
             case "promtail-config.yaml":
-                return new File(basePath + "promtail-config.yaml");
+                return resolvePromtailConfigFile();
             case "dashboard-layout.json":
-                return new File(basePath + "dashboard-layout.json");
+                return new File(resolveConfigDir(), "dashboard-layout.json");
             case "log4j2.xml":
                 // log4j2 通常在 resources 下，或者运行时指定的路径
                 // 这里假设在 src/main/resources 下 (开发环境)
@@ -650,5 +995,56 @@ public class LogSystemController {
             default:
                 return null;
         }
+    }
+
+    private File resolveConfigDir() {
+        String configuredDir = environment.getProperty("gms.log.config-dir");
+        if (configuredDir == null || configuredDir.isBlank()) {
+            configuredDir = environment.getProperty("GMS_LOG_CONFIG_DIR");
+        }
+        if (configuredDir == null || configuredDir.isBlank()) {
+            configuredDir = System.getenv("GMS_LOG_CONFIG_DIR");
+        }
+        if (configuredDir != null && !configuredDir.isBlank()) {
+            return new File(configuredDir.trim());
+        }
+
+        List<String> candidates = new ArrayList<>();
+        if (isWindows()) {
+            candidates.add("LogSystem/Windows/config/");
+            candidates.add("../LogSystem/Windows/config/");
+            candidates.add("../../LogSystem/Windows/config/");
+        } else {
+            candidates.add("docker/");
+            candidates.add("../docker/");
+            candidates.add("../../docker/");
+            candidates.add("LogSystem/Docker/runtime/docker/");
+            candidates.add("../LogSystem/Docker/runtime/docker/");
+            candidates.add("../../LogSystem/Docker/runtime/docker/");
+            candidates.add("LogSystem/Windows/config/");
+            candidates.add("../LogSystem/Windows/config/");
+            candidates.add("../../LogSystem/Windows/config/");
+        }
+
+        for (String path : candidates) {
+            File dir = new File(path);
+            if (dir.exists()) {
+                return dir;
+            }
+        }
+        return new File(candidates.get(0));
+    }
+
+    private File resolvePromtailConfigFile() {
+        File configDir = resolveConfigDir();
+        File yamlFile = new File(configDir, "promtail-config.yaml");
+        if (yamlFile.exists()) {
+            return yamlFile;
+        }
+        File ymlFile = new File(configDir, "promtail-config.yml");
+        if (ymlFile.exists()) {
+            return ymlFile;
+        }
+        return yamlFile;
     }
 }
