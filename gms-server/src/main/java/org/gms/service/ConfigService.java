@@ -112,6 +112,60 @@ public class ConfigService {
     }
 
     @Transactional(rollbackFor = Exception.class)
+    public GameConfigDO upsertServerConfig(String subType, String code, String clazz, String value, String desc) {
+        RequireUtil.requireNotEmpty(subType, I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configSubType"));
+        RequireUtil.requireNotEmpty(code, I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configCode"));
+        RequireUtil.requireNotEmpty(value, I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configValue"));
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .where(GAME_CONFIG_DO.CONFIG_TYPE.eq("server"))
+                .and(GAME_CONFIG_DO.CONFIG_SUB_TYPE.eq(subType))
+                .and(GAME_CONFIG_DO.CONFIG_CODE.eq(code));
+        GameConfigDO gameConfigDO = gameConfigMapper.selectOneByQuery(queryWrapper);
+        Date updateTime = new Date(System.currentTimeMillis());
+        if (gameConfigDO == null) {
+            gameConfigDO = GameConfigDO.builder()
+                    .configType("server")
+                    .configSubType(subType)
+                    .configClazz(clazz == null || clazz.isBlank() ? String.class.getName() : clazz)
+                    .configCode(code)
+                    .configValue(value)
+                    .configDesc(code)
+                    .updateTime(updateTime)
+                    .build();
+            gameConfigMapper.insertSelective(gameConfigDO);
+            langResourceService.insertOrUpdateI18n(LangResourcesDO.builder()
+                    .langBase("game_config")
+                    .langCode(code)
+                    .langType(serviceProperty.getLanguage())
+                    .langValue(desc == null || desc.isBlank() ? code : desc)
+                    .build());
+            GameConfig.add(gameConfigDO);
+            return gameConfigDO;
+        }
+
+        GameConfigDO update = GameConfigDO.builder()
+                .id(gameConfigDO.getId())
+                .configValue(value)
+                .configClazz(clazz == null || clazz.isBlank() ? gameConfigDO.getConfigClazz() : clazz)
+                .updateTime(updateTime)
+                .build();
+        gameConfigMapper.update(update);
+        if (desc != null && !desc.isBlank()) {
+            langResourceService.insertOrUpdateI18n(LangResourcesDO.builder()
+                    .langBase("game_config")
+                    .langCode(code)
+                    .langType(serviceProperty.getLanguage())
+                    .langValue(desc)
+                    .build());
+        }
+        gameConfigDO.setConfigValue(value);
+        gameConfigDO.setConfigClazz(update.getConfigClazz());
+        gameConfigDO.setUpdateTime(updateTime);
+        GameConfig.update(gameConfigDO);
+        return gameConfigDO;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
     public void updateConfig(GameConfigDO condition) {
         RequireUtil.requireNotNull(condition.getId(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_NULL", "id"));
         RequireUtil.requireNotEmpty(condition.getConfigValue(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configValue"));
