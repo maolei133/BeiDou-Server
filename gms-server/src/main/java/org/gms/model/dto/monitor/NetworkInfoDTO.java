@@ -13,6 +13,8 @@ import java.util.List;
 @AllArgsConstructor
 public class NetworkInfoDTO {
     private String hostName;
+    private String selectedInterfaceName;
+    private String defaultInterfaceName;
     private List<NetworkInterfaceInfoDTO> interfaces;
     private Double rxBytesPerSecond;
     private Double txBytesPerSecond;

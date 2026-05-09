@@ -83,10 +83,15 @@ export interface MonitorNetworkInterfaceInfo {
   virtual?: boolean | null;
   mtu?: number | null;
   addresses?: string[] | null;
+  internetReachable?: boolean | null;
+  defaultInterface?: boolean | null;
+  primaryAddress?: string | null;
 }
 
 export interface MonitorNetworkInfo {
   hostName?: string | null;
+  selectedInterfaceName?: string | null;
+  defaultInterfaceName?: string | null;
   interfaces?: MonitorNetworkInterfaceInfo[] | null;
   rxBytesPerSecond?: number | null;
   txBytesPerSecond?: number | null;
@@ -189,8 +194,10 @@ export function shutdown(params?: StopServerParams) {
   return axios.post('/server/v1/shutdown', params);
 }
 
-export function getServerMonitorSnapshot() {
-  return axios.get<ServerMonitorSnapshot>('/server/v1/monitor/snapshot');
+export function getServerMonitorSnapshot(params?: { interfaceName?: string }) {
+  return axios.get<ServerMonitorSnapshot>('/server/v1/monitor/snapshot', {
+    params,
+  });
 }
 
 export interface ServerMonitorHistoryParams {

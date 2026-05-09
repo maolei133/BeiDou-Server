@@ -161,7 +161,7 @@
         </div>
         <div class="body gms-section-body">
           <div class="resource-grid">
-            <div class="metric-card gms-metric-card">
+            <div class="metric-card gms-metric-card resource-scroll-card">
               <div class="metric-head"
                 ><span>CPU</span
                 ><span class="tag gms-tag info">{{
@@ -198,7 +198,7 @@
                 {{ formatNumber(monitorSnapshot?.cpu?.systemLoadAverage) }}</div
               >
             </div>
-            <div class="metric-card gms-metric-card">
+            <div class="metric-card gms-metric-card resource-scroll-card">
               <div class="metric-head"
                 ><span>{{ $t('workplace.monitor.memory') }}</span
                 ><span class="tag gms-tag info">{{
@@ -231,7 +231,7 @@
                 {{ formatBytes(systemMemoryFree) }}</div
               >
             </div>
-            <div class="metric-card gms-metric-card">
+            <div class="metric-card gms-metric-card resource-scroll-card">
               <div class="metric-head"
                 ><span>{{ $t('workplace.monitor.disk') }}</span
                 ><span class="tag gms-tag gray">{{
@@ -266,7 +266,13 @@
                 ><span
                   >{{ $t('workplace.monitor.network') }} /
                   {{ $t('workplace.monitor.diskIo') }}</span
-                ><span class="tag gms-tag gray">IO</span></div
+                ><a-select
+                  v-model="selectedNetworkInterface"
+                  size="mini"
+                  :options="networkInterfaceOptions"
+                  :disabled="!networkInterfaceOptions.length"
+                  style="width: 168px"
+                /></div
               >
               <div class="io-groups">
                 <div class="io-group">
@@ -854,6 +860,7 @@
   const worldList = ref<ServerWorldInfo[]>([]);
   const channelList = ref<ServerChannelInfo[]>([]);
   const onlinePlayerCount = ref<number | null>(null);
+  const selectedNetworkInterface = ref<string>();
   let monitorTimer: number | undefined;
   let historyTimer: number | undefined;
   const stopConfigVisible = ref(false);
@@ -933,10 +940,23 @@
     if (memory?.used === null || memory?.used === undefined) return undefined;
     return Math.max(memory.max - memory.used, 0);
   });
+  const networkInterfaces = computed(
+    () => monitorSnapshot.value?.network?.interfaces || []
+  );
+  const networkInterfaceOptions = computed(() =>
+    networkInterfaces.value.map((item) => {
+      const name = item.name || item.displayName || '-';
+      const address = item.primaryAddress || item.addresses?.[0];
+      return {
+        label: `${name}${item.defaultInterface ? '（默认）' : ''}${
+          address ? ` · ${address}` : ''
+        }`,
+        value: item.name || '',
+      };
+    }).filter((item) => item.value)
+  );
   const networkInterfacesText = computed(() => {
-    const interfaces = monitorSnapshot.value?.network?.interfaces || [];
-    const names = interfaces
-      .filter((item) => item.up && !item.loopback)
+    const names = networkInterfaces.value
       .map((item) => item.name || item.displayName)
       .filter(Boolean);
     return names.length ? names.join(', ') : '-';
@@ -1245,8 +1265,18 @@
     if (monitorLoading.value) return;
     monitorLoading.value = true;
     try {
-      const { data } = await getServerMonitorSnapshot();
+      const { data } = await getServerMonitorSnapshot({
+        interfaceName: selectedNetworkInterface.value,
+      });
       monitorSnapshot.value = data;
+      const defaultInterfaceName =
+        data?.network?.selectedInterfaceName ||
+        data?.network?.defaultInterfaceName ||
+        data?.network?.interfaces?.find((item) => item.defaultInterface)?.name ||
+        data?.network?.interfaces?.[0]?.name;
+      if (!selectedNetworkInterface.value && defaultInterfaceName) {
+        selectedNetworkInterface.value = defaultInterfaceName;
+      }
       monitorError.value = false;
       if (typeof data?.server?.online === 'boolean')
         serverStatus.value = data.server.online ? 'running' : 'resting';
@@ -1322,6 +1352,11 @@
     }
   };
   watch(trendRange, () => refreshMonitorHistory(true));
+  watch(selectedNetworkInterface, (value, oldValue) => {
+    if (value && oldValue && value !== oldValue) {
+      refreshMonitor(true);
+    }
+  });
 
   const range = (start: number, end: number) => {
     const result = [];
@@ -1802,6 +1837,29 @@
     min-height: 150px;
   }
 
+  .resource-scroll-card {
+    height: 220px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 10px;
+  }
+
+  .resource-scroll-card::-webkit-scrollbar,
+  .hot-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .resource-scroll-card::-webkit-scrollbar-thumb,
+  .hot-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #d7dde8;
+  }
+
+  .resource-scroll-card::-webkit-scrollbar-track,
+  .hot-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
   .metric-head {
     display: flex;
     justify-content: space-between;
@@ -2143,6 +2201,12 @@
     .status-bar,
     .resource-grid {
       grid-template-columns: 1fr;
+    }
+
+    .resource-scroll-card {
+      height: auto;
+      max-height: none;
+      overflow-y: visible;
     }
 
     .health-row {

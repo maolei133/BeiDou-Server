@@ -17,6 +17,9 @@ public class NetworkInterfaceInfoDTO {
     private Boolean up;
     private Boolean loopback;
     private Boolean virtual;
+    private Boolean internetReachable;
+    private Boolean defaultInterface;
     private Integer mtu;
+    private String primaryAddress;
     private List<String> addresses;
 }

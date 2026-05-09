@@ -12,11 +12,12 @@ import java.util.Locale;
 /**
  * Detects Docker/cgroup context and reads cgroup memory usage/limits without shelling out.
  */
-public class ContainerRuntimeDetector {
+public class ContainerRuntimeDetector implements ContainerInfoCollector {
     private static final Path DOCKER_ENV = Path.of("/.dockerenv");
     private static final Path PROC_1_CGROUP = Path.of("/proc/1/cgroup");
     private static final long UNLIMITED_THRESHOLD = Long.MAX_VALUE / 2;
 
+    @Override
     public ContainerInfoDTO detect(List<String> warnings) {
         ContainerInfoDTO.ContainerInfoDTOBuilder builder = ContainerInfoDTO.builder()
                 .runtime("none")

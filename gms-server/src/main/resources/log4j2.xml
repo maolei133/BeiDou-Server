@@ -61,6 +61,14 @@
                 </Delete>
             </DefaultRolloverStrategy>
         </RollingFile>
+        <!-- 5. Monitor events: JSON lines for Loki/Promtail only; do not attach Console/Root. -->
+        <RollingFile name="MonitorEventLog" fileName="logs/audit/monitor.json"
+                     filePattern="logs/audit/monitor-%d{yyyy-MM-dd}.json.gz">
+            <PatternLayout pattern="%m%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+            </Policies>
+        </RollingFile>
     </Appenders>
 
     <Loggers>
@@ -69,6 +77,10 @@
             <AppenderRef ref="AuditLog"/>
             <AppenderRef ref="ErrorLog"/> <!-- 错误同时也写到 ErrorLog -->
             <AppenderRef ref="Console" level="WARN"/>  <!-- 错误同时也输出到控制台，但只显示WARN及以上 -->
+        </Logger>
+
+        <Logger name="monitor-event" level="INFO" additivity="false">
+            <AppenderRef ref="MonitorEventLog"/>
         </Logger>
 
         <!-- 关闭 Druid 日志输出 -->
