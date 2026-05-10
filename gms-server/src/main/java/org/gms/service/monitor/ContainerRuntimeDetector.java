@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Detects Docker/cgroup context and reads cgroup memory usage/limits without shelling out.
+ * 检测 Docker/cgroup 运行环境，并直接读取 cgroup 内存用量与限制。
  */
 public class ContainerRuntimeDetector implements ContainerInfoCollector {
     private static final Path DOCKER_ENV = Path.of("/.dockerenv");
@@ -24,7 +24,7 @@ public class ContainerRuntimeDetector implements ContainerInfoCollector {
                 .detected(false);
 
         if (!isLinux()) {
-            warnings.add("Container cgroup metrics are unavailable on this operating system.");
+            warnings.add("当前操作系统无法采集容器 cgroup 指标。");
             return builder.build();
         }
 
@@ -63,12 +63,12 @@ public class ContainerRuntimeDetector implements ContainerInfoCollector {
     private List<String> readProc1Cgroup(List<String> warnings) {
         try {
             if (!Files.isReadable(PROC_1_CGROUP)) {
-                warnings.add(PROC_1_CGROUP + " is not readable; container runtime detection is limited.");
+                warnings.add(PROC_1_CGROUP + " 不可读取，容器运行环境检测结果可能不完整。");
                 return List.of();
             }
             return Files.readAllLines(PROC_1_CGROUP);
         } catch (Exception e) {
-            warnings.add("Failed to read " + PROC_1_CGROUP + ": " + e.getClass().getSimpleName());
+            warnings.add("读取 " + PROC_1_CGROUP + " 失败：" + e.getClass().getSimpleName());
             return List.of();
         }
     }
@@ -100,7 +100,7 @@ public class ContainerRuntimeDetector implements ContainerInfoCollector {
             }
         }
 
-        warnings.add("No readable cgroup memory.current/memory.max or cgroup v1 memory files were found.");
+        warnings.add("未找到可读取的 cgroup memory.current/memory.max 或 cgroup v1 内存文件。");
         return null;
     }
 
@@ -116,7 +116,7 @@ public class ContainerRuntimeDetector implements ContainerInfoCollector {
         try {
             if (!Files.isReadable(path)) {
                 if (warnMissing) {
-                    warnings.add(path + " is not readable.");
+                    warnings.add(path + " 不可读取。");
                 }
                 return null;
             }
@@ -126,7 +126,7 @@ public class ContainerRuntimeDetector implements ContainerInfoCollector {
             }
             return Long.parseLong(value);
         } catch (Exception e) {
-            warnings.add("Failed to read " + path + ": " + e.getClass().getSimpleName());
+            warnings.add("读取 " + path + " 失败：" + e.getClass().getSimpleName());
             return null;
         }
     }
@@ -135,13 +135,13 @@ public class ContainerRuntimeDetector implements ContainerInfoCollector {
         try {
             if (!Files.isReadable(path)) {
                 if (warnMissing) {
-                    warnings.add(path + " is not readable.");
+                    warnings.add(path + " 不可读取。");
                 }
                 return null;
             }
             return Long.parseLong(Files.readString(path).trim());
         } catch (Exception e) {
-            warnings.add("Failed to read " + path + ": " + e.getClass().getSimpleName());
+            warnings.add("读取 " + path + " 失败：" + e.getClass().getSimpleName());
             return null;
         }
     }

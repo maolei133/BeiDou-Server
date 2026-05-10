@@ -153,17 +153,19 @@
             <div class="section-title gms-section-title">{{
               $t('workplace.section.host')
             }}</div>
-            <div class="section-subtitle gms-section-subtitle"
-              >宿主环境资源，不与游戏服务/JVM 概念混用。</div
-            >
+            <div class="section-subtitle gms-section-subtitle">{{
+              $t('workplace.monitor.scopeNote')
+            }}</div>
           </div>
-          <span class="tag gms-tag gray">CPU / Memory / Disk / IO</span>
+          <span class="tag gms-tag gray">{{
+            $t('workplace.monitor.resourceScopeShort')
+          }}</span>
         </div>
         <div class="body gms-section-body">
           <div class="resource-grid">
             <div class="metric-card gms-metric-card resource-scroll-card">
               <div class="metric-head"
-                ><span>CPU</span
+                ><span>{{ $t('workplace.monitor.hostCpu') }}</span
                 ><span class="tag gms-tag info">{{
                   formatPercent(monitorSnapshot?.cpu?.systemCpuLoad)
                 }}</span></div
@@ -176,13 +178,13 @@
                 :show-text="false"
               />
               <div class="kv gms-kv"
-                ><span>{{ $t('workplace.monitor.system') }}</span
+                ><span>{{ $t('workplace.monitor.host') }}</span
                 ><b>{{
                   formatPercent(monitorSnapshot?.cpu?.systemCpuLoad)
                 }}</b></div
               >
               <div class="kv gms-kv"
-                ><span>{{ $t('workplace.monitor.process') }}</span
+                ><span>{{ $t('workplace.monitor.gameProcess') }}</span
                 ><b>{{
                   formatPercent(monitorSnapshot?.cpu?.processCpuLoad)
                 }}</b></div
@@ -193,8 +195,8 @@
                 >{{ monitorSnapshot?.cpu?.processorModel || '-' }}</div
               >
               <div class="mini-foot"
-                >{{ monitorSnapshot?.cpu?.availableProcessors || '-' }} Cores ·
-                Load
+                >{{ monitorSnapshot?.cpu?.availableProcessors || '-' }} 核 ·
+                负载
                 {{ formatNumber(monitorSnapshot?.cpu?.systemLoadAverage) }}</div
               >
             </div>
@@ -264,8 +266,8 @@
             <div class="metric-card gms-metric-card">
               <div class="metric-head"
                 ><span
-                  >{{ $t('workplace.monitor.network') }} /
-                  {{ $t('workplace.monitor.diskIo') }}</span
+                  >{{ $t('workplace.monitor.hostNetworkIo') }} /
+                  {{ $t('workplace.monitor.hostDiskIo') }}</span
                 ><a-select
                   v-model="selectedNetworkInterface"
                   size="mini"
@@ -276,13 +278,14 @@
               <div class="io-groups">
                 <div class="io-group">
                   <div class="io-group-title">{{
-                    $t('workplace.monitor.network')
+                    $t('workplace.monitor.hostNetworkIo')
                   }}</div>
                   <div class="io-row rx"
                     ><span><i>↓</i>{{ $t('workplace.monitor.networkRx') }}</span
                     ><b>{{
                       formatBytesPerSec(
-                        monitorSnapshot?.network?.rxBytesPerSecond
+                        monitorSnapshot?.network?.hostRxBytesPerSecond ??
+                          monitorSnapshot?.network?.rxBytesPerSecond
                       )
                     }}</b></div
                   >
@@ -290,20 +293,22 @@
                     ><span><i>↑</i>{{ $t('workplace.monitor.networkTx') }}</span
                     ><b>{{
                       formatBytesPerSec(
-                        monitorSnapshot?.network?.txBytesPerSecond
+                        monitorSnapshot?.network?.hostTxBytesPerSecond ??
+                          monitorSnapshot?.network?.txBytesPerSecond
                       )
                     }}</b></div
                   >
                 </div>
                 <div class="io-group">
                   <div class="io-group-title">{{
-                    $t('workplace.monitor.diskIo')
+                    $t('workplace.monitor.hostDiskIo')
                   }}</div>
                   <div class="io-row read"
                     ><span><i>R</i>{{ $t('workplace.monitor.diskRead') }}</span
                     ><b>{{
                       formatBytesPerSec(
-                        monitorSnapshot?.diskIo?.readBytesPerSecond
+                        monitorSnapshot?.diskIo?.hostReadBytesPerSecond ??
+                          monitorSnapshot?.diskIo?.readBytesPerSecond
                       )
                     }}</b></div
                   >
@@ -311,12 +316,16 @@
                     ><span><i>W</i>{{ $t('workplace.monitor.diskWrite') }}</span
                     ><b>{{
                       formatBytesPerSec(
-                        monitorSnapshot?.diskIo?.writeBytesPerSecond
+                        monitorSnapshot?.diskIo?.hostWriteBytesPerSecond ??
+                          monitorSnapshot?.diskIo?.writeBytesPerSecond
                       )
                     }}</b></div
                   >
                 </div>
               </div>
+              <div class="mini-foot">{{
+                $t('workplace.monitor.networkScopeNote')
+              }}</div>
               <div class="mini-foot"
                 >{{ $t('workplace.monitor.interfaces') }}:
                 {{ networkInterfacesText }}</div
@@ -469,11 +478,28 @@
                   class="health-row"
                 >
                   <div class="health-name">World {{ world.id }}</div>
-                  <div class="health-desc">
-                    {{ $t('workplace.game.channels') }}:
-                    {{ world.channelsText }} · EXP {{ world.expRateText }} ·
-                    Drop {{ world.dropRateText }} · Meso
-                    {{ world.mesoRateText }}
+                  <div class="health-content">
+                    <div class="channel-counts">
+                      <span
+                        v-for="channel in world.channels"
+                        :key="channel.id"
+                        class="tag info channel-pill"
+                      >
+                        {{ channel.label }}:
+                        {{
+                          $t('workplace.game.playerCount', {
+                            count: channel.playerCountText,
+                          })
+                        }}
+                      </span>
+                      <span v-if="!world.channels.length" class="tag gray">{{
+                        $t('workplace.game.noChannels')
+                      }}</span>
+                    </div>
+                    <div class="health-desc">
+                      EXP {{ world.expRateText }} · Drop
+                      {{ world.dropRateText }} · Meso {{ world.mesoRateText }}
+                    </div>
                   </div>
                   <span class="tag">{{ $t('workplace.running') }}</span>
                 </div>
@@ -778,6 +804,7 @@
   } from '@/api/dashboard';
   import { Message } from '@arco-design/web-vue';
   import useLoading from '@/hooks/loading';
+  import useThemes from '@/hooks/themes';
   import {
     reloadDropsByGMCommand,
     reloadEventsByGMCommand,
@@ -807,6 +834,7 @@
     time: number;
     label: string;
     cpu?: number;
+    gameCpu?: number;
     memory?: number;
     jvmHeap?: number;
     rx?: number;
@@ -819,6 +847,7 @@
   }
 
   const { t } = useI18n();
+  const { isDark } = useThemes();
   const { loading, setLoading } = useLoading(false);
   const serverStatus = ref<'resting' | 'running'>('resting');
   const monitorSnapshot = ref<ServerMonitorSnapshot | null>(null);
@@ -913,6 +942,7 @@
           ? dayjs(sampledAt).format('MM-DD HH:mm')
           : dayjs(sampledAt).format('HH:mm:ss'),
       cpu: toPercentNumber(point.systemCpuLoad),
+      gameCpu: toPercentNumber(point.processCpuLoad),
       memory: toPercentNumber(point.systemMemoryUsage),
       jvmHeap: toPercentNumber(point.jvmHeapUsage),
       rx: point.networkRxBytesPerSecond ?? undefined,
@@ -992,12 +1022,20 @@
     worldList.value.map((world) => {
       const channels = channelList.value
         .filter((item) => item.worldId === world.id)
-        .map((item) => item.id);
+        .map((item) => ({
+          id: item.id,
+          label: `CH${item.id}`,
+          playerCountText:
+            item.playerCount === null || item.playerCount === undefined
+              ? '-'
+              : String(item.playerCount),
+        }))
+        .sort((a, b) => a.id - b.id);
       const rate = (value?: number | null) =>
         value === null || value === undefined ? '-' : `${value}x`;
       return {
         id: world.id,
-        channelsText: channels.length ? channels.join(', ') : '-',
+        channels,
         expRateText: rate(world.expRate),
         dropRateText: rate(world.dropRate),
         mesoRateText: rate(world.mesoRate),
@@ -1034,12 +1072,15 @@
   const resourceTrendOptions = computed(() => {
     const labels = trendSamples.value.map((item) => item.label);
     const percentSeries = [
-      { name: 'CPU %', key: 'cpu' },
+      { name: t('workplace.monitor.hostCpu'), key: 'cpu' },
+      { name: t('workplace.monitor.gameCpu'), key: 'gameCpu' },
       { name: `${t('workplace.monitor.memory')} %`, key: 'memory' },
-      { name: 'JVM Heap %', key: 'jvmHeap' },
+      { name: t('workplace.trend.jvmHeap'), key: 'jvmHeap' },
     ];
+    const axisColor = isDark.value ? '#3a3a3c' : '#e6ebf3';
+    const splitLineColor = isDark.value ? '#303033' : '#eef2f7';
     return {
-      color: ['#1677ff', '#16a34a', '#f59e0b'],
+      color: ['#1677ff', '#f97316', '#16a34a', '#f59e0b'],
       tooltip: {
         trigger: 'axis',
         formatter: (params: any[]) => {
@@ -1074,7 +1115,7 @@
         boundaryGap: false,
         data: labels,
         axisTick: { show: false },
-        axisLine: { lineStyle: { color: '#e6ebf3' } },
+        axisLine: { lineStyle: { color: axisColor } },
       },
       yAxis: {
         type: 'value',
@@ -1082,7 +1123,7 @@
         max: 100,
         name: '%',
         axisLabel: { formatter: '{value}%' },
-        splitLine: { lineStyle: { color: '#eef2f7' } },
+        splitLine: { lineStyle: { color: splitLineColor } },
       },
       series: percentSeries.map((item) => ({
         name: item.name,
@@ -1118,6 +1159,8 @@
       { name: t('workplace.monitor.diskRead'), key: 'diskRead' },
       { name: t('workplace.monitor.diskWrite'), key: 'diskWrite' },
     ];
+    const axisColor = isDark.value ? '#3a3a3c' : '#e6ebf3';
+    const splitLineColor = isDark.value ? '#303033' : '#eef2f7';
     return {
       color: ['#06b6d4', '#6366f1', '#f97316', '#ef4444'],
       tooltip: {
@@ -1145,7 +1188,7 @@
         boundaryGap: false,
         data: labels,
         axisTick: { show: false },
-        axisLine: { lineStyle: { color: '#e6ebf3' } },
+        axisLine: { lineStyle: { color: axisColor } },
       },
       yAxis: {
         type: 'value',
@@ -1153,7 +1196,7 @@
         axisLabel: {
           formatter: (value: number) => formatBytesPerSec(value, 0),
         },
-        splitLine: { lineStyle: { color: '#eef2f7' } },
+        splitLine: { lineStyle: { color: splitLineColor } },
       },
       series: ioSeries.map((item) => ({
         name: item.name,
@@ -1605,24 +1648,29 @@
 
 <style lang="less" scoped>
   .workbench-page {
-    --bg: #f5f7fb;
-    --surface: #ffffff;
-    --surface-soft: #f8fafc;
-    --border: #e5e8ef;
-    --text: #1d2530;
-    --muted: #667085;
-    --muted-2: #98a2b3;
-    --blue: #1677ff;
-    --blue-soft: #e8f3ff;
-    --green: #16a34a;
-    --green-soft: #eaf8ef;
-    --orange: #f59e0b;
-    --orange-soft: #fff7e6;
-    --red: #dc2626;
-    --red-soft: #fff1f0;
-    --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-    --radius: 14px;
-    --radius-sm: 10px;
+    --bg: var(--gms-bg);
+    --surface: var(--gms-surface);
+    --surface-soft: var(--gms-surface-soft);
+    --border: var(--gms-border);
+    --border-soft: var(--gms-border-soft);
+    --text: var(--gms-text);
+    --muted: var(--gms-muted);
+    --muted-2: var(--gms-muted-2);
+    --blue: var(--gms-primary);
+    --blue-soft: var(--gms-primary-soft);
+    --green: var(--gms-success);
+    --green-soft: var(--gms-success-soft);
+    --orange: var(--gms-warning);
+    --orange-soft: var(--gms-warning-soft);
+    --red: var(--gms-danger);
+    --red-soft: var(--gms-danger-soft);
+    --cyan: var(--gms-cyan);
+    --cyan-soft: var(--gms-cyan-soft);
+    --shadow: var(--gms-shadow);
+    --radius: var(--gms-radius);
+    --radius-sm: var(--gms-radius-sm);
+    --scroll-thumb: var(--gms-muted-2);
+    --danger-border: var(--gms-danger);
     min-height: 100%;
     background: var(--bg);
     color: var(--text);
@@ -1665,7 +1713,7 @@
     gap: 12px;
     padding: 16px 18px;
     border-bottom: 1px solid var(--border);
-    background: linear-gradient(#fff, #fbfcff);
+    background: linear-gradient(var(--surface), var(--surface-soft));
   }
 
   .section-title {
@@ -1710,7 +1758,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 16px;
-    background: linear-gradient(135deg, #f8fbff, #fff);
+    background: linear-gradient(135deg, var(--surface-soft), var(--surface));
   }
 
   .status-label {
@@ -1726,7 +1774,7 @@
   }
 
   .status-label.gray {
-    background: #f2f4f7;
+    background: var(--surface-soft);
     color: var(--muted);
   }
 
@@ -1762,7 +1810,7 @@
   .mini-stat {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: #fff;
+    background: var(--surface);
     padding: 14px;
   }
 
@@ -1835,7 +1883,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 14px;
-    background: #fff;
+    background: var(--surface);
     min-height: 150px;
   }
 
@@ -1854,7 +1902,7 @@
   .resource-scroll-card::-webkit-scrollbar-thumb,
   .hot-scroll::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    background: #d7dde8;
+    background: var(--scroll-thumb);
   }
 
   .resource-scroll-card::-webkit-scrollbar-track,
@@ -1894,7 +1942,7 @@
   }
 
   .tag.gray {
-    background: #f2f4f7;
+    background: var(--surface-soft);
     color: var(--muted);
   }
 
@@ -1914,7 +1962,7 @@
   .disk-item + .disk-item {
     margin-top: 12px;
     padding-top: 12px;
-    border-top: 1px solid #f0f2f5;
+    border-top: 1px solid var(--border-soft);
   }
 
   .traffic-line {
@@ -1948,7 +1996,7 @@
   }
 
   .io-group {
-    border: 1px solid #eef2f7;
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius-sm);
     padding: 10px;
     background: var(--surface-soft);
@@ -1987,7 +2035,7 @@
     font-style: normal;
     font-size: 11px;
     font-weight: 850;
-    background: #eef2f7;
+    background: var(--border-soft);
   }
 
   .io-row b {
@@ -1997,26 +2045,26 @@
   }
 
   .io-row.rx i {
-    background: #e0f7fa;
-    color: #0891b2;
+    background: var(--cyan-soft);
+    color: var(--cyan);
   }
   .io-row.tx i {
-    background: #e8f3ff;
+    background: var(--blue-soft);
     color: var(--blue);
   }
   .io-row.read i {
-    background: #fff7e6;
+    background: var(--orange-soft);
     color: var(--orange);
   }
   .io-row.write i {
-    background: #fff1f0;
+    background: var(--red-soft);
     color: var(--red);
   }
 
   .chart-card {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: #fff;
+    background: var(--surface);
     padding: 14px;
     min-height: 230px;
   }
@@ -2067,7 +2115,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 16px;
-    background: #fff;
+    background: var(--surface);
   }
 
   .reload-panel {
@@ -2101,7 +2149,7 @@
     gap: 12px;
     align-items: center;
     padding: 10px 0;
-    border-top: 1px solid #f0f2f5;
+    border-top: 1px solid var(--border-soft);
   }
 
   .health-row:first-child {
@@ -2118,9 +2166,26 @@
     font-size: 12px;
   }
 
+  .health-content {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .channel-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .channel-pill {
+    font-variant-numeric: tabular-nums;
+  }
+
   .action-zone {
-    background: #fff;
-    border: 1px dashed #f0b4b4;
+    background: var(--surface);
+    border: 1px dashed var(--danger-border);
     border-radius: var(--radius-sm);
     padding: 14px;
   }
@@ -2150,7 +2215,7 @@
 
   :deep(.arco-progress-line-wrapper) {
     border-radius: 999px;
-    background: #eef2f7;
+    background: var(--border-soft);
   }
 
   :deep(.arco-progress-line-bar) {
@@ -2168,7 +2233,7 @@
   :deep(.range-switch-arco.arco-radio-group-button) {
     padding: 3px;
     border-radius: 999px;
-    background: #f2f4f7;
+    background: var(--surface-soft);
   }
 
   :deep(.range-switch-arco .arco-radio-button) {

@@ -16,11 +16,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Cross-platform OSHI-backed metrics collector used on Windows and other non-Linux systems.
+ * 基于 OSHI 的跨平台指标采集器，用于 Windows 与其他非 Linux 系统。
  */
 public class OshiSystemMetricsCollector implements SystemMetricsCollector {
-    private static final String DISK_IO_FIRST_SAMPLE_NOTE = "Disk IO rate counters require two samples; rates will be available on the next request.";
-    private static final String DISK_IO_UNAVAILABLE_NOTE = "Disk IO rate counters are not available on this platform.";
+    private static final String DISK_IO_FIRST_SAMPLE_NOTE = "磁盘 IO 速率需要两次采样，下次请求后可用。";
+    private static final String DISK_IO_UNAVAILABLE_NOTE = "当前平台无法采集磁盘 IO 速率。";
 
     private final SystemInfo systemInfo;
     private final HardwareAbstractionLayer hardware;
@@ -135,7 +135,7 @@ public class OshiSystemMetricsCollector implements SystemMetricsCollector {
                 counters.network.put(name, new NetworkCounters(network.getBytesRecv(), network.getBytesSent()));
             }
         } catch (Exception ignored) {
-            // Leave network counters empty; snapshot remains available with null rates.
+            // 网卡计数器读取失败时保持为空，快照仍可返回但速率为空。
         }
         try {
             for (HWDiskStore disk : hardware.getDiskStores()) {
@@ -146,7 +146,7 @@ public class OshiSystemMetricsCollector implements SystemMetricsCollector {
                 counters.disk.writeOps += disk.getWrites();
             }
         } catch (Exception ignored) {
-            // Leave disk counters at zero; availability is decided when compared to a previous sample.
+            // 磁盘计数器读取失败时保留零值，是否可用由后续差值计算决定。
         }
         try {
             OSProcess process = operatingSystem.getProcess(operatingSystem.getProcessId());
@@ -154,7 +154,7 @@ public class OshiSystemMetricsCollector implements SystemMetricsCollector {
                 counters.processDisk = new ProcessDiskCounters(process.getBytesRead(), process.getBytesWritten());
             }
         } catch (Exception ignored) {
-            // Leave process disk counters empty when the platform does not expose them.
+            // 平台不提供进程磁盘计数器时保持为空。
         }
         return counters;
     }

@@ -35,7 +35,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
         SystemMetricsSample sample = new SystemMetricsSample();
 
         if (!isLinux()) {
-            warnings.add("Linux /proc metrics are unavailable on this operating system.");
+            warnings.add("当前操作系统无法采集 Linux /proc 指标。");
             sample.setPartial(true);
             sample.setWarnings(warnings);
             return sample;
@@ -71,7 +71,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
             applyNetworkRates(sample, current.net, previous.net, seconds, networkInterfaceName);
             applyDiskRates(sample, current.disk, previous.disk, seconds);
         } else {
-            warnings.add("Linux /proc rate metrics require two samples; rates will be available on the next request.");
+            warnings.add("Linux /proc 速率指标需要两次采样，下次请求后可用。");
         }
 
         previous = current;
@@ -87,7 +87,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
     private CpuCounters readCpu(List<String> warnings) {
         try {
             if (!Files.isReadable(PROC_STAT)) {
-                warnings.add(PROC_STAT + " is not readable; CPU /proc usage is unavailable.");
+                warnings.add(PROC_STAT + " 不可读取，无法采集 CPU /proc 用量。");
                 return null;
             }
             for (String line : Files.readAllLines(PROC_STAT)) {
@@ -101,9 +101,9 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
                     return new CpuCounters(total, idle);
                 }
             }
-            warnings.add(PROC_STAT + " does not contain an aggregate cpu line.");
+            warnings.add(PROC_STAT + " 未包含汇总 CPU 行。");
         } catch (Exception e) {
-            warnings.add("Failed to read " + PROC_STAT + ": " + e.getClass().getSimpleName());
+            warnings.add("读取 " + PROC_STAT + " 失败：" + e.getClass().getSimpleName());
         }
         return null;
     }
@@ -111,7 +111,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
     private Map<String, Long> readMeminfo(List<String> warnings) {
         try {
             if (!Files.isReadable(PROC_MEMINFO)) {
-                warnings.add(PROC_MEMINFO + " is not readable; system memory is unavailable.");
+                warnings.add(PROC_MEMINFO + " 不可读取，无法采集系统内存。");
                 return null;
             }
             Map<String, Long> values = new HashMap<>();
@@ -127,7 +127,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
             }
             return values;
         } catch (Exception e) {
-            warnings.add("Failed to read " + PROC_MEMINFO + ": " + e.getClass().getSimpleName());
+            warnings.add("读取 " + PROC_MEMINFO + " 失败：" + e.getClass().getSimpleName());
             return null;
         }
     }
@@ -135,7 +135,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
     private NetCounters readNetDev(List<String> warnings) {
         try {
             if (!Files.isReadable(PROC_NET_DEV)) {
-                warnings.add(PROC_NET_DEV + " is not readable; network rates are unavailable.");
+                warnings.add(PROC_NET_DEV + " 不可读取，无法采集网络速率。");
                 return null;
             }
             NetCounters counters = new NetCounters();
@@ -158,7 +158,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
             }
             return counters;
         } catch (Exception e) {
-            warnings.add("Failed to read " + PROC_NET_DEV + ": " + e.getClass().getSimpleName());
+            warnings.add("读取 " + PROC_NET_DEV + " 失败：" + e.getClass().getSimpleName());
             return null;
         }
     }
@@ -166,7 +166,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
     private DiskCounters readDiskstats(List<String> warnings) {
         try {
             if (!Files.isReadable(PROC_DISKSTATS)) {
-                warnings.add(PROC_DISKSTATS + " is not readable; disk IO rates are unavailable.");
+                warnings.add(PROC_DISKSTATS + " 不可读取，无法采集磁盘 IO 速率。");
                 return null;
             }
             DiskCounters counters = new DiskCounters();
@@ -182,7 +182,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
             }
             return counters;
         } catch (Exception e) {
-            warnings.add("Failed to read " + PROC_DISKSTATS + ": " + e.getClass().getSimpleName());
+            warnings.add("读取 " + PROC_DISKSTATS + " 失败：" + e.getClass().getSimpleName());
             return null;
         }
     }
@@ -222,7 +222,7 @@ public class LinuxProcMonitorCollector implements SystemMetricsCollector {
         if (current == null || previous == null) {
             sample.setDiskIo(DiskIoInfoDTO.builder()
                     .available(false)
-                    .note("Disk IO rate counters require two samples; rates will be available on the next request.")
+                    .note("磁盘 IO 速率需要两次采样，下次请求后可用。")
                     .build());
             return;
         }

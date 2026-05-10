@@ -31,6 +31,10 @@ export interface MonitorRuntimeInfo {
 }
 
 export interface MonitorCpuInfo {
+  /** 宿主环境 CPU 占用率，取值范围 0..1。 */
+  hostCpuLoad?: number | null;
+  /** 游戏服务端 Java 进程 CPU 占用率，取值范围 0..1。 */
+  gameServerCpuLoad?: number | null;
   osName?: string | null;
   osVersion?: string | null;
   osArch?: string | null;
@@ -67,6 +71,14 @@ export interface MonitorDiskInfo {
 }
 
 export interface MonitorDiskIoInfo {
+  /** 宿主环境磁盘读取速率。 */
+  hostReadBytesPerSecond?: number | null;
+  /** 宿主环境磁盘写入速率。 */
+  hostWriteBytesPerSecond?: number | null;
+  /** 游戏服务端 Java 进程磁盘读取速率。 */
+  gameServerReadBytesPerSecond?: number | null;
+  /** 游戏服务端 Java 进程磁盘写入速率。 */
+  gameServerWriteBytesPerSecond?: number | null;
   available?: boolean | null;
   note?: string | null;
   readBytesPerSecond?: number | null;
@@ -91,6 +103,10 @@ export interface MonitorNetworkInterfaceInfo {
 }
 
 export interface MonitorNetworkInfo {
+  /** 宿主环境所选网卡下载速率；当前不等同于游戏服务端进程网络 IO。 */
+  hostRxBytesPerSecond?: number | null;
+  /** 宿主环境所选网卡上传速率；当前不等同于游戏服务端进程网络 IO。 */
+  hostTxBytesPerSecond?: number | null;
   hostName?: string | null;
   selectedInterfaceName?: string | null;
   defaultInterfaceName?: string | null;
@@ -241,6 +257,7 @@ export interface ServerWorldInfo {
 export interface ServerChannelInfo {
   id: number;
   worldId: number;
+  playerCount?: number | null;
 }
 
 export function getServerWorldList() {

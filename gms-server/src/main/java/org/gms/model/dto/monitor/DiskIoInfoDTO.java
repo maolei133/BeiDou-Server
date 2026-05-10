@@ -10,6 +10,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DiskIoInfoDTO {
+    private Double hostReadBytesPerSecond;
+    private Double hostWriteBytesPerSecond;
+    private Double gameServerReadBytesPerSecond;
+    private Double gameServerWriteBytesPerSecond;
     private Boolean available;
     private String note;
     private Double readBytesPerSecond;
