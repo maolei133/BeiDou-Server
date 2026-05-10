@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springdoc.core.properties.SpringDocConfigProperties;
 import org.springdoc.core.properties.SwaggerUiConfigProperties;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -63,12 +64,14 @@ public class AuthTokenFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
+        } catch (AuthenticationException e) {
+            SecurityContextHolder.clearContext();
+            logger.warn("认证过滤器处理失败，按登录失效处理 - 路径: {}, 错误信息: {}",
+                    request.getRequestURI(), e.getMessage());
         } catch (Exception e) {
-            logger.error("Filter error", e);
-            // 释放流，否则可能内存泄漏
-            request.getInputStream().close();
-            response.getOutputStream().close();
-            return;
+            SecurityContextHolder.clearContext();
+            logger.error("认证过滤器发生系统异常 - 路径: {}", request.getRequestURI(), e);
+            throw new ServletException(e);
         }
         filterChain.doFilter(request, response);
     }

@@ -85,7 +85,7 @@
   const loginConfig = useStorage('login-config', {
     rememberPassword: true,
     username: 'admin', // 演示默认值
-    password: 'admin', // demo default value
+    password: 'admin', // 演示默认值
   });
   const userInfo = reactive({
     username: loginConfig.value.username,
@@ -115,10 +115,10 @@
         const { rememberPassword } = loginConfig.value;
         const { username, password } = values;
         // 实际生产环境需要进行加密存储。
-        // The actual production environment requires encrypted storage.
         loginConfig.value.username = rememberPassword ? username : '';
         loginConfig.value.password = rememberPassword ? password : '';
       } catch (err) {
+        // 错误弹窗由 Axios 拦截器统一处理，这里只保留表单内联提示。
         errorMessage.value = (err as Error).message;
         if ((err as Error).name === 'TypeError')
           errorMessage.value = '错误的请求';

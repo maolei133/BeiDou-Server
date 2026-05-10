@@ -8,6 +8,7 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configurator;
+import org.gms.exception.BizException;
 import org.gms.model.dto.ResultBody;
 import org.gms.server.logging.AuditLogger;
 import org.gms.server.logging.LogAction;
@@ -40,6 +41,8 @@ import java.util.stream.Stream;
 @RestController
 @RequestMapping("/log")
 public class LogSystemController {
+
+    private static final int PARAMETER_ERROR_CODE = 10001;
 
     private final ObjectMapper objectMapper;
     private final AccountService accountService;
@@ -80,7 +83,7 @@ public class LogSystemController {
         File scriptFile = getScriptFile();
 
         if (!scriptFile.exists()) {
-            throw new RuntimeException("错误: 找不到启动脚本 " + scriptFile.getName() + " (路径: " + scriptFile.getAbsolutePath() + ")");
+            throw businessFailure("错误: 找不到启动脚本 " + scriptFile.getName() + " (路径: " + scriptFile.getAbsolutePath() + ")");
         }
 
         try {
@@ -101,7 +104,7 @@ public class LogSystemController {
 
             return ResultBody.success("已触发启动脚本");
         } catch (IOException e) {
-            throw new RuntimeException("启动失败: " + e.getMessage());
+            throw systemFailure("启动失败: " + e.getMessage(), e);
         }
     }
 
@@ -442,7 +445,7 @@ public class LogSystemController {
             if (!loki.contains("失败") && !promtail.contains("失败")) {
                 return loki + "; " + promtail;
             }
-            throw new RuntimeException("启动失败: " + loki + "; " + promtail);
+            throw businessFailure("启动失败: " + loki + "; " + promtail);
         }
         File scriptFile = getScriptFile();
         if (!scriptFile.exists()) {
@@ -458,7 +461,7 @@ public class LogSystemController {
             if (!loki.contains("失败") && !promtail.contains("失败")) {
                 return loki + "; " + promtail;
             }
-            throw new RuntimeException("停止失败: " + loki + "; " + promtail);
+            throw businessFailure("停止失败: " + loki + "; " + promtail);
         }
 
         StringBuilder result = new StringBuilder();
@@ -473,7 +476,7 @@ public class LogSystemController {
             result.append("; ").append(killLinuxProcessByName("promtail", "Promtail"));
         }
         if (result.toString().contains("Docker 不可用") && result.toString().contains("未运行")) {
-            throw new RuntimeException("停止失败: 当前容器没有 Docker 控制能力。请挂载 /var/run/docker.sock，或在宿主机执行 LogSystem/Docker/start-logging.sh patch compose 后重建 gms-server。");
+            throw businessFailure("停止失败: 当前容器没有 Docker 控制能力。请挂载 /var/run/docker.sock，或在宿主机执行 LogSystem/Docker/start-logging.sh patch compose 后重建 gms-server。");
         }
         return result.toString();
     }
@@ -579,7 +582,7 @@ public class LogSystemController {
             try {
                 Files.delete(positionsFile.toPath());
             } catch (IOException e) {
-                throw new RuntimeException("删除 Promtail positions 文件失败: " + e.getMessage());
+                throw systemFailure("删除 Promtail positions 文件失败: " + e.getMessage(), e);
             }
         }
     }
@@ -675,7 +678,7 @@ public class LogSystemController {
             }
             return ResultBody.success("Logger [" + loggerName + "] 级别已设置为 " + newLevel);
         } catch (IllegalArgumentException e) {
-            throw new RuntimeException("无效的日志级别: " + level);
+            throw businessFailure("无效的日志级别: " + level);
         }
     }
 
@@ -694,7 +697,7 @@ public class LogSystemController {
             @Parameter(description = "文件名", required = true) @PathVariable String fileName) {
         File file = getConfigFile(fileName);
         if (file == null) {
-            throw new RuntimeException("非法的文件名: " + fileName);
+            throw businessFailure("非法的文件名: " + fileName);
         }
         
         // 修复：dashboard-layout.json 不存在时返回默认空数组，不报错
@@ -702,13 +705,13 @@ public class LogSystemController {
             if ("dashboard-layout.json".equals(fileName)) {
                 return ResultBody.success("[]");
             }
-            throw new RuntimeException("文件不存在: " + file.getAbsolutePath());
+            throw businessFailure("文件不存在: " + file.getAbsolutePath());
         }
         
         try {
             return ResultBody.success(Files.readString(file.toPath(), StandardCharsets.UTF_8));
         } catch (IOException e) {
-            throw new RuntimeException("读取失败 [" + fileName + "]: " + e.getMessage());
+            throw systemFailure("读取失败 [" + fileName + "]: " + e.getMessage(), e);
         }
     }
 
@@ -719,13 +722,13 @@ public class LogSystemController {
             @RequestBody String content) {
         File file = getConfigFile(fileName);
         if (file == null) {
-            throw new RuntimeException("非法的文件名: " + fileName);
+            throw businessFailure("非法的文件名: " + fileName);
         }
         try {
             Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
             return ResultBody.success("文件已保存");
         } catch (IOException e) {
-            throw new RuntimeException("保存失败 [" + fileName + "]: " + e.getMessage());
+            throw systemFailure("保存失败 [" + fileName + "]: " + e.getMessage(), e);
         }
     }
 
@@ -736,21 +739,21 @@ public class LogSystemController {
     public ResultBody<Object> getConfigYaml(
             @Parameter(description = "文件名 (仅限 .yaml 文件)", required = true) @PathVariable String fileName) {
         if (!fileName.endsWith(".yaml")) {
-            throw new RuntimeException("仅支持 .yaml 文件");
+            throw businessFailure("仅支持 .yaml 文件");
         }
         File file = getConfigFile(fileName);
         if (file == null) {
-            throw new RuntimeException("非法的文件名: " + fileName);
+            throw businessFailure("非法的文件名: " + fileName);
         }
         if (!file.exists()) {
-            throw new RuntimeException("文件不存在: " + file.getAbsolutePath());
+            throw businessFailure("文件不存在: " + file.getAbsolutePath());
         }
         try {
             String content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
             Yaml yaml = new Yaml();
             return ResultBody.success(yaml.load(content));
         } catch (Exception e) {
-            throw new RuntimeException("解析失败 [" + fileName + "]: " + e.getMessage());
+            throw businessFailure("解析失败 [" + fileName + "]: " + e.getMessage());
         }
     }
 
@@ -760,11 +763,11 @@ public class LogSystemController {
             @Parameter(description = "文件名 (仅限 .yaml 文件)", required = true) @PathVariable String fileName,
             @RequestBody Map<String, Object> config) {
         if (!fileName.endsWith(".yaml")) {
-            throw new RuntimeException("仅支持 .yaml 文件");
+            throw businessFailure("仅支持 .yaml 文件");
         }
         File file = getConfigFile(fileName);
         if (file == null) {
-            throw new RuntimeException("非法的文件名: " + fileName);
+            throw businessFailure("非法的文件名: " + fileName);
         }
         try {
             DumperOptions options = new DumperOptions();
@@ -776,7 +779,7 @@ public class LogSystemController {
             Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
             return ResultBody.success(Collections.singletonMap("status", "文件已保存"));
         } catch (Exception e) {
-            throw new RuntimeException("保存失败 [" + fileName + "]: " + e.getMessage());
+            throw systemFailure("保存失败 [" + fileName + "]: " + e.getMessage(), e);
         }
     }
     
@@ -918,7 +921,7 @@ public class LogSystemController {
             Object jsonObject = objectMapper.readValue(response.body(), Object.class);
             return ResultBody.success(jsonObject);
         } catch (Exception e) {
-            throw new RuntimeException("查询失败: " + e.getMessage());
+            throw businessFailure("查询失败: " + e.getMessage());
         }
     }
 
@@ -973,8 +976,16 @@ public class LogSystemController {
              stats.put("raw", objectMapper.readValue(response.body(), Object.class));
              return ResultBody.success(stats);
         } catch (Exception e) {
-            throw new RuntimeException("统计失败: " + e.getMessage());
+            throw businessFailure("统计失败: " + e.getMessage());
         }
+    }
+
+    private BizException businessFailure(String message) {
+        return new BizException(PARAMETER_ERROR_CODE, message);
+    }
+
+    private IllegalStateException systemFailure(String message, Exception cause) {
+        return new IllegalStateException(message, cause);
     }
 
     private File getConfigFile(String fileName) {

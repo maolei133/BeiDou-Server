@@ -53,6 +53,8 @@ export interface ResultBody<T> {
   code: number;
   message: string;
   data: T;
+  timestamp: number;
+  path: string;
 }
 
 export interface SubmitBody {

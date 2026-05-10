@@ -77,15 +77,15 @@ public class JwtUtils {
             return true;
         } catch (SignatureException e) {
             // 注解：SignatureException的包路径已更新为 io.jsonwebtoken.security.SignatureException
-            logger.error("访问者的Token签名无效: {}", e.getMessage());
+            logger.warn("访问者的Token签名无效: {}", e.getMessage());
         } catch (MalformedJwtException e) {
-            logger.error("访问者的Token无效: {}", e.getMessage());
+            logger.warn("访问者的Token无效: {}", e.getMessage());
         } catch (ExpiredJwtException e) {
-            logger.error("访问者的Token已过期: {}", e.getMessage());
+            logger.info("访问者的Token已过期: {}", e.getMessage());
         } catch (UnsupportedJwtException e) {
-            logger.error("访问者的Token不被支持: {}", e.getMessage());
+            logger.warn("访问者的Token不被支持: {}", e.getMessage());
         } catch (IllegalArgumentException e) {
-            logger.error("访问者的Token参数为空: {}", e.getMessage());
+            logger.warn("访问者的Token参数为空: {}", e.getMessage());
         }
 
         return false;
