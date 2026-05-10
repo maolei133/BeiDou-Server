@@ -42,13 +42,14 @@ export default {
   'workplace.button.dataReloadOpcodes': 'Reload Opcodes',
   'workplace.button.dataReloadPackets': 'Reload Handlers',
   'workplace.button.dataReloadPacketCreator': 'Reload Packet Scripts',
-  'workplace.stop.shutdownInProgress': 'Server shutdown has started. Please wait...',
+  'workplace.stop.shutdownInProgress':
+    'Server shutdown has started. Please wait...',
   'common.operationSuccess': 'Operation successful',
   'common.requestFailed': 'Request failed',
   'workplace.mvp.title': 'Workbench Monitor',
   'workplace.mvp.desc':
     'Connected to real APIs, separating host environment, game service, and JVM. Trends prefer Loki logs and fall back to the in-memory window when unavailable.',
-  'workplace.section.today': 'Today\'s Operations',
+  'workplace.section.today': "Today's Operations",
   'workplace.section.host': 'Host Resources',
   'workplace.section.trend': 'Trends and Events',
   'workplace.section.game': 'Game Service',
@@ -59,7 +60,8 @@ export default {
   'workplace.monitor.updatedAt': 'Collected At',
   'workplace.monitor.partial': 'Partial Data',
   'workplace.monitor.failed': 'Collection Failed',
-  'workplace.monitor.failedDesc': 'Monitor snapshot collection failed. Automatic retry will continue.',
+  'workplace.monitor.failedDesc':
+    'Monitor snapshot collection failed. Automatic retry will continue.',
   'workplace.monitor.overview': 'Host Environment Overview',
   'workplace.monitor.uptime': 'Uptime',
   'workplace.monitor.version': 'Version',
@@ -70,11 +72,14 @@ export default {
   'workplace.monitor.hostCpu': 'Host CPU',
   'workplace.monitor.gameCpu': 'Game Server CPU',
   'workplace.monitor.hostNetworkIo': 'Host Network IO',
-  'workplace.monitor.gameNetworkIoUnavailable': 'Game process network IO is not collected yet',
+  'workplace.monitor.gameNetworkIoUnavailable':
+    'Game process network IO is not collected yet',
   'workplace.monitor.hostDiskIo': 'Host Disk IO',
   'workplace.monitor.gameDiskIo': 'Game Server Disk IO',
-  'workplace.monitor.scopeNote': 'Metric scope: host environment, game service process, and JVM are displayed separately.',
-  'workplace.monitor.networkScopeNote': 'Network IO is the selected host NIC rate and does not represent traffic exclusively used by the game process.',
+  'workplace.monitor.scopeNote':
+    'Metric scope: host environment, game service process, and JVM are displayed separately.',
+  'workplace.monitor.networkScopeNote':
+    'Network IO is the selected host NIC rate and does not represent traffic exclusively used by the game process.',
   'workplace.monitor.resourceScopeShort': 'CPU / Memory / Disk / IO',
   'workplace.monitor.memory': 'Memory',
   'workplace.monitor.total': 'Total',
@@ -99,14 +104,16 @@ export default {
   'workplace.game.online': 'Online',
   'workplace.game.offline': 'Offline',
   'workplace.game.currentOnline': 'Current Online',
-  'workplace.game.onlineScope': 'Online players summarized from returned worlds',
+  'workplace.game.onlineScope':
+    'Online players summarized from returned worlds',
   'workplace.game.worlds': 'Worlds',
   'workplace.game.channels': 'Channels',
   'workplace.game.playerCount': '{count} players',
   'workplace.game.noChannels': 'No channels yet',
   'workplace.game.loginHealth': 'Login Health',
   'workplace.game.healthNormal': 'Base APIs normal',
-  'workplace.game.healthDesc': 'Phase 1 uses monitor/API success rate as the basic health signal.',
+  'workplace.game.healthDesc':
+    'Phase 1 uses monitor/API success rate as the basic health signal.',
   'workplace.game.refreshStatus': 'Refresh Status',
   'workplace.game.worldChannel': 'World / Channel Base Data',
   'workplace.trend.samples': 'history records',
@@ -117,13 +124,15 @@ export default {
   'workplace.trend.subtitle':
     'Supports 1 minute, 5 minutes, 10 minutes, 30 minutes, 1 hour, 1 day, 7 days, and custom time ranges.',
   'workplace.trend.customRange': 'Custom',
-  'workplace.trend.historyFailed': 'Failed to load historical trends. Real-time cards are still available.',
+  'workplace.trend.historyFailed':
+    'Failed to load historical trends. Real-time cards are still available.',
   'workplace.trend.resourceTitle': 'Host / Game Process Resource Trends',
   'workplace.trend.ioTitle': 'Host Network / Disk IO Trends',
   'workplace.trend.jvmHeap': 'JVM Heap %',
   'workplace.trend.eventTitle': 'Event Timeline',
   'workplace.trend.anomalyTitle': 'CPU Anomaly Events',
-  'workplace.trend.noAnomaly': 'No CPU anomaly events in the current time range',
+  'workplace.trend.noAnomaly':
+    'No CPU anomaly events in the current time range',
   'workplace.trend.cpuSpike': 'CPU anomaly spike',
   'workplace.trend.waiting': 'Accumulating historical data. Please wait.',
   'workplace.cpuConfig.title': 'CPU Threshold Configuration',
@@ -131,7 +140,8 @@ export default {
     'Adjust CPU alert thresholds and log levels from the event area. The configuration is stored through GameConfig JSON.',
   'workplace.cpuConfig.threshold': 'Threshold',
   'workplace.cpuConfig.level': 'Log Level',
-  'workplace.cpuConfig.loadFailed': 'Failed to load CPU threshold configuration. Defaults are used.',
+  'workplace.cpuConfig.loadFailed':
+    'Failed to load CPU threshold configuration. Defaults are used.',
   'workplace.event.pageOpened': 'Page opened, real-time monitoring started',
   'workplace.event.snapshotOk': 'Monitor snapshot collected successfully',
   'workplace.event.gameApiDegraded': 'Game service base APIs degraded',
@@ -139,5 +149,6 @@ export default {
   'workplace.ops.warning':
     'Dangerous operations are separated into an independent area. This phase only adds frontend double confirmation and affected-player prompts; backend RBAC/audit will be handled later.',
   'workplace.ops.impact': 'Currently Affected Players',
-  'workplace.ops.forceOffline': 'May force players offline or make the service unavailable',
+  'workplace.ops.forceOffline':
+    'May force players offline or make the service unavailable',
 };

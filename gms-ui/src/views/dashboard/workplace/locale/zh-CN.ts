@@ -73,8 +73,10 @@ export default {
   'workplace.monitor.gameNetworkIoUnavailable': '暂未采集游戏进程网络 IO',
   'workplace.monitor.hostDiskIo': '宿主磁盘 IO',
   'workplace.monitor.gameDiskIo': '游戏服磁盘 IO',
-  'workplace.monitor.scopeNote': '指标范围：宿主环境、游戏服务进程与 JVM 分开展示。',
-  'workplace.monitor.networkScopeNote': '网络 IO 为宿主所选网卡速率，不代表游戏进程独占流量。',
+  'workplace.monitor.scopeNote':
+    '指标范围：宿主环境、游戏服务进程与 JVM 分开展示。',
+  'workplace.monitor.networkScopeNote':
+    '网络 IO 为宿主所选网卡速率，不代表游戏进程独占流量。',
   'workplace.monitor.resourceScopeShort': 'CPU / 内存 / 磁盘 / IO',
   'workplace.monitor.memory': '内存',
   'workplace.monitor.total': '总量',
