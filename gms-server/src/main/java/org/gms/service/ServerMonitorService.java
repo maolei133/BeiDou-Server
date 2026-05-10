@@ -660,6 +660,12 @@ public class ServerMonitorService {
 
 
     private Double resolveProcessCpuLoad(OperatingSystemMXBean osBean) {
+        if (systemMetricsCollector instanceof SystemMetricsCollectorFactory.JdkBackfilledSystemMetricsCollector collector) {
+            Double processCpuLoad = collector.getProcessCpuLoad();
+            if (processCpuLoad != null) {
+                return processCpuLoad;
+            }
+        }
         if (systemMetricsCollector instanceof OshiSystemMetricsCollector oshiCollector) {
             Double processCpuLoad = oshiCollector.getProcessCpuLoad();
             if (processCpuLoad != null) {
@@ -670,6 +676,12 @@ public class ServerMonitorService {
     }
 
     private String resolveProcessorModel() {
+        if (systemMetricsCollector instanceof SystemMetricsCollectorFactory.JdkBackfilledSystemMetricsCollector collector) {
+            String model = collector.getProcessorModel();
+            if (model != null) {
+                return model;
+            }
+        }
         if (systemMetricsCollector instanceof OshiSystemMetricsCollector oshiCollector) {
             String model = oshiCollector.getProcessorModel();
             if (model != null) {

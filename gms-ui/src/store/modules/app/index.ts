@@ -22,13 +22,13 @@ const useAppStore = defineStore('app', {
   },
 
   actions: {
-    // Update app settings
+    // 更新应用设置
     updateSettings(partial: Partial<AppState>) {
       // @ts-ignore-next-line
       this.$patch(partial);
     },
 
-    // Change theme color
+    // 切换主题颜色
     toggleTheme(dark: boolean) {
       if (dark) {
         this.theme = 'dark';
@@ -48,11 +48,11 @@ const useAppStore = defineStore('app', {
       let notifyInstance: NotificationReturn | null = null;
       try {
         notifyInstance = Notification.info({
-          id: 'menuNotice', // Keep the instance id the same
+          id: 'menuNotice', // 保持实例 ID 一致。
           content: 'loading',
           closable: true,
         });
-        const { data } = await getMenuList();
+        const data = await getMenuList();
         this.serverMenu = data;
         notifyInstance = Notification.success({
           id: 'menuNotice',

@@ -1,10 +1,9 @@
 package org.gms.service;
 
 import lombok.AllArgsConstructor;
-import org.gms.util.I18nUtil;
+import org.gms.exception.BizException;
 import org.gms.util.JwtUtils;
 import org.gms.dao.entity.AccountsDO;
-import org.gms.util.RequireUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -14,13 +13,18 @@ import java.util.Map;
 @Service
 @AllArgsConstructor
 public class AuthService {
+    private static final int AUTHENTICATION_ERROR_CODE = 20002;
+    private static final String AUTHENTICATION_ERROR_MESSAGE = "账号或密码错误";
+    private static final String TOKEN_INVALID_MESSAGE = "认证失败或登录已失效";
+
     private final AccountService accountService;
     private final JwtUtils jwtUtils;
 
     public Map<String, String> getToken(String name, String password) {
         AccountsDO account = accountService.findByName(name);
-        RequireUtil.requireFalse(account == null || !accountService.checkPassword(password, account),
-                I18nUtil.getExceptionMessage("AuthService.account.or.password.error"));
+        if (account == null || !accountService.checkPassword(password, account)) {
+            throw new BizException(AUTHENTICATION_ERROR_CODE, AUTHENTICATION_ERROR_MESSAGE);
+        }
 
         HashMap<String, String> result = new HashMap<>();
         result.put("token", jwtUtils.generateJwtToken(account.getName()));
@@ -30,13 +34,18 @@ public class AuthService {
     public Map<String, String> refreshToken(String token) {
         if (StringUtils.hasText(token) && token.startsWith("Bearer ")) {
             token = token.substring(7);
+            if (!jwtUtils.validateJwtToken(token)) {
+                throw new BizException(AUTHENTICATION_ERROR_CODE, TOKEN_INVALID_MESSAGE);
+            }
             String username = jwtUtils.getUserNameFromJwtToken(token);
             AccountsDO account = accountService.findByName(username);
-            if (account == null) return null;
+            if (account == null) {
+                throw new BizException(AUTHENTICATION_ERROR_CODE, TOKEN_INVALID_MESSAGE);
+            }
             HashMap<String, String> result = new HashMap<>();
             result.put("token", jwtUtils.generateJwtToken(account.getName()));
             return result;
         }
-        return null;
+        throw new BizException(AUTHENTICATION_ERROR_CODE, TOKEN_INVALID_MESSAGE);
     }
 }

@@ -5,15 +5,35 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.gms.model.dto.ResultBody;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.validation.BindException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    private static final int PARAMETER_ERROR_CODE = 10001;
+    private static final int AUTHENTICATION_ERROR_CODE = 20002;
+    private static final int ACCESS_DENIED_ERROR_CODE = 30001;
+    private static final int RESOURCE_NOT_FOUND_CODE = 40404;
+    private static final int SYSTEM_ERROR_CODE = 50000;
 
     /**
      * 获取客户端真实IP地址
@@ -47,14 +67,7 @@ public class GlobalExceptionHandler {
     /**
      * 获取尝试登录的账号信息
      */
-    private String getAttemptedUsername(HttpServletRequest request) {
-        // 尝试从请求参数中获取用户名
-        String username = request.getParameter("username");
-        if (username != null && !username.isEmpty()) {
-            return username;
-        }
-
-        // 尝试从认证上下文中获取已认证的用户名
+    private String getAttemptedUsername() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.isAuthenticated() &&
                 !"anonymousUser".equals(authentication.getPrincipal())) {
@@ -65,13 +78,32 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 记录异常详细信息
+     * 记录可预期业务失败，不打印堆栈，避免污染系统错误日志。
      */
-    private void logExceptionDetails(HttpServletRequest request, Exception e, String exceptionType) {
+    private void logBusinessFailure(HttpServletRequest request, Exception e, String exceptionType, boolean warn) {
         String clientIp = getClientIp(request);
         String path = request.getRequestURI();
         String method = request.getMethod();
-        String username = getAttemptedUsername(request);
+        String username = getAttemptedUsername();
+        String message = Optional.ofNullable(e.getMessage()).orElse("无异常消息");
+
+        if (warn) {
+            logger.warn("{} - IP: {}, 用户: {}, 路径: {} [{}], 错误详情: {}",
+                    exceptionType, clientIp, username, path, method, message);
+        } else {
+            logger.info("{} - IP: {}, 用户: {}, 路径: {} [{}], 错误详情: {}",
+                    exceptionType, clientIp, username, path, method, message);
+        }
+    }
+
+    /**
+     * 记录系统异常详细信息，保留完整堆栈。
+     */
+    private void logSystemException(HttpServletRequest request, Exception e, String exceptionType) {
+        String clientIp = getClientIp(request);
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+        String username = getAttemptedUsername();
 
         // 获取User-Agent信息
         String userAgent = request.getHeader("User-Agent");
@@ -81,51 +113,115 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理自定义的业务异常
+     * 处理自定义的业务异常。
      */
     @ExceptionHandler(value = BizException.class)
     @ResponseBody
     public ResultBody<Object> bizExceptionHandler(HttpServletRequest req, BizException e) {
-        logExceptionDetails(req, e, "业务异常");
-        return ResultBody.error(req, e.getErrorCode(), e.getErrorMsg());
+        logBusinessFailure(req, e, "业务异常", true);
+        Integer code = Optional.ofNullable(e.getErrorCode()).orElse(PARAMETER_ERROR_CODE);
+        String message = Optional.ofNullable(e.getErrorMsg()).orElse("参数错误");
+        return ResultBody.error(req, code, message);
     }
 
     /**
-     * IllegalArgumentException NullPointerException UnsupportedOperationException都是RuntimeException
-     * 这里直接捕获RuntimeException来代替一个一个去捕获
+     * 处理请求体、表单和 Bean Validation 参数校验异常。
      */
-    @ExceptionHandler(value = RuntimeException.class)
+    @ExceptionHandler({
+            MethodArgumentNotValidException.class,
+            BindException.class,
+            HandlerMethodValidationException.class,
+            MissingServletRequestParameterException.class,
+            HttpMessageNotReadableException.class,
+            IllegalArgumentException.class
+    })
     @ResponseBody
-    public ResultBody<Object> exceptionHandler(HttpServletRequest req, RuntimeException e) {
-        logExceptionDetails(req, e, "运行时异常");
-        // 如果是 BizException 包装的 RuntimeException，尝试提取信息
-        if (e instanceof BizException) {
-             BizException be = (BizException) e;
-             return ResultBody.error(req, be.getErrorCode(), be.getErrorMsg());
-        }
-        // 对于其他 RuntimeException，返回通用错误，但可以在日志中看到详情
-        // 如果需要把错误信息返回给前端，可以使用 e.getMessage()
-        // return ResultBody.error(req, BizExceptionEnum.INTERNAL_SERVER_ERROR.getResultCode(), e.getMessage());
-        return ResultBody.error(req, BizExceptionEnum.BODY_NOT_MATCH.getResultCode(), e.getMessage());
+    public ResultBody<Object> parameterExceptionHandler(HttpServletRequest req, Exception e) {
+        String message = resolveParameterMessage(e);
+        logBusinessFailure(req, e, "参数校验失败", true);
+        return ResultBody.error(req, PARAMETER_ERROR_CODE, message);
     }
 
     /**
-     * 处理请求方法不支持的异常
+     * 处理认证失败异常。
      */
-    @ExceptionHandler(value = ServletException.class)
+    @ExceptionHandler(AuthenticationException.class)
     @ResponseBody
-    public ResultBody<Object> exceptionHandler(HttpServletRequest req, ServletException e) {
-        logExceptionDetails(req, e, "请求时异常");
-        return ResultBody.error(req, BizExceptionEnum.REQUEST_METHOD_SUPPORT);
+    public ResultBody<Object> authenticationExceptionHandler(HttpServletRequest req, AuthenticationException e) {
+        logBusinessFailure(req, e, "认证失败", true);
+        return ResultBody.error(req, AUTHENTICATION_ERROR_CODE, "认证失败或登录已失效");
     }
 
     /**
-     * 处理其他异常
+     * 处理权限不足异常。
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseBody
+    public ResultBody<Object> accessDeniedExceptionHandler(HttpServletRequest req, AccessDeniedException e) {
+        logBusinessFailure(req, e, "权限不足", true);
+        return ResultBody.error(req, ACCESS_DENIED_ERROR_CODE, "权限不足，禁止访问");
+    }
+
+    /**
+     * 处理资源未找到异常。
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    @ResponseBody
+    public ResultBody<Object> notFoundExceptionHandler(HttpServletRequest req, Exception e) {
+        logBusinessFailure(req, e, "请求资源未找到", false);
+        return ResultBody.error(req, RESOURCE_NOT_FOUND_CODE, "请求的资源不存在");
+    }
+
+    /**
+     * 处理请求方法不支持的异常。
+     */
+    @ExceptionHandler(value = {ServletException.class, HttpRequestMethodNotSupportedException.class})
+    @ResponseBody
+    public ResultBody<Object> servletExceptionHandler(HttpServletRequest req, Exception e) {
+        logBusinessFailure(req, e, "请求不被支持", true);
+        return ResultBody.error(req, PARAMETER_ERROR_CODE, e.getMessage());
+    }
+
+    /**
+     * 处理其他未捕获的系统异常。
      */
     @ExceptionHandler(value = Exception.class)
     @ResponseBody
     public ResultBody<Object> exceptionHandler(HttpServletRequest req, Exception e) {
-        logExceptionDetails(req, e, "未知异常");
-        return ResultBody.error(req, BizExceptionEnum.INTERNAL_SERVER_ERROR);
+        logSystemException(req, e, "系统内部错误");
+        return ResultBody.error(req, SYSTEM_ERROR_CODE, "服务器内部错误!");
+    }
+
+    private String resolveParameterMessage(Exception e) {
+        if (e instanceof MethodArgumentNotValidException ex) {
+            return ex.getBindingResult().getFieldErrors().stream()
+                    .map(this::formatFieldError)
+                    .findFirst()
+                    .orElse("参数校验失败");
+        }
+        if (e instanceof BindException ex) {
+            return ex.getBindingResult().getFieldErrors().stream()
+                    .map(this::formatFieldError)
+                    .findFirst()
+                    .orElse("参数绑定失败");
+        }
+        if (e instanceof HandlerMethodValidationException ex) {
+            String message = ex.getAllErrors().stream()
+                    .map(error -> Optional.ofNullable(error.getDefaultMessage()).orElse(error.toString()))
+                    .collect(Collectors.joining("；"));
+            return message.isBlank() ? "参数校验失败" : message;
+        }
+        if (e instanceof MissingServletRequestParameterException ex) {
+            return "缺少必填参数: " + ex.getParameterName();
+        }
+        if (e instanceof HttpMessageNotReadableException) {
+            return "请求数据格式不正确";
+        }
+        return Optional.ofNullable(e.getMessage()).orElse("参数错误");
+    }
+
+    private String formatFieldError(FieldError error) {
+        String message = Optional.ofNullable(error.getDefaultMessage()).orElse("参数错误");
+        return error.getField() + ": " + message;
     }
 }

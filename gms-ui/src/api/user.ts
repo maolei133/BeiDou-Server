@@ -16,21 +16,23 @@ export interface LoginRes {
   token: string;
 }
 export function login(data: LoginData) {
-  return axios.post<LoginRes>('/auth/v1/login', data);
+  return axios.post<LoginRes, LoginRes>('/auth/v1/login', data);
 }
 
 export function logout() {
-  return axios.delete<LoginRes>('/auth/v1/logout');
+  return axios.delete<LoginRes, LoginRes>('/auth/v1/logout');
 }
 
 export function getUserInfo() {
-  return axios.get<UserState>('/account/v1/info');
+  return axios.get<UserState, UserState>('/account/v1/info');
 }
 
 export function getMenuList() {
-  return axios.get<RouteRecordNormalized[]>('/account/v1/menu');
+  return axios.get<RouteRecordNormalized[], RouteRecordNormalized[]>(
+    '/account/v1/menu'
+  );
 }
 
 export function refreshToken() {
-  return axios.get<LoginRes>('/auth/v1/refreshToken');
+  return axios.get<LoginRes, LoginRes>('/auth/v1/refreshToken');
 }

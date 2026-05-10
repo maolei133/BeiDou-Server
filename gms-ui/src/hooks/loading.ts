@@ -18,7 +18,7 @@ export default function useLoading(initValue = false) {
         return;
       }
       const res = await refreshToken();
-      setToken(res.data.token);
+      setToken(res.token);
     } catch (err) {
       clearToken();
       throw err;

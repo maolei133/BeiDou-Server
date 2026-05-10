@@ -13,15 +13,22 @@ import java.util.List;
 public class JdkSystemMetricsCollector implements SystemMetricsCollector {
     private static final String DISK_IO_UNAVAILABLE_NOTE = "当前平台无法采集磁盘 IO 速率。";
 
+    private final OsMetricsProvider osMetricsProvider;
+
+    public JdkSystemMetricsCollector() {
+        this(new ManagementFactoryOsMetricsProvider());
+    }
+
+    JdkSystemMetricsCollector(OsMetricsProvider osMetricsProvider) {
+        this.osMetricsProvider = osMetricsProvider;
+    }
+
     @Override
     public SystemMetricsSample collect() {
         SystemMetricsSample sample = new SystemMetricsSample();
-        java.lang.management.OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
 
-        if (osBean instanceof OperatingSystemMXBean extendedOsBean) {
-            sample.setSystemCpuLoad(normalizeLoad(extendedOsBean.getCpuLoad()));
-            sample.setSystemMemory(buildSystemMemory(extendedOsBean));
-        }
+        sample.setSystemCpuLoad(normalizeLoad(osMetricsProvider.systemCpuLoad()));
+        sample.setSystemMemory(buildSystemMemory(osMetricsProvider));
         sample.setDiskIo(DiskIoInfoDTO.builder()
                 .available(false)
                 .note(DISK_IO_UNAVAILABLE_NOTE)
@@ -31,10 +38,14 @@ public class JdkSystemMetricsCollector implements SystemMetricsCollector {
         return sample;
     }
 
-    private MemoryInfoDTO buildSystemMemory(OperatingSystemMXBean osBean) {
-        long total = osBean.getTotalMemorySize();
-        long free = osBean.getFreeMemorySize();
-        if (total <= 0 || free < 0) {
+    Double getProcessCpuLoad() {
+        return normalizeLoad(osMetricsProvider.processCpuLoad());
+    }
+
+    private MemoryInfoDTO buildSystemMemory(OsMetricsProvider provider) {
+        Long total = provider.totalMemory();
+        Long free = provider.freeMemory();
+        if (total == null || free == null || total <= 0 || free < 0) {
             return null;
         }
         long used = Math.max(0L, total - free);
@@ -45,7 +56,50 @@ public class JdkSystemMetricsCollector implements SystemMetricsCollector {
                 .build();
     }
 
-    private Double normalizeLoad(double value) {
-        return value >= 0 ? value : null;
+    private Double normalizeLoad(Double value) {
+        return value != null && value >= 0D && value <= 1D && Double.isFinite(value) ? value : null;
+    }
+
+    interface OsMetricsProvider {
+        Double systemCpuLoad();
+        Double processCpuLoad();
+        Long totalMemory();
+        Long freeMemory();
+    }
+
+    private static class ManagementFactoryOsMetricsProvider implements OsMetricsProvider {
+        private final java.lang.management.OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
+
+        @Override
+        public Double systemCpuLoad() {
+            if (osBean instanceof OperatingSystemMXBean extendedOsBean) {
+                return extendedOsBean.getCpuLoad();
+            }
+            return null;
+        }
+
+        @Override
+        public Double processCpuLoad() {
+            if (osBean instanceof OperatingSystemMXBean extendedOsBean) {
+                return extendedOsBean.getProcessCpuLoad();
+            }
+            return null;
+        }
+
+        @Override
+        public Long totalMemory() {
+            if (osBean instanceof OperatingSystemMXBean extendedOsBean) {
+                return extendedOsBean.getTotalMemorySize();
+            }
+            return null;
+        }
+
+        @Override
+        public Long freeMemory() {
+            if (osBean instanceof OperatingSystemMXBean extendedOsBean) {
+                return extendedOsBean.getFreeMemorySize();
+            }
+            return null;
+        }
     }
 }

@@ -38,7 +38,7 @@ public class AuthController {
     @Tag(name = "/auth/" + ApiConstant.LATEST)
     @Operation(summary = "刷新token")
     @GetMapping("/" + ApiConstant.LATEST + "/refreshToken")
-    public ResultBody<Map<String, String>> refreshToken(@RequestHeader("Authorization") String token) {
+    public ResultBody<Map<String, String>> refreshToken(@RequestHeader(value = "Authorization", required = false) String token) {
         return ResultBody.success(authService.refreshToken(token));
     }
 }
