@@ -257,6 +257,7 @@ export interface ServerWorldInfo {
 export interface ServerChannelInfo {
   id: number;
   worldId: number;
+  playerCount?: number | null;
 }
 
 export function getServerWorldList() {

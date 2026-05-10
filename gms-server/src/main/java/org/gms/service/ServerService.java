@@ -31,7 +31,11 @@ public class ServerService {
     public List<ChannelListRtnDTO> channelList(int worldId) {
         List<Channel> channels = Server.getInstance().getWorld(worldId).getChannels();
         return channels.stream()
-                .map(c -> ChannelListRtnDTO.builder().id(c.getId()).worldId(c.getWorld()).build())
+                .map(c -> ChannelListRtnDTO.builder()
+                        .id(c.getId())
+                        .worldId(c.getWorld())
+                        .playerCount(c.getPlayerStorage().getSize())
+                        .build())
                 .toList();
     }
 }

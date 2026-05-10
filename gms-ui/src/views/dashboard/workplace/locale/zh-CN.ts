@@ -102,6 +102,8 @@ export default {
   'workplace.game.onlineScope': '按已返回世界汇总在线人数',
   'workplace.game.worlds': '世界',
   'workplace.game.channels': '频道',
+  'workplace.game.playerCount': '{count}人',
+  'workplace.game.noChannels': '暂无频道',
   'workplace.game.loginHealth': '登录健康',
   'workplace.game.healthNormal': '基础接口正常',
   'workplace.game.healthDesc': '第一阶段用监控/API 成功率代表基础健康。',

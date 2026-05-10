@@ -12,4 +12,5 @@ import lombok.NoArgsConstructor;
 public class ChannelListRtnDTO {
     private Integer id;
     private Integer worldId;
+    private Integer playerCount;
 }

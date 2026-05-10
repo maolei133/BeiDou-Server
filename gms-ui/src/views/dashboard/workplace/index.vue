@@ -478,11 +478,28 @@
                   class="health-row"
                 >
                   <div class="health-name">World {{ world.id }}</div>
-                  <div class="health-desc">
-                    {{ $t('workplace.game.channels') }}:
-                    {{ world.channelsText }} · EXP {{ world.expRateText }} ·
-                    Drop {{ world.dropRateText }} · Meso
-                    {{ world.mesoRateText }}
+                  <div class="health-content">
+                    <div class="channel-counts">
+                      <span
+                        v-for="channel in world.channels"
+                        :key="channel.id"
+                        class="tag info channel-pill"
+                      >
+                        {{ channel.label }}:
+                        {{
+                          $t('workplace.game.playerCount', {
+                            count: channel.playerCountText,
+                          })
+                        }}
+                      </span>
+                      <span v-if="!world.channels.length" class="tag gray">{{
+                        $t('workplace.game.noChannels')
+                      }}</span>
+                    </div>
+                    <div class="health-desc">
+                      EXP {{ world.expRateText }} · Drop
+                      {{ world.dropRateText }} · Meso {{ world.mesoRateText }}
+                    </div>
                   </div>
                   <span class="tag">{{ $t('workplace.running') }}</span>
                 </div>
@@ -1005,12 +1022,20 @@
     worldList.value.map((world) => {
       const channels = channelList.value
         .filter((item) => item.worldId === world.id)
-        .map((item) => item.id);
+        .map((item) => ({
+          id: item.id,
+          label: `CH${item.id}`,
+          playerCountText:
+            item.playerCount === null || item.playerCount === undefined
+              ? '-'
+              : String(item.playerCount),
+        }))
+        .sort((a, b) => a.id - b.id);
       const rate = (value?: number | null) =>
         value === null || value === undefined ? '-' : `${value}x`;
       return {
         id: world.id,
-        channelsText: channels.length ? channels.join(', ') : '-',
+        channels,
         expRateText: rate(world.expRate),
         dropRateText: rate(world.dropRate),
         mesoRateText: rate(world.mesoRate),
@@ -2139,6 +2164,23 @@
   .health-desc {
     color: var(--muted);
     font-size: 12px;
+  }
+
+  .health-content {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .channel-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .channel-pill {
+    font-variant-numeric: tabular-nums;
   }
 
   .action-zone {
