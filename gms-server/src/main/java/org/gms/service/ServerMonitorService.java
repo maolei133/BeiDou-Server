@@ -29,7 +29,6 @@ import org.gms.net.server.Server;
 import org.gms.service.monitor.ContainerInfoCollector;
 import org.gms.service.monitor.ContainerInfoCollectorFactory;
 import org.gms.service.monitor.CpuAnomalyDetector;
-import org.gms.service.monitor.OshiSystemMetricsCollector;
 import org.gms.service.monitor.SystemMetricsCollector;
 import org.gms.service.monitor.SystemMetricsCollectorFactory;
 import org.gms.service.monitor.SystemMetricsSample;
@@ -660,33 +659,17 @@ public class ServerMonitorService {
 
 
     private Double resolveProcessCpuLoad(OperatingSystemMXBean osBean) {
-        if (systemMetricsCollector instanceof SystemMetricsCollectorFactory.JdkBackfilledSystemMetricsCollector collector) {
-            Double processCpuLoad = collector.getProcessCpuLoad();
-            if (processCpuLoad != null) {
-                return processCpuLoad;
-            }
-        }
-        if (systemMetricsCollector instanceof OshiSystemMetricsCollector oshiCollector) {
-            Double processCpuLoad = oshiCollector.getProcessCpuLoad();
-            if (processCpuLoad != null) {
-                return processCpuLoad;
-            }
+        Double processCpuLoad = systemMetricsCollector.getProcessCpuLoad();
+        if (processCpuLoad != null) {
+            return processCpuLoad;
         }
         return normalizeLoad(osBean.getProcessCpuLoad());
     }
 
     private String resolveProcessorModel() {
-        if (systemMetricsCollector instanceof SystemMetricsCollectorFactory.JdkBackfilledSystemMetricsCollector collector) {
-            String model = collector.getProcessorModel();
-            if (model != null) {
-                return model;
-            }
-        }
-        if (systemMetricsCollector instanceof OshiSystemMetricsCollector oshiCollector) {
-            String model = oshiCollector.getProcessorModel();
-            if (model != null) {
-                return model;
-            }
+        String model = systemMetricsCollector.getProcessorModel();
+        if (model != null) {
+            return model;
         }
         String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         if (!osName.contains("linux")) {

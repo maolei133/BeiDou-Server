@@ -6,4 +6,12 @@ public interface SystemMetricsCollector {
     default SystemMetricsSample collect(String networkInterfaceName) {
         return collect();
     }
+
+    default Double getProcessCpuLoad() {
+        return null;
+    }
+
+    default String getProcessorModel() {
+        return null;
+    }
 }

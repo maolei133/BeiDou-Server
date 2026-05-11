@@ -38,7 +38,8 @@ public class JdkSystemMetricsCollector implements SystemMetricsCollector {
         return sample;
     }
 
-    Double getProcessCpuLoad() {
+    @Override
+    public Double getProcessCpuLoad() {
         return normalizeLoad(osMetricsProvider.processCpuLoad());
     }
 

@@ -55,17 +55,25 @@ class SystemMetricsCollectorFactoryTest {
 
     @Test
     void keepsRealOshiCpuOnWindowsWhenAvailable() {
-        SystemMetricsCollector delegate = () -> {
-            SystemMetricsSample sample = new SystemMetricsSample();
-            sample.setSystemCpuLoad(0.33D);
-            return sample;
-        };
+        SystemMetricsCollector delegate = fixedCollector(0.33D, 0.27D, "测试处理器");
         JdkSystemMetricsCollector fallback = new JdkSystemMetricsCollector(new FixedOsMetricsProvider(0.42D, 0.1D, 8L, 2L));
         SystemMetricsCollector collector = SystemMetricsCollectorFactory.create("Windows Server 2022", delegate, fallback);
 
         SystemMetricsSample sample = collector.collect();
 
         assertEquals(0.33D, sample.getSystemCpuLoad());
+        assertEquals(0.27D, collector.getProcessCpuLoad());
+        assertEquals("测试处理器", collector.getProcessorModel());
+    }
+
+    @Test
+    void backfillsProcessCpuWhenPrimaryReturnsZeroOnWindows() {
+        SystemMetricsCollector delegate = fixedCollector(0.33D, 0D, "测试处理器");
+        JdkSystemMetricsCollector fallback = new JdkSystemMetricsCollector(new FixedOsMetricsProvider(0.42D, 0.1D, 8L, 2L));
+        SystemMetricsCollector collector = SystemMetricsCollectorFactory.create("Windows Server 2022", delegate, fallback);
+
+        assertEquals(0.1D, collector.getProcessCpuLoad());
+        assertEquals("测试处理器", collector.getProcessorModel());
     }
 
     @Test
@@ -85,6 +93,27 @@ class SystemMetricsCollectorFactoryTest {
 
     private static void assertInstanceOf(Class<?> expectedType, Object actual) {
         org.junit.jupiter.api.Assertions.assertInstanceOf(expectedType, actual);
+    }
+
+    private static SystemMetricsCollector fixedCollector(Double systemCpuLoad, Double processCpuLoad, String processorModel) {
+        return new SystemMetricsCollector() {
+            @Override
+            public SystemMetricsSample collect() {
+                SystemMetricsSample sample = new SystemMetricsSample();
+                sample.setSystemCpuLoad(systemCpuLoad);
+                return sample;
+            }
+
+            @Override
+            public Double getProcessCpuLoad() {
+                return processCpuLoad;
+            }
+
+            @Override
+            public String getProcessorModel() {
+                return processorModel;
+            }
+        };
     }
 
     private record FixedOsMetricsProvider(Double systemCpuLoad, Double processCpuLoad, Long totalMemory, Long freeMemory)

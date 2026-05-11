@@ -23,7 +23,7 @@ public final class SystemMetricsCollectorFactory {
         if (collectorTypeForOsName(osName) == LinuxProcMonitorCollector.class) {
             return linuxCollector;
         }
-        return new JdkBackfilledSystemMetricsCollector(nonLinuxCollector, jdkCollector);
+        return new BackfilledSystemMetricsCollector(nonLinuxCollector, jdkCollector);
     }
 
     static boolean isLinux() {
@@ -37,11 +37,11 @@ public final class SystemMetricsCollectorFactory {
         return JdkSystemMetricsCollector.class;
     }
 
-    public static class JdkBackfilledSystemMetricsCollector implements SystemMetricsCollector {
+    private static class BackfilledSystemMetricsCollector implements SystemMetricsCollector {
         private final SystemMetricsCollector primary;
         private final JdkSystemMetricsCollector fallback;
 
-        JdkBackfilledSystemMetricsCollector(SystemMetricsCollector primary, JdkSystemMetricsCollector fallback) {
+        BackfilledSystemMetricsCollector(SystemMetricsCollector primary, JdkSystemMetricsCollector fallback) {
             this.primary = primary;
             this.fallback = fallback;
         }
@@ -67,21 +67,18 @@ public final class SystemMetricsCollectorFactory {
             return sample;
         }
 
+        @Override
         public Double getProcessCpuLoad() {
-            if (primary instanceof OshiSystemMetricsCollector oshiCollector) {
-                Double processCpuLoad = oshiCollector.getProcessCpuLoad();
-                if (processCpuLoad != null && processCpuLoad > 0D) {
-                    return processCpuLoad;
-                }
+            Double processCpuLoad = primary.getProcessCpuLoad();
+            if (processCpuLoad != null && processCpuLoad > 0D) {
+                return processCpuLoad;
             }
             return fallback.getProcessCpuLoad();
         }
 
+        @Override
         public String getProcessorModel() {
-            if (primary instanceof OshiSystemMetricsCollector oshiCollector) {
-                return oshiCollector.getProcessorModel();
-            }
-            return null;
+            return primary.getProcessorModel();
         }
 
         private boolean shouldBackfillCpu(Double primaryCpuLoad, Double fallbackCpuLoad) {
