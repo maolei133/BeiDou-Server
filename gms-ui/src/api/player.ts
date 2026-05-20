@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { PageResult, SubmitBody, ResultBody } from '@/types/global';
+import { PageResult, ResultBody } from '@/types/global';
 
 export interface PlayerListParams {
   pageNo: number;

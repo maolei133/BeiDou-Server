@@ -60,7 +60,7 @@ public class ResultBody<T> {
     }
 
     public static <T> ResultBody<T> error(String message) {
-        return error(-1, message);
+        return error(10001, message);
     }
 
     public static <T> ResultBody<T> error(Integer code, String message) {

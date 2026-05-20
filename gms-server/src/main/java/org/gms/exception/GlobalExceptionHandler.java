@@ -2,6 +2,7 @@ package org.gms.exception;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import org.gms.model.dto.ResultBody;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -133,7 +134,8 @@ public class GlobalExceptionHandler {
             HandlerMethodValidationException.class,
             MissingServletRequestParameterException.class,
             HttpMessageNotReadableException.class,
-            IllegalArgumentException.class
+            IllegalArgumentException.class,
+            ConstraintViolationException.class
     })
     @ResponseBody
     public ResultBody<Object> parameterExceptionHandler(HttpServletRequest req, Exception e) {
