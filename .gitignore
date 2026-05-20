@@ -33,3 +33,6 @@ database/docker-pg-db-data
 
 # 前端构建产物，由 gms-ui 构建生成，不提交
 gms-server/src/main/resources/static/
+
+# 测试目录：保留本地改动供开发调试，不提交推送避免其他成员打包时因测试类编译错误而失败
+gms-server/src/test/
