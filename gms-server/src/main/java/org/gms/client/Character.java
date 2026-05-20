@@ -6991,6 +6991,12 @@ public class Character extends AbstractCharacterObject {
         cdo.setPartySearch(chr.isRecvPartySearchInviteEnabled());
         cdo.setJailexpire(chr.getJailExpiration());
 
+        // 保存学院声望——确保声望变更在角色存盘时持久化
+        FamilyEntry fe = chr.getFamilyEntry();
+        if (fe != null) {
+            fe.saveReputation();
+        }
+
         return cdo;
     }
 

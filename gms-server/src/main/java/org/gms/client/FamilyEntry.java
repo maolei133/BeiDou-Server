@@ -101,48 +101,85 @@ public class FamilyEntry {
         }
         Family oldFamily = getFamily();
         Family newFamily = senior.getFamily();
-        setSenior(senior, false);
-        addSeniorCount(newFamily.getTotalGenerations(), newFamily); // 计数将被 doFullCount() 覆盖
-        newFamily.getLeader().doFullCount(); // 比跟踪数字更容易
-        oldFamily.setMessage(null, true);
-        newFamily.addEntryTree(this);
-        Server.getInstance().getWorld(oldFamily.getWorld()).removeFamily(oldFamily.getID());
 
-        // 数据库操作
+        // DB 事务前置——成功后才改内存（防止事务失败导致内存/DB 失同步）
         TransactionTemplate transactionTemplate = SpringContextUtil.getBean(TransactionTemplate.class);
-        transactionTemplate.executeWithoutResult(status -> {
-            try {
-                boolean success = updateDBChangeFamily(getChrId(), newFamily.getID(), senior.getChrId());
-                for (FamilyEntry junior : juniors) { // 最好复制这个而不是 SQL 代码
-                    if (junior != null) {
-                        success = junior.updateNewFamilyDB(); // 递归更新数据库中的晚辈
-                        if (!success) {
-                            break;
+        try {
+            transactionTemplate.executeWithoutResult(status -> {
+                try {
+                    // 清除旧学院训言
+                    UpdateChain.of(FamilyCharacterDO.class)
+                            .set(FamilyCharacterDO::getPrecepts, (String) null)
+                            .where(FamilyCharacterDO::getCid).eq(oldFamily.getLeader().getChrId())
+                            .update();
+
+                    boolean success = updateDBChangeFamily(getChrId(), newFamily.getID(), senior.getChrId());
+                    for (FamilyEntry junior : juniors) {
+                        if (junior != null) {
+                            if (!junior.updateNewFamilyDB(newFamily.getID())) {
+                                success = false;
+                                break;
+                            }
                         }
                     }
-                }
-                if (!success) {
+                    if (!success) {
+                        status.setRollbackOnly();
+                    }
+                } catch (Exception e) {
                     status.setRollbackOnly();
-                    log.error("无法将 {} 的学院合并到 {} 的学院中。(SQL 错误)", oldFamily.getName(), newFamily.getName());
                 }
-            } catch (Exception e) {
-                status.setRollbackOnly();
-                log.error("合并学院时无法连接到数据库", e);
-            }
-        });
+            });
+        } catch (Exception e) {
+            log.error("合并学院时无法连接到数据库", e);
+            return;
+        }
+
+        // DB 事务成功——安全修改内存
+        oldFamily.setMessage(null, false);
+        setSenior(senior, false);
+        addSeniorCount(newFamily.getTotalGenerations(), newFamily);
+        newFamily.getLeader().doFullCount();
+        newFamily.addEntryTree(this);
+        Server.getInstance().getWorld(oldFamily.getWorld()).removeFamily(oldFamily.getID());
     }
 
     public synchronized void fork() {
         Family oldFamily = getFamily();
         FamilyEntry oldSenior = getSenior();
-        family = new Family(-1, oldFamily.getWorld());
-        Server.getInstance().getWorld(family.getWorld()).addFamily(family.getID(), family);
 
-        // 【关键修复】同步更新当前 Character 对象的内存中的 familyId，防止数据不一致
+        // 先生成新学院 ID，再执行 DB 事务，成功后才改内存（防止事务失败导致内存/DB 失同步）
+        Family newFamily = new Family(-1, oldFamily.getWorld());
+        TransactionTemplate transactionTemplate = SpringContextUtil.getBean(TransactionTemplate.class);
+        try {
+            transactionTemplate.executeWithoutResult(status -> {
+                try {
+                    boolean success = updateDBChangeFamily(getChrId(), newFamily.getID(), 0);
+                    for (FamilyEntry junior : juniors) {
+                        if (junior != null) {
+                            if (!junior.updateNewFamilyDB(newFamily.getID())) {
+                                success = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (!success) {
+                        status.setRollbackOnly();
+                    }
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                }
+            });
+        } catch (Exception e) {
+            log.error("分离学院时无法连接到数据库", e);
+            return;
+        }
+
+        // DB 事务成功——安全修改内存
+        family = newFamily;
+        Server.getInstance().getWorld(family.getWorld()).addFamily(family.getID(), family);
         if (character != null) {
             character.setFamilyId(family.getID());
         }
-
         setSenior(null, false);
         family.setLeader(this);
         addSeniorCount(-getTotalSeniors(), family);
@@ -157,43 +194,24 @@ public class FamilyEntry {
         this.repsToSenior = 0;
         this.repChanged = true;
         family.setMessage("", true);
-        doFullCount(); // 确保所有计数正确
-        // 更新数据库
-        TransactionTemplate transactionTemplate = SpringContextUtil.getBean(TransactionTemplate.class);
-        transactionTemplate.executeWithoutResult(status -> {
-            try {
-                boolean success = updateDBChangeFamily(getChrId(), getFamily().getID(), 0);
-
-                for (FamilyEntry junior : juniors) { // 最好复制这个而不是 SQL 代码
-                    if (junior != null) {
-                        success = junior.updateNewFamilyDB(); // 递归更新数据库中的晚辈
-                        if (!success) {
-                            break;
-                        }
-                    }
-                }
-                if (!success) {
-                    status.setRollbackOnly();
-                    log.error("无法使用新院长 {} 分离学院。(旧老师: {}, 院长: {})", getName(), oldSenior.getName(), oldFamily.getLeader().getName());
-                }
-            } catch (Exception e) {
-                status.setRollbackOnly();
-                log.error("分离学院时无法连接到数据库", e);
-            }
-        });
+        doFullCount();
     }
 
     private synchronized boolean updateNewFamilyDB() {
-        if (!updateFamilyEntryDB(getChrId(), getFamily().getID())) {
+        return updateNewFamilyDB(getFamily().getID());
+    }
+
+    private synchronized boolean updateNewFamilyDB(int newFamilyId) {
+        if (!updateFamilyEntryDB(getChrId(), newFamilyId)) {
             return false;
         }
-        if (!updateCharacterFamilyDB(getChrId(), getFamily().getID(), true)) {
+        if (!updateCharacterFamilyDB(getChrId(), newFamilyId, true)) {
             return false;
         }
 
         for (FamilyEntry junior : juniors) {
             if (junior != null) {
-                if (!junior.updateNewFamilyDB()) {
+                if (!junior.updateNewFamilyDB(newFamilyId)) {
                     return false;
                 }
             }
