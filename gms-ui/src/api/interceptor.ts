@@ -179,7 +179,7 @@ axios.interceptors.response.use(
       return handleBusinessError(res);
     }
 
-    return res.data;
+    return res;
   },
   (error) => {
     const errorMessage = getHttpErrorMessage(error);

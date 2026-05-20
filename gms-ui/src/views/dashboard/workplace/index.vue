@@ -846,20 +846,6 @@
     cpuAnomalyReason?: string | null;
   }
 
-  type ApiResult<T> = T | { data?: T };
-
-  function unwrapApiData<T>(response: ApiResult<T>): T | undefined {
-    const maybeWrappedResponse = response as { data?: T } | null | undefined;
-    if (
-      maybeWrappedResponse &&
-      typeof maybeWrappedResponse === 'object' &&
-      Object.prototype.hasOwnProperty.call(maybeWrappedResponse, 'data')
-    ) {
-      return maybeWrappedResponse.data;
-    }
-    return response as T;
-  }
-
   const { t } = useI18n();
   const { isDark } = useThemes();
   const { loading, setLoading } = useLoading(false);
@@ -1269,7 +1255,7 @@
   const loadCpuMonitorConfig = async () => {
     cpuConfigLoading.value = true;
     try {
-      const data = unwrapApiData(await getCpuMonitorConfig());
+      const { data } = await getCpuMonitorConfig();
       cpuRules.value = normalizeCpuRules(data?.rules);
     } catch (err) {
       Message.warning(t('workplace.cpuConfig.loadFailed'));
@@ -1287,7 +1273,7 @@
           lv: rule.lv === 'ERROR' ? 'ERROR' : 'WARN',
         })),
       };
-      const data = unwrapApiData(await updateCpuMonitorConfig(payload));
+      const { data } = await updateCpuMonitorConfig(payload);
       cpuRules.value = normalizeCpuRules(data?.rules);
       cpuConfigVisible.value = false;
       Message.success(t('common.operationSuccess'));
@@ -1307,9 +1293,7 @@
   const refreshMonitorHistory = async (manual = false) => {
     if (!pageVisible.value && !manual) return;
     try {
-      const data = unwrapApiData(
-        await getServerMonitorHistory(historyParams.value)
-      );
+      const { data } = await getServerMonitorHistory(historyParams.value);
       trendSamples.value = (data?.points || [])
         .map(historyPointToSample)
         .sort((a, b) => a.time - b.time);
@@ -1325,11 +1309,9 @@
     if (monitorLoading.value) return;
     monitorLoading.value = true;
     try {
-      const data = unwrapApiData(
-        await getServerMonitorSnapshot({
-          interfaceName: selectedNetworkInterface.value,
-        })
-      );
+      const { data } = await getServerMonitorSnapshot({
+        interfaceName: selectedNetworkInterface.value,
+      });
       monitorSnapshot.value = data;
       const defaultInterfaceName =
         data?.network?.selectedInterfaceName ||
@@ -1352,10 +1334,10 @@
 
   const refreshGameInfo = async (includeStructure = false) => {
     try {
-      const statusData = unwrapApiData(await getServerStatus());
+      const { data: statusData } = await getServerStatus();
       serverStatus.value = statusData ? 'running' : 'resting';
       if (includeStructure || !worldList.value.length) {
-        const worldData = unwrapApiData(await getServerWorldList());
+        const { data: worldData } = await getServerWorldList();
         worldList.value = worldData || [];
       }
       const worldIds = worldList.value
@@ -1365,15 +1347,16 @@
       const channelResponses = await Promise.all(
         (worldIds.length ? worldIds : [0]).map((worldId) =>
           getServerChannelList(worldId)
-            .then((response) => unwrapApiData(response) || [])
+            .then(({ data }) => data || [])
             .catch(() => [] as ServerChannelInfo[])
         )
       );
       channelList.value = channelResponses.flat();
 
-      const onlineData = unwrapApiData(
-        await getAllWorldsOnlinePlayersCount(worldIds.length ? worldIds : [0])
+      const onlineDataResult = await getAllWorldsOnlinePlayersCount(
+        worldIds.length ? worldIds : [0]
       );
+      const onlineData = onlineDataResult.data;
       onlinePlayerCount.value = onlineData ?? null;
       gameError.value = false;
     } catch (err) {
@@ -1509,7 +1492,7 @@
   const loadSeverStatus = async () => {
     setLoading(true);
     try {
-      const data = unwrapApiData(await getServerStatus());
+      const { data } = await getServerStatus();
       serverStatus.value = data ? 'running' : 'resting';
     } finally {
       setLoading(false);
