@@ -30,6 +30,7 @@ import org.gms.client.inventory.Equip.ScrollResult;
 import org.gms.client.inventory.Inventory;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
+import org.gms.client.inventory.ItemFactory;
 import org.gms.client.inventory.ModifyInventory;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
 import org.gms.constants.id.ItemId;
@@ -42,7 +43,10 @@ import org.gms.service.TraceabilityService;
 import org.gms.util.PacketCreator;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+
+import org.gms.util.Pair;
 
 /**
  * @author Matze
@@ -185,6 +189,15 @@ public final class ScrollHandler extends AbstractPacketHandler {
                 if (equipSlot < 0 && (scrollSuccess == Equip.ScrollResult.SUCCESS || scrollSuccess == Equip.ScrollResult.CURSE)) {
                     chr.equipChanged(); // 通知客户端装备发生变化
                 }
+
+                // 实时持久化——确保装备属性变更立即写入 DB，防止内存/DB 失同步
+                InventoryType scrollInvType = equipSlot < 0 ? InventoryType.EQUIPPED : InventoryType.EQUIP;
+                ItemFactory.INVENTORY.saveItems(
+                        chr.getInventory(scrollInvType).list().stream()
+                                .map(i -> new Pair<>(i, scrollInvType))
+                                .toList(),
+                        chr.getId(),
+                        Collections.singleton(scrollInvType));
             } finally {
                 c.releaseClient(); // 释放客户端资源
             }
