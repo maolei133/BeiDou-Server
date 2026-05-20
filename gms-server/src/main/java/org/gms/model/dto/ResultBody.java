@@ -41,6 +41,10 @@ public class ResultBody<T> {
         return rb;
     }
 
+    public static <T> ResultBody<T> ok(T data) {
+        return success(data);
+    }
+
     public static <T> ResultBody<T> success(SubmitBody<?> request, T data) {
         ResultBody<T> rb = new ResultBody<>();
         applyRequestMetadata(rb, null);

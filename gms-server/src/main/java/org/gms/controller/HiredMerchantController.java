@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.gms.dao.entity.HiredMerchantItemsDO;
 import org.gms.dao.entity.HiredMerchantTransactionsDO;
 import org.gms.dao.entity.HiredMerchantsDO;
+import org.gms.model.dto.ResultBody;
 import org.gms.service.HiredMerchantService;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,46 +19,46 @@ public class HiredMerchantController {
     private final HiredMerchantService hiredMerchantService;
 
     @GetMapping("/list")
-    public List<HiredMerchantsDO> getAllActiveMerchants() {
-        return hiredMerchantService.getAllActiveMerchants();
+    public ResultBody<List<HiredMerchantsDO>> getAllActiveMerchants() {
+        return ResultBody.success(hiredMerchantService.getAllActiveMerchants());
     }
 
     @GetMapping("/{id}/items")
-    public List<HiredMerchantItemsDO> getMerchantItems(@PathVariable int id) {
-        return hiredMerchantService.getMerchantItems(id);
+    public ResultBody<List<HiredMerchantItemsDO>> getMerchantItems(@PathVariable int id) {
+        return ResultBody.success(hiredMerchantService.getMerchantItems(id));
     }
 
     @PostMapping("/{id}/restore")
-    public String restoreMerchant(@PathVariable int id) {
+    public ResultBody<String> restoreMerchant(@PathVariable int id) {
         try {
             hiredMerchantService.restoreMerchantItems(id);
-            return "商店物品恢复成功。";
+            return ResultBody.success("商店物品恢复成功。");
         } catch (Exception e) {
-            return "恢复商店物品时出错: " + e.getMessage();
+            return ResultBody.error("恢复商店物品时出错: " + e.getMessage());
         }
     }
     
     @PostMapping("/restore-backup")
-    public String restoreFromBackup(@RequestParam String filePath) {
+    public ResultBody<String> restoreFromBackup(@RequestParam String filePath) {
         try {
             File backupFile = new File(filePath);
             if (!backupFile.exists()) {
-                return "备份文件不存在: " + filePath;
+                return ResultBody.error("备份文件不存在: " + filePath);
             }
             hiredMerchantService.restoreFromBackup(backupFile);
-            return "从备份恢复成功。";
+            return ResultBody.success("从备份恢复成功。");
         } catch (Exception e) {
-            return "从备份恢复时出错: " + e.getMessage();
+            return ResultBody.error("从备份恢复时出错: " + e.getMessage());
         }
     }
     
     @PostMapping("/cleanup")
-    public String cleanupOldRecords(@RequestParam(defaultValue = "30") int days) {
+    public ResultBody<String> cleanupOldRecords(@RequestParam(defaultValue = "30") int days) {
         try {
             hiredMerchantService.cleanupOldRecords(days);
-            return "清理完成。";
+            return ResultBody.success("清理完成。");
         } catch (Exception e) {
-            return "清理过程中出错: " + e.getMessage();
+            return ResultBody.error("清理过程中出错: " + e.getMessage());
         }
     }
 }
