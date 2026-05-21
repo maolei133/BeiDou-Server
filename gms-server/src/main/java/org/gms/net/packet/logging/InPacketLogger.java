@@ -31,10 +31,23 @@ public class InPacketLogger extends ChannelInboundHandlerAdapter implements Pack
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof InPacket packet) {
+            if (isBlocked(packet)) {
+                return; // 被屏蔽的包完全拦截，不传入 pipeline
+            }
             String clientIp = getClientIp(ctx);
             log(packet, clientIp);
         }
         ctx.fireChannelRead(msg);
+    }
+
+    private boolean isBlocked(InPacket packet) {
+        final byte[] content = packet.getBytes();
+        if (content.length < 2) {
+            return false;
+        }
+        final short opcode = LoggingUtil.readFirstShort(content);
+        final String opcodeHex = Integer.toHexString(opcode).toUpperCase();
+        return BLOCKED_OPCODES.contains(opcodeHex);
     }
 
     private String getClientIp(ChannelHandlerContext ctx) {
@@ -51,12 +64,6 @@ public class InPacketLogger extends ChannelInboundHandlerAdapter implements Pack
         if (packetLength <= LOG_CONTENT_THRESHOLD) {
             final short opcode = LoggingUtil.readFirstShort(content);
             final String opcodeHex = Integer.toHexString(opcode).toUpperCase();
-
-            // 检查是否在屏蔽列表中
-            if (BLOCKED_OPCODES.contains(opcodeHex)) {
-                return; // 直接跳过，不记录日志
-            }
-
             final String opcodeName = getRecvOpcodeName(opcode);
             final boolean isUnknownPacket = opcodeName == null;
             final boolean debugMode = GameConfig.getServerBoolean("use_debug_show_packet");
