@@ -13,4 +13,7 @@ public class ChannelListRtnDTO {
     private Integer id;
     private Integer worldId;
     private Integer playerCount;
+    private Integer mapCount;
+    private Long estimatedMapMemoryBytes;
+    private Integer disposedMapCount;
 }

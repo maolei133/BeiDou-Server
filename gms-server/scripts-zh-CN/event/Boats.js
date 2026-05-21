@@ -42,6 +42,18 @@ function init() {
     Ellinia_docked.setDocked(true);
     Orbis_docked.setDocked(true);
 
+    // 将渡轮相关地图标记为常驻，防止 Caffeine 缓存自动释放
+    var mapFactory = em.getChannelServer().getMapFactory();
+    mapFactory.pinMap(Orbis_btf.getId());
+    mapFactory.pinMap(Boat_to_Orbis.getId());
+    mapFactory.pinMap(Orbis_Boat_Cabin.getId());
+    mapFactory.pinMap(Orbis_docked.getId());
+    mapFactory.pinMap(Ellinia_btf.getId());
+    mapFactory.pinMap(Boat_to_Ellinia.getId());
+    mapFactory.pinMap(Ellinia_Boat_Cabin.getId());
+    mapFactory.pinMap(Ellinia_docked.getId());
+    mapFactory.pinMap(Orbis_Station.getId());
+
     // 安排新的周期性任务
     scheduleNew();
 }

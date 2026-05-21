@@ -258,6 +258,9 @@ export interface ServerChannelInfo {
   id: number;
   worldId: number;
   playerCount?: number | null;
+  mapCount?: number | null;
+  estimatedMapMemoryBytes?: number | null;
+  disposedMapCount?: number | null;
 }
 
 export function getServerWorldList() {

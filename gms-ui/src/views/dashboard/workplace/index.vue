@@ -24,9 +24,9 @@
             <div class="section-title gms-section-title">{{
               $t('workplace.section.today')
             }}</div>
-            <div class="section-subtitle gms-section-subtitle"
-              >先判断游戏服是否正常、玩家是否受影响、数据是否新鲜。</div
-            >
+            <div class="section-subtitle gms-section-subtitle">{{
+              $t('workplace.game.healthCheck')
+            }}</div>
           </div>
           <div class="toolbar section-toolbar gms-toolbar">
             <a-tag v-if="monitorSnapshot?.sample?.partial" color="orange">
@@ -195,8 +195,12 @@
                 >{{ monitorSnapshot?.cpu?.processorModel || '-' }}</div
               >
               <div class="mini-foot"
-                >{{ monitorSnapshot?.cpu?.availableProcessors || '-' }} 核 ·
-                负载
+                >{{
+                  $t('workplace.game.cpuCores', {
+                    n: monitorSnapshot?.cpu?.availableProcessors || '-',
+                  })
+                }}
+                · 负载
                 {{ formatNumber(monitorSnapshot?.cpu?.systemLoadAverage) }}</div
               >
             </div>
@@ -456,9 +460,9 @@
             <div class="section-title gms-section-title">{{
               $t('workplace.section.game')
             }}</div>
-            <div class="section-subtitle gms-section-subtitle"
-              >游戏服务是玩家连接的世界实例；JVM 是承载进程。</div
-            >
+            <div class="section-subtitle gms-section-subtitle">{{
+              $t('workplace.game.gameServiceDesc')
+            }}</div>
           </div>
           <span class="tag gms-tag info">{{
             $t('workplace.section.jvm')
@@ -485,20 +489,39 @@
                         :key="channel.id"
                         class="tag info channel-pill"
                       >
-                        {{ channel.label }}:
-                        {{
+                        <span class="channel-pill-label">{{
+                          channel.label
+                        }}</span>
+                        <span class="channel-pill-value">{{
                           $t('workplace.game.playerCount', {
                             count: channel.playerCountText,
                           })
-                        }}
+                        }}</span>
+                        <span class="channel-pill-label">{{
+                          $t('workplace.game.mapsLabel')
+                        }}</span>
+                        <span class="channel-pill-value"
+                          >{{ channel.mapCount }}
+                          <span v-if="channel.disposedCount"
+                            >({{
+                              $t('workplace.game.disposedMaps', {
+                                n: channel.disposedCount,
+                              })
+                            }})</span
+                          ></span
+                        >
                       </span>
                       <span v-if="!world.channels.length" class="tag gray">{{
                         $t('workplace.game.noChannels')
                       }}</span>
                     </div>
                     <div class="health-desc">
-                      EXP {{ world.expRateText }} · Drop
-                      {{ world.dropRateText }} · Meso {{ world.mesoRateText }}
+                      {{ $t('workplace.game.expLabel') }}
+                      {{ world.expRateText }} ·
+                      {{ $t('workplace.game.dropLabel') }}
+                      {{ world.dropRateText }} ·
+                      {{ $t('workplace.game.mesoLabel') }}
+                      {{ world.mesoRateText }}
                     </div>
                   </div>
                   <span class="tag">{{ $t('workplace.running') }}</span>
@@ -543,12 +566,14 @@
                 ></div
               >
               <div class="mini-foot"
-                >Java: {{ monitorSnapshot?.jvm?.javaVersion || '-' }} ·
+                >{{ $t('workplace.game.javaLabel') }}:
+                {{ monitorSnapshot?.jvm?.javaVersion || '-' }} ·
                 {{ monitorSnapshot?.jvm?.vmName || '-' }}</div
               >
               <div class="mini-foot"
                 >{{ $t('workplace.monitor.container') }}: {{ containerText }} ·
-                Profiles: {{ activeProfilesText }}</div
+                {{ $t('workplace.game.profilesLabel') }}:
+                {{ activeProfilesText }}</div
               >
             </div>
           </div>
@@ -561,9 +586,9 @@
             <div class="section-title gms-section-title">{{
               $t('workplace.section.ops')
             }}</div>
-            <div class="section-subtitle gms-section-subtitle"
-              >高危操作与监控信息分离，执行前保留确认与影响范围。</div
-            >
+            <div class="section-subtitle gms-section-subtitle">{{
+              $t('workplace.game.dangerousOpsDesc')
+            }}</div>
           </div>
           <span class="tag gms-tag warn"
             >{{ $t('workplace.ops.impact') }}: {{ onlinePlayerCountText }}</span
@@ -1029,13 +1054,25 @@
             item.playerCount === null || item.playerCount === undefined
               ? '-'
               : String(item.playerCount),
+          mapCount: item.mapCount ?? 0,
+          disposedCount: item.disposedMapCount ?? 0,
+          mapMemoryText:
+            item.estimatedMapMemoryBytes === null ||
+            item.estimatedMapMemoryBytes === undefined
+              ? '-'
+              : formatBytes(item.estimatedMapMemoryBytes),
         }))
         .sort((a, b) => a.id - b.id);
+      const totalMapCount = channels.reduce(
+        (sum, ch) => sum + (ch.mapCount || 0),
+        0
+      );
       const rate = (value?: number | null) =>
         value === null || value === undefined ? '-' : `${value}x`;
       return {
         id: world.id,
         channels,
+        totalMapCount,
         expRateText: rate(world.expRate),
         dropRateText: rate(world.dropRate),
         mesoRateText: rate(world.mesoRate),
@@ -2144,8 +2181,8 @@
 
   .health-row {
     display: grid;
-    grid-template-columns: 120px minmax(0, 1fr) auto;
-    gap: 12px;
+    grid-template-columns: 80px minmax(0, 1fr) auto;
+    //gap: 12px;
     align-items: center;
     padding: 10px 0;
     border-top: 1px solid var(--border-soft);
@@ -2158,6 +2195,8 @@
   .health-name {
     font-weight: 750;
     color: var(--text);
+    min-width: 80px;
+    flex-shrink: 0;
   }
 
   .health-desc {
@@ -2172,14 +2211,28 @@
   }
 
   .channel-counts {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: 6px;
     min-width: 0;
   }
 
   .channel-pill {
     font-variant-numeric: tabular-nums;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 3px 6px;
+    align-items: baseline;
+    white-space: nowrap;
+  }
+
+  .channel-pill-label {
+    grid-column: 1 / 2;
+  }
+
+  .channel-pill-value {
+    grid-column: 2 / 3;
+    white-space: nowrap;
   }
 
   .action-zone {

@@ -110,6 +110,22 @@ export default {
   'workplace.game.channels': 'Channels',
   'workplace.game.playerCount': '{count} players',
   'workplace.game.noChannels': 'No channels yet',
+  'workplace.game.mapsLabel': 'Maps',
+  'workplace.game.mapsLabel': 'Maps',
+  'workplace.game.mapCount': '{count} maps',
+  'workplace.game.disposedMaps': '{n} disposed',
+  'workplace.game.healthCheck':
+    'Check game service health, player impact, and data freshness first.',
+  'workplace.game.gameServiceDesc':
+    'Game service is the world instance players connect to; JVM hosts the process.',
+  'workplace.game.dangerousOpsDesc':
+    'Dangerous ops are separated from monitoring info. Confirmation and impact scope are shown before execution.',
+  'workplace.game.cpuCores': '{n} cores',
+  'workplace.game.expLabel': 'EXP',
+  'workplace.game.dropLabel': 'Drop',
+  'workplace.game.mesoLabel': 'Meso',
+  'workplace.game.javaLabel': 'Java',
+  'workplace.game.profilesLabel': 'Profiles',
   'workplace.game.loginHealth': 'Login Health',
   'workplace.game.healthNormal': 'Base APIs normal',
   'workplace.game.healthDesc':

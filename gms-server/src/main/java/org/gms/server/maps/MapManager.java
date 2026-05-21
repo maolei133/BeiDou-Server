@@ -19,86 +19,89 @@
 */
 package org.gms.server.maps;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Expiry;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import org.gms.scripting.event.EventInstanceManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class MapManager {
+    private static final Logger log = LoggerFactory.getLogger(MapManager.class);
+
     private final int channel;
     private final int world;
     private EventInstanceManager event;
 
-    private final Map<Integer, MapleMap> maps = new HashMap<>();
+    // 缓存：地图加载后由 Caffeine 自动管理生命周期，根据 canDisposeMap() 条件动态过期
+    private final Cache<Integer, MapleMap> cache;
 
-    private final Lock mapsRLock;
-    private final Lock mapsWLock;
+    // 被脚本标记为常驻的地图 ID（不可被 auto-dispose）
+    private final Set<Integer> pinnedMaps = new HashSet<>();
+
+    // 累计已释放的地图数量（用于统计）
+    private int disposedCount;
+    // 当前估算内存（字节），约每张地图 200KB 基础开销
+    private static final long ESTIMATED_MAP_OVERHEAD = 200 * 1024;
 
     public MapManager(EventInstanceManager eim, int world, int channel) {
         this.world = world;
         this.channel = channel;
         this.event = eim;
+        this.disposedCount = 0;
 
-        ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
-        this.mapsRLock = readWriteLock.readLock();
-        this.mapsWLock = readWriteLock.writeLock();
+        MapManager self = this;
+        this.cache = Caffeine.newBuilder()
+                .maximumSize(5_000)
+                .expireAfter(new Expiry<Integer, MapleMap>() {
+                    @Override
+                    public long expireAfterCreate(Integer key, MapleMap value, long currentTime) {
+                        return resolveExpiry(value);
+                    }
+
+                    @Override
+                    public long expireAfterUpdate(Integer key, MapleMap value,
+                                                  long currentTime, long currentDuration) {
+                        return resolveExpiry(value);
+                    }
+
+                    @Override
+                    public long expireAfterRead(Integer key, MapleMap value,
+                                                long currentTime, long currentDuration) {
+                        return resolveExpiry(value);
+                    }
+
+                    private long resolveExpiry(MapleMap map) {
+                        if (self.canDisposeMap(map)) {
+                            return TimeUnit.SECONDS.toNanos(60);
+                        }
+                        return Long.MAX_VALUE;
+                    }
+                })
+                .evictionListener((Integer key, MapleMap map, RemovalCause cause) -> {
+                    if (map != null && cause.wasEvicted()) {
+                        log.debug("释放空闲地图 [{}] {} 世界{}频道{}", key, map.getMapName(), world, channel);
+                        map.dispose();
+                        disposedCount++;
+                    }
+                })
+                .build();
     }
 
     public MapleMap resetMap(int mapid) {
-        mapsWLock.lock();
-        try {
-            maps.remove(mapid);
-        } finally {
-            mapsWLock.unlock();
-        }
-
+        cache.invalidate(mapid);
         return getMap(mapid);
     }
 
-    private synchronized MapleMap loadMapFromWz(int mapid, boolean cache) {
-        MapleMap map;
-
-        if (cache) {
-            mapsRLock.lock();
-            try {
-                map = maps.get(mapid);
-            } finally {
-                mapsRLock.unlock();
-            }
-
-            if (map != null) {
-                return map;
-            }
-        }
-
-        map = MapFactory.loadMapFromWz(mapid, world, channel, event);
-
-        if (cache) {
-            mapsWLock.lock();
-            try {
-                maps.put(mapid, map);
-            } finally {
-                mapsWLock.unlock();
-            }
-        }
-
-        return map;
-    }
-
     public MapleMap getMap(int mapid) {
-        MapleMap map;
-
-        mapsRLock.lock();
-        try {
-            map = maps.get(mapid);
-        } finally {
-            mapsRLock.unlock();
-        }
-
-        return (map != null) ? map : loadMapFromWz(mapid, true);
+        return cache.get(mapid, id -> MapFactory.loadMapFromWz(id, world, channel, event));
     }
 
     public MapleMap getMapByLifeId(int lifeId) {
@@ -107,71 +110,79 @@ public class MapManager {
     }
 
     public MapleMap getDisposableMap(int mapid) {
-        return loadMapFromWz(mapid, false);
+        return MapFactory.loadMapFromWz(mapid, world, channel, event);
     }
 
     public boolean isMapLoaded(int mapId) {
-        mapsRLock.lock();
-        try {
-            return maps.containsKey(mapId);
-        } finally {
-            mapsRLock.unlock();
-        }
+        return cache.getIfPresent(mapId) != null;
     }
 
     public Map<Integer, MapleMap> getMaps() {
-        mapsRLock.lock();
-        try {
-            return new HashMap<>(maps);
-        } finally {
-            mapsRLock.unlock();
-        }
+        return new HashMap<>(cache.asMap());
     }
 
     public void updateMaps() {
-        for (MapleMap map : getMaps().values()) {
+        for (MapleMap map : cache.asMap().values()) {
             map.respawn();
             map.mobMpRecovery();
         }
     }
 
     public void dispose() {
-        for (MapleMap map : getMaps().values()) {
-            map.dispose();
-        }
-
+        cache.invalidateAll();
         this.event = null;
     }
-    /**
-     * 判断地图是否满足添加到待清理队列的条件
-     * @param map 地图实例
-     * @return 是否满足添加到待清理队列的条件
-     */
-    public boolean canAddDisposeMap(MapleMap map) {
-        return map.getCharacterCount() == 0 &&  // 没有角色
-                !map.hasHiredMerchants(); // 没有雇佣商店
 
+    public boolean canAddDisposeMap(MapleMap map) {
+        return map.getCharacterCount() == 0
+                && !map.hasHiredMerchants();
     }
-    /**
-     * 判断地图是否满足释放条件
-     */
+
     private boolean canDisposeMap(MapleMap map) {
-        return map == null ||   // 地图不存在，直接释放
-                map.getCharacterCount() == 0 &&  // 没有角色
-                        !map.hasHiredMerchants() && // 没有雇佣商店
-                        map.getDroppedItemCount() <= 0 && // 没有掉落物
-                        map.countBosses() == 0 && // 没有boss存活
-                        map.getEventInstance() == null && // 不属于某个副本事件实例
-                        !map.isEventMap() && // 不是活动地图
-                        !map.hasClock() && // 没有任何时钟倒计时
-                        !map.hasPendingBossSpawns(); // 没有BOSS刷怪点
+        if (map == null) return true;
+        if (pinnedMaps.contains(map.getId())) return false;
+        return map.getCharacterCount() == 0
+                && !map.hasHiredMerchants()
+                && map.getDroppedItemCount() <= 0
+                && map.countBosses() == 0
+                && map.getEventInstance() == null
+                && !map.isEventMap()
+                && !map.hasClock()
+                && !map.hasPendingBossSpawns();
     }
-    public int getMapCount() {
-        mapsRLock.lock();
-        try {
-            return maps.size();
-        } finally {
-            mapsRLock.unlock();
+
+    public void pinMap(int mapId) {
+        pinnedMaps.add(mapId);
+        // 强制触发 expireAfterUpdate 重新评估过期时间（防止 pin 前已设 60 秒倒计时）
+        MapleMap existing = cache.getIfPresent(mapId);
+        if (existing != null) {
+            cache.put(mapId, existing);
         }
+    }
+
+    public void unpinMap(int mapId) {
+        pinnedMaps.remove(mapId);
+    }
+
+    // ---- 统计接口 ----
+
+    public int getMapCount() {
+        return cache.asMap().size();
+    }
+
+    public long getEstimatedMemoryBytes() {
+        return (long) getMapCount() * ESTIMATED_MAP_OVERHEAD;
+    }
+
+    public int getDisposedCount() {
+        return disposedCount;
+    }
+
+    public int getWorld() {
+        return world;
+    }
+
+    public int getChannel() {
+        return channel;
     }
 }

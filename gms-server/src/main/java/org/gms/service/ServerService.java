@@ -35,6 +35,9 @@ public class ServerService {
                         .id(c.getId())
                         .worldId(c.getWorld())
                         .playerCount(c.getPlayerStorage().getSize())
+                        .mapCount(c.getMapFactory() != null ? c.getMapFactory().getMapCount() : 0)
+                        .estimatedMapMemoryBytes(c.getMapFactory() != null ? c.getMapFactory().getEstimatedMemoryBytes() : 0L)
+                        .disposedMapCount(c.getMapFactory() != null ? c.getMapFactory().getDisposedCount() : 0)
                         .build())
                 .toList();
     }

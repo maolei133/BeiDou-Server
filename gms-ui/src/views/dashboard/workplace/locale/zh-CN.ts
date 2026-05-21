@@ -106,6 +106,22 @@ export default {
   'workplace.game.channels': '频道',
   'workplace.game.playerCount': '{count}人',
   'workplace.game.noChannels': '暂无频道',
+  'workplace.game.mapsLabel': '地图',
+  'workplace.game.mapUnit': '{count}张',
+  'workplace.game.mapCount': '{count}张地图',
+  'workplace.game.disposedMaps': '已释放{n}张',
+  'workplace.game.healthCheck':
+    '先判断游戏服是否正常、玩家是否受影响、数据是否新鲜。',
+  'workplace.game.gameServiceDesc':
+    '游戏服务是玩家连接的世界实例；JVM 是承载进程。',
+  'workplace.game.dangerousOpsDesc':
+    '高危操作与监控信息分离，执行前保留确认与影响范围。',
+  'workplace.game.cpuCores': '{n} 核',
+  'workplace.game.expLabel': '经验',
+  'workplace.game.dropLabel': '爆率',
+  'workplace.game.mesoLabel': '金币',
+  'workplace.game.javaLabel': 'Java',
+  'workplace.game.profilesLabel': 'Profiles',
   'workplace.game.loginHealth': '登录健康',
   'workplace.game.healthNormal': '基础接口正常',
   'workplace.game.healthDesc': '第一阶段用监控/API 成功率代表基础健康。',
