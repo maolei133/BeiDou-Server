@@ -57,6 +57,7 @@ export interface OnlinePlayer {
   banStatus: number;
   banReason?: string;
   tempBanTime?: string;
+  jailTimeLeft: number;
 }
 
 export interface GiveForm {
@@ -252,4 +253,25 @@ export function getBanInfo(id: number) {
 
 export function unbanPlayer(data: UnbanPlayerReq) {
   return axios.post<ResultBody<any>>('/character/v1/unban', data);
+}
+
+export interface ImprisonReq {
+  playerId: number;
+  minutes: number;
+}
+
+/**
+ * 抓捕玩家服刑
+ * @param data - 服刑请求参数（playerId, minutes）
+ */
+export function imprisonPlayer(data: ImprisonReq) {
+  return axios.post<ResultBody<any>>('/character/v1/imprison', data);
+}
+
+/**
+ * 释放服刑玩家
+ * @param data - 释放请求参数（id: 角色ID）
+ */
+export function releasePlayer(data: { id: number }) {
+  return axios.post<ResultBody<any>>('/character/v1/releaseJail', data);
 }

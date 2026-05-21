@@ -279,6 +279,9 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
             player.getMap().addPlayer(player);
             player.visitMap(player.getMap());
 
+            // 服刑状态恢复：自动确认监狱位置、发送倒计时和剩余时间
+            player.resumeJailSentence();
+
             BuddyList bl = player.getBuddylist();
             int[] buddyIds = bl.getBuddyIds();
             wserv.loggedOn(player.getName(), player.getId(), c.getChannel(), buddyIds);

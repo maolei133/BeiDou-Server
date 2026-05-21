@@ -46,4 +46,5 @@ public class ChrOnlineListRtnDTO {
     private int banStatus; // 0: 未封禁, 1: 永久封禁, 2: 临时封禁
     private String banReason;
     private String tempBanTime;
+    private long jailTimeLeft;  // 剩余服刑时间(秒)，0表示未服刑
 }

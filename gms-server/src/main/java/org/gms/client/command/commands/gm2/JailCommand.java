@@ -26,13 +26,8 @@ package org.gms.client.command.commands.gm2;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.command.Command;
-import org.gms.constants.id.MapId;
-import org.gms.server.maps.MapleMap;
-import org.gms.server.maps.Portal;
 import org.gms.util.I18nUtil;
 import org.gms.util.StringUtil;
-
-import static java.util.concurrent.TimeUnit.MINUTES;
 
 public class JailCommand extends Command {
     {
@@ -65,18 +60,11 @@ public class JailCommand extends Command {
                 player.yellowMessage(I18nUtil.getMessage("JailCommand.message5"));
                 return;
             }
-            victim.addJailExpirationTime(MINUTES.toMillis(minutesJailed));
-
-            if (victim.getMapId() != MapId.JAIL) {    // those gone to jail won't be changing map anyway
-                MapleMap target = c.getChannelServer().getMapFactory().getMap(MapId.JAIL);
-                Portal targetPortal = target.getPortal(0);
-                victim.saveLocation("JAIL");
-                victim.changeMap(target, targetPortal);
-                player.message(I18nUtil.getMessage("JailCommand.message3", victim.getName(), minutesJailed));
-            } else {
-                player.message(I18nUtil.getMessage("JailCommand.message4", victim.getName(), minutesJailed));
-            }
-
+            boolean alreadyJailed = victim.isJailed();
+            victim.imprison(minutesJailed);
+            player.message(I18nUtil.getMessage(
+                    alreadyJailed ? "JailCommand.message4" : "JailCommand.message3",
+                    victim.getName(), minutesJailed));
         } else {
             player.message(I18nUtil.getMessage("BombCommand.message3", params[0]));
         }

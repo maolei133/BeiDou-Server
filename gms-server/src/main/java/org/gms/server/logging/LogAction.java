@@ -48,6 +48,10 @@ public enum LogAction {
     CHARACTER_SP_DISTRIBUTE,
     /** 属性点分配 */
     CHARACTER_AP_DISTRIBUTE,
+    /** 抓捕服刑 */
+    CHARACTER_JAIL,
+    /** 释放服刑 */
+    CHARACTER_UNJAIL,
 
     // --- ITEM_TRACEAB ---
     /** 获得物品 */

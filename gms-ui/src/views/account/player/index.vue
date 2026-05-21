@@ -509,6 +509,12 @@
                     $t('account.player.button.unban')
                   }}</a-doption>
                   <a-doption value="duey">发放快递</a-doption>
+                  <a-doption v-if="!record.jailTimeLeft" value="jail">{{
+                    $t('account.player.button.jail')
+                  }}</a-doption>
+                  <a-doption v-else value="releaseJail">{{
+                    $t('account.player.button.releaseJail')
+                  }}</a-doption>
                 </template>
               </a-dropdown>
             </template>
@@ -551,6 +557,12 @@
                         {{ $t('account.player.button.unban') }}
                       </a-doption>
                       <a-doption value="duey">发放快递</a-doption>
+                      <a-doption v-if="!item.jailTimeLeft" value="jail">
+                        {{ $t('account.player.button.jail') }}
+                      </a-doption>
+                      <a-doption v-else value="releaseJail">
+                        {{ $t('account.player.button.releaseJail') }}
+                      </a-doption>
                     </template>
                   </a-dropdown>
                 </a-space>
@@ -667,6 +679,12 @@
       :loading="loading"
       @success="loadData"
     />
+    <JailModal
+      v-model:visible="jailFormVisible"
+      :player-id="jailTarget?.id || 0"
+      :player-name="jailTarget?.name || ''"
+      @success="loadData"
+    />
   </div>
 </template>
 
@@ -681,6 +699,7 @@
     givePlayerSrc,
     OnlinePlayer,
     disconnectPlayer,
+    releasePlayer,
   } from '@/api/player';
   import { getJobs, getGuilds, InformationResult } from '@/api/information';
   import SendDueyModal from '@/views/game/duey/list/components/SendDueyModal.vue';
@@ -689,6 +708,7 @@
   import BanPlayerModal from './BanPlayerModal.vue';
   import GiveItemModal from './components/GiveItemModal.vue';
   import UnbanPlayerModal from './UnbanPlayerModal.vue';
+  import JailModal from './JailModal.vue';
 
   const { t } = useI18n();
   const { loading, setLoading } = useLoading(false);
@@ -743,6 +763,8 @@
   const dueyTargetName = ref('');
   const unbanFormVisible = ref(false);
   const unbanTarget = ref<OnlinePlayer | null>(null);
+  const jailFormVisible = ref(false);
+  const jailTarget = ref<OnlinePlayer | null>(null);
 
   const formData = ref<GiveForm>({
     type: 5,
@@ -1039,6 +1061,29 @@
     dueyFormVisible.value = true;
   };
 
+  const handleJail = (record: OnlinePlayer) => {
+    jailTarget.value = record;
+    jailFormVisible.value = true;
+  };
+
+  const handleReleaseJail = (record: OnlinePlayer) => {
+    Modal.confirm({
+      title: '确认释放',
+      content: `确定要释放玩家 ${record.name} (ID: ${record.id}) 吗？`,
+      okText: '确认释放',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await releasePlayer({ id: record.id });
+          Message.success('玩家已释放');
+          loadData();
+        } catch {
+          Message.error('释放失败');
+        }
+      },
+    });
+  };
+
   const handleGlobalDuey = () => {
     dueyTargetName.value = '';
     dueyFormVisible.value = true;
@@ -1116,6 +1161,10 @@
       handleUnban(record);
     } else if (value === 'duey') {
       handleDuey(record);
+    } else if (value === 'jail') {
+      handleJail(record);
+    } else if (value === 'releaseJail') {
+      handleReleaseJail(record);
     }
   };
 </script>

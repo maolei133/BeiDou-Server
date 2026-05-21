@@ -36,6 +36,9 @@ public class OnlineTimeTask implements Runnable {
                     onlineTime = 0;
                 }
                 chr.setCurrentOnlineTime(onlineTime);
+
+                // 服刑倒计时
+                chr.tickJailCountdown(5000);
             }
         }
         lastUpdated.set(now);

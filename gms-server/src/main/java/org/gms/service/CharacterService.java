@@ -42,6 +42,10 @@ import org.gms.server.maps.SavedLocation;
 import org.gms.server.maps.SavedLocationType;
 import org.gms.util.BasePageUtil;
 import org.gms.util.NumberTool;
+import org.apache.logging.log4j.message.MapMessage;
+import org.gms.server.logging.AuditLogger;
+import org.gms.server.logging.LogAction;
+import org.gms.server.logging.LogModule;
 import org.gms.util.Pair;
 import org.gms.util.RequireUtil;
 import org.gms.util.ExtendUtil;
@@ -58,6 +62,7 @@ import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -283,6 +288,7 @@ public class CharacterService {
                             .banStatus(banStatus)
                             .banReason(banReason)
                             .tempBanTime(tempBanTime)
+                            .jailTimeLeft(chr.getJailExpirationTimeLeft() / 1000)
                             .build();
                     });
         }
@@ -438,6 +444,7 @@ public class CharacterService {
                         .banStatus(banStatus)
                         .banReason(banReason)
                         .tempBanTime(tempBanTime)
+                        .jailTimeLeft(onlineChr.getJailExpirationTimeLeft() / 1000)
                         .build();
             }
 
@@ -534,6 +541,7 @@ public class CharacterService {
                     .banStatus(banStatus)
                     .banReason(banReason)
                     .tempBanTime(tempBanTime)
+                    .jailTimeLeft(Math.max(0, charactersDO.getJailexpire()) / 1000)
                     .build();
         }).filter(Objects::nonNull).collect(Collectors.toList()); // 过滤掉返回null的记录
 
@@ -2218,6 +2226,68 @@ public class CharacterService {
         if (onlineChr != null) {
             onlineChr.setBanned(false);
         }
+    }
+
+    /**
+     * 抓捕玩家服刑（支持在线/离线）
+     */
+    public void imprison(ImprisonReqDTO request) {
+        int charId = request.getPlayerId();
+        long addMs = TimeUnit.MINUTES.toMillis(request.getMinutes());
+        Pair<Character, CharactersDO> pair = getOnlineOrOfflineCharacter(charId);
+        Character onlineChr = pair.getLeft();
+        CharactersDO chrDO = pair.getRight();
+
+        if (onlineChr == null && chrDO == null) return;
+
+        String charName = onlineChr != null ? onlineChr.getName() : chrDO.getName();
+
+        if (onlineChr != null) {
+            onlineChr.imprison(request.getMinutes());
+        } else {
+            long cur = chrDO.getJailexpire() != null ? chrDO.getJailexpire() : 0L;
+            long newVal = (cur <= 0) ? addMs : cur + addMs;
+            CharactersDO update = new CharactersDO();
+            update.setId(charId);
+            update.setJailexpire(newVal);
+            charactersMapper.update(update);
+        }
+
+        MapMessage logData = new MapMessage()
+                .with("charId", charId)
+                .with("charName", charName)
+                .with("minutes", request.getMinutes())
+                .with("online", onlineChr != null);
+        AuditLogger.info(LogModule.CHARACTER, LogAction.CHARACTER_JAIL, logData);
+    }
+
+    /**
+     * 释放服刑玩家（支持在线/离线）
+     */
+    public void releaseJail(ChrIdDTO request) {
+        int charId = request.getId();
+        Pair<Character, CharactersDO> pair = getOnlineOrOfflineCharacter(charId);
+        Character onlineChr = pair.getLeft();
+        CharactersDO chrDO = pair.getRight();
+
+        if (onlineChr == null && chrDO == null) return;
+
+        String charName = onlineChr != null ? onlineChr.getName() : chrDO.getName();
+
+        if (onlineChr != null) {
+            onlineChr.releaseFromJail();  // 封装：清除时钟+服刑状态+送回入狱前地图+提示
+        } else {
+            CharactersDO update = new CharactersDO();
+            update.setId(charId);
+            update.setJailexpire(0L);
+            charactersMapper.update(update);
+        }
+
+        MapMessage logData = new MapMessage()
+                .with("charId", charId)
+                .with("charName", charName)
+                .with("online", onlineChr != null);
+        AuditLogger.info(LogModule.CHARACTER, LogAction.CHARACTER_UNJAIL, logData);
     }
 
     /**

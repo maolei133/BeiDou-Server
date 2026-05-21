@@ -93,4 +93,20 @@ public class CharacterController {
         characterService.unban(submitBody.getData());
         return ResultBody.success();
     }
+
+    @Tag(name = "/character/" + ApiConstant.LATEST)
+    @Operation(summary = "抓捕玩家服刑")
+    @PostMapping("/" + ApiConstant.LATEST + "/imprison")
+    public ResultBody<Object> imprison(@RequestBody SubmitBody<ImprisonReqDTO> submitBody) {
+        characterService.imprison(submitBody.getData());
+        return ResultBody.success();
+    }
+
+    @Tag(name = "/character/" + ApiConstant.LATEST)
+    @Operation(summary = "刑满释放玩家")
+    @PostMapping("/" + ApiConstant.LATEST + "/releaseJail")
+    public ResultBody<Object> releaseJail(@RequestBody SubmitBody<ChrIdDTO> submitBody) {
+        characterService.releaseJail(submitBody.getData());
+        return ResultBody.success();
+    }
 }

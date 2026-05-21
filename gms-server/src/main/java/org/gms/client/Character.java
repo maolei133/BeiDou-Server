@@ -252,7 +252,7 @@ public class Character extends AbstractCharacterObject {
     private long lastExpression = 0;
     private long lastMonsterDamageTime = 0;  // 记录最后一次对怪物造成伤害的时间戳，用于判断是否是组队活跃成员
     @Setter
-    private long jailExpiration = -1;
+    private long jailExpiration = -1;  // 剩余服刑时间(毫秒)，0或负数表示未服刑
     private transient int localstr, localdex, localluk, localint_, localmagic, localwatk;
     private transient int equipmaxhp, equipmaxmp, equipstr, equipdex, equipluk, equipint_, equipmagic, equipwatk, localchairhp, localchairmp;
     private int localchairrate;
@@ -1983,6 +1983,13 @@ public class Character extends AbstractCharacterObject {
             return;
         }
         if (getMap(to.getId(), true) == null) return; //判断地图不存在则直接返回并发送提示消息。
+
+        // 监狱拦截：服刑期间禁止离开监狱地图，违者加刑10分钟
+        if (isJailed() && getMapId() == MapId.JAIL && to.getId() != MapId.JAIL) {
+            addJailDuration(TimeUnit.MINUTES.toMillis(10));
+            refreshJailDisplay();
+            return;
+        }
 
         this.mapTransitioning.set(true);
 
@@ -9301,26 +9308,89 @@ public class Character extends AbstractCharacterObject {
         dragon = new Dragon(this);
     }
 
+    // ===================== 监狱系统 (Jail System) =====================
+
+    public boolean isJailed() {
+        return jailExpiration > 0;
+    }
+
     public long getJailExpirationTimeLeft() {
-        return jailExpiration - System.currentTimeMillis();
+        return Math.max(0, jailExpiration);
     }
 
-    private void setFutureJailExpiration(long time) {
-        jailExpiration = System.currentTimeMillis() + time;
+    /**
+     * [GM命令] 关入监狱 / 延长刑期。
+     * 自动处理：加刑期 → 保存现场 → 传送监狱 → 客户端倒计时 → 剩余时间提示。
+     */
+    public void imprison(int minutes) {
+        addJailDuration(TimeUnit.MINUTES.toMillis(minutes));
+        if (getMapId() != MapId.JAIL) {
+            saveLocation("JAIL");
+            changeMap(MapId.JAIL);
+        }
+        refreshJailDisplay();
     }
 
-    public void addJailExpirationTime(long time) {
-        long timeLeft = getJailExpirationTimeLeft();
+    /**
+     * [登录恢复] 上线时自动恢复服刑状态：确认在监狱、显示倒计时和剩余时间。
+     */
+    public void resumeJailSentence() {
+        if (!isJailed()) return;
+        if (getMapId() != MapId.JAIL) {
+            saveLocation("JAIL");
+            changeMap(MapId.JAIL);
+        }
+        refreshJailDisplay();
+    }
 
-        if (timeLeft <= 0) {
-            setFutureJailExpiration(time);
+    /**
+     * [OnlineTimeTask] 服刑倒计时 tick（每5秒），在线期间递减，归零自动释放。
+     */
+    public void tickJailCountdown(long deltaMs) {
+        if (!isJailed()) return;
+        jailExpiration -= deltaMs;
+        if (jailExpiration <= 0) {
+            releaseFromJail();
         } else {
-            setFutureJailExpiration(timeLeft + time);
+            sendPacket(PacketCreator.getClock((int) Math.max(1, jailExpiration / 1000)));
         }
     }
 
-    public void removeJailExpirationTime() {
+    /**
+     * [刑满释放/!unjail] 倒计时归零或GM强制释放时调用。
+     * 清除服刑状态 → 移除倒计时 → 送回入狱前地图 → 提示消息。
+     */
+    public void releaseFromJail() {
+        removeJailTimeAndClock();
+        message(I18nUtil.getMessage("JailCommand.message6"));
+        int returnMap = getSavedLocation("JAIL");
+        changeMap(returnMap != -1 && returnMap != MapId.NONE ? returnMap : MapId.FM_ENTRANCE);
+    }
+
+    /**
+     * [GM强制释放] 仅清除服刑状态和客户端倒计时，不传送玩家。
+     */
+    public void cancelImprisonment() {
+        removeJailTimeAndClock();
+    }
+
+    // ----- 内部方法 -----
+
+    private void addJailDuration(long ms) {
+        jailExpiration = (jailExpiration <= 0) ? ms : jailExpiration + ms;
+    }
+
+    private void removeJailTimeAndClock() {
         jailExpiration = 0;
+        sendPacket(PacketCreator.removeClock());
+    }
+
+    private void refreshJailDisplay() {
+        long ms = getJailExpirationTimeLeft();
+        int sec = (int) Math.max(1, ms / 1000);
+        sendPacket(PacketCreator.getClock(sec));
+        message(I18nUtil.getMessage("JailCommand.message7",
+                ms / 3600000, (ms % 3600000) / 60000, (ms % 60000) / 1000));
     }
 
     public boolean registerNameChange(String newName) {
