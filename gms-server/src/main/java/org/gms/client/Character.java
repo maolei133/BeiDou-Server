@@ -1978,18 +1978,30 @@ public class Character extends AbstractCharacterObject {
      * @param pos 目标位置坐标
      * @param warpPacket 传送数据包
      */
-    private void changeMapInternal(final MapleMap to, final Point pos, Packet warpPacket) {
+    private void changeMapInternal(MapleMap to, Point pos, Packet warpPacket) {
         if (!canWarpMap) {
             return;
         }
-        if (getMap(to.getId(), true) == null) return; //判断地图不存在则直接返回并发送提示消息。
 
-        // 监狱拦截：服刑期间禁止离开监狱地图，违者加刑10分钟
-        if (isJailed() && getMapId() == MapId.JAIL && to.getId() != MapId.JAIL) {
-            addJailDuration(TimeUnit.MINUTES.toMillis(10));
-            refreshJailDisplay();
-            return;
+        // ===== 监狱传送检查 =====
+        if (isJailed()) {
+            // 条件①：服刑期间不在监狱 → 强制改目标为监狱地图
+            if (getMapId() != MapId.JAIL) {
+                MapleMap jailMap = getMap(MapId.JAIL, true);
+                if (jailMap == null) return;
+                to = jailMap;
+                pos = jailMap.getPortal(0).getPosition();
+                warpPacket = PacketCreator.getWarpToMap(to, 0, pos, this);
+            }
+            // 条件②：在监狱试图越狱 → 加刑10分钟 + 拦截
+            else if (to.getId() != MapId.JAIL) {
+                addJailDuration(TimeUnit.MINUTES.toMillis(10));
+                refreshJailDisplay();
+                return;
+            }
         }
+
+        if (getMap(to.getId(), true) == null) return; //判断地图不存在则直接返回并发送提示消息。
 
         this.mapTransitioning.set(true);
 
