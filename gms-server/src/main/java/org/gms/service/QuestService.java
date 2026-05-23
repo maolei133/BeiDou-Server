@@ -57,9 +57,15 @@ public class QuestService {
         // 1. 从数据库加载旧的任务状态
         List<QuestStatus> oldQuestStatusList = getQuestStatusByCharacter(cid);
         Map<Integer, QuestStatus> oldQuestMap = oldQuestStatusList.stream()
-                .collect(Collectors.toMap(qs -> (int) qs.getQuest().getId(), Function.identity()));
+                .collect(Collectors.toMap(
+                        qs -> (int) qs.getQuest().getId(),
+                        Function.identity(),
+                        (existing, duplicate) -> existing));
         Map<Integer, QuestStatus> newQuestMap = newQuestStatusList.stream()
-                .collect(Collectors.toMap(qs -> (int) qs.getQuest().getId(), Function.identity()));
+                .collect(Collectors.toMap(
+                        qs -> (int) qs.getQuest().getId(),
+                        Function.identity(),
+                        (existing, duplicate) -> existing));
 
         // 2. 识别需要删除的任务
         List<Integer> questsToDelete = oldQuestMap.keySet().stream()
@@ -146,9 +152,21 @@ public class QuestService {
                 .and(QUESTSTATUS_DO.QUEST.eq((int) qs.getQuest().getId())));
 
         if (queststatusDO == null) {
-            // 如果找不到，说明是新任务，直接插入
             insertQuestStatus(cid, qs);
             return;
+        }
+
+        // 防止并发写入产生重复行：如果 selectOneByQuery 返回了
+        // 多条记录的警告（理论上 DB 不应有重复），先清理后插入
+        List<QueststatusDO> allMatches = queststatusMapper.selectListByQuery(QueryWrapper.create()
+                .where(QUESTSTATUS_DO.CHARACTERID.eq(cid))
+                .and(QUESTSTATUS_DO.QUEST.eq((int) qs.getQuest().getId())));
+        if (allMatches.size() > 1) {
+            // 删除冗余行，只保留主表第一条，子表全清后重建
+            for (int i = 1; i < allMatches.size(); i++) {
+                queststatusMapper.deleteByQuery(QueryWrapper.create()
+                        .where(QUESTSTATUS_DO.QUESTSTATUSID.eq(allMatches.get(i).getQueststatusid())));
+            }
         }
 
         // 更新主表
