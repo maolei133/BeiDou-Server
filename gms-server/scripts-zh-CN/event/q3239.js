@@ -1,11 +1,9 @@
-var entryMap;
-var exitMap;
+const ENTRY_MAP_ID = 922000000;
+const EXIT_MAP_ID  = 922000009;
 var eventLength = 20;
 
 function init() {
     em.setProperty("noEntry", "false");
-    entryMap = em.getChannelServer().getMapFactory().getMap(922000000);
-    exitMap = em.getChannelServer().getMapFactory().getMap(922000009);
 }
 
 function setup(level, lobbyid) {
@@ -15,7 +13,7 @@ function setup(level, lobbyid) {
 }
 
 function playerEntry(eim, player) {
-    var im = eim.getInstanceMap(entryMap.getId());
+    var im = eim.getInstanceMap(ENTRY_MAP_ID);
 
     // Reset instance
     im.clearDrops();
@@ -26,12 +24,12 @@ function playerEntry(eim, player) {
     eim.startEventTimer(eventLength * 60 * 1000);
 
     // Warp player and mark event as occupied
-    player.changeMap(entryMap, 0);
+    player.changeMap(ENTRY_MAP_ID, 0);
     em.setProperty("noEntry", "true");
 }
 
 function changedMap(eim, player, mapid) {
-    if (mapid != entryMap.getId())
+    if (mapid != ENTRY_MAP_ID)
         playerExit(eim, player);
 }
 
@@ -52,7 +50,7 @@ function end(eim) {
     for (var i = 0; i < party.size(); i++) {
         var player = party.get(i);
         eim.unregisterPlayer(player);
-        player.changeMap(exitMap);
+        player.changeMap(EXIT_MAP_ID);
     }
 
     eim.dispose();

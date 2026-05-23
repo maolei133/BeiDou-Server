@@ -1,81 +1,67 @@
-/*
-	This file is part of the OdinMS Maple Story Server
-    Copyright (C) 2008 Patrick Huy <patrick.huy@frz.cc> 
-					   Matthias Butz <matze@odinms.de>
-					   Jan Christian Meyer <vimes@odinms.de>
+// 船舱地图 ID 常量
+const MAP_ID = {
+    ORBIS_BTF:      200000132,  // 候船室<开往神木村>
+    LEAFRE_BTF:     240000111,  // 候船室<开往天空之城>
+    CABIN_TO_ORBIS: 200090210,  // 船仓<开往天空之城>
+    CABIN_TO_LEAFRE:200090200,  // 船仓<开往神木村>
+    ORBIS_DOCKED:   200000131,  // 码头<开往神木村>
+    LEAFRE_DOCKED:  240000110,  // 神木村码头
+    ORBIS_STATION:  200000100,  // 天空之城售票处
+    LEAFRE_STATION: 240000100,  // 神木村车站
+};
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation version 3 as published by
-    the Free Software Foundation. You may not use, modify or distribute
-    this program under any other version of the GNU Affero General Public
-    License.
+const RIDE_MAPS = [MAP_ID.CABIN_TO_ORBIS, MAP_ID.CABIN_TO_LEAFRE];
+const WAIT_MAPS = [MAP_ID.ORBIS_BTF, MAP_ID.LEAFRE_BTF];
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
+let closeTime = 4 * 60 * 1000;
+let beginTime = 5 * 60 * 1000;
+let rideTime  = 5 * 60 * 1000;
 
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+const REBROADCAST_INTERVAL = 10000;   // 广播刷新间隔（毫秒）
+const COUNTDOWN_OFFSET_MS  = 1000;    // 倒计时提前量（毫秒），确保客户端00:00前事件已触发
 
-/**
- -- Odin JavaScript --------------------------------------------------------------------------------
- Cabin between Orbis and Leafre
- -- By ---------------------------------------------------------------------------------------------
- Information
- -- Version Info -----------------------------------------------------------------------------------
- 1.5 - Fix for infinity looping [Information]
- 1.4 - Ship/boat is now showed
- - Removed temp message[Information]
- - Credits to Snow, superraz777 for old source
- - Credits to Titan, Kool for the ship/boat packet
- 1.3 - Removing some function since is not needed [Information]
- - Remove register player menthod [Information]
- 1.2 - It should be 2 ships not 1 [Information]
- 1.1 - Add timer variable for easy edit [Information]
- 1.0 - First Version by Information
- ---------------------------------------------------------------------------------------------------
- **/
 
-var Orbis_btf;
-var Leafre_btf;
-var Cabin_to_Orbis;
-var Cabin_to_Leafre;
-var Orbis_docked;
-var Leafre_docked;
+function getMap(mapId) {
+    return em.getChannelServer().getMapFactory().getMap(mapId);
+}
 
-//Time Setting is in millisecond
-var closeTime = 4 * 60 * 1000; //The time to close the gate
-var beginTime = 5 * 60 * 1000; //The time to begin the ride
-var rideTime = 5 * 60 * 1000; //The time that require move to destination
+function mapFactory() {
+    return em.getChannelServer().getMapFactory();
+}
+
+function broadcastWaitCountdown() {
+    const takeoffTime = Number(em.getProperty("takeoffTime"));
+    if (!takeoffTime) return;
+    const sec = Math.max(1, Math.floor((takeoffTime - Date.now()) / 1000) + Math.ceil(COUNTDOWN_OFFSET_MS / 1000)); for (let i = 0; i < WAIT_MAPS.length; i++) { const id = WAIT_MAPS[i]; if (mapFactory().isMapLoaded(id)) { getMap(id).broadcastClock(sec); } }
+}
+
+function broadcastRideCountdown() { const rideEnd = em.getProperty("rideEndTime"); if (!rideEnd || rideEnd === "0") return; const sec = Math.max(1, Math.floor((Number(rideEnd) - Date.now()) / 1000) + Math.ceil(COUNTDOWN_OFFSET_MS / 1000)); for (let i = 0; i < RIDE_MAPS.length; i++) { const id = RIDE_MAPS[i]; if (mapFactory().isMapLoaded(id)) { getMap(id).broadcastClock(sec); } } }
+function rebroadcastRide() { broadcastRideCountdown(); const rideEnd = em.getProperty("rideEndTime"); if (rideEnd && Number(rideEnd) > Date.now()) { em.schedule("rebroadcastRide", REBROADCAST_INTERVAL); } }
+function rebroadcastWait() {
+    broadcastWaitCountdown();
+    if (em.getProperty("entry") === "true") {
+        em.schedule("rebroadcastWait", REBROADCAST_INTERVAL);
+    }
+}
 
 function init() {
     closeTime = em.getTransportationTime(closeTime);
     beginTime = em.getTransportationTime(beginTime);
-    rideTime = em.getTransportationTime(rideTime);
-
-    Orbis_btf = em.getChannelServer().getMapFactory().getMap(200000132);
-    Leafre_btf = em.getChannelServer().getMapFactory().getMap(240000111);
-    Cabin_to_Orbis = em.getChannelServer().getMapFactory().getMap(200090210);
-    Cabin_to_Leafre = em.getChannelServer().getMapFactory().getMap(200090200);
-    Orbis_docked = em.getChannelServer().getMapFactory().getMap(200000131);
-    Leafre_docked = em.getChannelServer().getMapFactory().getMap(240000110);
-    Orbis_Station = em.getChannelServer().getMapFactory().getMap(200000100);
-    Leafre_Station = em.getChannelServer().getMapFactory().getMap(240000100);
-
+    rideTime  = em.getTransportationTime(rideTime);
     scheduleNew();
 }
 
 function scheduleNew() {
     em.setProperty("docked", "true");
-    Orbis_docked.setDocked(true);
-    Leafre_docked.setDocked(true);
-
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).setDocked(true); }
+    if (mapFactory().isMapLoaded(MAP_ID.LEAFRE_DOCKED)) { getMap(MAP_ID.LEAFRE_DOCKED).setDocked(true); }
     em.setProperty("entry", "true");
-    em.schedule("stopEntry", closeTime); //The time to close the gate
-    em.schedule("takeoff", beginTime); //The time to begin the ride
+    em.setProperty("takeoffTime", String(Date.now() + beginTime));
+
+    broadcastWaitCountdown();
+    em.schedule("rebroadcastWait", REBROADCAST_INTERVAL);
+    em.schedule("stopEntry", closeTime);
+    em.schedule("takeoff", beginTime);
 }
 
 function stopEntry() {
@@ -83,61 +69,58 @@ function stopEntry() {
 }
 
 function takeoff() {
-    Orbis_btf.warpEveryone(Cabin_to_Leafre.getId());
-    Leafre_btf.warpEveryone(Cabin_to_Orbis.getId());
-
-    Orbis_docked.broadcastShip(false);
-    Leafre_docked.broadcastShip(false);
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_BTF)) { getMap(MAP_ID.ORBIS_BTF).warpEveryone(MAP_ID.CABIN_TO_LEAFRE); }
+    if (mapFactory().isMapLoaded(MAP_ID.LEAFRE_BTF)) { getMap(MAP_ID.LEAFRE_BTF).warpEveryone(MAP_ID.CABIN_TO_ORBIS); }
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).broadcastShip(false); }
+    if (mapFactory().isMapLoaded(MAP_ID.LEAFRE_DOCKED)) { getMap(MAP_ID.LEAFRE_DOCKED).broadcastShip(false); }
 
     em.setProperty("docked", "false");
-    Orbis_docked.setDocked(false);
-    Leafre_docked.setDocked(false);
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).setDocked(false); }
+    if (mapFactory().isMapLoaded(MAP_ID.LEAFRE_DOCKED)) { getMap(MAP_ID.LEAFRE_DOCKED).setDocked(false); }
+    em.setProperty("rideEndTime", String(Date.now() + rideTime));
 
-    em.schedule("arrived", rideTime); //The time that require move to destination
+    for (let i = 0; i < RIDE_MAPS.length; i++) {
+        mapFactory().pinMap(RIDE_MAPS[i]);
+    }
+
+    for (let i = 0; i < RIDE_MAPS.length; i++) {
+        if (mapFactory().isMapLoaded(RIDE_MAPS[i])) { getMap(RIDE_MAPS[i]).broadcastClock(Math.max(1, Math.floor(rideTime / 1000) - 1)); }
+    }
+
+    em.schedule("rebroadcastRide", REBROADCAST_INTERVAL);
+    em.schedule("arrived", rideTime);
 }
 
 function arrived() {
-    Cabin_to_Orbis.warpEveryone(Orbis_Station.getId(), 0);
-    Cabin_to_Leafre.warpEveryone(Leafre_Station.getId(), 0);
+    if (mapFactory().isMapLoaded(MAP_ID.CABIN_TO_ORBIS)) { getMap(MAP_ID.CABIN_TO_ORBIS).warpEveryone(MAP_ID.ORBIS_STATION, 0); }
+    if (mapFactory().isMapLoaded(MAP_ID.CABIN_TO_LEAFRE)) { getMap(MAP_ID.CABIN_TO_LEAFRE).warpEveryone(MAP_ID.LEAFRE_STATION, 0); }
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).broadcastShip(true); }
+    if (mapFactory().isMapLoaded(MAP_ID.LEAFRE_DOCKED)) { getMap(MAP_ID.LEAFRE_DOCKED).broadcastShip(true); }
 
-    Orbis_docked.broadcastShip(true);
-    Leafre_docked.broadcastShip(true);
+    for (let i = 0; i < RIDE_MAPS.length; i++) {
+        if (mapFactory().isMapLoaded(RIDE_MAPS[i])) { getMap(RIDE_MAPS[i]).broadcastRemoveClock(); }
+        mapFactory().unpinMap(RIDE_MAPS[i]);
+    }
 
+    em.setProperty("rideEndTime", "0");
     scheduleNew();
 }
 
 function cancelSchedule() {}
 
-
-// ---------- FILLER FUNCTIONS ----------
-
+// ========== FILLER ==========
 function dispose() {}
-
 function setup(eim, leaderid) {}
-
-function monsterValue(eim, mobid) {return 0;}
-
+function monsterValue(eim, mobid) { return 0; }
 function disbandParty(eim, player) {}
-
 function playerDisconnected(eim, player) {}
-
 function playerEntry(eim, player) {}
-
 function monsterKilled(mob, eim) {}
-
 function scheduledTimeout(eim) {}
-
 function afterSetup(eim) {}
-
 function changedLeader(eim, leader) {}
-
 function playerExit(eim, player) {}
-
 function leftParty(eim, player) {}
-
 function clearPQ(eim) {}
-
 function allMonstersDead(eim) {}
-
 function playerUnregistered(eim, player) {}
-

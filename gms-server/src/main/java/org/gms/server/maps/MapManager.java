@@ -27,10 +27,7 @@ import org.gms.scripting.event.EventInstanceManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class MapManager {
@@ -59,38 +56,38 @@ public class MapManager {
 
         MapManager self = this;
         this.cache = Caffeine.newBuilder()
-                .maximumSize(5_000)
+                .maximumSize(2_000)
                 .expireAfter(new Expiry<Integer, MapleMap>() {
                     @Override
                     public long expireAfterCreate(Integer key, MapleMap value, long currentTime) {
                         return resolveExpiry(value);
                     }
-
                     @Override
-                    public long expireAfterUpdate(Integer key, MapleMap value,
-                                                  long currentTime, long currentDuration) {
+                    public long expireAfterUpdate(Integer key, MapleMap value,long currentTime, long currentDuration) {
                         return resolveExpiry(value);
                     }
-
                     @Override
-                    public long expireAfterRead(Integer key, MapleMap value,
-                                                long currentTime, long currentDuration) {
+                    public long expireAfterRead(Integer key, MapleMap value,long currentTime, long currentDuration) {
                         return resolveExpiry(value);
                     }
-
                     private long resolveExpiry(MapleMap map) {
                         if (self.canDisposeMap(map)) {
-                            return TimeUnit.SECONDS.toNanos(60);
+                            return TimeUnit.SECONDS.toNanos(60);   // 60秒宽限期
                         }
-                        return Long.MAX_VALUE;
+                        return Long.MAX_VALUE;                      // 不满足条件：永不过期
                     }
                 })
                 .evictionListener((Integer key, MapleMap map, RemovalCause cause) -> {
-                    if (map != null && cause.wasEvicted()) {
-                        log.debug("释放空闲地图 [{}] {} 世界{}频道{}", key, map.getMapName(), world, channel);
-                        map.dispose();
-                        disposedCount++;
+                    if (map == null || !cause.wasEvicted()) return;
+
+                    // ★ 二次确认：宽限期到了，重新检查条件
+                    if (!self.canDisposeMap(map)) {
+                        return;   // 条件不满足 → 跳过本次驱逐（map 对象被丢弃，下次 getMap 重建）
                     }
+
+                    log.debug(" 世界 {} 频道 {} 释放空闲地图 [{}] {}", world, channel, key, map.getMapName());
+                    map.dispose();
+                    disposedCount++;
                 })
                 .build();
     }
@@ -101,7 +98,17 @@ public class MapManager {
     }
 
     public MapleMap getMap(int mapid) {
-        return cache.get(mapid, id -> MapFactory.loadMapFromWz(id, world, channel, event));
+        return cache.get(mapid, id -> {
+            MapleMap map = MapFactory.loadMapFromWz(id, world, channel, event);
+            map.setMapManager(this);
+            return map;
+        });
+    }
+
+    /** 地图占用变化时，强制缓存刷新过期评估 */
+    public void touchMap(int mapid) {
+        MapleMap map = cache.getIfPresent(mapid);
+        if (map != null) cache.put(mapid, map);   // 触发 expireAfterUpdate
     }
 
     public MapleMap getMapByLifeId(int lifeId) {
@@ -133,31 +140,39 @@ public class MapManager {
         this.event = null;
     }
 
-    public boolean canAddDisposeMap(MapleMap map) {
-        return map.getCharacterCount() == 0
-                && !map.hasHiredMerchants();
-    }
-
+    /**
+     * 判断地图是否可以释放（自动回收）。
+     * 全部条件满足时才进入 60 秒宽限期，到期后二次确认仍满足才释放。
+     *
+     * ① 地图对象非空
+     * ② 未被脚本 pin 为常驻地图
+     * ③ 无玩家在线 (getCharacterCount)
+     * ④ 无雇佣商人 (hiredMerchantCount)
+     * ⑤ 无地面掉落物品 (droppedItemCount)
+     * ⑥ 无 BOSS 存活 (spawnedBossesOnMap)
+     * ⑦ 无关联的事件实例 (EventInstance)
+     * ⑧ 非活动地图 (EventMap, 按 ID 范围判定)
+     * ⑨ WZ <clock> 属性为 false（地图固有钟表，非玩家倒计时包）
+     * ⑩ 无待刷新的 BOSS (monsterSpawnBoss 队列非空)
+     */
     private boolean canDisposeMap(MapleMap map) {
         if (map == null) return true;
-        if (pinnedMaps.contains(map.getId())) return false;
-        return map.getCharacterCount() == 0
-                && !map.hasHiredMerchants()
-                && map.getDroppedItemCount() <= 0
-                && map.countBosses() == 0
-                && map.getEventInstance() == null
-                && !map.isEventMap()
-                && !map.hasClock()
-                && !map.hasPendingBossSpawns();
+        if (pinnedMaps.contains(map.getId())) return false;                                     // ②
+        return map.getCharacterCount() == 0                                                     // ③
+                && map.getHiredMerchantCount() == 0                                             // ④
+                && map.getDroppedItemCount() <= 0                                               // ⑤
+                && map.getSpawnedBossesOnMap() == 0                                             // ⑥
+                && map.getEventInstance() == null                                               // ⑦
+                && !map.isEventMap()                                                            // ⑧
+                && !map.hasClock()                                                              // ⑨
+                && !map.hasPendingBossSpawns();                                                 // ⑩
     }
 
     public void pinMap(int mapId) {
         pinnedMaps.add(mapId);
-        // 强制触发 expireAfterUpdate 重新评估过期时间（防止 pin 前已设 60 秒倒计时）
+        // pin 后强制刷新过期评估（可能之前已有60秒倒计时）
         MapleMap existing = cache.getIfPresent(mapId);
-        if (existing != null) {
-            cache.put(mapId, existing);
-        }
+        if (existing != null) cache.put(mapId, existing);
     }
 
     public void unpinMap(int mapId) {

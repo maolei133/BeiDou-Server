@@ -19,9 +19,9 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-var entryMap;
-var exitMap;
-var otherMap;
+const EXIT_MAP_ID  = 103040400;
+const ENTRY_MAP_ID = 103040410;
+const OTHER_MAP_ID = 103040420;
 
 var minMapId = 103040410;
 var maxMapId = 103040460;
@@ -30,11 +30,7 @@ var minPlayers = 1;
 var fightTime = 60;
 var timer = 1000 * 60 * fightTime;
 
-function init() {
-    exitMap = em.getChannelServer().getMapFactory().getMap(103040400);
-    entryMap = em.getChannelServer().getMapFactory().getMap(103040410);
-    otherMap = em.getChannelServer().getMapFactory().getMap(103040420);
-}
+function init() {}
 
 function setup(level, lobbyid) {
     var eim = em.newInstance("RockSpirit_" + lobbyid);
@@ -49,8 +45,8 @@ function setup(level, lobbyid) {
 function afterSetup(eim) {}
 
 function respawn(eim) {
-    var map = eim.getMapInstance(entryMap.getId());
-    var map2 = eim.getMapInstance(otherMap.getId());
+    var map = eim.getMapInstance(ENTRY_MAP_ID);
+    var map2 = eim.getMapInstance(OTHER_MAP_ID);
     map.allowSummonState(true);
     map2.allowSummonState(true);
     map.instanceMapRespawn();
@@ -60,13 +56,13 @@ function respawn(eim) {
 
 
 function playerEntry(eim, player) {
-    var amplifierMap = eim.getMapInstance(entryMap.getId());
+    var amplifierMap = eim.getMapInstance(ENTRY_MAP_ID);
     player.changeMap(amplifierMap, 1);
     eim.schedule("timeOut", timer);
 }
 
 function playerRevive(eim, player) {
-    player.respawn(eim, exitMap);
+    player.respawn(eim, EXIT_MAP_ID);
     return false;
 }
 
@@ -112,7 +108,7 @@ function playerUnregistered(eim, player) {}
 
 function playerExit(eim, player) {
     eim.unregisterPlayer(player);
-    player.changeMap(exitMap, exitMap.getPortal(0));
+    player.changeMap(EXIT_MAP_ID, 0);
 }
 
 function cancelSchedule() {}

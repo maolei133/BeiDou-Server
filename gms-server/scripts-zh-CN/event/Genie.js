@@ -1,61 +1,66 @@
-/*
-	This file is part of the OdinMS Maple Story Server
-    Copyright (C) 2008 Patrick Huy <patrick.huy@frz.cc> 
-					   Matthias Butz <matze@odinms.de>
-					   Jan Christian Meyer <vimes@odinms.de>
+// 精灵渡轮地图 ID 常量
+const MAP_ID = {
+    ORBIS_BTF:       200000152,  // 候船室<开往阿里安特>
+    ARIANT_BTF:      260000110,  // 候船室<开往天空之城>
+    GENIE_TO_ORBIS:  200090410,  // 开往天空之城
+    GENIE_TO_ARIANT: 200090400,  // 开往阿里安特
+    ORBIS_DOCKED:    200000151,  // 码头<开往阿里安特>
+    ARIANT_DOCKED:   260000100,  // 阿里安特码头
+    ORBIS_STATION:   200000100,  // 天空之城售票处
+};
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation version 3 as published by
-    the Free Software Foundation. You may not use, modify or distribute
-    this program under any other version of the GNU Affero General Public
-    License.
+const RIDE_MAPS = [MAP_ID.GENIE_TO_ORBIS, MAP_ID.GENIE_TO_ARIANT];
+const WAIT_MAPS = [MAP_ID.ORBIS_BTF, MAP_ID.ARIANT_BTF];
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
+let closeTime = 4 * 60 * 1000;
+let beginTime = 5 * 60 * 1000;
+let rideTime  = 5 * 60 * 1000;
 
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+const REBROADCAST_INTERVAL = 10000;   // 广播刷新间隔（毫秒）
+const COUNTDOWN_OFFSET_MS  = 1000;    // 倒计时提前量（毫秒），确保客户端00:00前事件已触发
 
-var Orbis_btf;
-var Genie_to_Orbis;
-var Orbis_docked;
-var Ariant_btf;
-var Genie_to_Ariant;
-var Ariant_docked;
 
-//Time Setting is in millisecond
-var closeTime = 4 * 60 * 1000; //The time to close the gate
-var beginTime = 5 * 60 * 1000; //The time to begin the ride
-var rideTime = 5 * 60 * 1000; //The time that require move to destination
+function getMap(mapId) {
+    return em.getChannelServer().getMapFactory().getMap(mapId);
+}
+
+function mapFactory() {
+    return em.getChannelServer().getMapFactory();
+}
+
+function broadcastWaitCountdown() {
+    const takeoffTime = Number(em.getProperty("takeoffTime"));
+    if (!takeoffTime) return;
+    const sec = Math.max(1, Math.floor((takeoffTime - Date.now()) / 1000) + Math.ceil(COUNTDOWN_OFFSET_MS / 1000)); for (let i = 0; i < WAIT_MAPS.length; i++) { const id = WAIT_MAPS[i]; if (mapFactory().isMapLoaded(id)) { getMap(id).broadcastClock(sec); } }
+}
+
+function broadcastRideCountdown() { const rideEnd = em.getProperty("rideEndTime"); if (!rideEnd || rideEnd === "0") return; const sec = Math.max(1, Math.floor((Number(rideEnd) - Date.now()) / 1000) + Math.ceil(COUNTDOWN_OFFSET_MS / 1000)); for (let i = 0; i < RIDE_MAPS.length; i++) { const id = RIDE_MAPS[i]; if (mapFactory().isMapLoaded(id)) { getMap(id).broadcastClock(sec); } } }
+function rebroadcastRide() { broadcastRideCountdown(); const rideEnd = em.getProperty("rideEndTime"); if (rideEnd && Number(rideEnd) > Date.now()) { em.schedule("rebroadcastRide", REBROADCAST_INTERVAL); } }
+function rebroadcastWait() {
+    broadcastWaitCountdown();
+    if (em.getProperty("entry") === "true") {
+        em.schedule("rebroadcastWait", REBROADCAST_INTERVAL);
+    }
+}
 
 function init() {
     closeTime = em.getTransportationTime(closeTime);
     beginTime = em.getTransportationTime(beginTime);
-    rideTime = em.getTransportationTime(rideTime);
-
-    Orbis_btf = em.getChannelServer().getMapFactory().getMap(200000152);
-    Ariant_btf = em.getChannelServer().getMapFactory().getMap(260000110);
-    Genie_to_Orbis = em.getChannelServer().getMapFactory().getMap(200090410);
-    Genie_to_Ariant = em.getChannelServer().getMapFactory().getMap(200090400);
-    Orbis_docked = em.getChannelServer().getMapFactory().getMap(200000151);
-    Ariant_docked = em.getChannelServer().getMapFactory().getMap(260000100);
-    Orbis_Station = em.getChannelServer().getMapFactory().getMap(200000100);
-
+    rideTime  = em.getTransportationTime(rideTime);
     scheduleNew();
 }
 
 function scheduleNew() {
     em.setProperty("docked", "true");
-    Orbis_docked.setDocked(true);
-    Ariant_docked.setDocked(true);
-
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).setDocked(true); }
+    if (mapFactory().isMapLoaded(MAP_ID.ARIANT_DOCKED)) { getMap(MAP_ID.ARIANT_DOCKED).setDocked(true); }
     em.setProperty("entry", "true");
-    em.schedule("stopEntry", closeTime); //The time to close the gate
-    em.schedule("takeoff", beginTime); //The time to begin the ride
+    em.setProperty("takeoffTime", String(Date.now() + beginTime));
+
+    broadcastWaitCountdown();
+    em.schedule("rebroadcastWait", REBROADCAST_INTERVAL);
+    em.schedule("stopEntry", closeTime);
+    em.schedule("takeoff", beginTime);
 }
 
 function stopEntry() {
@@ -63,58 +68,58 @@ function stopEntry() {
 }
 
 function takeoff() {
-    Orbis_btf.warpEveryone(Genie_to_Ariant.getId());
-    Ariant_btf.warpEveryone(Genie_to_Orbis.getId());
-    Orbis_docked.broadcastShip(false);
-    Ariant_docked.broadcastShip(false);
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_BTF)) { getMap(MAP_ID.ORBIS_BTF).warpEveryone(MAP_ID.GENIE_TO_ARIANT); }
+    if (mapFactory().isMapLoaded(MAP_ID.ARIANT_BTF)) { getMap(MAP_ID.ARIANT_BTF).warpEveryone(MAP_ID.GENIE_TO_ORBIS); }
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).broadcastShip(false); }
+    if (mapFactory().isMapLoaded(MAP_ID.ARIANT_DOCKED)) { getMap(MAP_ID.ARIANT_DOCKED).broadcastShip(false); }
 
     em.setProperty("docked", "false");
-    Orbis_docked.setDocked(false);
-    Ariant_docked.setDocked(false);
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).setDocked(false); }
+    if (mapFactory().isMapLoaded(MAP_ID.ARIANT_DOCKED)) { getMap(MAP_ID.ARIANT_DOCKED).setDocked(false); }
+    em.setProperty("rideEndTime", String(Date.now() + rideTime));
 
-    em.schedule("arrived", rideTime); //The time that require move to destination
+    for (let i = 0; i < RIDE_MAPS.length; i++) {
+        mapFactory().pinMap(RIDE_MAPS[i]);
+    }
+
+    for (let i = 0; i < RIDE_MAPS.length; i++) {
+        if (mapFactory().isMapLoaded(RIDE_MAPS[i])) { getMap(RIDE_MAPS[i]).broadcastClock(Math.max(1, Math.floor(rideTime / 1000) - 1)); }
+    }
+
+    em.schedule("rebroadcastRide", REBROADCAST_INTERVAL);
+    em.schedule("arrived", rideTime);
 }
 
 function arrived() {
-    Genie_to_Orbis.warpEveryone(Orbis_Station.getId(), 0);
-    Genie_to_Ariant.warpEveryone(Ariant_docked.getId(), 1);
-    Orbis_docked.broadcastShip(true);
-    Ariant_docked.broadcastShip(true);
+    if (mapFactory().isMapLoaded(MAP_ID.GENIE_TO_ORBIS)) { getMap(MAP_ID.GENIE_TO_ORBIS).warpEveryone(MAP_ID.ORBIS_STATION, 0); }
+    if (mapFactory().isMapLoaded(MAP_ID.GENIE_TO_ARIANT)) { getMap(MAP_ID.GENIE_TO_ARIANT).warpEveryone(MAP_ID.ARIANT_DOCKED, 1); }
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).broadcastShip(true); }
+    if (mapFactory().isMapLoaded(MAP_ID.ARIANT_DOCKED)) { getMap(MAP_ID.ARIANT_DOCKED).broadcastShip(true); }
 
+    for (let i = 0; i < RIDE_MAPS.length; i++) {
+        if (mapFactory().isMapLoaded(RIDE_MAPS[i])) { getMap(RIDE_MAPS[i]).broadcastRemoveClock(); }
+        mapFactory().unpinMap(RIDE_MAPS[i]);
+    }
+
+    em.setProperty("rideEndTime", "0");
     scheduleNew();
 }
 
 function cancelSchedule() {}
 
-// ---------- FILLER FUNCTIONS ----------
-
+// ========== FILLER ==========
 function dispose() {}
-
 function setup(eim, leaderid) {}
-
-function monsterValue(eim, mobid) {return 0;}
-
+function monsterValue(eim, mobid) { return 0; }
 function disbandParty(eim, player) {}
-
 function playerDisconnected(eim, player) {}
-
 function playerEntry(eim, player) {}
-
 function monsterKilled(mob, eim) {}
-
 function scheduledTimeout(eim) {}
-
 function afterSetup(eim) {}
-
 function changedLeader(eim, leader) {}
-
 function playerExit(eim, player) {}
-
 function leftParty(eim, player) {}
-
 function clearPQ(eim) {}
-
 function allMonstersDead(eim) {}
-
 function playerUnregistered(eim, player) {}
-

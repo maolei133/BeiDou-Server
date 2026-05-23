@@ -129,6 +129,8 @@ public class MapleMap {
     private final AtomicInteger spawnedMonstersOnMap = new AtomicInteger(0);
     private final AtomicInteger spawnedBossesOnMap = new AtomicInteger(0);
     private final AtomicInteger droppedItemCount = new AtomicInteger(0);
+    /** 当前地图雇佣商人数量，影响 @see MapManager#canDisposeMap ④ */
+    private final AtomicInteger hiredMerchantCount = new AtomicInteger(0);
     private final Collection<Character> characters = new LinkedHashSet<>();
     private final Map<Integer, Set<Integer>> mapParty = new LinkedHashMap<>();
     private final Map<Integer, Portal> portals = new HashMap<>();
@@ -147,6 +149,7 @@ public class MapleMap {
     private final int returnMapId;
     private final int channel;
     private final int world;
+    private MapManager mapManager;  // 用于通知缓存刷新过期评估
     private int seats;
     private byte monsterRate;
     private boolean clock;
@@ -400,6 +403,11 @@ public class MapleMap {
         } finally {
             objectWLock.unlock();
         }
+        // 雇佣商人影响 canDisposeMap，需通知缓存刷新
+        if (mapobject.getType() == MapObjectType.HIRED_MERCHANT) {
+            hiredMerchantCount.incrementAndGet();
+            touchCache();
+        }
     }
 
     public void addSelfDestructive(Monster mob) {
@@ -492,11 +500,18 @@ public class MapleMap {
     }
 
     public void removeMapObject(int num) {
+        boolean wasMerchant = false;
         objectWLock.lock();
         try {
+            MapObject obj = this.mapobjects.get(num);
+            wasMerchant = obj != null && obj.getType() == MapObjectType.HIRED_MERCHANT;
             this.mapobjects.remove(num);
         } finally {
             objectWLock.unlock();
+        }
+        if (wasMerchant) {
+            hiredMerchantCount.decrementAndGet();
+            touchCache();
         }
     }
 
@@ -939,6 +954,10 @@ public class MapleMap {
         }
     }
 
+    /**
+     * 获取当前那地图的物品数量
+     * @return
+     */
     public int getDroppedItemCount() {
         return droppedItemCount.get();
     }
@@ -1372,16 +1391,13 @@ public class MapleMap {
         return count;
     }
 
+    /**
+     * 当前地图 BOSS 存活数（原子计数器，O(1)）。
+     * 替代遍历 {@link #getAllMonsters()} 的全量扫描方案。
+     * @see MapManager#canDisposeMap ⑥
+     */
     public int countBosses() {
-        int count = 0;
-
-        for (Monster mob : getAllMonsters()) {
-            if (mob.isBoss()) {
-                count++;
-            }
-        }
-
-        return count;
+        return spawnedBossesOnMap.get();
     }
 
     public boolean damageMonster(final Character chr, final Monster monster, final int damage) {
@@ -2586,6 +2602,7 @@ public class MapleMap {
                 addPartyMemberInternal(chr, party.getId());
             }
             itemMonitorTimeout = 1;
+            touchCache();
         } finally {
             chrWLock.unlock();
         }
@@ -2882,6 +2899,7 @@ public class MapleMap {
             }
 
             characters.remove(chr);
+            touchCache();
         } finally {
             chrWLock.unlock();
         }
@@ -3180,6 +3198,16 @@ public class MapleMap {
 
     public void broadcastStringMessage(int type, String message) {
         broadcastMessage(PacketCreator.serverNotice(type, message));
+    }
+
+    /** 向地图上所有玩家广播倒计时时钟（秒） */
+    public void broadcastClock(int seconds) {
+        broadcastMessage(PacketCreator.getClock(Math.max(1, seconds)));
+    }
+
+    /** 移除地图上所有玩家的倒计时时钟 */
+    public void broadcastRemoveClock() {
+        broadcastMessage(PacketCreator.removeClock());
     }
 
     private static boolean isNonRangedType(MapObjectType type) {
@@ -3541,6 +3569,15 @@ public class MapleMap {
         return mapName;
     }
 
+    void setMapManager(MapManager mm) {
+        this.mapManager = mm;
+    }
+
+    /** 玩家/商人进出时通知缓存刷新过期评估 */
+    private void touchCache() {
+        if (mapManager != null) mapManager.touchMap(mapid);
+    }
+
     public void setMapName(String mapName) {
         this.mapName = mapName;
     }
@@ -3589,6 +3626,10 @@ public class MapleMap {
         return spawnedMonstersOnMap.get();
     }
 
+    /**
+     * 获取当前地图的boss数量
+     * @return
+     */
     public int getSpawnedBossesOnMap() {
         return spawnedBossesOnMap.get();
     }
@@ -4845,19 +4886,13 @@ public class MapleMap {
         }
     }
 
-    /** 检查地图中是否有雇佣商人 */
-    public boolean hasHiredMerchants() {
-        objectRLock.lock();
-        try {
-            for (MapObject obj : mapobjects.values()) {
-                if (obj.getType() == MapObjectType.HIRED_MERCHANT) {
-                    return true;
-                }
-            }
-            return false;
-        } finally {
-            objectRLock.unlock();
-        }
+    /**
+     * 当前地图雇佣商人数量（原子计数器，O(1)）。
+     * 替代遍历 {@link #mapobjects} 的全量扫描方案。
+     * @see MapManager#canDisposeMap ④
+     */
+    public int getHiredMerchantCount() {
+        return hiredMerchantCount.get();
     }
 
     /**

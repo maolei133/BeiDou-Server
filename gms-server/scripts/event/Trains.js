@@ -1,42 +1,67 @@
-var Orbis_btf;
-var Train_to_Orbis;
-var Orbis_docked;
-var Ludibrium_btf;
-var Train_to_Ludibrium;
-var Ludibrium_docked;
-var Orbis_Station;
-var Ludibrium_Station;
+// 列车地图 ID 常量
+const MAP_ID = {
+    ORBIS_BTF:         200000122,  // 候车室<开往玩具城>
+    LUDIBRIUM_BTF:     220000111,  // 候车室<开往天空之城>
+    TRAIN_TO_ORBIS:    200090110,  // 开往天空之城
+    TRAIN_TO_LUDIBRIUM:200090100,  // 开往玩具城
+    ORBIS_DOCKED:      200000121,  // 码头<开往玩具城>
+    LUDIBRIUM_DOCKED:  220000110,  // 玩具城码头
+    ORBIS_STATION:     200000100,  // 天空之城售票处
+    LUDIBRIUM_STATION: 220000100,  // 玩具城车站
+};
 
-//Time Setting is in millisecond
-var closeTime = 4 * 60 * 1000; //The time to close the gate
-var beginTime = 5 * 60 * 1000; //The time to begin the ride
-var rideTime = 5 * 60 * 1000; //The time that require move to destination
+const RIDE_MAPS = [MAP_ID.TRAIN_TO_ORBIS, MAP_ID.TRAIN_TO_LUDIBRIUM];
+const WAIT_MAPS = [MAP_ID.ORBIS_BTF, MAP_ID.LUDIBRIUM_BTF];
+
+let closeTime = 4 * 60 * 1000;
+let beginTime = 5 * 60 * 1000;
+let rideTime  = 5 * 60 * 1000;
+
+const REBROADCAST_INTERVAL = 10000;   // 广播刷新间隔（毫秒）
+const COUNTDOWN_OFFSET_MS  = 1000;    // 倒计时提前量（毫秒），确保客户端00:00前事件已触发
+
+
+function getMap(mapId) {
+    return em.getChannelServer().getMapFactory().getMap(mapId);
+}
+
+function mapFactory() {
+    return em.getChannelServer().getMapFactory();
+}
+
+function broadcastWaitCountdown() {
+    const takeoffTime = Number(em.getProperty("takeoffTime"));
+    if (!takeoffTime) return;
+    const sec = Math.max(1, Math.floor((takeoffTime - Date.now()) / 1000) + Math.ceil(COUNTDOWN_OFFSET_MS / 1000)); for (let i = 0; i < WAIT_MAPS.length; i++) { const id = WAIT_MAPS[i]; if (mapFactory().isMapLoaded(id)) { getMap(id).broadcastClock(sec); } }
+}
+
+function broadcastRideCountdown() { const rideEnd = em.getProperty("rideEndTime"); if (!rideEnd || rideEnd === "0") return; const sec = Math.max(1, Math.floor((Number(rideEnd) - Date.now()) / 1000) + Math.ceil(COUNTDOWN_OFFSET_MS / 1000)); for (let i = 0; i < RIDE_MAPS.length; i++) { const id = RIDE_MAPS[i]; if (mapFactory().isMapLoaded(id)) { getMap(id).broadcastClock(sec); } } }
+function rebroadcastRide() { broadcastRideCountdown(); const rideEnd = em.getProperty("rideEndTime"); if (rideEnd && Number(rideEnd) > Date.now()) { em.schedule("rebroadcastRide", REBROADCAST_INTERVAL); } }
+function rebroadcastWait() {
+    broadcastWaitCountdown();
+    if (em.getProperty("entry") === "true") {
+        em.schedule("rebroadcastWait", REBROADCAST_INTERVAL);  // 每30秒刷新
+    }
+}
 
 function init() {
     closeTime = em.getTransportationTime(closeTime);
     beginTime = em.getTransportationTime(beginTime);
-    rideTime = em.getTransportationTime(rideTime);
-
-    Orbis_btf = em.getChannelServer().getMapFactory().getMap(200000122);
-    Ludibrium_btf = em.getChannelServer().getMapFactory().getMap(220000111);
-    Train_to_Orbis = em.getChannelServer().getMapFactory().getMap(200090110);
-    Train_to_Ludibrium = em.getChannelServer().getMapFactory().getMap(200090100);
-    Orbis_docked = em.getChannelServer().getMapFactory().getMap(200000121);
-    Ludibrium_docked = em.getChannelServer().getMapFactory().getMap(220000110);
-    Orbis_Station = em.getChannelServer().getMapFactory().getMap(200000100);
-    Ludibrium_Station = em.getChannelServer().getMapFactory().getMap(220000100);
-
+    rideTime  = em.getTransportationTime(rideTime);
     scheduleNew();
 }
 
 function scheduleNew() {
     em.setProperty("docked", "true");
-    Orbis_docked.setDocked(true);
-    Ludibrium_docked.setDocked(true);
-
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).setDocked(true); }
+    if (mapFactory().isMapLoaded(MAP_ID.LUDIBRIUM_DOCKED)) { getMap(MAP_ID.LUDIBRIUM_DOCKED).setDocked(true); }
     em.setProperty("entry", "true");
-    em.schedule("stopEntry", closeTime); //The time to close the gate
-    em.schedule("takeoff", beginTime); //The time to begin the ride
+    em.setProperty("takeoffTime", String(Date.now() + beginTime));
+
+    broadcastWaitCountdown();
+    em.schedule("rebroadcastWait", REBROADCAST_INTERVAL);
+    em.schedule("stopEntry", closeTime);
+    em.schedule("takeoff", beginTime);
 }
 
 function stopEntry() {
@@ -44,58 +69,58 @@ function stopEntry() {
 }
 
 function takeoff() {
-    Orbis_btf.warpEveryone(Train_to_Ludibrium.getId());
-    Ludibrium_btf.warpEveryone(Train_to_Orbis.getId());
-    Orbis_docked.broadcastShip(false);
-    Ludibrium_docked.broadcastShip(false);
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_BTF)) { getMap(MAP_ID.ORBIS_BTF).warpEveryone(MAP_ID.TRAIN_TO_LUDIBRIUM); }
+    if (mapFactory().isMapLoaded(MAP_ID.LUDIBRIUM_BTF)) { getMap(MAP_ID.LUDIBRIUM_BTF).warpEveryone(MAP_ID.TRAIN_TO_ORBIS); }
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).broadcastShip(false); }
+    if (mapFactory().isMapLoaded(MAP_ID.LUDIBRIUM_DOCKED)) { getMap(MAP_ID.LUDIBRIUM_DOCKED).broadcastShip(false); }
 
     em.setProperty("docked", "false");
-    Orbis_docked.setDocked(false);
-    Ludibrium_docked.setDocked(false);
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).setDocked(false); }
+    if (mapFactory().isMapLoaded(MAP_ID.LUDIBRIUM_DOCKED)) { getMap(MAP_ID.LUDIBRIUM_DOCKED).setDocked(false); }
+    em.setProperty("rideEndTime", String(Date.now() + rideTime));
 
-    em.schedule("arrived", rideTime); //The time that require move to destination
+    for (let i = 0; i < RIDE_MAPS.length; i++) {
+        mapFactory().pinMap(RIDE_MAPS[i]);
+    }
+
+    for (let i = 0; i < RIDE_MAPS.length; i++) {
+        if (mapFactory().isMapLoaded(RIDE_MAPS[i])) { getMap(RIDE_MAPS[i]).broadcastClock(Math.max(1, Math.floor(rideTime / 1000) - 1)); }
+    }
+
+    em.schedule("rebroadcastRide", REBROADCAST_INTERVAL);
+    em.schedule("arrived", rideTime);
 }
 
 function arrived() {
-    Train_to_Orbis.warpEveryone(Orbis_Station.getId(), 0);
-    Train_to_Ludibrium.warpEveryone(Ludibrium_Station.getId(), 0);
-    Orbis_docked.broadcastShip(true);
-    Ludibrium_docked.broadcastShip(true);
+    if (mapFactory().isMapLoaded(MAP_ID.TRAIN_TO_ORBIS)) { getMap(MAP_ID.TRAIN_TO_ORBIS).warpEveryone(MAP_ID.ORBIS_STATION, 0); }
+    if (mapFactory().isMapLoaded(MAP_ID.TRAIN_TO_LUDIBRIUM)) { getMap(MAP_ID.TRAIN_TO_LUDIBRIUM).warpEveryone(MAP_ID.LUDIBRIUM_STATION, 0); }
+    if (mapFactory().isMapLoaded(MAP_ID.ORBIS_DOCKED)) { getMap(MAP_ID.ORBIS_DOCKED).broadcastShip(true); }
+    if (mapFactory().isMapLoaded(MAP_ID.LUDIBRIUM_DOCKED)) { getMap(MAP_ID.LUDIBRIUM_DOCKED).broadcastShip(true); }
+
+    for (let i = 0; i < RIDE_MAPS.length; i++) {
+        if (mapFactory().isMapLoaded(RIDE_MAPS[i])) { getMap(RIDE_MAPS[i]).broadcastRemoveClock(); }
+        mapFactory().unpinMap(RIDE_MAPS[i]);
+    }
+
+    em.setProperty("rideEndTime", "0");
     scheduleNew();
 }
 
 function cancelSchedule() {}
 
-
-// ---------- FILLER FUNCTIONS ----------
-
+// ========== FILLER ==========
 function dispose() {}
-
 function setup(eim, leaderid) {}
-
-function monsterValue(eim, mobid) {return 0;}
-
+function monsterValue(eim, mobid) { return 0; }
 function disbandParty(eim, player) {}
-
 function playerDisconnected(eim, player) {}
-
 function playerEntry(eim, player) {}
-
 function monsterKilled(mob, eim) {}
-
 function scheduledTimeout(eim) {}
-
 function afterSetup(eim) {}
-
 function changedLeader(eim, leader) {}
-
 function playerExit(eim, player) {}
-
 function leftParty(eim, player) {}
-
 function clearPQ(eim) {}
-
 function allMonstersDead(eim) {}
-
 function playerUnregistered(eim, player) {}
-
