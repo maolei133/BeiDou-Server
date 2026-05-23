@@ -311,14 +311,22 @@
                     <outputDirectory>${outputDirectory}</outputDirectory>
                     <finalName>${finalName}</finalName>
                     <mainClass>${mainClass}</mainClass>
+                    <!-- 跳过 repackage（改为 thin JAR + 外部 lib/） -->
+                    <skip>true</skip>
                 </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>repackage</goal>
-                        </goals>
-                    </execution>
-                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addClasspath>true</addClasspath>
+                            <classpathPrefix>lib/</classpathPrefix>
+                            <mainClass>${mainClass}</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
             </plugin>
         </plugins>
     </build>
