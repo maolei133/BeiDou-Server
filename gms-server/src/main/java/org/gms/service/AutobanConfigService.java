@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-import static org.gms.dao.entity.table.AutobanConfigDOTableDef.AUTOBAN_CONFIG_D_O;
+import static org.gms.dao.entity.table.AutobanConfigDOTableDef.AUTOBAN_CONFIG_DO;
 
 /**
  * 自动封禁配置服务。
@@ -98,7 +98,7 @@ public class AutobanConfigService {
 
         String type = dto.getType();
         AutobanConfigDO existing = autobanConfigMapper.selectOneByQuery(
-                QueryWrapper.create().where(AUTOBAN_CONFIG_D_O.TYPE.eq(type))
+                QueryWrapper.create().where(AUTOBAN_CONFIG_DO.TYPE.eq(type))
         );
 
         // 构建 points 和 expireTime

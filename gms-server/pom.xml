@@ -33,13 +33,15 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <mainClass>org.gms.ServerApplication</mainClass>
 
+        <spring-boot.version>4.0.6</spring-boot.version>
+        <mybatis-flex.version>1.11.7</mybatis-flex.version>
         <!-- Dependencies -->
-        <graalvm.version>24.2.1</graalvm.version>
+        <graalvm.version>24.2.2</graalvm.version>
         <jcip-annotations.version>1.0</jcip-annotations.version> <!-- Annotations for concurrency documentation -->
-        <druid.version>1.2.24</druid.version> <!-- Database connection pool -->
-        <flyway-mysql.version>11.8.2</flyway-mysql.version>
-        <lombok.version>1.18.38</lombok.version>
-        <fastjson2.version>2.0.57</fastjson2.version>
+        <druid.version>1.2.28</druid.version> <!-- Database connection pool -->
+        <flyway-mysql.version>12.6.1</flyway-mysql.version>
+        <lombok.version>1.18.46</lombok.version>
+        <fastjson2.version>2.0.62</fastjson2.version>
         <junit.version>5.10.2</junit.version> <!-- Unit test -->
         <mockito.version>5.11.0</mockito.version> <!-- Unit test -->
     </properties>
@@ -50,7 +52,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
-                <version>3.4.6</version>
+                <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -58,7 +60,7 @@
             <dependency>
                 <groupId>com.mybatis-flex</groupId>
                 <artifactId>mybatis-flex-dependencies</artifactId>
-                <version>1.10.9</version>
+                <version>${mybatis-flex.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -66,7 +68,7 @@
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
-                <version>4.1.121.Final</version>
+                <version>4.1.134.Final</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -74,7 +76,7 @@
             <dependency>
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-bom</artifactId>
-                <version>2.8.8</version>
+                <version>3.0.3</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -86,20 +88,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-tomcat</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-logging</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-undertow</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -110,14 +98,13 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-jwt</artifactId>
             <version>5.8.38</version>
-        </dependency>
-        <dependency>
-            <groupId>jakarta.xml.bind</groupId>
-            <artifactId>jakarta.xml.bind-api</artifactId>
-            <version>4.0.2</version>
         </dependency>
 
         <!-- Tool -->
@@ -146,25 +133,27 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
+
+        <!-- Database -->
+        <dependency>
+            <groupId>com.mybatis-flex</groupId>
+            <artifactId>mybatis-flex-spring-boot4-starter</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.mybatis-flex</groupId>
             <artifactId>mybatis-flex-processor</artifactId>
             <scope>provided</scope>
         </dependency>
-
-        <!-- Database -->
-        <dependency>
-            <groupId>com.mybatis-flex</groupId>
-            <artifactId>mybatis-flex-spring-boot3-starter</artifactId>
-        </dependency>
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
         </dependency>
+        <!-- Source: https://mvnrepository.com/artifact/com.alibaba/druid-spring-boot-4-starter -->
         <dependency>
             <groupId>com.alibaba</groupId>
-            <artifactId>druid-spring-boot-3-starter</artifactId>
+            <artifactId>druid-spring-boot-4-starter</artifactId>
             <version>${druid.version}</version>
+            <scope>compile</scope>
         </dependency>
 
         <!-- Networking -->
@@ -259,6 +248,18 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>com.mybatis-flex</groupId>
+                            <artifactId>mybatis-flex-processor</artifactId>
+                            <version>${mybatis-flex.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
         </plugins>
