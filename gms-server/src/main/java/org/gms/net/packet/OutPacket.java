@@ -1,5 +1,6 @@
 package org.gms.net.packet;
 
+import org.gms.net.opcodes.Opcode;
 import org.gms.net.opcodes.SendOpcode;
 
 import java.awt.*;
@@ -14,10 +15,11 @@ public interface OutPacket extends Packet {
     void writeBool(boolean value);
     void writeString(String value);
     void writeFixedString(String value);
+    void writeFixedString(String value, int fixed);
     void writePos(Point value);
     void skip(int numberOfBytes);
 
-    static OutPacket create(SendOpcode opcode) {
+    static OutPacket create(Opcode opcode) {
         return new ByteBufOutPacket(opcode);
     }
 }

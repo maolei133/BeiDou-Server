@@ -43,6 +43,7 @@ import org.gms.constants.id.MobId;
 import org.gms.constants.inventory.ItemConstants;
 import org.gms.constants.net.ServerConstants;
 import org.gms.constants.skills.*;
+import org.gms.constants.string.ExtendKey;
 import org.gms.constants.string.ExtendType;
 import org.gms.dao.entity.*;
 import org.gms.exception.NotEnabledException;
@@ -99,6 +100,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
@@ -401,6 +403,26 @@ public class Character extends AbstractCharacterObject {
     @Getter
     private final Set<Integer> disabledPartySearchInvites = new LinkedHashSet<>();
     private long portaldelay = 0;
+    // 记录最近一次“瞬移类位移”发生时间（单调时钟纳秒，用于短时间内的距离检测防误判）
+    private volatile long lastTeleportLikeMoveTime = 0;
+    // 传送距离误判修正上下文：用于“传送前坐标 + 当前坐标”双坐标校验
+    private static final long TELEPORT_DISTANCE_CONTEXT_EXPIRE_NS = MILLISECONDS.toNanos(1200L); // 保护窗口，过长会增加可利用面
+    private static final byte TELEPORT_DISTANCE_CONTEXT_MAX_ATTACK_CHECKS = 2; // 最多保护 2 次攻击包
+    private static final double TELEPORT_DISTANCE_CONTEXT_MIN_SHIFT_SQ = 1600.0; // 至少 40px 位移才建立上下文
+    private Point teleportBeforePos = null; // 传送前服务端坐标（用于双坐标距离复核）
+    private Point teleportAfterPos = null; // 传送后服务端坐标（用于确认确实发生了传送位移）
+    private int teleportContextMapId = MapId.NONE; // 传送上下文所属地图，跨图后自动失效
+    private long teleportContextExpireTime = 0L; // 传送上下文过期时间戳（单调时钟纳秒）
+    private byte teleportContextRemainingChecks = 0; // 传送上下文剩余可用攻击校验次数
+    // 普通移动距离误判修正上下文：只覆盖“移动包后紧跟攻击包”的极短时间窗
+    private static final long MOVEMENT_DISTANCE_CONTEXT_EXPIRE_NS = MILLISECONDS.toNanos(350L);
+    private static final byte MOVEMENT_DISTANCE_CONTEXT_MAX_ATTACK_CHECKS = 1;
+    private static final double MOVEMENT_DISTANCE_CONTEXT_MIN_SHIFT_SQ = 400.0; // 至少 20px 位移才建立上下文
+    private Point movementBeforePos = null;
+    private Point movementAfterPos = null;
+    private int movementContextMapId = MapId.NONE;
+    private long movementContextExpireTime = 0L;
+    private byte movementContextRemainingChecks = 0;
     @Getter
     @Setter
     private long lastCombo = 0;
@@ -483,6 +505,30 @@ public class Character extends AbstractCharacterObject {
     private static final AccountService accountService = ServerManager.getApplicationContext().getBean(AccountService.class);
     private static final HpMpAlertService hpMpAlertService = ServerManager.getApplicationContext().getBean(HpMpAlertService.class);
     private static final InventoryService inventoryService = ServerManager.getApplicationContext().getBean(InventoryService.class);
+
+    /**
+     * 最后攻击时间
+     * 用来校验攻击速度是否过快
+     */
+    private final ConcurrentHashMap<Integer, Long> lastAttackTimes = new ConcurrentHashMap<>();
+
+    /**
+     * 原子更新指定技能的最后攻击时间，并返回与上次记录的时间间隔（毫秒）。
+     * 若是首次记录或出现时钟回退，返回 Long.MAX_VALUE 表示本次不参与间隔判定。
+     */
+    public long updateLastAttackTimeAndGetInterval(int skillId, long currentTimeMillis) {
+        AtomicLong intervalMillis = new AtomicLong(Long.MAX_VALUE);
+        lastAttackTimes.compute(skillId, (ignored, previousTime) -> {
+            long previous = previousTime == null ? 0L : previousTime;
+            if (previous > 0L && currentTimeMillis > previous) {
+                intervalMillis.set(currentTimeMillis - previous);
+            }
+            // 保证每个技能的时间记录单调不回退，避免并发写入覆盖新值。
+            return Math.max(previous, currentTimeMillis);
+        });
+        return intervalMillis.get();
+    }
+
 
     private Character() {
         super.setListener(new CharacterListener(this));
@@ -1688,6 +1734,8 @@ public class Character extends AbstractCharacterObject {
         if (getMap(to.getId(), true) == null) return; //判断地图不存在则直接返回并发送提示消息。
 
         this.mapTransitioning.set(true);
+        // 显式清空“传送距离校验上下文”，避免跨图后旧上下文残留
+        clearTeleportDistanceContext();
 
         this.unregisterChairBuff();
         this.clearBanishPlayerData();
@@ -2172,6 +2220,8 @@ public class Character extends AbstractCharacterObject {
     public static boolean deleteCharFromDB(Character player, int senderAccId) {
         try {
             characterService.deleteCharFromDB(player, senderAccId);
+            // NOTE: 删除缓存,防止角色槽满后无法再次建立角色
+            Server.getInstance().deleteCharacterEntry(senderAccId, player.getId());
             return true;
         } catch (Exception e) {
             log.error(I18nUtil.getLogMessage("Character.deleteCharFromDB.error1"), e);
@@ -2600,6 +2650,7 @@ public class Character extends AbstractCharacterObject {
     public void doHurtHp() {
         if (!(this.getInventory(InventoryType.EQUIPPED).findById(getMap().getHPDecProtect()) != null || buffMapProtection())) {
             addHP(-getMap().getHPDec());
+            sendPacket(PacketCreator.onNotifyHPDecByField(getMap().getHPDec()));
         }
     }
 
@@ -2779,6 +2830,10 @@ public class Character extends AbstractCharacterObject {
                                 }
 
                                 if (ItemConstants.isExpirablePet(item.getItemId())) {
+                                    if (item.getPetId() > -1) {
+                                        // 宠物道具真正过期销毁时，同时清理 pets/petignores，避免数据库残留孤儿数据。
+                                        Pet.deleteFromDb(this, item.getPetId());
+                                    }
                                     sendPacket(PacketCreator.itemExpired(item.getItemId()));
                                     toberemove.add(item);
                                 } else {
@@ -2830,8 +2885,10 @@ public class Character extends AbstractCharacterObject {
     public void gainGachaExp() {
         int expgain = 0;
         long currentgexp = gachaExp.get();
-        if ((currentgexp + exp.get()) >= ExpTable.getExpNeededForLevel(level)) {
-            expgain += ExpTable.getExpNeededForLevel(level) - exp.get();
+
+        int levelUpNeed = ExpTable.getExpNeededForLevel(level) - exp.get();
+        if (currentgexp >= levelUpNeed) {
+            expgain += Math.max(0, levelUpNeed);
 
             int nextneed = ExpTable.getExpNeededForLevel(level + 1);
             if (currentgexp - expgain >= nextneed) {
@@ -4388,6 +4445,82 @@ public class Character extends AbstractCharacterObject {
         chrLock.lock();
         try {
             excluded.get(petId).add(x);
+        } finally {
+            chrLock.unlock();
+        }
+    }
+
+    /**
+     * 统一从数据库加载单只宠物的过滤配置，确保召唤时内存状态与数据库保持一致。
+     */
+    public void loadPetExcludedItems(int petId) {
+        List<Integer> excludedItemIds = inventoryService.getPetIgnoreByPetId(petId).stream()
+                .map(PetignoresDO::getItemid)
+                .filter(Objects::nonNull)
+                .toList();
+        replacePetExcludedItemsInMemory(petId, excludedItemIds);
+    }
+
+    /**
+     * 客户端提交过滤设置时，直接按差异增量更新数据库，避免角色保存时再做危险的全量删写。
+     */
+    public void updatePetExcludedItems(int petId, Set<Integer> newExcludedItems) {
+        Set<Integer> currentExcludedItems = getExcludedForPet(petId);
+        Set<Integer> normalizedExcludedItems = new LinkedHashSet<>(newExcludedItems);
+
+        Set<Integer> toAdd = new LinkedHashSet<>(normalizedExcludedItems);
+        toAdd.removeAll(currentExcludedItems);
+
+        Set<Integer> toRemove = new LinkedHashSet<>(currentExcludedItems);
+        toRemove.removeAll(normalizedExcludedItems);
+
+        inventoryService.addPetIgnoreItems(petId, toAdd);
+        inventoryService.removePetIgnoreItems(petId, toRemove);
+        replacePetExcludedItemsInMemory(petId, normalizedExcludedItems);
+    }
+
+    /**
+     * 宠物被永久删除时同步清理数据库和角色内存中的过滤配置，避免残留脏数据。
+     */
+    public void deletePetExcludedData(int petId) {
+        inventoryService.deletePetData(petId);
+        removeExcluded(petId);
+    }
+
+    public Set<Integer> getExcludedForPet(int petId) {
+        chrLock.lock();
+        try {
+            Set<Integer> petExcludedItems = excluded.get(petId);
+            if (petExcludedItems == null) {
+                return Collections.emptySet();
+            }
+            return Collections.unmodifiableSet(new LinkedHashSet<>(petExcludedItems));
+        } finally {
+            chrLock.unlock();
+        }
+    }
+
+    private void replacePetExcludedItemsInMemory(int petId, Collection<Integer> itemIds) {
+        chrLock.lock();
+        try {
+            excluded.remove(petId);
+            if (itemIds != null && !itemIds.isEmpty()) {
+                LinkedHashSet<Integer> normalizedItems = itemIds.stream()
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
+                if (!normalizedItems.isEmpty()) {
+                    excluded.put(petId, normalizedItems);
+                }
+            }
+        } finally {
+            chrLock.unlock();
+        }
+    }
+
+    private void removeExcluded(int petId) {
+        chrLock.lock();
+        try {
+            excluded.remove(petId);
         } finally {
             chrLock.unlock();
         }
@@ -6273,8 +6406,8 @@ public class Character extends AbstractCharacterObject {
                     Pet pet = item.getPet();
                     if (pet != null && pet.isSummoned()) {
                         chr.addPet(pet);
-                        chr.resetExcluded(item.getPetId());
-                        inventoryService.getPetIgnoreByPetId(item.getPetId()).forEach(petignoresDO -> chr.addExcluded(petignoresDO.getPetid(), petignoresDO.getItemid()));
+                        // 登录时对已召唤宠物统一走同一套过滤配置加载逻辑，避免后续入口行为不一致。
+                        chr.loadPetExcludedItems(item.getPetId());
                     }
                     continue;
                 }
@@ -6585,8 +6718,9 @@ public class Character extends AbstractCharacterObject {
                 break;
             }
         }
+        usedSafetyCharm = false;
         if (possesed > 0 && !MapId.isDojo(getMapId())) {
-            message(I18nUtil.getLogMessage("Character.useItem.message1"));  //使用安全护符，不扣经验
+            message(I18nUtil.getMessage("Character.useItem.message1"));  //使用安全护符，不扣经验
             InventoryManipulator.removeById(client, ItemConstants.getInventoryType(charmID[i]), charmID[i], 1, true, false);
             usedSafetyCharm = true;
         } else if (getJob() != Job.BEGINNER) { //Hmm...
@@ -7492,22 +7626,6 @@ public class Character extends AbstractCharacterObject {
 
                 for (Pet pet : petList) {
                     pet.saveToDb();
-                }
-
-                for (Entry<Integer, Set<Integer>> es : getExcluded().entrySet()) {    // this set is already protected
-                    try (PreparedStatement psIgnore = con.prepareStatement("DELETE FROM petignores WHERE petid=?")) {
-                        psIgnore.setInt(1, es.getKey());
-                        psIgnore.executeUpdate();
-                    }
-
-                    try (PreparedStatement psIgnore = con.prepareStatement("INSERT INTO petignores (petid, itemid) VALUES (?, ?)")) {
-                        psIgnore.setInt(1, es.getKey());
-                        for (Integer x : es.getValue()) {
-                            psIgnore.setInt(2, x);
-                            psIgnore.addBatch();
-                        }
-                        psIgnore.executeBatch();
-                    }
                 }
 
                 // Key config
@@ -8885,6 +9003,178 @@ public class Character extends AbstractCharacterObject {
         return portaldelay;
     }
 
+    /**
+     * 标记一次瞬移类位移（例如树洞/传送动作）。
+     */
+    public void markTeleportLikeMove() {
+        this.lastTeleportLikeMoveTime = monotonicNow();
+    }
+
+    /**
+     * 标记一次瞬移类位移，并记录传送前后坐标用于后续攻击距离双坐标校验。
+     *
+     * <p>只在位移明显时建立上下文，避免普通小步移动误入传送保护逻辑。</p>
+     */
+    public synchronized void markTeleportLikeMove(Point beforePos, Point afterPos) {
+        long now = monotonicNow();
+        this.lastTeleportLikeMoveTime = now;
+
+        if (!shouldBuildTeleportDistanceContext(beforePos, afterPos)) {
+            clearTeleportDistanceContextLocked();
+            return;
+        }
+
+        this.teleportBeforePos = copyPoint(beforePos);
+        this.teleportAfterPos = copyPoint(afterPos);
+        this.teleportContextMapId = getMapId();
+        this.teleportContextExpireTime = now + TELEPORT_DISTANCE_CONTEXT_EXPIRE_NS;
+        this.teleportContextRemainingChecks = TELEPORT_DISTANCE_CONTEXT_MAX_ATTACK_CHECKS;
+    }
+
+    /**
+     * 记录一次普通移动前后坐标，用于极短时间窗内的攻击距离双坐标校验。
+     */
+    public synchronized void markRegularMove(Point beforePos, Point afterPos) {
+        long now = monotonicNow();
+        if (!shouldBuildMovementDistanceContext(beforePos, afterPos)) {
+            clearMovementDistanceContextLocked();
+            return;
+        }
+
+        this.movementBeforePos = copyPoint(beforePos);
+        this.movementAfterPos = copyPoint(afterPos);
+        this.movementContextMapId = getMapId();
+        this.movementContextExpireTime = now + MOVEMENT_DISTANCE_CONTEXT_EXPIRE_NS;
+        this.movementContextRemainingChecks = MOVEMENT_DISTANCE_CONTEXT_MAX_ATTACK_CHECKS;
+    }
+
+    /**
+     * 获取最近一次瞬移类位移时间戳（单调时钟纳秒）。
+     */
+    public long getLastTeleportLikeMoveTime() {
+        return lastTeleportLikeMoveTime;
+    }
+
+    /**
+     * 获取用于攻击距离校验的“传送前坐标”。
+     *
+     * <p>仅在上下文仍有效时返回，超时/跨图/次数耗尽会自动清理。</p>
+     */
+    public synchronized Point getTeleportBeforePositionForDistanceCheck() {
+        if (!isTeleportDistanceContextActiveLocked(monotonicNow())) {
+            clearTeleportDistanceContextLocked();
+            return null;
+        }
+        return copyPoint(teleportBeforePos);
+    }
+
+    /**
+     * 获取用于攻击距离校验的“普通移动前坐标”。
+     */
+    public synchronized Point getMovementBeforePositionForDistanceCheck() {
+        if (!isMovementDistanceContextActiveLocked(monotonicNow())) {
+            clearMovementDistanceContextLocked();
+            return null;
+        }
+        return copyPoint(movementBeforePos);
+    }
+
+    /**
+     * 消费一次传送距离保护校验次数（按攻击包维度消费）。
+     */
+    public synchronized void consumeTeleportDistanceCheckContext() {
+        if (!isTeleportDistanceContextActiveLocked(monotonicNow())) {
+            clearTeleportDistanceContextLocked();
+            return;
+        }
+
+        teleportContextRemainingChecks--;
+        if (teleportContextRemainingChecks <= 0) {
+            clearTeleportDistanceContextLocked();
+        }
+    }
+
+    /**
+     * 消费一次普通移动距离保护校验次数。
+     */
+    public synchronized void consumeMovementDistanceCheckContext() {
+        if (!isMovementDistanceContextActiveLocked(monotonicNow())) {
+            clearMovementDistanceContextLocked();
+            return;
+        }
+
+        movementContextRemainingChecks--;
+        if (movementContextRemainingChecks <= 0) {
+            clearMovementDistanceContextLocked();
+        }
+    }
+
+    /**
+     * 显式清空“传送距离校验上下文”。
+     *
+     * <p>用于跨图切换等关键状态变更点，确保不会携带旧地图上下文参与后续判定。</p>
+     */
+    public synchronized void clearTeleportDistanceContext() {
+        clearTeleportDistanceContextLocked();
+        clearMovementDistanceContextLocked();
+        lastTeleportLikeMoveTime = 0L;
+    }
+
+    private boolean isTeleportDistanceContextActiveLocked(long now) {
+        return teleportBeforePos != null
+                && teleportAfterPos != null
+                && teleportContextRemainingChecks > 0
+                && now <= teleportContextExpireTime
+                && teleportContextMapId == getMapId();
+    }
+
+    private boolean isMovementDistanceContextActiveLocked(long now) {
+        return movementBeforePos != null
+                && movementAfterPos != null
+                && movementContextRemainingChecks > 0
+                && now <= movementContextExpireTime
+                && movementContextMapId == getMapId();
+    }
+
+    private void clearTeleportDistanceContextLocked() {
+        teleportBeforePos = null;
+        teleportAfterPos = null;
+        teleportContextMapId = MapId.NONE;
+        teleportContextExpireTime = 0L;
+        teleportContextRemainingChecks = 0;
+    }
+
+    private void clearMovementDistanceContextLocked() {
+        movementBeforePos = null;
+        movementAfterPos = null;
+        movementContextMapId = MapId.NONE;
+        movementContextExpireTime = 0L;
+        movementContextRemainingChecks = 0;
+    }
+
+    /**
+     * 仅当传送前后坐标有效且位移幅度足够大时，才建立距离校验上下文。
+     */
+    private static boolean shouldBuildTeleportDistanceContext(Point beforePos, Point afterPos) {
+        return beforePos != null
+                && afterPos != null
+                && beforePos.distanceSq(afterPos) >= TELEPORT_DISTANCE_CONTEXT_MIN_SHIFT_SQ;
+    }
+
+    private static boolean shouldBuildMovementDistanceContext(Point beforePos, Point afterPos) {
+        return beforePos != null
+                && afterPos != null
+                && beforePos.distanceSq(afterPos) >= MOVEMENT_DISTANCE_CONTEXT_MIN_SHIFT_SQ;
+    }
+
+    private static Point copyPoint(Point pos) {
+        return pos == null ? null : new Point(pos);
+    }
+
+    private static long monotonicNow() {
+        return System.nanoTime();
+    }
+
     public void blockPortal(String scriptName) {
         if (!blockedPortals.contains(scriptName) && scriptName != null) {
             blockedPortals.add(scriptName);
@@ -9615,6 +9905,7 @@ public class Character extends AbstractCharacterObject {
     /////////////////////////////////////////////////////////////////////////////////
     //module: 角色在线时间
     private int m_iCurrentOnlineTime = -1;//-1用于服务器重启时角色初始变量时间
+    private AtomicBoolean timeUpdating = new AtomicBoolean(false);
 
     public int getCurrentOnlineTime() {
         return this.m_iCurrentOnlineTime;
@@ -9625,8 +9916,11 @@ public class Character extends AbstractCharacterObject {
     }
 
     public void updateOnlineTime() {
+        if (m_iCurrentOnlineTime == -1) {
+            return;
+        }
         String strNewOnlineTime = String.valueOf(m_iCurrentOnlineTime);
-        getAbstractPlayerInteraction().saveOrUpdateAccountExtendValue("每日在线时间", strNewOnlineTime, true);
+        getAbstractPlayerInteraction().saveOrUpdateAccountExtendValue(ExtendKey.ONLINE_TIME.getKey(), strNewOnlineTime, true);
     }
 
     /**

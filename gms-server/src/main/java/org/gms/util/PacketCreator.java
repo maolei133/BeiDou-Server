@@ -6546,20 +6546,13 @@ public class PacketCreator {
             for (DueyPackage dp : packages) {
                 p.writeInt(dp.getPackageId());
                 p.writeFixedString(dp.getSender());
-                for (int i = dp.getSender().length(); i < 13; i++) {
-                    p.writeByte(0);
-                }
-
                 p.writeInt(dp.getMesos());
                 p.writeLong(getTime(dp.sentTimeInMilliseconds()));
 
                 String msg = dp.getMessage();
                 if (msg != null) {
                     p.writeInt(1);
-                    p.writeFixedString(msg);
-                    for (int i = msg.length(); i < 200; i++) {
-                        p.writeByte(0);
-                    }
+                    p.writeFixedString(msg, 200);
                 } else {
                     p.writeInt(0);
                     p.skip(200);
@@ -6963,7 +6956,7 @@ public class PacketCreator {
         }
         p.writeFixedString(StringUtil.getRightPaddedStr(item.getGiftFrom(), '\0', 13));
         if (isGift) {
-            p.writeFixedString(StringUtil.getRightPaddedStr(giftMessage, '\0', 73));
+            p.writeFixedString(giftMessage, 73);
             return;
         }
         addExpirationTime(p, item.getExpiration());
@@ -7070,11 +7063,14 @@ public class PacketCreator {
 
     public static Packet showCashInventory(Client c) {
         final OutPacket p = OutPacket.create(SendOpcode.CASHSHOP_OPERATION);
+        List<Item> inventory = c.getPlayer().getCashShop().getInventory();
+        int itemCount = Math.min(inventory.size(), CashShop.MAX_CASH_INVENTORY_SAFE);
 
         p.writeByte(0x4B);
-        p.writeShort(c.getPlayer().getCashShop().getInventory().size());
+        p.writeShort(itemCount);
 
-        for (Item item : c.getPlayer().getCashShop().getInventory()) {
+        for (int i = 0; i < itemCount; i++) {
+            Item item = inventory.get(i);
             addCashItemInformation(p, item, c.getAccID());
         }
 
@@ -7512,7 +7508,12 @@ public class PacketCreator {
         return p;
     }
 
-    public static Packet updateHpMpAlert(byte hp, byte mp) {
+
+    /**
+     * 客户端系统设置回显（目前仅 HP/MP 警报阈值）。
+     * 后续如需扩展系统设置字段，可在该包尾部追加，保持前两个字节为 HP/MP 警报。
+     */
+    public static Packet updateClientSettings(byte hp, byte mp) {
         OutPacket p = OutPacket.create(SendOpcode.UPDATE_HPMPAALERT);
         p.writeByte(hp);
         p.writeByte(mp);
