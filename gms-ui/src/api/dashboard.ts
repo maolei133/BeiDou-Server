@@ -212,6 +212,45 @@ export function shutdown(params?: StopServerParams) {
   return axios.post('/server/v1/shutdown', params);
 }
 
+export interface ServerWorldInfo {
+  id: number;
+  expRate?: number | null;
+  dropRate?: number | null;
+  mesoRate?: number | null;
+  bossDropRate?: number | null;
+  questRate?: number | null;
+  travelRate?: number | null;
+  fishingRate?: number | null;
+}
+
+export interface ServerChannelInfo {
+  id: number;
+  worldId: number;
+  playerCount?: number | null;
+  mapCount?: number | null;
+  estimatedMapMemoryBytes?: number | null;
+  disposedMapCount?: number | null;
+}
+
+/**
+ * 工作台首页聚合数据接口。
+ * 合并监控快照 + 大区列表 + 频道列表 + 在线人数。
+ * 前端工作台组件每5秒只调用此一个请求。
+ *
+ * ⚠️ 后续如需在工作台页面新增数据，优先在此接口的 DTO 中添加字段，
+ *    不要新增独立的定时 API。
+ */
+export interface DashboardData {
+  monitor?: ServerMonitorSnapshot | null;
+  worldList?: ServerWorldInfo[];
+  channelList?: Record<number, ServerChannelInfo[]>;
+  onlinePlayerCount?: number;
+}
+
+export function getDashboard(params?: { interfaceName?: string }) {
+  return axios.get<DashboardData>('/server/v1/dashboard', { params });
+}
+
 export function getServerMonitorSnapshot(params?: { interfaceName?: string }) {
   return axios.get<ServerMonitorSnapshot>('/server/v1/monitor/snapshot', {
     params,
@@ -241,26 +280,6 @@ export function getCpuMonitorConfig() {
 
 export function updateCpuMonitorConfig(data: CpuMonitorConfig) {
   return axios.post<CpuMonitorConfig>('/server/v1/monitor/cpu-config', data);
-}
-
-export interface ServerWorldInfo {
-  id: number;
-  expRate?: number | null;
-  dropRate?: number | null;
-  mesoRate?: number | null;
-  bossDropRate?: number | null;
-  questRate?: number | null;
-  travelRate?: number | null;
-  fishingRate?: number | null;
-}
-
-export interface ServerChannelInfo {
-  id: number;
-  worldId: number;
-  playerCount?: number | null;
-  mapCount?: number | null;
-  estimatedMapMemoryBytes?: number | null;
-  disposedMapCount?: number | null;
 }
 
 export function getServerWorldList() {

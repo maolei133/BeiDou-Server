@@ -24,6 +24,9 @@ export default {
   'workplace.stop.showCenterMsg': 'Center Megaphone Notice',
   'workplace.stop.showChatMsg': 'GM Chat Message Notice',
   'workplace.button.stop.config': 'Stop Game Service',
+  'workplace.reloadConfirmTitle': 'Confirm Reload',
+  'workplace.reloadConfirmContent':
+    'This will reload the data. Are you sure you want to continue?',
   'workplace.dataReload': 'Data Reload',
   'workplace.unit.minutes': 'minutes',
   'workplace.stop.now': 'Now',

@@ -24,6 +24,8 @@ export default {
   'workplace.stop.showCenterMsg': '中央喇叭通告',
   'workplace.stop.showChatMsg': '聊天栏GM消息通知',
   'workplace.button.stop.config': '关闭游戏服务',
+  'workplace.reloadConfirmTitle': '确认重载',
+  'workplace.reloadConfirmContent': '此操作将重新加载数据，确定要继续吗？',
   'workplace.dataReload': '数据重载',
   'workplace.unit.minutes': '分钟',
   'workplace.stop.now': '立即',

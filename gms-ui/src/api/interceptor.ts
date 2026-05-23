@@ -61,15 +61,15 @@ function getResponseMessage(res: ApiResponse) {
 }
 
 function redirectToLogin() {
-  const userStore = useUserStore();
-
-  userStore.logoutCallBack();
   window.location.href = '/';
 }
 
 function handleAuthExpired(res?: ApiResponse) {
   if (authExpiredHandled) return;
   authExpiredHandled = true;
+
+  // 立即清除 Token，使前端定时器检测 getToken() 为空后停止请求
+  useUserStore().logoutCallBack();
 
   Modal.warning({
     title: '登录已失效',

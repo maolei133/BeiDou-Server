@@ -805,13 +805,9 @@
     watch,
   } from 'vue';
   import {
-    getAllWorldsOnlinePlayersCount,
     getCpuMonitorConfig,
-    getServerChannelList,
+    getDashboard,
     getServerMonitorHistory,
-    getServerMonitorSnapshot,
-    getServerStatus,
-    getServerWorldList,
     restartServer,
     shutdown,
     startServer,
@@ -827,7 +823,7 @@
     ServerMonitorSnapshot,
     ServerWorldInfo,
   } from '@/api/dashboard';
-  import { Message } from '@arco-design/web-vue';
+  import { Message, Modal } from '@arco-design/web-vue';
   import useLoading from '@/hooks/loading';
   import useThemes from '@/hooks/themes';
   import {
@@ -1329,6 +1325,11 @@
 
   const refreshMonitorHistory = async (manual = false) => {
     if (!pageVisible.value && !manual) return;
+    const token = (await import('@/utils/auth')).getToken();
+    if (!token) {
+      stopMonitorRefresh();
+      return;
+    }
     try {
       const { data } = await getServerMonitorHistory(historyParams.value);
       trendSamples.value = (data?.points || [])
@@ -1341,71 +1342,74 @@
     }
   };
 
-  const refreshMonitor = async (manual = false) => {
-    if (!pageVisible.value && !manual) return;
-    if (monitorLoading.value) return;
+  /**
+   * 工作台首页聚合刷新。
+   * 一次请求获取监控快照 + 大区列表 + 频道列表 + 在线人数，
+   * 替代原来每5秒2个请求的模式。
+   *
+   * ⚠️ 如需新增工作台数据，优先在 DashboardDTO 中添加字段，
+   *    不要新增独立的定时 API。
+   */
+  const refreshDashboard = async (includeStructure = false) => {
+    if (!pageVisible.value && !includeStructure) return;
+    // Token 不存在 → 用户已登出，停止定时请求
+    const token = (await import('@/utils/auth')).getToken();
+    if (!token) {
+      stopMonitorRefresh();
+      return;
+    }
     monitorLoading.value = true;
     try {
-      const { data } = await getServerMonitorSnapshot({
+      const { data } = await getDashboard({
         interfaceName: selectedNetworkInterface.value,
       });
-      monitorSnapshot.value = data;
-      const defaultInterfaceName =
-        data?.network?.selectedInterfaceName ||
-        data?.network?.defaultInterfaceName ||
-        data?.network?.interfaces?.find((item) => item.defaultInterface)
-          ?.name ||
-        data?.network?.interfaces?.[0]?.name;
-      if (!selectedNetworkInterface.value && defaultInterfaceName) {
-        selectedNetworkInterface.value = defaultInterfaceName;
+      // 监控快照
+      if (data?.monitor) {
+        monitorSnapshot.value = data.monitor;
+        const defaultIface =
+          data.monitor.network?.selectedInterfaceName ||
+          data.monitor.network?.defaultInterfaceName ||
+          data.monitor.network?.interfaces?.find(
+            (item) => item.defaultInterface
+          )?.name ||
+          data.monitor.network?.interfaces?.[0]?.name;
+        if (!selectedNetworkInterface.value && defaultIface) {
+          selectedNetworkInterface.value = defaultIface;
+        }
+        if (typeof data.monitor.server?.online === 'boolean') {
+          serverStatus.value = data.monitor.server.online
+            ? 'running'
+            : 'resting';
+        }
+        monitorError.value = false;
       }
-      monitorError.value = false;
-      if (typeof data?.server?.online === 'boolean')
-        serverStatus.value = data.server.online ? 'running' : 'resting';
+      // 大区/频道/在线人数（每次刷新更新，频道在线人数需实时展示）
+      if (data?.worldList) worldList.value = data.worldList;
+      if (data?.channelList) {
+        channelList.value = Object.values(data.channelList).flat();
+      }
+      if (typeof data?.onlinePlayerCount === 'number') {
+        onlinePlayerCount.value = data.onlinePlayerCount;
+      }
+      gameError.value = false;
     } catch (err) {
       monitorError.value = true;
+      gameError.value = true;
+      // 请求失败时检查 Token → 若已失效则停止定时请求
+      if (!(await import('@/utils/auth')).getToken()) {
+        stopMonitorRefresh();
+      }
     } finally {
       monitorLoading.value = false;
     }
   };
 
-  const refreshGameInfo = async (includeStructure = false) => {
-    try {
-      const { data: statusData } = await getServerStatus();
-      serverStatus.value = statusData ? 'running' : 'resting';
-      if (includeStructure || !worldList.value.length) {
-        const { data: worldData } = await getServerWorldList();
-        worldList.value = worldData || [];
-      }
-      const worldIds = worldList.value
-        .map((item) => item.id)
-        .filter((id) => Number.isFinite(id));
-
-      const channelResponses = await Promise.all(
-        (worldIds.length ? worldIds : [0]).map((worldId) =>
-          getServerChannelList(worldId)
-            .then(({ data }) => data || [])
-            .catch(() => [] as ServerChannelInfo[])
-        )
-      );
-      channelList.value = channelResponses.flat();
-
-      const onlineDataResult = await getAllWorldsOnlinePlayersCount(
-        worldIds.length ? worldIds : [0]
-      );
-      const onlineData = onlineDataResult.data;
-      onlinePlayerCount.value = onlineData ?? null;
-      gameError.value = false;
-    } catch (err) {
-      gameError.value = true;
-    }
-  };
+  // 旧 refreshMonitor / refreshGameInfo 逻辑已合并为 refreshDashboard，见上方定义
 
   const refreshAll = async (manual = false) => {
     await Promise.all([
-      refreshMonitor(manual),
+      refreshDashboard(manual || !worldList.value.length),
       refreshMonitorHistory(manual),
-      refreshGameInfo(manual || !worldList.value.length),
     ]);
   };
 
@@ -1416,10 +1420,9 @@
   const startMonitorRefresh = () => {
     if (monitorTimer) window.clearInterval(monitorTimer);
     if (historyTimer) window.clearInterval(historyTimer);
-    monitorTimer = window.setInterval(
-      () => Promise.all([refreshMonitor(), refreshGameInfo(false)]),
-      3000
-    );
+    monitorTimer = window.setInterval(async () => {
+      await refreshDashboard(false);
+    }, 5000);
     historyTimer = window.setInterval(() => refreshMonitorHistory(), 30000);
   };
   const stopMonitorRefresh = () => {
@@ -1435,7 +1438,7 @@
   watch(trendRange, () => refreshMonitorHistory(true));
   watch(selectedNetworkInterface, (value, oldValue) => {
     if (value && oldValue && value !== oldValue) {
-      refreshMonitor(true);
+      refreshDashboard(true);
     }
   });
 
@@ -1528,12 +1531,8 @@
 
   const loadSeverStatus = async () => {
     setLoading(true);
-    try {
-      const { data } = await getServerStatus();
-      serverStatus.value = data ? 'running' : 'resting';
-    } finally {
-      setLoading(false);
-    }
+    await refreshDashboard(true);
+    setLoading(false);
   };
 
   onMounted(() => {
@@ -1562,6 +1561,18 @@
     if (action === 'restart') {
       restartConfirmVisible.value = true;
       return;
+    }
+    // 数据重载操作需要二次确认
+    if (action.startsWith('reload')) {
+      const confirmed = await new Promise((resolve) => {
+        Modal.confirm({
+          title: t('workplace.reloadConfirmTitle'),
+          content: t('workplace.reloadConfirmContent'),
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!confirmed) return;
     }
     setLoading(true);
     try {
@@ -1921,10 +1932,11 @@
     padding: 14px;
     background: var(--surface);
     min-height: 150px;
+    max-height: 320px;
   }
 
   .resource-scroll-card {
-    height: 220px;
+    //height: 220px;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 10px;
