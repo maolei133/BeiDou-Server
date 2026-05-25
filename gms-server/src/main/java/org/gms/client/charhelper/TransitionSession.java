@@ -25,10 +25,11 @@ public class TransitionSession {
     private final int gmLevel;
     private final String remoteAddress;
     private final String physicalAddress;
+    private final long createdAt;
 
     TransitionSession(int accountId, String accountName, int charId, String macs,
                       Hwid hwid, byte characterSlots, int language, int gmLevel,
-                      String remoteAddress, String physicalAddress) {
+                      String remoteAddress, String physicalAddress, long createdAt) {
         this.accountId = accountId;
         this.accountName = accountName;
         this.charId = charId;
@@ -39,6 +40,7 @@ public class TransitionSession {
         this.gmLevel = gmLevel;
         this.remoteAddress = remoteAddress;
         this.physicalAddress = physicalAddress;
+        this.createdAt = createdAt;
     }
 
     public int getAccountId() {
@@ -79,6 +81,10 @@ public class TransitionSession {
 
     public String getPhysicalAddress() {
         return physicalAddress;
+    }
+
+    public long getCreatedAt() {
+        return createdAt;
     }
 
     /**
@@ -125,7 +131,8 @@ public class TransitionSession {
                     client.getLanguage(),
                     gmLevel,
                     client.getRemoteAddress(),
-                    client.getEffectiveAddress()
+                    client.getEffectiveAddress(),
+                    System.currentTimeMillis()
             );
         }
     }

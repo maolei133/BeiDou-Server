@@ -297,7 +297,8 @@ public class SessionCoordinator {
 
     public void closeSession(Client client, Boolean immediately) {
         if (client == null) {
-            client = fetchInTransitionSessionClient(client);
+            log.warn("关闭会话失败：client 为空");
+            return;
         }
 
         final Hwid hwid = client.getHwid();

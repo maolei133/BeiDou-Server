@@ -121,6 +121,7 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
 
         if (!c.tryacquireClient()) {
             c.sendPacket(PacketCreator.getAfterLoginError(10));
+            return;
         }
 
         try {

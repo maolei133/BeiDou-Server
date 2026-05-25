@@ -94,6 +94,26 @@ public final class LoginCoordinator {
     }
 
     /**
+     * 清理超过 ttlMillis 的过期过渡数据。
+     *
+     * @param now      当前时间戳 (ms)
+     * @param ttlMillis TTL（毫秒）
+     * @return 清理数量
+     */
+    public int purgeExpired(long now, long ttlMillis) {
+        int[] count = {0};
+        long threshold = now - ttlMillis;
+        pendingTransitions.values().removeIf(s -> {
+            if (s.getCreatedAt() < threshold) {
+                count[0]++;
+                return true;
+            }
+            return false;
+        });
+        return count[0];
+    }
+
+    /**
      * 检查是否有待消费的过渡数据（用于 Client.disconnect 判断）。
      */
     public boolean hasPending(Client client) {
