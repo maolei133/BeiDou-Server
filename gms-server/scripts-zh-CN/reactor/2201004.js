@@ -23,6 +23,6 @@ function act() {
     let MapObj = rm.getMap();
     let BossMapId = MapObj.getId();
     let exitMapId = BossMapId - 1;
-    rm.summonBoss(8500000, -410, -400,"Bgm09/TimeAttack","由于<时空裂痕的碎片D>填补了时空的裂痕，帕普拉图斯出现了！");
+    rm.summonBossDelayed(8500000,1000, -410, -400,"Bgm09/TimeAttack","由于<时空裂痕的碎片D>填补了时空的裂痕，帕普拉图斯出现了！");
     rm.getMap(exitMapId).setReactorState(); //通知本源入口关闭
 }
