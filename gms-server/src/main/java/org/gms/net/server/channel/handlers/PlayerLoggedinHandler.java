@@ -28,6 +28,7 @@ import org.gms.client.BuddylistEntry;
 import org.gms.client.Character;
 import org.gms.client.CharacterNameAndId;
 import org.gms.client.Client;
+import org.gms.client.charhelper.TransitionSession;
 import org.gms.client.Disease;
 import org.gms.client.Family;
 import org.gms.client.FamilyEntry;
@@ -153,16 +154,13 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
 
             c.setHwid(hwid);
 
-            if (!server.validateCharacteridInTransition(c, cid)) {
+            // 原子消费过渡数据：一次性取出、校验、删除（消除 remove-before-read）
+            TransitionSession session = server.consumeTransitionSession(c, cid);
+            if (session == null) {
                 c.disconnect(true, false);
                 return;
             }
-            
-            // 在验证通过后，恢复客户端的MAC地址信息
-            String transitionMacs = server.getTransitionMacs(c);
-            if (transitionMacs != null && !transitionMacs.isEmpty()) {
-                c.setMacs(transitionMacs);
-            }
+            session.applyTo(c);
 
             boolean newcomer = false;
             if (player == null) {

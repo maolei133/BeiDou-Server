@@ -110,7 +110,29 @@ public class Client extends ChannelInboundHandlerAdapter {
     private final PacketProcessor packetProcessor;
 
     private Hwid hwid;
+
+    /**
+     * 客户端 IP 地址。
+     *
+     * <p>直连时为 Netty 物理连接 IP；启用 Proxy Protocol 时由解码器
+     * 覆盖为真实源 IP（即 FRP 代理背后的客户端真实 IP）。</p>
+     *
+     * <p>该字段由 {@link #channelActive(ChannelHandlerContext)}
+     * 从 Netty 取得原始 IP 初始化，再由 Proxy Protocol 解码器覆盖。</p>
+     */
     private String remoteAddress;
+
+    /**
+     * 物理连接 IP 地址（Netty TCP 对端 IP）。
+     *
+     * <p>由 {@link #channelActive(ChannelHandlerContext)} 设置，
+     * 之后永不改变。</p>
+     *
+     * <p>直连时与 {@link #remoteAddress} 相同；经 FRP/代理转发时为
+     * 代理节点 IP（如 127.0.0.1 或 192.168.x.x）。</p>
+     */
+    private String effectiveAddress;
+
     private volatile boolean inTransition;
 
     private io.netty.channel.Channel ioChannel;
@@ -197,7 +219,9 @@ public class Client extends ChannelInboundHandlerAdapter {
             return;
         }
 
-        this.remoteAddress = getRemoteAddress(channel);
+        String physicalIp = getRemoteAddress(channel);
+        this.effectiveAddress = physicalIp;
+        this.remoteAddress = physicalIp;
         this.ioChannel = channel;
     }
 
@@ -325,8 +349,46 @@ public class Client extends ChannelInboundHandlerAdapter {
         this.hwid = hwid;
     }
 
+    /**
+     * 返回客户端真实源 IP 地址，用于封禁、审计日志、速率限制等业务逻辑。
+     *
+     * <p>直连时 = 物理连接 IP；启用 Proxy Protocol 后 = FRP 代理背后
+     * 的客户端真实 IP。</p>
+     *
+     * <p>26 处调用方（日志、封禁、Session key）均通过此方法获取 IP，
+     * 无需逐处修改。</p>
+     *
+     * @return 真实源 IP（可能为 {@code "null"}，表示 Netty 尚未绑定）
+     */
     public String getRemoteAddress() {
         return remoteAddress;
+    }
+
+    /**
+     * 用 Proxy Protocol 提取的真实源 IP 覆盖 {@link #remoteAddress}。
+     *
+     * <p>由 Proxy Protocol 解码器在连接建立阶段调用。直连模式不调用，
+     * remoteAddress 保持 channelActive 时设置的值。</p>
+     *
+     * @param realIp 真实客户端 IP（如 203.0.113.10）
+     */
+    public void setRemoteAddress(String realIp) {
+        this.remoteAddress = realIp;
+    }
+
+    /**
+     * 返回物理连接 IP 地址，即 Netty 层面看到的 TCP 对端 IP。
+     *
+     * <p>直连时与 {@link #getRemoteAddress()} 相同；经 FRP/代理转发时
+     * 为代理节点 IP（而非客户端真实 IP）。</p>
+     *
+     * <p><b>仅用于</b> {@link Server#getInetSocket(Client, int, int)}
+     * 判断客户端是否来自本机/局域网。</p>
+     *
+     * @return 物理连接 IP（可能为 {@code "null"}）
+     */
+    public String getEffectiveAddress() {
+        return effectiveAddress;
     }
 
     public boolean isInTransition() {

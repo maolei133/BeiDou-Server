@@ -112,6 +112,9 @@ public final class CharSelectedHandler extends AbstractPacketHandler {
             return;
         }
 
+        // [链路调试] log.info("[链路] 选角 → 发频道地址: charId={} addr={}:{} remoteAddress={}",
+        //         charId, socket[0], socket[1], c.getRemoteAddress());
+
         server.unregisterLoginState(c);
         c.setCharacterOnSessionTransitionState(charId);
 
