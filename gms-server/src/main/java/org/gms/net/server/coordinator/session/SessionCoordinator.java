@@ -21,6 +21,7 @@ package org.gms.net.server.coordinator.session;
 
 import org.gms.client.Character;
 import org.gms.client.Client;
+import org.gms.client.charhelper.LoginCoordinator;
 import org.gms.config.GameConfig;
 import org.gms.constants.id.NpcId;
 import org.gms.net.server.Server;
@@ -282,8 +283,8 @@ public class SessionCoordinator {
 
         Client fakeClient = Client.createMock();
         fakeClient.setHwid(hwid);
-        Integer chrId = Server.getInstance().freeCharacteridInTransition(client);
-        if (chrId != null) {
+        int chrId = LoginCoordinator.getInstance().release(client.getAccID());
+        if (chrId > 0) {
             try {
                 fakeClient.setAccID(Character.loadCharFromDB(chrId, client, false).getAccountId());
             } catch (Exception sqle) {

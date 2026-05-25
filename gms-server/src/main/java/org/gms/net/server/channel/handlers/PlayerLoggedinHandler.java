@@ -29,6 +29,7 @@ import org.gms.client.Character;
 import org.gms.client.CharacterNameAndId;
 import org.gms.client.Client;
 import org.gms.client.charhelper.TransitionSession;
+import org.gms.client.charhelper.LoginCoordinator;
 import org.gms.client.Disease;
 import org.gms.client.Family;
 import org.gms.client.FamilyEntry;
@@ -224,7 +225,7 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
         c.setHwid(hwid);
 
         // TransitionSession 原子消费
-        TransitionSession session = server.consumeTransitionSession(c, cid);
+        TransitionSession session = LoginCoordinator.getInstance().consume(c, cid);
         if (session == null) {
             c.disconnect(true, false);
             return null;

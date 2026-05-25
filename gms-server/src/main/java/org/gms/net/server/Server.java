@@ -25,7 +25,6 @@ import lombok.Getter;
 import lombok.Setter;
 import org.gms.client.Character;
 import org.gms.client.Client;
-import org.gms.client.charhelper.TransitionSession;
 import org.gms.client.SkillFactory;
 import org.gms.client.command.CommandsExecutor;
 import org.gms.client.inventory.Item;
@@ -47,7 +46,6 @@ import org.gms.net.netty.LoginServer;
 import org.gms.net.netty.NettyServerManager;
 import org.gms.net.packet.Packet;
 import org.gms.net.server.channel.Channel;
-import org.gms.net.server.coordinator.session.Hwid;
 import org.gms.net.server.coordinator.session.IpAddresses;
 import org.gms.net.server.coordinator.session.SessionCoordinator;
 import org.gms.net.server.guild.Alliance;
@@ -81,7 +79,6 @@ import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -119,13 +116,7 @@ public class Server {
     private final Map<Integer, Set<Integer>> accountChars = new HashMap<>();
     private final Map<Integer, Short> accountCharacterCount = new HashMap<>();
     private final Map<Integer, Integer> worldChars = new HashMap<>();
-    /**
-     * 登录→频道过渡数据缓存。key = "accountId:charId:hwid"。
-     * 原子消费模式：consumeTransitionSession 一次性取出、校验、删除，
-     * 消除原有 remove-before-read 导致的数据丢失。
-     */
-    private final ConcurrentHashMap<String, TransitionSession> pendingTransitions = new ConcurrentHashMap<>();
-
+    // TransitionSession 已迁移到 LoginCoordinator
     private final List<Pair<Integer, String>> worldRecommendedList = new LinkedList<>();
     private final Map<Integer, Guild> guilds = new HashMap<>(100);
     private final Map<Client, Long> inLoginState = new HashMap<>(100);
@@ -1550,88 +1541,6 @@ public class Server {
         }
     }
 
-    /**
-     * 计算过渡数据 key。
-     *
-     * <p>使用 remoteAddress:charId 作为 key。启用 Proxy Protocol 后
-     * remoteAddress 为真实客户端 IP，唯一标识该客户端。</p>
-     */
-    private static String makeTransitionKey(Client client, int charId) {
-        return client.getRemoteAddress() + ":" + charId;
-    }
-
-    /**
-     * 存储登录→频道过渡数据。
-     */
-    public void storeTransitionSession(Client client, int charId, int gmLevel) {
-        TransitionSession session = TransitionSession.builder(client, charId)
-                .gmLevel(gmLevel)
-                .build();
-        String key = makeTransitionKey(client, charId);
-        // [链路调试] log.info("[链路] 存储 TransitionSession: key={} account={} remote={}", key, client.getAccountName(), client.getRemoteAddress());
-        pendingTransitions.put(key, session);
-    }
-
-    /**
-     * 原子消费过渡数据：取出→校验→删除。
-     *
-     * <p>login 和 channel 连接共享相同的 getRemoteAddress()（Proxy Protocol
-     * 后 = 真实 IP），key 可正确匹配。</p>
-     *
-     * @param client 频道连接 Client
-     * @param charId 角色 ID
-     * @return 过渡数据；校验失败返回 null
-     */
-    public TransitionSession consumeTransitionSession(Client client, int charId) {
-        String key = makeTransitionKey(client, charId);
-        // [链路调试] log.info("[链路] 消费 TransitionSession: key={} remote={} physical={}", key, client.getRemoteAddress(), client.getEffectiveAddress());
-        TransitionSession session = pendingTransitions.remove(key);
-        if (session == null) {
-            // [链路调试] log.warn("[链路] TransitionSession 未找到: key={}", key);
-            return null;
-        }
-        if (session.getCharId() != charId) {
-            return null;
-        }
-        return session;
-    }
-
-    /**
-     * 释放过渡数据（客户端断连清理）。
-     */
-    public void releaseTransitionSession(Client client) {
-        // 遍历查找，效率较低但仅用于异常路径
-        pendingTransitions.values().removeIf(s -> s.getAccountId() == client.getAccID());
-    }
-
-    // ====== 以下为已废弃方法的兼容委托，保留供现有代码编译通过 ======
-    // 后续步骤中逐步移除调用方后删除。
-
-    public void setCharacteridInTransition(Client client, int charId) {
-        storeTransitionSession(client, charId, 0);
-    }
-
-    public boolean validateCharacteridInTransition(Client client, int charId) {
-        return consumeTransitionSession(client, charId) != null;
-    }
-
-    public Integer freeCharacteridInTransition(Client client) {
-        releaseTransitionSession(client);
-        return null;
-    }
-
-    public boolean hasCharacteridInTransition(Client client) {
-        if (!GameConfig.getServerBoolean("use_ip_validation")) {
-            return true;
-        }
-        return !pendingTransitions.isEmpty();
-    }
-
-    public String getTransitionMacs(Client client) {
-        // 废弃：新代码请走 consumeTransitionSession
-        return "";
-    }
-    
     public void registerLoginState(Client c) {
         srvLock.lock();
         try {

@@ -27,6 +27,7 @@ import io.netty.handler.timeout.IdleStateEvent;
 import lombok.Getter;
 import lombok.Setter;
 import org.gms.client.inventory.InventoryType;
+import org.gms.client.charhelper.LoginCoordinator;
 import org.gms.config.GameConfig;
 import org.gms.constants.game.GameConstants;
 import org.gms.constants.id.MapId;
@@ -1113,7 +1114,7 @@ public class Client extends ChannelInboundHandlerAdapter {
             clear();
         } else {
             // 检查服务器是否正在转移该角色
-            if (!Server.getInstance().hasCharacteridInTransition(this)) {
+            if (!LoginCoordinator.getInstance().hasPending(this)) {
                 updateLoginState(Client.LOGIN_NOTLOGGEDIN);
             }
             // 清理引擎引用
@@ -1141,7 +1142,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     public void setCharacterOnSessionTransitionState(int cid) {
         this.updateLoginState(Client.LOGIN_SERVER_TRANSITION);
         this.inTransition = true;
-        Server.getInstance().setCharacteridInTransition(this, cid);
+        LoginCoordinator.getInstance().prepare(this, cid, 0);
     }
 
     public int getChannel() {
