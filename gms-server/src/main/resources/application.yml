@@ -65,3 +65,7 @@ gms:
     localhost: ${GMS_SERVICE_LOCAL_HOST:127.0.0.1}
     # 客户端登录端口
     login-port: ${GMS_SERVICE_LOGIN_PORT:8484}
+    # 以下为新增配置项，默认值与原来硬编码一致
+    mob-vac-interval: 1000
+    item-vac-interval: 1000
+    bag-organize-interval: 30000

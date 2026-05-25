@@ -15,6 +15,11 @@ public class ServiceProperty {
     private String localhost;
     private int loginPort;
 
+    // 新增三个间隔配置（单位：毫秒）
+    private long mobVacInterval = 1000;
+    private long itemVacInterval = 1000;
+    private long bagOrganizeInterval = 30000;
+
     @Data
     public static class RateLimitProperty {
         private boolean enabled;
