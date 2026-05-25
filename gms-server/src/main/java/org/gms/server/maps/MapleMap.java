@@ -4328,7 +4328,7 @@ public class MapleMap {
     }
 
     public boolean isEventMap() {
-        return this.mapid >= MapId.EVENT_FIND_THE_JEWEL && this.mapid < MapId.EVENT_WINNER || this.mapid > MapId.EVENT_EXIT && this.mapid <= 109090000;
+        return this.event != null || this.mapid >= MapId.EVENT_FIND_THE_JEWEL && this.mapid < MapId.EVENT_WINNER || this.mapid > MapId.EVENT_EXIT && this.mapid <= 109090000;
     }
 
     public void setTimeMob(int id, String msg) {
